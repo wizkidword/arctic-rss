@@ -403,7 +403,11 @@ describe("unsubscribeFeedAction", () => {
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/folders")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/settings")
     expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/app/settings/import-export"
+    )
+    expect(mocks.revalidatePath).not.toHaveBeenCalledWith(
       "/app/feed/subscription-1"
     )
     expect(mocks.refresh).not.toHaveBeenCalled()

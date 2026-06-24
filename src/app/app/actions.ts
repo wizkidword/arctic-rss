@@ -283,7 +283,6 @@ export async function unsubscribeFeedAction(
   try {
     revalidateReaderPaths()
     revalidateSettingsPaths()
-    revalidatePath(`/app/feed/${subscriptionId}`)
   } catch {
     // The unsubscribe is committed; cache invalidation is best effort.
   }
