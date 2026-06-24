@@ -51,8 +51,10 @@ export function ReaderSurface({
   title: string
   toolbar?: React.ReactNode
 }) {
-  const selectedArticle =
-    articles.find((article) => article.id === selectedArticleId) ?? articles[0]
+  const explicitlySelectedArticle = selectedArticleId
+    ? articles.find((article) => article.id === selectedArticleId)
+    : undefined
+  const selectedArticle = explicitlySelectedArticle ?? articles[0]
   const keyboardArticles = articles.map((article) => ({
     id: article.id,
     isRead: article.isRead,
@@ -102,6 +104,7 @@ export function ReaderSurface({
         defaultView,
         emptyMessage,
         selectedArticle,
+        trackSelectedArticleRead: Boolean(explicitlySelectedArticle),
       })}
     </div>
   )
@@ -113,12 +116,14 @@ function renderReaderView({
   defaultView,
   emptyMessage,
   selectedArticle,
+  trackSelectedArticleRead,
 }: {
   articles: ReaderArticle[]
   basePath: string
   defaultView: DefaultView
   emptyMessage: string
   selectedArticle: ReaderArticle | undefined
+  trackSelectedArticleRead: boolean
 }) {
   if (!articles.length) {
     return (
@@ -139,7 +144,10 @@ function renderReaderView({
           basePath={basePath}
           selectedArticleId={selectedArticle?.id}
         />
-        <ArticleReaderCard article={selectedArticle} trackRead />
+        <ArticleReaderCard
+          article={selectedArticle}
+          trackRead={trackSelectedArticleRead}
+        />
       </section>
     )
   }
@@ -178,7 +186,10 @@ function renderReaderView({
           ))}
         </CardContent>
       </Card>
-      <ArticleReaderCard article={selectedArticle} trackRead />
+      <ArticleReaderCard
+        article={selectedArticle}
+        trackRead={trackSelectedArticleRead}
+      />
     </section>
   )
 }
