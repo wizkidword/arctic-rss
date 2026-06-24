@@ -267,7 +267,7 @@ export async function unsubscribeFeedAction(
 
     revalidateReaderPaths()
     revalidateSettingsPaths()
-    revalidatePath(`/app/feed/${subscription.id}`)
+    revalidatePath(`/app/feed/${subscriptionId}`)
     refresh()
 
     return {

@@ -383,7 +383,7 @@ describe("unsubscribeFeedAction", () => {
       },
     })
     mocks.unsubscribeFromFeed.mockResolvedValue({
-      id: "subscription-1",
+      id: "service-returned-id",
       title: "Example Feed",
     })
     const formData = new FormData()
