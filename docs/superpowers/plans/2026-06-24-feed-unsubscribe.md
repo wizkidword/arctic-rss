@@ -477,6 +477,10 @@ git commit -m "Add feed unsubscribe server action"
 - Create: `src/components/feed-unsubscribe-button.test.tsx`
 - Create: `src/components/feed-unsubscribe-button.tsx`
 
+> **Implementation note:** Successful navigation is owned by the Server Action
+> redirect described in Task 2. The final client component owns dialog,
+> pending, and error state only.
+
 - [x] **Step 1: Write the failing component tests**
 
 Mock the alert-dialog wrappers as simple semantic containers and mock
@@ -961,7 +965,7 @@ git add README.md docs/superpowers/plans/2026-06-24-feed-unsubscribe.md
 git commit -m "Document feed unsubscribe support"
 ```
 
-- [ ] **Step 4: Rebuild the production application**
+- [x] **Step 4: Rebuild the production application**
 
 Run:
 
@@ -972,7 +976,7 @@ docker compose ps
 
 Expected: PostgreSQL, Redis, and web are healthy; worker is running.
 
-- [ ] **Step 5: Seed isolated QA records**
+- [x] **Step 5: Seed isolated QA records**
 
 Run this through the worker container so it uses the Compose database address:
 
@@ -1051,7 +1055,7 @@ $qa
 Keep the single JSON output for Step 6. Do not modify the owner's real
 subscriptions.
 
-- [ ] **Step 6: Browser-smoke both UI entry points**
+- [x] **Step 6: Browser-smoke both UI entry points**
 
 Using the isolated QA account and credentials from Step 5:
 
@@ -1113,7 +1117,7 @@ Expected JSON:
 {"article":1,"articleState":1,"feed":1,"subscription":0}
 ```
 
-- [ ] **Step 7: Verify public health and repository state**
+- [x] **Step 7: Verify public health and repository state**
 
 Run:
 
@@ -1125,7 +1129,7 @@ git log --oneline -6
 
 Expected: public health is `ok` and the worktree is clean.
 
-- [ ] **Step 8: Push the completed feature**
+- [x] **Step 8: Push the completed feature**
 
 ```powershell
 git push origin main
