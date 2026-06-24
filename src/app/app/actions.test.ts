@@ -29,6 +29,9 @@ const mocks = vi.hoisted(() => {
     MockAiDigestError,
     MockAiSummaryError,
     MockFeedSubscriptionError,
+    redirect: vi.fn((path: string) => {
+      throw new Error(`REDIRECT:${path}`)
+    }),
     refresh: vi.fn(),
     requestAiDigestForUser: vi.fn(),
     revalidatePath: vi.fn(),
@@ -40,6 +43,10 @@ const mocks = vi.hoisted(() => {
 vi.mock("next/cache", () => ({
   refresh: mocks.refresh,
   revalidatePath: mocks.revalidatePath,
+}))
+
+vi.mock("next/navigation", () => ({
+  redirect: mocks.redirect,
 }))
 
 vi.mock("@/auth", () => ({
@@ -329,6 +336,7 @@ describe("updateAiPreferencesAction", () => {
 describe("unsubscribeFeedAction", () => {
   beforeEach(() => {
     mocks.auth.mockReset()
+    mocks.redirect.mockClear()
     mocks.refresh.mockReset()
     mocks.revalidatePath.mockReset()
     mocks.unsubscribeFromFeed.mockReset()
@@ -376,7 +384,7 @@ describe("unsubscribeFeedAction", () => {
     expect(mocks.unsubscribeFromFeed).not.toHaveBeenCalled()
   })
 
-  it("unsubscribes the selected feed and revalidates affected paths", async () => {
+  it("unsubscribes the selected feed and redirects before the deleted route rerenders", async () => {
     mocks.auth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -389,13 +397,15 @@ describe("unsubscribeFeedAction", () => {
     const formData = new FormData()
     formData.set("subscriptionId", "subscription-1")
 
-    const result = await unsubscribeFeedAction(
-      {
-        message: "",
-        status: "idle",
-      },
-      formData
-    )
+    await expect(
+      unsubscribeFeedAction(
+        {
+          message: "",
+          status: "idle",
+        },
+        formData
+      )
+    ).rejects.toThrow("REDIRECT:/app")
 
     expect(mocks.unsubscribeFromFeed).toHaveBeenCalledWith({
       subscriptionId: "subscription-1",
@@ -411,10 +421,7 @@ describe("unsubscribeFeedAction", () => {
       "/app/feed/subscription-1"
     )
     expect(mocks.refresh).not.toHaveBeenCalled()
-    expect(result).toEqual({
-      message: "Unsubscribed from Example Feed.",
-      status: "success",
-    })
+    expect(mocks.redirect).toHaveBeenCalledWith("/app")
   })
 
   it("returns success when cache invalidation fails after unsubscribing", async () => {
@@ -433,23 +440,22 @@ describe("unsubscribeFeedAction", () => {
     const formData = new FormData()
     formData.set("subscriptionId", "subscription-1")
 
-    const result = await unsubscribeFeedAction(
-      {
-        message: "",
-        status: "idle",
-      },
-      formData
-    )
+    await expect(
+      unsubscribeFeedAction(
+        {
+          message: "",
+          status: "idle",
+        },
+        formData
+      )
+    ).rejects.toThrow("REDIRECT:/app")
 
     expect(mocks.unsubscribeFromFeed).toHaveBeenCalledTimes(1)
     expect(mocks.unsubscribeFromFeed).toHaveBeenCalledWith({
       subscriptionId: "subscription-1",
       userId: "user-1",
     })
-    expect(result).toEqual({
-      message: "Unsubscribed from Example Feed.",
-      status: "success",
-    })
+    expect(mocks.redirect).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).not.toHaveBeenCalled()
   })
 

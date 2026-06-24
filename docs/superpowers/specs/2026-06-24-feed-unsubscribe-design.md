@@ -61,10 +61,10 @@ Add an authenticated action to `src/app/app/actions.ts`. The action:
    basis.
 5. Returns a structured success or error result to the confirmation dialog.
 
-The client navigates to `/app` and refreshes on successful completion. The
-deleted feed route is not revalidated, avoiding a Next.js 16 race that could
-render a now-missing subscription. No destructive work is performed by the
-client directly.
+The Server Action redirects to `/app` on successful completion. The deleted
+feed route is not revalidated, avoiding a Next.js 16 race that could render a
+now-missing subscription before a client effect runs. No destructive work is
+performed by the client directly.
 
 ### Confirmation Component
 

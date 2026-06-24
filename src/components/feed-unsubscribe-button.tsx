@@ -1,8 +1,7 @@
 "use client"
 
-import { useActionState, useEffect, useState, type ComponentProps } from "react"
+import { useActionState, useState, type ComponentProps } from "react"
 import { Trash2Icon } from "lucide-react"
-import { useRouter } from "next/navigation"
 
 import {
   unsubscribeFeedAction,
@@ -32,19 +31,11 @@ export function FeedUnsubscribeButton({
   feedTitle: string
   subscriptionId: string
 }) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(
     unsubscribeFeedAction,
     initialState
   )
-
-  useEffect(() => {
-    if (state.status === "success") {
-      router.replace("/app")
-      router.refresh()
-    }
-  }, [router, state.status])
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>

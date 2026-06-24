@@ -1,6 +1,7 @@
 "use server"
 
 import { refresh, revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
 import { enqueueAiDigest } from "@/lib/ai-digest-queue"
@@ -259,10 +260,8 @@ export async function unsubscribeFeedAction(
     }
   }
 
-  let subscription: Awaited<ReturnType<typeof unsubscribeFromFeed>>
-
   try {
-    subscription = await unsubscribeFromFeed({
+    await unsubscribeFromFeed({
       subscriptionId,
       userId: session.user.id,
     })
@@ -287,10 +286,7 @@ export async function unsubscribeFeedAction(
     // The unsubscribe is committed; cache invalidation is best effort.
   }
 
-  return {
-    message: `Unsubscribed from ${subscription.title}.`,
-    status: "success",
-  }
+  redirect("/app")
 }
 
 export async function importOpmlAction(

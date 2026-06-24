@@ -14,13 +14,6 @@ vi.mock("react", async (importOriginal) => {
   }
 })
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    refresh: vi.fn(),
-    replace: vi.fn(),
-  }),
-}))
-
 vi.mock("@/app/app/actions", () => ({
   unsubscribeFeedAction: vi.fn(),
 }))

@@ -225,10 +225,10 @@ git commit -m "Add ownership-safe feed unsubscribe service"
 - Modify: `src/app/app/actions.ts`
 
 > **Implementation note:** Next.js 16 can immediately refresh the current route
-> when a Server Action calls `refresh()` or revalidates that route. The final
+> after a mutation, before a client success effect can run. The final
 > implementation therefore invalidates only surviving reader/settings paths
-> on a best-effort basis. The client navigates to `/app` and refreshes after a
-> successful response, so the deleted feed route is never re-rendered.
+> on a best-effort basis and calls `redirect("/app")` from the successful
+> Server Action. The deleted feed route is never re-rendered.
 
 - [x] **Step 1: Add the action error class, mock, and import**
 
