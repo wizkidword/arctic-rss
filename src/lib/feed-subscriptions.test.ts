@@ -1,22 +1,58 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const findMany = vi.fn()
+const {
+  articleDeleteMany,
+  articleStateDeleteMany,
+  countUnreadArticlesForFeed,
+  deleteMany,
+  feedDelete,
+  findFirst,
+  findMany,
+} = vi.hoisted(() => ({
+  articleDeleteMany: vi.fn(),
+  articleStateDeleteMany: vi.fn(),
+  countUnreadArticlesForFeed: vi.fn(),
+  deleteMany: vi.fn(),
+  feedDelete: vi.fn(),
+  findFirst: vi.fn(),
+  findMany: vi.fn(),
+}))
 
 vi.mock("./db", () => ({
   getPrisma: () => ({
+    article: {
+      deleteMany: articleDeleteMany,
+    },
+    articleState: {
+      deleteMany: articleStateDeleteMany,
+    },
+    feed: {
+      delete: feedDelete,
+    },
     feedSubscription: {
+      deleteMany,
+      findFirst,
       findMany,
     },
   }),
 }))
 
 vi.mock("./articles", () => ({
-  countUnreadArticlesForFeed: vi.fn().mockResolvedValue(3),
+  countUnreadArticlesForFeed,
 }))
 
-import { listUserFeedSubscriptions } from "./feed-subscriptions"
+import {
+  FeedSubscriptionError,
+  listUserFeedSubscriptions,
+  unsubscribeFromFeed,
+} from "./feed-subscriptions"
 
 describe("feed subscriptions", () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    countUnreadArticlesForFeed.mockResolvedValue(3)
+  })
+
   it("includes folder metadata for reader navigation", async () => {
     findMany.mockResolvedValue([
       {
@@ -62,5 +98,113 @@ describe("feed subscriptions", () => {
         unreadCount: 3,
       },
     ])
+  })
+
+  it("unsubscribes only the current user's subscription", async () => {
+    findFirst.mockResolvedValue({
+      customTitle: "My Example Feed",
+      feed: {
+        title: "Example Feed",
+      },
+      id: "subscription-1",
+    })
+    deleteMany.mockResolvedValue({ count: 1 })
+
+    const result = await unsubscribeFromFeed({
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+
+    expect(findFirst).toHaveBeenCalledWith({
+      select: {
+        customTitle: true,
+        feed: {
+          select: {
+            title: true,
+          },
+        },
+        id: true,
+      },
+      where: {
+        id: "subscription-1",
+        userId: "user-1",
+      },
+    })
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: "subscription-1",
+        userId: "user-1",
+      },
+    })
+    expect(result).toEqual({
+      id: "subscription-1",
+      title: "My Example Feed",
+    })
+    expect(feedDelete).not.toHaveBeenCalled()
+    expect(articleDeleteMany).not.toHaveBeenCalled()
+    expect(articleStateDeleteMany).not.toHaveBeenCalled()
+  })
+
+  it("falls back to the feed title when no custom title is set", async () => {
+    findFirst.mockResolvedValue({
+      customTitle: null,
+      feed: {
+        title: "Example Feed",
+      },
+      id: "subscription-1",
+    })
+    deleteMany.mockResolvedValue({ count: 1 })
+
+    await expect(
+      unsubscribeFromFeed({
+        subscriptionId: "subscription-1",
+        userId: "user-1",
+      })
+    ).resolves.toEqual({
+      id: "subscription-1",
+      title: "Example Feed",
+    })
+  })
+
+  it("rejects missing or foreign subscriptions without deleting", async () => {
+    findFirst.mockResolvedValue(null)
+
+    await expect(
+      unsubscribeFromFeed({
+        subscriptionId: "subscription-1",
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new FeedSubscriptionError("That feed subscription was not found.")
+    )
+
+    expect(deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("rejects a subscription that disappears before deletion", async () => {
+    findFirst.mockResolvedValue({
+      customTitle: null,
+      feed: {
+        title: "Example Feed",
+      },
+      id: "subscription-1",
+    })
+    deleteMany.mockResolvedValue({ count: 0 })
+
+    await expect(
+      unsubscribeFromFeed({
+        subscriptionId: "subscription-1",
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new FeedSubscriptionError("That feed subscription was not found.")
+    )
+
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: "subscription-1",
+        userId: "user-1",
+      },
+    })
   })
 })

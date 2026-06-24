@@ -68,6 +68,55 @@ export async function getUserFeedSubscription(
   })
 }
 
+export async function unsubscribeFromFeed({
+  subscriptionId,
+  userId,
+}: {
+  subscriptionId: string
+  userId: string
+}) {
+  const prisma = getPrisma()
+  const subscription = await prisma.feedSubscription.findFirst({
+    where: {
+      id: subscriptionId,
+      userId,
+    },
+    select: {
+      id: true,
+      customTitle: true,
+      feed: {
+        select: {
+          title: true,
+        },
+      },
+    },
+  })
+
+  if (!subscription) {
+    throw new FeedSubscriptionError(
+      "That feed subscription was not found."
+    )
+  }
+
+  const deletion = await prisma.feedSubscription.deleteMany({
+    where: {
+      id: subscriptionId,
+      userId,
+    },
+  })
+
+  if (deletion.count !== 1) {
+    throw new FeedSubscriptionError(
+      "That feed subscription was not found."
+    )
+  }
+
+  return {
+    id: subscription.id,
+    title: subscription.customTitle || subscription.feed.title,
+  }
+}
+
 export async function subscribeToFeed({
   folderId,
   url,
