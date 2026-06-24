@@ -16,6 +16,7 @@ import {
   renameFolderAction,
 } from "@/app/app/actions"
 import { auth } from "@/auth"
+import { FeedUnsubscribeButton } from "@/components/feed-unsubscribe-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -161,7 +162,7 @@ export default async function FoldersPage() {
           <div className="divide-y">
             {subscriptions.map((subscription) => (
               <div
-                className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,420px)]"
+                className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,420px)_auto]"
                 key={subscription.id}
               >
                 <div className="min-w-0">
@@ -206,6 +207,11 @@ export default async function FoldersPage() {
                     Move
                   </Button>
                 </form>
+
+                <FeedUnsubscribeButton
+                  feedTitle={subscription.title}
+                  subscriptionId={subscription.id}
+                />
               </div>
             ))}
           </div>

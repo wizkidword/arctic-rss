@@ -1,9 +1,10 @@
 import { notFound, redirect } from "next/navigation"
 
 import { auth } from "@/auth"
-import { Badge } from "@/components/ui/badge"
 import { FeedRefreshButton } from "@/components/feed-refresh-button"
+import { FeedUnsubscribeButton } from "@/components/feed-unsubscribe-button"
 import { ReaderSurface } from "@/components/reader-surface"
+import { Badge } from "@/components/ui/badge"
 import { listReaderArticles } from "@/lib/articles"
 import { getUserFeedSubscription } from "@/lib/feed-subscriptions"
 import { normalizeDefaultView } from "@/lib/preferences"
@@ -61,6 +62,10 @@ export default async function FeedPage({
             {subscription.feed.lastError ? "Needs attention" : "Subscribed"}
           </Badge>
           <FeedRefreshButton subscriptionId={subscription.id} />
+          <FeedUnsubscribeButton
+            feedTitle={title}
+            subscriptionId={subscription.id}
+          />
         </>
       }
     />
