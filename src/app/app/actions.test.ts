@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => {
     refresh: vi.fn(),
     requestAiDigestForUser: vi.fn(),
     revalidatePath: vi.fn(),
+    setArticleReadState: vi.fn(),
     unsubscribeFromFeed: vi.fn(),
     updateAiPreferencesForUser: vi.fn(),
   }
@@ -74,7 +75,7 @@ vi.mock("@/lib/ai-dashboard", () => ({
 vi.mock("@/lib/articles", () => ({
   ArticleStateError: class ArticleStateError extends Error {},
   markArticlesRead: vi.fn(),
-  setArticleReadState: vi.fn(),
+  setArticleReadState: mocks.setArticleReadState,
   setArticleStarredState: vi.fn(),
 }))
 
@@ -123,6 +124,7 @@ vi.mock("@/lib/url-safety", () => ({
 import {
   generateAiDigestAction,
   generateArticleSummaryAction,
+  markArticleReadOnOpen,
   unsubscribeFeedAction,
   updateAiPreferencesAction,
 } from "./actions"
@@ -510,6 +512,33 @@ describe("unsubscribeFeedAction", () => {
       message: "Arctic RSS could not unsubscribe from that feed.",
       status: "error",
     })
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe("markArticleReadOnOpen", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.refresh.mockReset()
+    mocks.revalidatePath.mockReset()
+    mocks.setArticleReadState.mockReset()
+  })
+
+  it("persists the read state without refreshing the current unread view", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+
+    await markArticleReadOnOpen("article-2")
+
+    expect(mocks.setArticleReadState).toHaveBeenCalledWith({
+      articleId: "article-2",
+      isRead: true,
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
     expect(mocks.refresh).not.toHaveBeenCalled()
   })
 })

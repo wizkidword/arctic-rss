@@ -474,9 +474,6 @@ export async function markArticleReadOnOpen(articleId: string) {
 
     throw error
   }
-
-  revalidateReaderPaths()
-  refresh()
 }
 
 export async function generateArticleSummaryAction(
