@@ -376,7 +376,7 @@ describe("unsubscribeFeedAction", () => {
     expect(mocks.unsubscribeFromFeed).not.toHaveBeenCalled()
   })
 
-  it("unsubscribes the selected feed and refreshes affected paths", async () => {
+  it("unsubscribes the selected feed and revalidates affected paths", async () => {
     mocks.auth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -406,11 +406,47 @@ describe("unsubscribeFeedAction", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith(
       "/app/feed/subscription-1"
     )
-    expect(mocks.refresh).toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
     expect(result).toEqual({
       message: "Unsubscribed from Example Feed.",
       status: "success",
     })
+  })
+
+  it("returns success when cache invalidation fails after unsubscribing", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.unsubscribeFromFeed.mockResolvedValue({
+      id: "service-returned-id",
+      title: "Example Feed",
+    })
+    mocks.revalidatePath.mockImplementation(() => {
+      throw new Error("Cache unavailable")
+    })
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    const result = await unsubscribeFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData
+    )
+
+    expect(mocks.unsubscribeFromFeed).toHaveBeenCalledTimes(1)
+    expect(mocks.unsubscribeFromFeed).toHaveBeenCalledWith({
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(result).toEqual({
+      message: "Unsubscribed from Example Feed.",
+      status: "success",
+    })
+    expect(mocks.refresh).not.toHaveBeenCalled()
   })
 
   it("returns feed subscription errors safely", async () => {

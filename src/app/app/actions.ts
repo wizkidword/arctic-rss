@@ -259,21 +259,13 @@ export async function unsubscribeFeedAction(
     }
   }
 
+  let subscription: Awaited<ReturnType<typeof unsubscribeFromFeed>>
+
   try {
-    const subscription = await unsubscribeFromFeed({
+    subscription = await unsubscribeFromFeed({
       subscriptionId,
       userId: session.user.id,
     })
-
-    revalidateReaderPaths()
-    revalidateSettingsPaths()
-    revalidatePath(`/app/feed/${subscriptionId}`)
-    refresh()
-
-    return {
-      message: `Unsubscribed from ${subscription.title}.`,
-      status: "success",
-    }
   } catch (error) {
     if (error instanceof FeedSubscriptionError) {
       return {
@@ -286,6 +278,19 @@ export async function unsubscribeFeedAction(
       message: "Arctic RSS could not unsubscribe from that feed.",
       status: "error",
     }
+  }
+
+  try {
+    revalidateReaderPaths()
+    revalidateSettingsPaths()
+    revalidatePath(`/app/feed/${subscriptionId}`)
+  } catch {
+    // The unsubscribe is committed; cache invalidation is best effort.
+  }
+
+  return {
+    message: `Unsubscribed from ${subscription.title}.`,
+    status: "success",
   }
 }
 
