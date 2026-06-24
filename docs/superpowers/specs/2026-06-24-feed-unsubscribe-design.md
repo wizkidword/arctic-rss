@@ -57,11 +57,14 @@ Add an authenticated action to `src/app/app/actions.ts`. The action:
 1. Requires a signed-in user.
 2. Validates the submitted subscription ID.
 3. Calls the ownership-checked service.
-4. Revalidates reader, folder, settings, and feed paths.
+4. Revalidates surviving reader, folder, and settings paths on a best-effort
+   basis.
 5. Returns a structured success or error result to the confirmation dialog.
 
-Navigation to `/app` occurs on successful completion. No destructive work is
-performed by the client directly.
+The client navigates to `/app` and refreshes on successful completion. The
+deleted feed route is not revalidated, avoiding a Next.js 16 race that could
+render a now-missing subscription. No destructive work is performed by the
+client directly.
 
 ### Confirmation Component
 

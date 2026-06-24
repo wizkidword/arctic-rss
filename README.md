@@ -130,6 +130,8 @@ Done:
 - Per-user starred state and Starred view
 - Unread counts in the sidebar and feed list
 - Folder management with create, rename, delete, and feed move actions
+- Confirmed feed unsubscribe from feed pages and Feed Organization
+- Subscription removal that preserves shared articles and personal read/starred history
 - Sidebar folder navigation with folder unread counts
 - Folder-scoped reader pages
 - Add Feed folder assignment

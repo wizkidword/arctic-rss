@@ -16,7 +16,7 @@
 - Modify: `src/lib/feed-subscriptions.test.ts`
 - Modify: `src/lib/feed-subscriptions.ts`
 
-- [ ] **Step 1: Expand the subscription database mock**
+- [x] **Step 1: Expand the subscription database mock**
 
 Add focused mocks for lookup and deletion while retaining the existing list
 test:
@@ -65,7 +65,7 @@ beforeEach(() => {
 })
 ```
 
-- [ ] **Step 2: Write failing service tests**
+- [x] **Step 2: Write failing service tests**
 
 Import `unsubscribeFromFeed` and add:
 
@@ -140,7 +140,7 @@ it("reports a subscription that disappears before deletion", async () => {
 })
 ```
 
-- [ ] **Step 3: Run the tests to verify RED**
+- [x] **Step 3: Run the tests to verify RED**
 
 Run:
 
@@ -150,7 +150,7 @@ npm test -- src/lib/feed-subscriptions.test.ts
 
 Expected: FAIL because `unsubscribeFromFeed` is not exported.
 
-- [ ] **Step 4: Implement the minimal ownership-scoped service**
+- [x] **Step 4: Implement the minimal ownership-scoped service**
 
 Add to `src/lib/feed-subscriptions.ts`:
 
@@ -201,7 +201,7 @@ export async function unsubscribeFromFeed({
 }
 ```
 
-- [ ] **Step 5: Run the focused service tests**
+- [x] **Step 5: Run the focused service tests**
 
 Run:
 
@@ -211,7 +211,7 @@ npm test -- src/lib/feed-subscriptions.test.ts
 
 Expected: all feed subscription tests PASS.
 
-- [ ] **Step 6: Commit the service behavior**
+- [x] **Step 6: Commit the service behavior**
 
 ```powershell
 git add src/lib/feed-subscriptions.ts src/lib/feed-subscriptions.test.ts
@@ -224,7 +224,13 @@ git commit -m "Add ownership-safe feed unsubscribe service"
 - Modify: `src/app/app/actions.test.ts`
 - Modify: `src/app/app/actions.ts`
 
-- [ ] **Step 1: Add the action error class, mock, and import**
+> **Implementation note:** Next.js 16 can immediately refresh the current route
+> when a Server Action calls `refresh()` or revalidates that route. The final
+> implementation therefore invalidates only surviving reader/settings paths
+> on a best-effort basis. The client navigates to `/app` and refreshes after a
+> successful response, so the deleted feed route is never re-rendered.
+
+- [x] **Step 1: Add the action error class, mock, and import**
 
 Define this class inside the existing `vi.hoisted` callback:
 
@@ -257,7 +263,7 @@ vi.mock("@/lib/feed-subscriptions", () => ({
 
 Import `unsubscribeFeedAction` from `./actions`.
 
-- [ ] **Step 2: Write failing action tests**
+- [x] **Step 2: Write failing action tests**
 
 Add:
 
@@ -372,7 +378,7 @@ describe("unsubscribeFeedAction", () => {
 })
 ```
 
-- [ ] **Step 3: Run the action tests to verify RED**
+- [x] **Step 3: Run the action tests to verify RED**
 
 Run:
 
@@ -382,7 +388,7 @@ npm test -- src/app/app/actions.test.ts
 
 Expected: FAIL because the action and mock are missing.
 
-- [ ] **Step 4: Implement the action state and action**
+- [x] **Step 4: Implement the action state and action**
 
 Import `unsubscribeFromFeed` and add:
 
@@ -447,7 +453,7 @@ export async function unsubscribeFeedAction(
 }
 ```
 
-- [ ] **Step 5: Verify the focused action tests**
+- [x] **Step 5: Verify the focused action tests**
 
 Run:
 
@@ -457,7 +463,7 @@ npm test -- src/app/app/actions.test.ts
 
 Expected: all action tests PASS.
 
-- [ ] **Step 6: Commit the Server Action**
+- [x] **Step 6: Commit the Server Action**
 
 ```powershell
 git add src/app/app/actions.ts src/app/app/actions.test.ts
@@ -471,7 +477,7 @@ git commit -m "Add feed unsubscribe server action"
 - Create: `src/components/feed-unsubscribe-button.test.tsx`
 - Create: `src/components/feed-unsubscribe-button.tsx`
 
-- [ ] **Step 1: Write the failing component tests**
+- [x] **Step 1: Write the failing component tests**
 
 Mock the alert-dialog wrappers as simple semantic containers and mock
 `next/navigation` plus `unsubscribeFeedAction`. Test the exported content and
@@ -534,7 +540,7 @@ it("renders a destructive feed-specific trigger", () => {
 })
 ```
 
-- [ ] **Step 2: Run the component test to verify RED**
+- [x] **Step 2: Run the component test to verify RED**
 
 Run:
 
@@ -544,7 +550,7 @@ npm test -- src/components/feed-unsubscribe-button.test.tsx
 
 Expected: FAIL because the component files do not exist.
 
-- [ ] **Step 3: Add the Base UI alert-dialog wrappers**
+- [x] **Step 3: Add the Base UI alert-dialog wrappers**
 
 Create `src/components/ui/alert-dialog.tsx` using
 `@base-ui/react/dialog`, following `sheet.tsx`:
@@ -650,7 +656,7 @@ export {
 }
 ```
 
-- [ ] **Step 4: Implement the reusable unsubscribe component**
+- [x] **Step 4: Implement the reusable unsubscribe component**
 
 Create `src/components/feed-unsubscribe-button.tsx`:
 
@@ -777,7 +783,7 @@ export function FeedUnsubscribeDialogContent({
 Import `type React` or the specific `ComponentProps` type so the file
 type-checks without relying on the global namespace.
 
-- [ ] **Step 5: Run the focused component tests**
+- [x] **Step 5: Run the focused component tests**
 
 Run:
 
@@ -788,7 +794,7 @@ npm run typecheck
 
 Expected: both PASS.
 
-- [ ] **Step 6: Commit the reusable UI**
+- [x] **Step 6: Commit the reusable UI**
 
 ```powershell
 git add src/components/ui/alert-dialog.tsx src/components/feed-unsubscribe-button.tsx src/components/feed-unsubscribe-button.test.tsx
@@ -803,7 +809,7 @@ git commit -m "Add feed unsubscribe confirmation dialog"
 - Modify: `src/app/app/feed/[subscriptionId]/page.tsx`
 - Modify: `src/app/app/folders/page.tsx`
 
-- [ ] **Step 1: Write a failing feed-page placement test**
+- [x] **Step 1: Write a failing feed-page placement test**
 
 Mock authentication, subscription/article/settings data, and
 `ReaderSurface`. Render the toolbar passed into the mocked reader:
@@ -839,7 +845,7 @@ it("places unsubscribe beside the feed toolbar actions", async () => {
 })
 ```
 
-- [ ] **Step 2: Write a failing Feed Organization placement test**
+- [x] **Step 2: Write a failing Feed Organization placement test**
 
 Mock `auth`, `listUserFolders`, and `listUserFeedSubscriptions`, returning one
 subscription. Mock `FeedUnsubscribeButton` as above:
@@ -854,7 +860,7 @@ it("places unsubscribe on every Feed Organization row", async () => {
 })
 ```
 
-- [ ] **Step 3: Run placement tests to verify RED**
+- [x] **Step 3: Run placement tests to verify RED**
 
 Run:
 
@@ -864,7 +870,7 @@ npm test -- "src/app/app/feed/[subscriptionId]/page.test.tsx" src/app/app/folder
 
 Expected: FAIL because neither page renders the component.
 
-- [ ] **Step 4: Add the feed-page toolbar command**
+- [x] **Step 4: Add the feed-page toolbar command**
 
 Import `FeedUnsubscribeButton` and append:
 
@@ -877,7 +883,7 @@ Import `FeedUnsubscribeButton` and append:
 
 after `FeedRefreshButton` inside the toolbar fragment.
 
-- [ ] **Step 5: Add the Feed Organization row command**
+- [x] **Step 5: Add the Feed Organization row command**
 
 Import `FeedUnsubscribeButton`, change the row grid to reserve an action
 column, and add:
@@ -897,7 +903,7 @@ className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,420px)_au
 
 so the destructive action is separate from the move form.
 
-- [ ] **Step 6: Run placement and focused feature tests**
+- [x] **Step 6: Run placement and focused feature tests**
 
 Run:
 
@@ -909,7 +915,7 @@ npm run lint
 
 Expected: all commands PASS.
 
-- [ ] **Step 7: Commit both placements**
+- [x] **Step 7: Commit both placements**
 
 ```powershell
 git add src/app/app/feed/[subscriptionId]/page.tsx src/app/app/feed/[subscriptionId]/page.test.tsx src/app/app/folders/page.tsx src/app/app/folders/page.test.tsx
@@ -922,7 +928,7 @@ git commit -m "Expose unsubscribe in feed management"
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-06-24-feed-unsubscribe.md`
 
-- [ ] **Step 1: Document the completed capability**
+- [x] **Step 1: Document the completed capability**
 
 Add to the README completed-feature list:
 
@@ -931,7 +937,7 @@ Add to the README completed-feature list:
 - Subscription removal that preserves shared articles and personal read/starred history
 ```
 
-- [ ] **Step 2: Run the full repository verification**
+- [x] **Step 2: Run the full repository verification**
 
 Run:
 
@@ -946,7 +952,7 @@ docker compose config --quiet
 
 Expected: 0 test failures and all commands exit successfully.
 
-- [ ] **Step 3: Commit documentation and checklist**
+- [x] **Step 3: Commit documentation and checklist**
 
 Mark completed plan items, then:
 
