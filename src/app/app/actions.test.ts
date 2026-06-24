@@ -15,15 +15,24 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockFeedSubscriptionError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "FeedSubscriptionError"
+    }
+  }
+
   return {
     auth: vi.fn(),
     enqueueAiDigest: vi.fn(),
     generateArticleSummaryForUser: vi.fn(),
     MockAiDigestError,
     MockAiSummaryError,
+    MockFeedSubscriptionError,
     refresh: vi.fn(),
     requestAiDigestForUser: vi.fn(),
     revalidatePath: vi.fn(),
+    unsubscribeFromFeed: vi.fn(),
     updateAiPreferencesForUser: vi.fn(),
   }
 })
@@ -76,9 +85,10 @@ vi.mock("@/lib/feed-refresh", () => ({
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
-  FeedSubscriptionError: class FeedSubscriptionError extends Error {},
+  FeedSubscriptionError: mocks.MockFeedSubscriptionError,
   getUserFeedSubscription: vi.fn(),
   subscribeToFeed: vi.fn(),
+  unsubscribeFromFeed: mocks.unsubscribeFromFeed,
 }))
 
 vi.mock("@/lib/folders", () => ({
@@ -106,6 +116,7 @@ vi.mock("@/lib/url-safety", () => ({
 import {
   generateAiDigestAction,
   generateArticleSummaryAction,
+  unsubscribeFeedAction,
   updateAiPreferencesAction,
 } from "./actions"
 
@@ -312,5 +323,147 @@ describe("updateAiPreferencesAction", () => {
       message: "AI preferences saved.",
       status: "success",
     })
+  })
+})
+
+describe("unsubscribeFeedAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.refresh.mockReset()
+    mocks.revalidatePath.mockReset()
+    mocks.unsubscribeFromFeed.mockReset()
+  })
+
+  it("requires authentication before unsubscribing", async () => {
+    mocks.auth.mockResolvedValue(null)
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    const result = await unsubscribeFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData
+    )
+
+    expect(result).toEqual({
+      message: "You need to sign in before unsubscribing.",
+      status: "error",
+    })
+    expect(mocks.unsubscribeFromFeed).not.toHaveBeenCalled()
+  })
+
+  it("requires a subscription to unsubscribe from", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+
+    const result = await unsubscribeFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      new FormData()
+    )
+
+    expect(result).toEqual({
+      message: "Choose a feed to unsubscribe from.",
+      status: "error",
+    })
+    expect(mocks.unsubscribeFromFeed).not.toHaveBeenCalled()
+  })
+
+  it("unsubscribes the selected feed and refreshes affected paths", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.unsubscribeFromFeed.mockResolvedValue({
+      id: "subscription-1",
+      title: "Example Feed",
+    })
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    const result = await unsubscribeFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData
+    )
+
+    expect(mocks.unsubscribeFromFeed).toHaveBeenCalledWith({
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/folders")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/app/feed/subscription-1"
+    )
+    expect(mocks.refresh).toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "Unsubscribed from Example Feed.",
+      status: "success",
+    })
+  })
+
+  it("returns feed subscription errors safely", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.unsubscribeFromFeed.mockRejectedValue(
+      new mocks.MockFeedSubscriptionError(
+        "That feed subscription was not found."
+      )
+    )
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    const result = await unsubscribeFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData
+    )
+
+    expect(result).toEqual({
+      message: "That feed subscription was not found.",
+      status: "error",
+    })
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+
+  it("returns a generic error when unsubscribing fails unexpectedly", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.unsubscribeFromFeed.mockRejectedValue(new Error("Database offline"))
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    const result = await unsubscribeFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData
+    )
+
+    expect(result).toEqual({
+      message: "Arctic RSS could not unsubscribe from that feed.",
+      status: "error",
+    })
+    expect(mocks.refresh).not.toHaveBeenCalled()
   })
 })
