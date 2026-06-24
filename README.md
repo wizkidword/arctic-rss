@@ -1,0 +1,167 @@
+# Arctic RSS
+
+Arctic RSS is an open-source RSS reader inspired by Google Reader. The current foundation includes Next.js App Router, TypeScript, Tailwind, shadcn/ui, Auth.js credentials auth, Prisma/PostgreSQL, a protected reader shell, per-user view settings, an operational admin dashboard, feed subscription discovery, RSS/Atom article ingestion, folder management, OPML import/export, on-demand article AI summaries, stored unread AI digests, Redis-backed workers, and Docker Compose.
+
+## Stack
+
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- shadcn/ui
+- Auth.js / NextAuth credentials auth
+- Prisma 7 with PostgreSQL
+- Redis-backed BullMQ worker container
+- Docker Compose
+
+## Local Development
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+1. Create an environment file:
+
+```bash
+cp .env.example .env
+```
+
+1. Update `DATABASE_URL`, `AUTH_SECRET`, and `ADMIN_EMAILS` in `.env`.
+
+1. Generate the Prisma client and push the schema:
+
+```bash
+npm run prisma:generate
+npx prisma db push
+```
+
+1. Start the app:
+
+```bash
+npm run dev
+```
+
+The app runs at [http://localhost:3000](http://localhost:3000).
+
+## Docker
+
+Copy `.env.example` to `.env`, then start the stack:
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- `web`: Next.js app on port `3000`
+- `worker`: background feed refresh worker
+- `postgres`: PostgreSQL database
+- `redis`: Redis queue/cache dependency
+- `migrate`: one-shot Prisma `db push` for this foundation milestone
+- `cloudflared`: optional tunnel service behind the `tunnel` profile
+
+To run with Cloudflare Tunnel:
+
+```bash
+docker compose --profile tunnel up --build
+```
+
+The production deployment reuses the active Cloudflare Tunnel and publishes
+the app at [https://arcticrss.taverncellar.com](https://arcticrss.taverncellar.com).
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for production environment values, the
+current Tavern Cellar named-tunnel configuration, generic VPS/home-server
+instructions, backups, restores, upgrades, rollbacks, and health validation.
+
+The readiness endpoint is available at `/api/health`.
+
+## Auth
+
+This project uses Auth.js with local email/password credentials as the open-source default. The first user whose email appears in `ADMIN_EMAILS` receives the `ADMIN` role on signup.
+
+## AI Summaries
+
+Article summaries and unread digests use deterministic local providers by default, so development and self-hosted installs work without an external AI account. Set `AI_PROVIDER=openai` and `OPENAI_API_KEY` to use the OpenAI Responses API instead. `AI_DEFAULT_MODEL`, `OPENAI_SUMMARY_MODEL`, and `AI_DIGEST_MODEL` can override models. The `/app/ai` dashboard shows monthly usage, recent summaries, eligible unread articles, stored digest history, and per-user AI preferences.
+
+## Scripts
+
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run test
+npm run typecheck
+npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:deploy
+npm run worker
+```
+
+## Current Milestone
+
+Done:
+
+- Public landing page
+- Signup and login pages
+- Authenticated `/app` reader shell
+- Sidebar placeholder
+- Classic/Card/Compact/River view switcher
+- User settings model and persistence action
+- Admin role support and protected `/admin`
+- Prisma schema for the planned RSS reader domain
+- Docker Compose foundation
+- Add Feed sheet
+- Safe feed URL validation and SSRF checks
+- RSS/Atom feed discovery from website URLs
+- Feed subscription persistence
+- Sidebar feed display
+- RSS/Atom article parsing
+- Article upsert and duplicate prevention
+- Feed health/error tracking during refresh
+- Manual feed refresh action
+- BullMQ feed refresh queue and worker
+- Stored articles on the All Articles and feed pages
+- Placeholder route for general settings
+- Main reader surface for Classic, Card, Compact, and River views
+- Per-user read/unread state
+- Per-user starred state and Starred view
+- Unread counts in the sidebar and feed list
+- Folder management with create, rename, delete, and feed move actions
+- Sidebar folder navigation with folder unread counts
+- Folder-scoped reader pages
+- Add Feed folder assignment
+- OPML import/export with folder preservation and import summaries
+- Mark all read for all articles, folders, and individual feeds
+- Sanitized article HTML rendering
+- On-demand article AI summaries with cached results
+- Per-user AI monthly usage limits and usage logging
+- Local summary provider with optional OpenAI provider
+- Stable article detail routes with reader permalinks
+- Reader keyboard shortcuts for next, previous, read/unread, star, and open original
+- AI dashboard with monthly usage and recent summary history
+- Stored AI digests generated from unread articles
+- Must Read and Skim Later digest sections with topic labels
+- Dedicated BullMQ digest queue and worker processing
+- Digest history with pending, completed, and failed states
+- Local digest provider with optional OpenAI provider
+- Per-user automatic-summary and daily-digest preferences
+- Operational admin statistics and user monitoring
+- Failing and stale feed health views
+- Current-month AI token, request, provider/model, and cost reporting
+- Persisted and BullMQ failed-job monitoring
+- Dependency-aware readiness checks for PostgreSQL and Redis
+- Loopback-only production Docker port bindings
+- Production deployment, backup, restore, upgrade, and rollback documentation
+- Active Cloudflare Tunnel deployment at `arcticrss.taverncellar.com`
+
+Status:
+
+- Original MVP milestones 1-11 complete
+- Post-MVP work can proceed from the deployed, self-hosted foundation
+
+## License
+
+MIT
