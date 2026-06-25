@@ -59,6 +59,7 @@ describe("feed subscriptions", () => {
         customTitle: null,
         feed: {
           faviconUrl: null,
+          feedUrl: "https://example.com/feed.xml",
           lastError: null,
           siteUrl: "https://example.com",
           title: "Example Feed",
@@ -88,6 +89,7 @@ describe("feed subscriptions", () => {
       {
         faviconUrl: null,
         feedId: "feed-1",
+        feedUrl: "https://example.com/feed.xml",
         folderId: "folder-1",
         folderName: "Tech",
         id: "subscription-1",

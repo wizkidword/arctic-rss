@@ -14,6 +14,7 @@ export class FeedSubscriptionError extends Error {
 export type FeedSubscriptionNavItem = {
   faviconUrl: string | null
   feedId: string
+  feedUrl: string
   folderId: string | null
   folderName: string | null
   id: string
@@ -40,6 +41,7 @@ export async function listUserFeedSubscriptions(
     subscriptions.map(async (subscription) => ({
       faviconUrl: subscription.feed.faviconUrl,
       feedId: subscription.feedId,
+      feedUrl: subscription.feed.feedUrl,
       folderId: subscription.folderId,
       folderName: subscription.folder?.name ?? null,
       id: subscription.id,
