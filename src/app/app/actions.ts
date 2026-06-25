@@ -19,6 +19,7 @@ import {
   type ArticleReadScope,
 } from "@/lib/articles"
 import { getPrisma } from "@/lib/db"
+import { getFeedDirectoryFeed } from "@/lib/feed-directory"
 import { FeedValidationError } from "@/lib/feed-discovery"
 import { FeedRefreshError, refreshFeed } from "@/lib/feed-refresh"
 import {
@@ -39,6 +40,11 @@ import { isDefaultView, type DefaultView } from "@/lib/preferences"
 import { FeedFetchError, UnsafeUrlError } from "@/lib/url-safety"
 
 export type AddFeedActionState = {
+  message: string
+  status: "idle" | "success" | "error"
+}
+
+export type SubscribeDirectoryFeedActionState = {
   message: string
   status: "idle" | "success" | "error"
 }
@@ -171,6 +177,77 @@ export async function addFeedAction(
       message: "Arctic RSS could not add that feed. Try another URL.",
       status: "error",
     }
+  }
+}
+
+export async function subscribeDirectoryFeedAction(
+  _previousState: SubscribeDirectoryFeedActionState,
+  formData: FormData
+): Promise<SubscribeDirectoryFeedActionState> {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    return {
+      message: "You need to sign in before subscribing.",
+      status: "error",
+    }
+  }
+
+  const directoryFeedId = String(
+    formData.get("directoryFeedId") ?? ""
+  ).trim()
+  const folderId = String(formData.get("folderId") ?? "").trim() || undefined
+  const directoryFeed = getFeedDirectoryFeed(directoryFeedId)
+
+  if (!directoryFeed) {
+    return {
+      message: "That directory feed is not available.",
+      status: "error",
+    }
+  }
+
+  let subscription
+
+  try {
+    subscription = await subscribeToFeed({
+      folderId,
+      url: directoryFeed.url,
+      userId: session.user.id,
+    })
+  } catch (error) {
+    if (
+      error instanceof FeedSubscriptionError ||
+      error instanceof FeedValidationError ||
+      error instanceof FeedFetchError ||
+      error instanceof UnsafeUrlError
+    ) {
+      return {
+        message: error.message,
+        status: "error",
+      }
+    }
+
+    return {
+      message: "Arctic RSS could not subscribe to that directory feed.",
+      status: "error",
+    }
+  }
+
+  let refreshMessage = "Article refresh will retry."
+
+  try {
+    const refreshResult = await refreshFeed(subscription.feedId)
+    refreshMessage = `Imported ${refreshResult.articleCount} articles.`
+  } catch {
+    // The subscription is committed and the worker can retry the refresh.
+  }
+
+  revalidatePath("/app", "layout")
+  refresh()
+
+  return {
+    message: `Subscribed to ${directoryFeed.label}. ${refreshMessage}`,
+    status: "success",
   }
 }
 
