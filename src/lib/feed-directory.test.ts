@@ -505,15 +505,119 @@ const expectedUsPoliticsFeedRecords = [
   },
 ]
 
+const expectedUsBusinessFeedRecords = [
+  {
+    aliases: ["http://online.wsj.com/xml/rss/3_7014.xml"],
+    categoryId: "us-business",
+    id: "wsj-us-business",
+    label: "Wall Street Journal - U.S. Business",
+    source: "wsj.com",
+    url: "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness",
+  },
+  {
+    aliases: [
+      "http://www.nytimes.com/services/xml/rss/nyt/Business.xml",
+      "http://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+    ],
+    categoryId: "us-business",
+    id: "nyt-business",
+    label: "New York Times - Business",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+  },
+  {
+    aliases: [
+      "http://feeds.washingtonpost.com/rss/rss_storyline",
+      "http://feeds.washingtonpost.com/rss/rss_wonkblog",
+    ],
+    categoryId: "us-business",
+    id: "washington-post-business",
+    label: "Washington Post - Business",
+    source: "washingtonpost.com",
+    url: "https://feeds.washingtonpost.com/rss/business",
+  },
+  {
+    aliases: ["http://www.economist.com/feeds/print-sections/77/business.xml"],
+    categoryId: "us-business",
+    id: "economist-business",
+    label: "The Economist - Business",
+    source: "economist.com",
+    url: "https://www.economist.com/business/rss.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "us-business",
+    id: "harvard-business-review",
+    label: "Harvard Business Review",
+    source: "hbr.org",
+    url: "http://feeds.harvardbusiness.org/harvardbusiness?format=xml",
+  },
+  {
+    aliases: ["http://au.ibtimes.com/rss/articles/region/1.rss"],
+    categoryId: "us-business",
+    id: "ibtimes-business",
+    label: "International Business Times - Business",
+    source: "ibtimes.com",
+    url: "https://www.ibtimes.com/rss/business",
+  },
+  {
+    aliases: ["http://www.businessweek.com/search/rssfeed.htm"],
+    categoryId: "us-business",
+    id: "bloomberg-businessweek",
+    label: "Bloomberg Businessweek",
+    source: "bloomberg.com",
+    url: "https://feeds.bloomberg.com/businessweek/news.rss",
+  },
+  {
+    aliases: ["http://www.huffingtonpost.com/feeds/verticals/business/news.xml"],
+    categoryId: "us-business",
+    id: "huffpost-business",
+    label: "HuffPost - Business",
+    source: "huffpost.com",
+    url: "https://www.huffpost.com/section/business/feed",
+  },
+  {
+    aliases: [
+      "http://www.ft.com/rss/home/us",
+      "https://www.ft.com/world/us?format=rss",
+    ],
+    categoryId: "us-business",
+    id: "financial-times-us",
+    label: "Financial Times - U.S.",
+    source: "ft.com",
+    url: "https://www.ft.com/us?format=rss",
+  },
+  {
+    aliases: [],
+    categoryId: "us-business",
+    id: "cnn-business",
+    label: "CNN Business",
+    source: "cnn.com",
+    url: "http://rss.cnn.com/rss/edition_business.rss",
+  },
+  {
+    aliases: ["http://www.bloomberg.com/feed/podcast/law.xml"],
+    categoryId: "us-business",
+    id: "bloomberg-law",
+    label: "Bloomberg Law",
+    source: "bloomberg.com",
+    url: "https://feeds.bloomberg.com/podcasts/law.xml",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
+  ...expectedUsBusinessFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
   (feed) => feed.id
 )
 const expectedUsPoliticsFeedIds = expectedUsPoliticsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedUsBusinessFeedIds = expectedUsBusinessFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -531,6 +635,12 @@ describe("feed directory catalog", () => {
           "Campaigns, Congress, policy, and political analysis from U.S. outlets.",
         id: "us-politics",
         label: "US Politics",
+      },
+      {
+        description:
+          "Markets, companies, economy, and workplace coverage from business outlets.",
+        id: "us-business",
+        label: "US Business",
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
@@ -587,6 +697,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-politics")).toBe(
       feedDirectoryCategories[1]
     )
+    expect(getFeedDirectoryCategory("us-business")).toBe(
+      feedDirectoryCategories[2]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -598,6 +711,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryFeed("npr-politics")?.url).toBe(
       "https://feeds.npr.org/1014/rss.xml"
     )
+    expect(getFeedDirectoryFeed("wsj-us-business")?.url).toBe(
+      "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness"
+    )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
       expectedUsGeneralFeedIds
@@ -605,19 +721,28 @@ describe("feed directory catalog", () => {
     expect(
       listFeedDirectoryFeeds("us-politics").map((feed) => feed.id)
     ).toEqual(expectedUsPoliticsFeedIds)
+    expect(
+      listFeedDirectoryFeeds("us-business").map((feed) => feed.id)
+    ).toEqual(expectedUsBusinessFeedIds)
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times, NBC, and politics legacy aliases", () => {
+  it("matches New York Times, NBC, politics, and business legacy aliases", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
     const huffpost = getFeedDirectoryFeed("huffpost-politics")
+    const wsjBusiness = getFeedDirectoryFeed("wsj-us-business")
+    const ft = getFeedDirectoryFeed("financial-times-us")
+    const bloombergLaw = getFeedDirectoryFeed("bloomberg-law")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
     expect(politics).toBeDefined()
     expect(huffpost).toBeDefined()
+    expect(wsjBusiness).toBeDefined()
+    expect(ft).toBeDefined()
+    expect(bloombergLaw).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -636,6 +761,19 @@ describe("feed directory catalog", () => {
     expect(
       isDirectoryFeedSubscribed(huffpost!, [
         "http://www.huffingtonpost.com/feeds/verticals/politics/index.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(wsjBusiness!, [
+        "http://online.wsj.com/xml/rss/3_7014.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(ft!, ["http://www.ft.com/rss/home/us"])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(bloombergLaw!, [
+        "http://www.bloomberg.com/feed/podcast/law.xml",
       ])
     ).toBe(true)
   })
@@ -689,6 +827,18 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://feeds.reuters.com/Reuters/PoliticsNews"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://hosted2.ap.org/atom/APDEFAULT/f70471f764144b2fab526d39972d37b3"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.reuters.com/reuters/businessNews"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.business-standard.com/rss/latest.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.business-standard.com/rss/home_page_top_stories.rss"
     )
   })
 })
