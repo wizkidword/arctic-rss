@@ -819,11 +819,332 @@ const expectedUsHealthFeedRecords = [
   },
 ]
 
+const expectedUsScienceFeedRecords = [
+  {
+    aliases: ["http://www.huffingtonpost.com/feeds/verticals/science/index.xml"],
+    categoryId: "us-science",
+    id: "huffpost-science",
+    label: "HuffPost - Science",
+    source: "huffpost.com",
+    url: "https://www.huffpost.com/section/science/feed",
+  },
+  {
+    aliases: ["http://rss.nytimes.com/services/xml/rss/nyt/Science.xml"],
+    categoryId: "us-science",
+    id: "nyt-science",
+    label: "New York Times - Science",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml",
+  },
+  {
+    aliases: ["http://rss.nytimes.com/services/xml/rss/nyt/Space.xml"],
+    categoryId: "us-science",
+    id: "nyt-space",
+    label: "New York Times - Space",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Space.xml",
+  },
+  {
+    aliases: ["http://feeds.foxnews.com/foxnews/science"],
+    categoryId: "us-science",
+    id: "fox-news-science",
+    label: "Fox News - Science",
+    source: "foxnews.com",
+    url: "https://moxie.foxnews.com/google-publisher/science.xml",
+  },
+  {
+    aliases: ["http://feeds.nbcnews.com/feeds/science"],
+    categoryId: "us-science",
+    id: "nbc-science",
+    label: "NBC News - Science",
+    source: "nbcnews.com",
+    url: "https://feeds.nbcnews.com/nbcnews/public/science",
+  },
+  {
+    aliases: [],
+    categoryId: "us-science",
+    id: "scientific-american-global",
+    label: "Scientific American - Global",
+    source: "scientificamerican.com",
+    url: "http://rss.sciam.com/ScientificAmerican-Global",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/BreakingScienceNews?format=xml"],
+    categoryId: "us-science",
+    id: "sci-news",
+    label: "Sci.News",
+    source: "sci.news",
+    url: "https://www.sci.news/feed",
+  },
+  {
+    aliases: [
+      "http://feeds.wired.com/wiredscience",
+      "http://www.wired.com/category/science/science-blogs/feed/",
+    ],
+    categoryId: "us-science",
+    id: "wired-science",
+    label: "WIRED - Science",
+    source: "wired.com",
+    url: "https://www.wired.com/feed/category/science/latest/rss",
+  },
+  {
+    aliases: ["http://feeds.sciencedaily.com/sciencedaily"],
+    categoryId: "us-science",
+    id: "science-daily",
+    label: "ScienceDaily",
+    source: "sciencedaily.com",
+    url: "https://www.sciencedaily.com/rss/all.xml",
+  },
+  {
+    aliases: ["http://www.latimes.com/health/rss2.0.xml"],
+    categoryId: "us-science",
+    id: "la-times-health",
+    label: "Los Angeles Times - Health",
+    source: "latimes.com",
+    url: "https://www.latimes.com/health/rss2.0.xml",
+  },
+  {
+    aliases: ["http://www.chron.com/rss/feed/AP-Technology-and-Science-266.php"],
+    categoryId: "us-science",
+    id: "chron-ap-technology-science",
+    label: "Houston Chronicle - AP Technology and Science",
+    source: "chron.com",
+    url: "https://www.chron.com/rss/feed/AP-Technology-and-Science-266.php",
+  },
+  {
+    aliases: ["http://feeds.washingtonpost.com/rss/rss_speaking-of-science"],
+    categoryId: "us-science",
+    id: "washington-post-science",
+    label: "Washington Post - Science",
+    source: "washingtonpost.com",
+    url: "https://feeds.washingtonpost.com/rss/rss_speaking-of-science",
+  },
+  {
+    aliases: ["http://www.sciencemag.org/rss/current.xml"],
+    categoryId: "us-science",
+    id: "science-magazine",
+    label: "Science Magazine",
+    source: "science.org",
+    url: "https://feeds.science.org/rss/science.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "us-science",
+    id: "discover-magazine",
+    label: "Discover Magazine",
+    source: "discovermagazine.com",
+    url: "http://feeds.feedburner.com/DiscoverTopStories",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/science_and_environment/rss.xml"],
+    categoryId: "us-science",
+    id: "bbc-science-environment",
+    label: "BBC News - Science & Environment",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+  },
+  {
+    aliases: ["http://feeds.howtogeek.com/howtogeek"],
+    categoryId: "us-science",
+    id: "how-to-geek",
+    label: "How-To Geek",
+    source: "howtogeek.com",
+    url: "https://www.howtogeek.com/feed/",
+  },
+  {
+    aliases: ["http://syndication.howstuffworks.com/rss/science"],
+    categoryId: "us-science",
+    id: "howstuffworks-science",
+    label: "HowStuffWorks - Science",
+    source: "howstuffworks.com",
+    url: "https://syndication.howstuffworks.com/rss/science",
+  },
+  {
+    aliases: ["http://www.npr.org/templates/rss/podlayer.php?id=1007"],
+    categoryId: "us-science",
+    id: "npr-science",
+    label: "NPR - Science",
+    source: "npr.org",
+    url: "https://feeds.npr.org/1007/rss.xml",
+  },
+  {
+    aliases: ["http://www.nasa.gov/rss/dyn/breaking_news.rss"],
+    categoryId: "us-science",
+    id: "nasa-breaking-news",
+    label: "NASA - Breaking News",
+    source: "nasa.gov",
+    url: "https://www.nasa.gov/news-release/feed/",
+  },
+  {
+    aliases: ["http://www.livescience.com/home/feed/site.xml"],
+    categoryId: "us-science",
+    id: "live-science",
+    label: "Live Science",
+    source: "livescience.com",
+    url: "https://www.livescience.com/feeds.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "us-science",
+    id: "scientific-american-news",
+    label: "Scientific American - News",
+    source: "scientificamerican.com",
+    url: "http://rss.sciam.com/ScientificAmerican-News",
+  },
+  {
+    aliases: ["http://www.popsci.com/rss.xml"],
+    categoryId: "us-science",
+    id: "popular-science",
+    label: "Popular Science",
+    source: "popsci.com",
+    url: "https://www.popsci.com/feed/",
+  },
+  {
+    aliases: ["http://nautil.us/rss/all"],
+    categoryId: "us-science",
+    id: "nautilus",
+    label: "Nautilus",
+    source: "nautil.us",
+    url: "https://nautil.us/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "us-science",
+    id: "ars-technica-science",
+    label: "Ars Technica - Science",
+    source: "arstechnica.com",
+    url: "http://feeds.arstechnica.com/arstechnica/science",
+  },
+  {
+    aliases: ["http://www.smithsonianmag.com/rss/science-nature/"],
+    categoryId: "us-science",
+    id: "smithsonian-science-nature",
+    label: "Smithsonian Magazine - Science & Nature",
+    source: "smithsonianmag.com",
+    url: "https://www.smithsonianmag.com/rss/science-nature/",
+  },
+  {
+    aliases: [
+      "http://feeds.gawker.com/io9/full#_ga=1.239815749.772722176.1436906624",
+    ],
+    categoryId: "us-science",
+    id: "io9",
+    label: "io9",
+    source: "gizmodo.com",
+    url: "https://gizmodo.com/io9/feed",
+  },
+  {
+    aliases: ["http://feeds.newscientist.com/science-news"],
+    categoryId: "us-science",
+    id: "new-scientist",
+    label: "New Scientist",
+    source: "newscientist.com",
+    url: "https://www.newscientist.com/feed/home/",
+  },
+  {
+    aliases: ["http://feeds.newscientist.com/space"],
+    categoryId: "us-science",
+    id: "new-scientist-space",
+    label: "New Scientist - Space",
+    source: "newscientist.com",
+    url: "https://www.newscientist.com/subject/space/feed/",
+  },
+  {
+    aliases: ["http://www.pnas.org/rss/Feature_Article.xml"],
+    categoryId: "us-science",
+    id: "pnas",
+    label: "PNAS",
+    source: "pnas.org",
+    url: "https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=PNAS",
+  },
+  {
+    aliases: ["http://feeds2.feedburner.com/time/scienceandhealth"],
+    categoryId: "us-science",
+    id: "time-science",
+    label: "TIME - Science",
+    source: "time.com",
+    url: "https://time.com/science/feed/",
+  },
+  {
+    aliases: ["http://phys.org/rss-feed/"],
+    categoryId: "us-science",
+    id: "phys-org",
+    label: "Phys.org",
+    source: "phys.org",
+    url: "https://phys.org/rss-feed/",
+  },
+  {
+    aliases: ["http://rss.csmonitor.com/feeds/science"],
+    categoryId: "us-science",
+    id: "cs-monitor-science",
+    label: "Christian Science Monitor - Science",
+    source: "csmonitor.com",
+    url: "https://rss.csmonitor.com/feeds/science",
+  },
+  {
+    aliases: ["http://news.yahoo.com/rss/science"],
+    categoryId: "us-science",
+    id: "yahoo-science",
+    label: "Yahoo News - Science",
+    source: "yahoo.com",
+    url: "https://news.yahoo.com/rss/science",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/IeeeSpectrumFullText"],
+    categoryId: "us-science",
+    id: "ieee-spectrum",
+    label: "IEEE Spectrum",
+    source: "spectrum.ieee.org",
+    url: "https://spectrum.ieee.org/feeds/feed.rss",
+  },
+  {
+    aliases: ["http://www.theverge.com/science/rss/index.xml"],
+    categoryId: "us-science",
+    id: "the-verge-science",
+    label: "The Verge - Science",
+    source: "theverge.com",
+    url: "https://www.theverge.com/rss/science/index.xml",
+  },
+  {
+    aliases: ["http://grist.org/feed/"],
+    categoryId: "us-science",
+    id: "grist",
+    label: "Grist",
+    source: "grist.org",
+    url: "https://grist.org/feed/",
+  },
+  {
+    aliases: ["http://www.theguardian.com/science/rss"],
+    categoryId: "us-science",
+    id: "guardian-science",
+    label: "The Guardian - Science",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/science/rss",
+  },
+  {
+    aliases: ["http://www.theguardian.com/us/environment/rss"],
+    categoryId: "us-science",
+    id: "guardian-us-environment",
+    label: "The Guardian - U.S. Environment",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/us/environment/rss",
+  },
+  {
+    aliases: ["http://www.viralnova.com/feed"],
+    categoryId: "us-science",
+    id: "viralnova",
+    label: "ViralNova",
+    source: "viralnova.com",
+    url: "http://viralnova.com/feed/",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
   ...expectedUsBusinessFeedRecords,
   ...expectedUsHealthFeedRecords,
+  ...expectedUsScienceFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -836,6 +1157,9 @@ const expectedUsBusinessFeedIds = expectedUsBusinessFeedRecords.map(
   (feed) => feed.id
 )
 const expectedUsHealthFeedIds = expectedUsHealthFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedUsScienceFeedIds = expectedUsScienceFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -865,6 +1189,12 @@ describe("feed directory catalog", () => {
           "Health news, wellness, medicine, and public-health reporting from trusted outlets.",
         id: "us-health",
         label: "US Health",
+      },
+      {
+        description:
+          "Science news, space, research, environment, and discovery coverage from major outlets and journals.",
+        id: "us-science",
+        label: "US Science",
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
@@ -927,6 +1257,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-health")).toBe(
       feedDirectoryCategories[3]
     )
+    expect(getFeedDirectoryCategory("us-science")).toBe(
+      feedDirectoryCategories[4]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -944,6 +1277,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryFeed("npr-health")?.url).toBe(
       "https://feeds.npr.org/1128/rss.xml"
     )
+    expect(getFeedDirectoryFeed("wired-science")?.url).toBe(
+      "https://www.wired.com/feed/category/science/latest/rss"
+    )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
       expectedUsGeneralFeedIds
@@ -957,10 +1293,13 @@ describe("feed directory catalog", () => {
     expect(listFeedDirectoryFeeds("us-health").map((feed) => feed.id)).toEqual(
       expectedUsHealthFeedIds
     )
+    expect(listFeedDirectoryFeeds("us-science").map((feed) => feed.id)).toEqual(
+      expectedUsScienceFeedIds
+    )
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times, NBC, politics, business, and health legacy aliases", () => {
+  it("matches New York Times, NBC, politics, business, health, and science legacy aliases", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -971,6 +1310,10 @@ describe("feed directory catalog", () => {
     const wsjHealth = getFeedDirectoryFeed("wsj-health")
     const nprHealth = getFeedDirectoryFeed("npr-health")
     const huffpostWellness = getFeedDirectoryFeed("huffpost-wellness")
+    const wiredScience = getFeedDirectoryFeed("wired-science")
+    const nprScience = getFeedDirectoryFeed("npr-science")
+    const scienceDaily = getFeedDirectoryFeed("science-daily")
+    const vergeScience = getFeedDirectoryFeed("the-verge-science")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -982,6 +1325,10 @@ describe("feed directory catalog", () => {
     expect(wsjHealth).toBeDefined()
     expect(nprHealth).toBeDefined()
     expect(huffpostWellness).toBeDefined()
+    expect(wiredScience).toBeDefined()
+    expect(nprScience).toBeDefined()
+    expect(scienceDaily).toBeDefined()
+    expect(vergeScience).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -1028,6 +1375,26 @@ describe("feed directory catalog", () => {
     expect(
       isDirectoryFeedSubscribed(huffpostWellness!, [
         "http://feeds.huffingtonpost.com/c/35496/f/677070/index.rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(wiredScience!, [
+        "http://feeds.wired.com/wiredscience",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(nprScience!, [
+        "http://www.npr.org/templates/rss/podlayer.php?id=1007",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(scienceDaily!, [
+        "http://feeds.sciencedaily.com/sciencedaily",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(vergeScience!, [
+        "http://www.theverge.com/science/rss/index.xml",
       ])
     ).toBe(true)
   })
@@ -1128,6 +1495,25 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://rss.medicalnewstoday.com/featurednews.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.treehugger.com/feeds/category/science/"
+    )
+    expect(directoryUrls).not.toContain("http://www.eurekalert.org/rss.xml")
+    expect(directoryUrls).not.toContain(
+      "http://hosted2.ap.org/atom/APDEFAULT/b2f0ca3a594644ee9e50a8ec4ce2d6de"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://omnifeed.com/feed/www.iflscience.com/rss.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://news.nationalgeographic.com/rss/index.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.reuters.com/reuters/scienceNews"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.nature.com/nbt/rss/current"
     )
   })
 })
