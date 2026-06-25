@@ -114,6 +114,78 @@ describe("FeedDirectorySubscribeButton", () => {
     ).toBeTruthy()
   })
 
+  it("preserves the popup during its closing transition and restores trigger focus", async () => {
+    const user = userEvent.setup()
+    const closingAnimation = createDeferred<void>()
+    const getAnimationsDescriptor = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "getAnimations"
+    )
+    Object.defineProperty(Element.prototype, "getAnimations", {
+      configurable: true,
+      value(this: Element) {
+        if (
+          this.matches('[data-slot="alert-dialog-content"]') &&
+          this.hasAttribute("data-ending-style")
+        ) {
+          return [
+            {
+              finished: closingAnimation.promise,
+              pending: false,
+              playState: "running",
+            },
+          ] as unknown as Animation[]
+        }
+
+        return []
+      },
+    })
+
+    try {
+      render(
+        <FeedDirectorySubscribeButton
+          feedId="npr-national"
+          feedLabel="NPR - National"
+          folders={folders}
+          subscribed={false}
+        />
+      )
+
+      const subscribeTrigger = screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+      await user.click(subscribeTrigger)
+
+      const popup = screen.getByRole("dialog")
+      await user.click(
+        within(popup).getByRole("button", {
+          name: "Cancel",
+        })
+      )
+
+      expect(popup.isConnected).toBe(true)
+
+      await act(async () => {
+        closingAnimation.resolve()
+        await closingAnimation.promise
+      })
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull()
+      })
+      expect(document.activeElement).toBe(subscribeTrigger)
+    } finally {
+      if (getAnimationsDescriptor) {
+        Object.defineProperty(
+          Element.prototype,
+          "getAnimations",
+          getAnimationsDescriptor
+        )
+      } else {
+        Reflect.deleteProperty(Element.prototype, "getAnimations")
+      }
+    }
+  })
+
   it("clears an action error after the dialog is closed and reopened", async () => {
     const user = userEvent.setup()
     subscribeDirectoryFeedAction.mockResolvedValueOnce({
@@ -156,11 +228,12 @@ describe("FeedDirectorySubscribeButton", () => {
       expect(screen.queryByRole("dialog")).toBeNull()
     })
 
-    await user.click(
-      screen.getByRole("button", {
-        name: /Subscribe.*NPR - National/,
-      })
-    )
+    const subscribeTrigger = screen.getByRole("button", {
+      name: /Subscribe.*NPR - National/,
+    })
+    expect(document.activeElement).toBe(subscribeTrigger)
+
+    await user.click(subscribeTrigger)
 
     expect(
       screen.queryByText(
@@ -199,6 +272,12 @@ describe("FeedDirectorySubscribeButton", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull()
     })
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+    )
   })
 
   it("disables the folder picker and dialog actions while pending", async () => {

@@ -11,14 +11,9 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "test": "vitest run --config package.json --configLoader runner",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "worker": "tsx worker/index.ts"
-  },
-  "resolve": {
-    "alias": {
-      "@": "/src"
-    }
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

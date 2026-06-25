@@ -47,7 +47,18 @@ export function FeedDirectorySubscribeButton({
   subscribed: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const [openSession, setOpenSession] = useState(0)
   const closeDialog = useCallback(() => setOpen(false), [])
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen && !open) {
+        setOpenSession((session) => session + 1)
+      }
+
+      setOpen(nextOpen)
+    },
+    [open]
+  )
 
   if (subscribed) {
     return (
@@ -60,7 +71,7 @@ export function FeedDirectorySubscribeButton({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogTrigger
         render={<Button size="sm" variant="outline" />}
       >
@@ -68,17 +79,15 @@ export function FeedDirectorySubscribeButton({
         Subscribe
         <span className="sr-only"> to {feedLabel}</span>
       </AlertDialogTrigger>
-      {open && (
-        <AlertDialogContent>
-          <FeedDirectorySubscribeActionForm
-            key={feedId}
-            feedId={feedId}
-            feedLabel={feedLabel}
-            folders={folders}
-            onSuccess={closeDialog}
-          />
-        </AlertDialogContent>
-      )}
+      <AlertDialogContent>
+        <FeedDirectorySubscribeActionForm
+          key={`${feedId}:${openSession}`}
+          feedId={feedId}
+          feedLabel={feedLabel}
+          folders={folders}
+          onSuccess={closeDialog}
+        />
+      </AlertDialogContent>
     </AlertDialog>
   )
 }
