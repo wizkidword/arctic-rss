@@ -101,7 +101,7 @@ describe("DiscoverPage", () => {
     ])
   })
 
-  it("renders all categories as collapsible sections with the selected category open", async () => {
+  it("renders all categories as collapsed sections by default", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
         searchParams: Promise.resolve({ category: "us-general" }),
@@ -164,7 +164,7 @@ describe("DiscoverPage", () => {
     )
     expect(detailTags).toHaveLength(6)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).toContain("open")
+    expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
     expect(detailTags[1]).not.toContain("open")
     expect(detailTags[2]).toContain('id="directory-category-us-business"')
@@ -209,7 +209,7 @@ describe("DiscoverPage", () => {
     )
   })
 
-  it("opens US Politics when requested from the category navigation", async () => {
+  it("marks US Politics in navigation without opening it by default", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
         searchParams: Promise.resolve({ category: "us-politics" }),
@@ -224,7 +224,7 @@ describe("DiscoverPage", () => {
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).toContain("open")
+    expect(detailTags[1]).not.toContain("open")
     expect(detailTags[2]).toContain('id="directory-category-us-business"')
     expect(detailTags[2]).not.toContain("open")
     expect(detailTags[3]).toContain('id="directory-category-us-health"')
@@ -237,7 +237,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("NPR - Politics")
   })
 
-  it("opens US Business when requested from the category navigation", async () => {
+  it("marks US Business in navigation without opening it by default", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
         searchParams: Promise.resolve({ category: "us-business" }),
@@ -254,7 +254,7 @@ describe("DiscoverPage", () => {
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
     expect(detailTags[1]).not.toContain("open")
     expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).toContain("open")
+    expect(detailTags[2]).not.toContain("open")
     expect(detailTags[3]).toContain('id="directory-category-us-health"')
     expect(detailTags[3]).not.toContain("open")
     expect(detailTags[4]).toContain('id="directory-category-us-science"')
@@ -265,7 +265,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("Bloomberg Law")
   })
 
-  it("opens US Health when requested from the category navigation", async () => {
+  it("marks US Health in navigation without opening it by default", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
         searchParams: Promise.resolve({ category: "us-health" }),
@@ -284,7 +284,7 @@ describe("DiscoverPage", () => {
     expect(detailTags[2]).toContain('id="directory-category-us-business"')
     expect(detailTags[2]).not.toContain("open")
     expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).toContain("open")
+    expect(detailTags[3]).not.toContain("open")
     expect(detailTags[4]).toContain('id="directory-category-us-science"')
     expect(detailTags[4]).not.toContain("open")
     expect(detailTags[5]).toContain('id="directory-category-us-sports"')
@@ -293,7 +293,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("NPR - Health")
   })
 
-  it("opens US Science when requested from the category navigation", async () => {
+  it("marks US Science in navigation without opening it by default", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
         searchParams: Promise.resolve({ category: "us-science" }),
@@ -314,14 +314,14 @@ describe("DiscoverPage", () => {
     expect(detailTags[3]).toContain('id="directory-category-us-health"')
     expect(detailTags[3]).not.toContain("open")
     expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).toContain("open")
+    expect(detailTags[4]).not.toContain("open")
     expect(detailTags[5]).toContain('id="directory-category-us-sports"')
     expect(detailTags[5]).not.toContain("open")
     expect(markup).toContain("WIRED - Science")
     expect(markup).toContain("NPR - Science")
   })
 
-  it("opens US Sports when requested from the category navigation", async () => {
+  it("marks US Sports in navigation without opening it by default", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
         searchParams: Promise.resolve({ category: "us-sports" }),
@@ -344,7 +344,7 @@ describe("DiscoverPage", () => {
     expect(detailTags[4]).toContain('id="directory-category-us-science"')
     expect(detailTags[4]).not.toContain("open")
     expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).toContain("open")
+    expect(detailTags[5]).not.toContain("open")
     expect(markup).toContain("ESPN - Top News")
     expect(markup).toContain("Sports Illustrated")
   })

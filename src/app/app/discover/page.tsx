@@ -105,7 +105,6 @@ export default async function DiscoverPage({
             className="group rounded-lg border bg-card"
             id={`directory-category-${category.id}`}
             key={category.id}
-            open={category.id === selectedCategory.id}
           >
             <summary className="flex cursor-pointer list-none flex-col gap-3 p-4 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-row sm:items-center sm:justify-between [&::-webkit-details-marker]:hidden">
               <div className="flex min-w-0 items-start gap-3">
