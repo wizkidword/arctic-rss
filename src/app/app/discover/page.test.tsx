@@ -186,6 +186,12 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-gaming#directory-category-us-gaming"'
     )
+    expect(markup).toContain(
+      "grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+    )
+    expect(markup).toContain("min-h-32")
+    expect(markup).toContain("bg-sky-50 text-sky-700")
+    expect(markup).toContain("bg-lime-50 text-lime-700")
     expect(detailTags).toHaveLength(9)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")

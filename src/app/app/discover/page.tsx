@@ -1,6 +1,19 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ChevronDownIcon, CompassIcon, RssIcon } from "lucide-react"
+import {
+  AtomIcon,
+  BriefcaseBusinessIcon,
+  ChevronDownIcon,
+  CompassIcon,
+  CpuIcon,
+  FilmIcon,
+  Gamepad2Icon,
+  HeartPulseIcon,
+  LandmarkIcon,
+  NewspaperIcon,
+  RssIcon,
+  TrophyIcon,
+} from "lucide-react"
 
 import { auth } from "@/auth"
 import { FeedDirectorySubscribeButton } from "@/components/feed-directory-subscribe-button"
@@ -15,6 +28,30 @@ import {
 import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
 import { listUserFolders } from "@/lib/folders"
 import { cn } from "@/lib/utils"
+
+const categoryIcons = {
+  "us-business": BriefcaseBusinessIcon,
+  "us-entertainment": FilmIcon,
+  "us-gaming": Gamepad2Icon,
+  "us-general": NewspaperIcon,
+  "us-health": HeartPulseIcon,
+  "us-politics": LandmarkIcon,
+  "us-science": AtomIcon,
+  "us-sports": TrophyIcon,
+  "us-tech": CpuIcon,
+}
+
+const categoryIconStyles = {
+  "us-business": "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+  "us-entertainment": "bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300",
+  "us-gaming": "bg-lime-50 text-lime-700 dark:bg-lime-950/40 dark:text-lime-300",
+  "us-general": "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+  "us-health": "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+  "us-politics": "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300",
+  "us-science": "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  "us-sports": "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+  "us-tech": "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300",
+}
 
 export default async function DiscoverPage({
   searchParams,
@@ -98,72 +135,88 @@ export default async function DiscoverPage({
 
       <section
         aria-label="Feed directory categories"
-        className="grid gap-3"
+        className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
       >
-        {categoryGroups.map(({ category, feeds }) => (
-          <details
-            className="group rounded-lg border bg-card"
-            id={`directory-category-${category.id}`}
-            key={category.id}
-          >
-            <summary className="flex cursor-pointer list-none flex-col gap-3 p-4 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-row sm:items-center sm:justify-between [&::-webkit-details-marker]:hidden">
-              <div className="flex min-w-0 items-start gap-3">
-                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                  <CompassIcon className="size-4" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="font-heading text-base font-medium">
-                    {category.label}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {category.description}
-                  </p>
+        {categoryGroups.map(({ category, feeds }) => {
+          const CategoryIcon =
+            categoryIcons[category.id as keyof typeof categoryIcons] ??
+            CompassIcon
+          const iconStyle =
+            categoryIconStyles[
+              category.id as keyof typeof categoryIconStyles
+            ] ?? "bg-muted text-muted-foreground"
+
+          return (
+            <details
+              className="group overflow-hidden rounded-lg border bg-card shadow-xs transition-colors hover:border-foreground/15"
+              id={`directory-category-${category.id}`}
+              key={category.id}
+            >
+              <summary className="flex min-h-32 cursor-pointer list-none flex-col justify-between gap-4 p-4 outline-none transition-colors hover:bg-muted/35 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    className={cn(
+                      "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md",
+                      iconStyle
+                    )}
+                  >
+                    <CategoryIcon className="size-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="font-heading text-base font-medium leading-6">
+                      {category.label}
+                    </h2>
+                    <p className="text-sm leading-5 text-muted-foreground">
+                      {category.description}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 sm:pl-4">
-                <Badge variant="secondary">
-                  {feeds.length} {feeds.length === 1 ? "feed" : "feeds"}
-                </Badge>
-                <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-              </div>
-            </summary>
 
-            <ul className="divide-y border-t">
-              {feeds.map((feed) => (
-                <li
-                  className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4"
-                  key={feed.id}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                      <RssIcon className="size-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {feed.label}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {feed.source}
-                      </p>
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant="secondary">
+                    {feeds.length} {feeds.length === 1 ? "feed" : "feeds"}
+                  </Badge>
+                  <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                </div>
+              </summary>
+
+              <ul className="divide-y border-t">
+                {feeds.map((feed) => (
+                  <li
+                    className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4"
+                    key={feed.id}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <RssIcon className="size-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {feed.label}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {feed.source}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="w-full shrink-0 sm:w-auto sm:pl-4 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:min-h-9 sm:[&_[data-slot=button]]:w-auto sm:[&_[data-slot=button]]:min-h-7">
-                    <FeedDirectorySubscribeButton
-                      feedId={feed.id}
-                      feedLabel={feed.label}
-                      folders={pickerFolders}
-                      subscribed={isDirectoryFeedSubscribed(
-                        feed,
-                        subscriptionUrls
-                      )}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ))}
+                    <div className="w-full shrink-0 sm:w-auto sm:pl-4 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:min-h-9 sm:[&_[data-slot=button]]:w-auto sm:[&_[data-slot=button]]:min-h-7">
+                      <FeedDirectorySubscribeButton
+                        feedId={feed.id}
+                        feedLabel={feed.label}
+                        folders={pickerFolders}
+                        subscribed={isDirectoryFeedSubscribed(
+                          feed,
+                          subscriptionUrls
+                        )}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )
+        })}
       </section>
     </div>
   )
