@@ -101,24 +101,43 @@ describe("DiscoverPage", () => {
     ])
   })
 
-  it("renders the selected category with all feeds and subscription state", async () => {
+  it("renders all categories as collapsible sections with the selected category open", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
         searchParams: Promise.resolve({ category: "us-general" }),
       })
     )
+    const detailTags = markup.match(/<details[^>]*>/g) ?? []
 
     expect(markup).toContain("Discover Feeds")
     expect(markup).toContain("US General")
+    expect(markup).toContain("US Politics")
+    expect(markup).toContain("60 feeds")
+    expect(markup).toContain("Campaigns, Congress, policy")
     expect(markup).toContain("27 feeds")
+    expect(markup).toContain("33 feeds")
     expect(markup).toContain("ABC News - U.S.")
     expect(markup).toContain("abcnews.com")
     expect(markup).toContain("Fox News - Latest")
     expect(markup).toContain("foxnews.com")
+    expect(markup).toContain("Politico Magazine")
+    expect(markup).toContain("NPR - Politics")
     expect(markup).toContain('<nav aria-label="Feed categories"')
     expect(markup.match(/aria-current="page"/g)).toHaveLength(1)
+    expect(markup).toContain(
+      'href="/app/discover?category=us-general#directory-category-us-general" aria-current="page"'
+    )
+    expect(markup).toContain(
+      'href="/app/discover?category=us-politics#directory-category-us-politics"'
+    )
+    expect(detailTags).toHaveLength(2)
+    expect(detailTags[0]).toContain('id="directory-category-us-general"')
+    expect(detailTags[0]).toContain("open")
+    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
+    expect(detailTags[1]).not.toContain("open")
+    expect(markup).toContain("<summary")
     expect(markup).toContain("<ul")
-    expect(markup.match(/<li /g)).toHaveLength(27)
+    expect(markup.match(/<li /g)).toHaveLength(60)
     expect(markup).toContain("w-full shrink-0 sm:w-auto sm:pl-4")
     expect(markup).toContain(
       "[&amp;_[data-slot=button]]:w-full [&amp;_[data-slot=button]]:min-h-9"
@@ -126,13 +145,36 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "sm:[&amp;_[data-slot=button]]:w-auto sm:[&amp;_[data-slot=button]]:min-h-7"
     )
-    expect(markup.match(/Directory control:/g)).toHaveLength(27)
+    expect(markup.match(/Directory control:/g)).toHaveLength(60)
     expect(markup).toContain(
       "Directory control: npr-national | NPR - National | subscribed=true | folders=folder-1:Morning News"
     )
     expect(markup).toContain(
       "Directory control: npr-world | NPR - World | subscribed=false | folders=folder-1:Morning News"
     )
+    expect(markup).toContain(
+      "Directory control: npr-politics | NPR - Politics | subscribed=false | folders=folder-1:Morning News"
+    )
+  })
+
+  it("opens US Politics when requested from the category navigation", async () => {
+    const markup = renderToStaticMarkup(
+      await DiscoverPage({
+        searchParams: Promise.resolve({ category: "us-politics" }),
+      })
+    )
+    const detailTags = markup.match(/<details[^>]*>/g) ?? []
+
+    expect(markup).toContain(
+      'href="/app/discover?category=us-politics#directory-category-us-politics" aria-current="page"'
+    )
+    expect(detailTags).toHaveLength(2)
+    expect(detailTags[0]).toContain('id="directory-category-us-general"')
+    expect(detailTags[0]).not.toContain("open")
+    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
+    expect(detailTags[1]).toContain("open")
+    expect(markup).toContain("Politico Magazine")
+    expect(markup).toContain("NPR - Politics")
   })
 
   it("falls back to US General for an unknown category", async () => {
@@ -144,7 +186,7 @@ describe("DiscoverPage", () => {
 
     expect(markup).toContain("US General")
     expect(markup).toContain(
-      'href="/app/discover?category=us-general" aria-current="page"'
+      'href="/app/discover?category=us-general#directory-category-us-general" aria-current="page"'
     )
     expect(markup).toContain("27 feeds")
   })
