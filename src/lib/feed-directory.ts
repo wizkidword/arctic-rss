@@ -323,7 +323,7 @@ export function validateFeedDirectoryCatalog() {
 
       const owner = urlOwners.get(normalizedUrl)
 
-      if (owner && owner !== feed.id) {
+      if (owner !== undefined && owner !== feed.id) {
         errors.push(
           `Duplicate normalized URL "${normalizedUrl}" for feeds "${owner}" and "${feed.id}"`
         )

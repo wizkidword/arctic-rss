@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  type FeedDirectoryFeed,
   feedDirectoryCategories,
   feedDirectoryFeeds,
   getFeedDirectoryCategory,
@@ -51,6 +52,37 @@ describe("feed directory catalog", () => {
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
+  })
+
+  it("reports duplicate normalized URLs when the first feed ID is empty", () => {
+    const runtimeCatalog =
+      feedDirectoryFeeds as unknown as FeedDirectoryFeed[]
+    const originalLength = runtimeCatalog.length
+
+    try {
+      runtimeCatalog.push(
+        {
+          categoryId: "us-general",
+          id: "",
+          label: "Empty ID Feed",
+          source: "example.com",
+          url: "http://EXAMPLE.com:80/collision/?b=2&a=1#first",
+        },
+        {
+          categoryId: "us-general",
+          id: "second-owner",
+          label: "Second Owner",
+          source: "example.com",
+          url: "https://example.com/collision?a=1&b=2",
+        }
+      )
+
+      expect(validateFeedDirectoryCatalog()).toContain(
+        'Duplicate normalized URL "https://example.com/collision?a=1&b=2" for feeds "" and "second-owner"'
+      )
+    } finally {
+      runtimeCatalog.splice(originalLength)
+    }
   })
 
   it("contains exactly the expected feeds in order", () => {
