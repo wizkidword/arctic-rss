@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { CompassIcon, RssIcon } from "lucide-react"
+import { ChevronDownIcon, CompassIcon, RssIcon } from "lucide-react"
 
 import { auth } from "@/auth"
 import { FeedDirectorySubscribeButton } from "@/components/feed-directory-subscribe-button"
@@ -40,7 +40,14 @@ export default async function DiscoverPage({
     listUserFolders(session.user.id),
     listUserFeedSubscriptions(session.user.id),
   ])
-  const feeds = listFeedDirectoryFeeds(selectedCategory.id)
+  const categoryGroups = feedDirectoryCategories.map((category) => ({
+    category,
+    feeds: listFeedDirectoryFeeds(category.id),
+  }))
+  const totalFeedCount = categoryGroups.reduce(
+    (count, group) => count + group.feeds.length,
+    0
+  )
   const subscriptionUrls = subscriptions.map(
     (subscription) => subscription.feedUrl
   )
@@ -55,7 +62,7 @@ export default async function DiscoverPage({
             <h1 className="font-heading text-xl font-semibold">
               Discover Feeds
             </h1>
-            <Badge variant="secondary">{feeds.length} feeds</Badge>
+            <Badge variant="secondary">{totalFeedCount} feeds</Badge>
           </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Browse curated RSS feeds and add them directly to your reader.
@@ -80,7 +87,7 @@ export default async function DiscoverPage({
                       : "outline",
                 })
               )}
-              href={`/app/discover?category=${encodeURIComponent(category.id)}`}
+              href={`/app/discover?category=${encodeURIComponent(category.id)}#directory-category-${category.id}`}
               key={category.id}
             >
               {category.label}
@@ -89,51 +96,75 @@ export default async function DiscoverPage({
         </nav>
       </section>
 
-      <section className="rounded-lg border bg-card">
-        <div className="flex flex-col gap-2 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="font-heading text-base font-medium">
-              {selectedCategory.label}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {selectedCategory.description}
-            </p>
-          </div>
-          <Badge variant="secondary">{feeds.length} feeds</Badge>
-        </div>
-
-        <ul className="divide-y">
-          {feeds.map((feed) => (
-            <li
-              className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4"
-              key={feed.id}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                  <RssIcon className="size-4" />
+      <section
+        aria-label="Feed directory categories"
+        className="grid gap-3"
+      >
+        {categoryGroups.map(({ category, feeds }) => (
+          <details
+            className="group rounded-lg border bg-card"
+            id={`directory-category-${category.id}`}
+            key={category.id}
+            open={category.id === selectedCategory.id}
+          >
+            <summary className="flex cursor-pointer list-none flex-col gap-3 p-4 outline-none transition-colors hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-row sm:items-center sm:justify-between [&::-webkit-details-marker]:hidden">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <CompassIcon className="size-4" />
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{feed.label}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {feed.source}
+                  <h2 className="font-heading text-base font-medium">
+                    {category.label}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {category.description}
                   </p>
                 </div>
               </div>
-
-              <div className="w-full shrink-0 sm:w-auto sm:pl-4 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:min-h-9 sm:[&_[data-slot=button]]:w-auto sm:[&_[data-slot=button]]:min-h-7">
-                <FeedDirectorySubscribeButton
-                  feedId={feed.id}
-                  feedLabel={feed.label}
-                  folders={pickerFolders}
-                  subscribed={isDirectoryFeedSubscribed(
-                    feed,
-                    subscriptionUrls
-                  )}
-                />
+              <div className="flex items-center gap-2 sm:pl-4">
+                <Badge variant="secondary">
+                  {feeds.length} {feeds.length === 1 ? "feed" : "feeds"}
+                </Badge>
+                <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
               </div>
-            </li>
-          ))}
-        </ul>
+            </summary>
+
+            <ul className="divide-y border-t">
+              {feeds.map((feed) => (
+                <li
+                  className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4"
+                  key={feed.id}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <RssIcon className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {feed.label}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {feed.source}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="w-full shrink-0 sm:w-auto sm:pl-4 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:min-h-9 sm:[&_[data-slot=button]]:w-auto sm:[&_[data-slot=button]]:min-h-7">
+                    <FeedDirectorySubscribeButton
+                      feedId={feed.id}
+                      feedLabel={feed.label}
+                      folders={pickerFolders}
+                      subscribed={isDirectoryFeedSubscribed(
+                        feed,
+                        subscriptionUrls
+                      )}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
       </section>
     </div>
   )

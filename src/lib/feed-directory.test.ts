@@ -11,7 +11,7 @@ import {
   validateFeedDirectoryCatalog,
 } from "./feed-directory"
 
-const expectedFeedRecords = [
+const expectedUsGeneralFeedRecords = [
   {
     aliases: ["http://feeds.abcnews.com/abcnews/usheadlines"],
     categoryId: "us-general",
@@ -233,10 +233,292 @@ const expectedFeedRecords = [
   },
 ]
 
-const expectedFeedIds = expectedFeedRecords.map((feed) => feed.id)
+const expectedUsPoliticsFeedRecords = [
+  {
+    aliases: ["http://www.politico.com/rss/magazine.xml"],
+    categoryId: "us-politics",
+    id: "politico-magazine",
+    label: "Politico Magazine",
+    source: "politico.com",
+    url: "https://rss.politico.com/magazine.xml",
+  },
+  {
+    aliases: ["http://www.politico.com/rss/Top10Blogs.xml"],
+    categoryId: "us-politics",
+    id: "politico-politics-news",
+    label: "Politico - Politics",
+    source: "politico.com",
+    url: "https://rss.politico.com/politics-news.xml",
+  },
+  {
+    aliases: [
+      "http://www.huffingtonpost.com/feeds/verticals/politics/index.xml",
+    ],
+    categoryId: "us-politics",
+    id: "huffpost-politics",
+    label: "HuffPost - Politics",
+    source: "huffpost.com",
+    url: "https://www.huffpost.com/section/politics/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "us-politics",
+    id: "cnn-politics",
+    label: "CNN Politics",
+    source: "cnn.com",
+    url: "http://rss.cnn.com/rss/cnn_allpolitics.rss",
+  },
+  {
+    aliases: ["http://www.buzzfeed.com/politics.xml"],
+    categoryId: "us-politics",
+    id: "buzzfeed-politics",
+    label: "BuzzFeed News - Politics",
+    source: "buzzfeed.com",
+    url: "https://www.buzzfeed.com/politics.xml",
+  },
+  {
+    aliases: ["http://feeds.nbcnews.com/feeds/nbcpolitics"],
+    categoryId: "us-politics",
+    id: "nbc-politics",
+    label: "NBC News - Politics",
+    source: "nbcnews.com",
+    url: "https://feeds.nbcnews.com/nbcnews/public/politics",
+  },
+  {
+    aliases: ["http://feeds.foxnews.com/foxnews/politics"],
+    categoryId: "us-politics",
+    id: "fox-news-politics",
+    label: "Fox News - Politics",
+    source: "foxnews.com",
+    url: "https://moxie.foxnews.com/google-publisher/politics.xml",
+  },
+  {
+    aliases: ["http://feeds.washingtonpost.com/rss/rss_election-2012"],
+    categoryId: "us-politics",
+    id: "washington-post-politics",
+    label: "Washington Post - Politics",
+    source: "washingtonpost.com",
+    url: "https://feeds.washingtonpost.com/rss/politics",
+  },
+  {
+    aliases: [
+      "http://rss.nytimes.com/services/xml/rss/nyt/Politics.xml",
+      "http://thecaucus.blogs.nytimes.com/feed/",
+    ],
+    categoryId: "us-politics",
+    id: "nyt-politics",
+    label: "New York Times - Politics",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml",
+  },
+  {
+    aliases: ["http://rss.nytimes.com/services/xml/rss/nyt/Upshot.xml"],
+    categoryId: "us-politics",
+    id: "nyt-upshot",
+    label: "New York Times - The Upshot",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Upshot.xml",
+  },
+  {
+    aliases: ["http://www.reddit.com/r/politics/.rss"],
+    categoryId: "us-politics",
+    id: "reddit-politics",
+    label: "Reddit - r/politics",
+    source: "reddit.com",
+    url: "https://www.reddit.com/r/politics/.rss",
+  },
+  {
+    aliases: ["http://feeds.dailykos.com/dailykos/index.xml"],
+    categoryId: "us-politics",
+    id: "daily-kos",
+    label: "Daily Kos",
+    source: "dailykos.com",
+    url: "https://www.dailykos.com/feed/",
+  },
+  {
+    aliases: ["http://www.npr.org/rss/rss.php?id=1014"],
+    categoryId: "us-politics",
+    id: "npr-politics",
+    label: "NPR - Politics",
+    source: "npr.org",
+    url: "https://feeds.npr.org/1014/rss.xml",
+  },
+  {
+    aliases: ["http://www.rollcall.com/rss/all_news.xml"],
+    categoryId: "us-politics",
+    id: "roll-call-all",
+    label: "Roll Call",
+    source: "rollcall.com",
+    url: "https://rollcall.com/feed/",
+  },
+  {
+    aliases: ["http://www.rollcall.com/news/?zkDo=showRSS"],
+    categoryId: "us-politics",
+    id: "roll-call-politics",
+    label: "Roll Call - Politics",
+    source: "rollcall.com",
+    url: "https://rollcall.com/category/politics/feed/",
+  },
+  {
+    aliases: ["http://www.rollcall.com/politics/archives/?zkDo=showRSS"],
+    categoryId: "us-politics",
+    id: "roll-call-congress",
+    label: "Roll Call - Congress",
+    source: "rollcall.com",
+    url: "https://rollcall.com/category/congress/feed/",
+  },
+  {
+    aliases: ["http://www.rollcall.com/policy/archives/?zkDo=showRSS"],
+    categoryId: "us-politics",
+    id: "roll-call-policy",
+    label: "Roll Call - Policy",
+    source: "rollcall.com",
+    url: "https://rollcall.com/category/policy/feed/",
+  },
+  {
+    aliases: ["http://www.thenation.com/rss/articles"],
+    categoryId: "us-politics",
+    id: "nation-articles",
+    label: "The Nation - Articles",
+    source: "thenation.com",
+    url: "https://www.thenation.com/feed/?post_type=article",
+  },
+  {
+    aliases: ["http://www.thenation.com/blogs/rss/politics"],
+    categoryId: "us-politics",
+    id: "nation-politics",
+    label: "The Nation - Politics",
+    source: "thenation.com",
+    url: "https://www.thenation.com/subject/politics/feed/",
+  },
+  {
+    aliases: ["http://www.thenation.com/blogs/rss/foreign-reporting"],
+    categoryId: "us-politics",
+    id: "nation-foreign-policy",
+    label: "The Nation - Foreign Policy",
+    source: "thenation.com",
+    url: "https://www.thenation.com/subject/foreign-policy/feed/",
+  },
+  {
+    aliases: ["http://www.washingtontimes.com/rss/headlines/news/politics/"],
+    categoryId: "us-politics",
+    id: "washington-times-politics",
+    label: "Washington Times - Politics",
+    source: "washingtontimes.com",
+    url: "https://www.washingtontimes.com/rss/headlines/news/politics/",
+  },
+  {
+    aliases: [],
+    categoryId: "us-politics",
+    id: "real-clear-politics",
+    label: "RealClearPolitics",
+    source: "realclearpolitics.com",
+    url: "http://feeds.feedburner.com/realclearpolitics/qlMj",
+  },
+  {
+    aliases: [],
+    categoryId: "us-politics",
+    id: "breitbart",
+    label: "Breitbart News",
+    source: "breitbart.com",
+    url: "http://feeds.feedburner.com/BreitbartFeed",
+  },
+  {
+    aliases: ["http://dailycaller.com/section/politics/feed/"],
+    categoryId: "us-politics",
+    id: "daily-caller-politics",
+    label: "Daily Caller - Politics",
+    source: "dailycaller.com",
+    url: "https://dailycaller.com/section/politics/feed/",
+  },
+  {
+    aliases: ["https://www.nationalreview.com/rss.xml"],
+    categoryId: "us-politics",
+    id: "national-review",
+    label: "National Review",
+    source: "nationalreview.com",
+    url: "https://www.nationalreview.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "us-politics",
+    id: "drudge-report",
+    label: "Drudge Report Feed",
+    source: "drudgereport.com",
+    url: "http://feeds.feedburner.com/DrudgeReportFeed",
+  },
+  {
+    aliases: ["http://feeds.slate.com/slate-101526"],
+    categoryId: "us-politics",
+    id: "slate",
+    label: "Slate",
+    source: "slate.com",
+    url: "https://slate.com/feeds/all.rss",
+  },
+  {
+    aliases: [],
+    categoryId: "us-politics",
+    id: "mother-jones-politics",
+    label: "Mother Jones - Politics",
+    source: "motherjones.com",
+    url: "http://feeds.feedburner.com/motherjones/Politics",
+  },
+  {
+    aliases: ["http://www.newrepublic.com/taxonomy/term/17538/feed"],
+    categoryId: "us-politics",
+    id: "new-republic",
+    label: "The New Republic",
+    source: "newrepublic.com",
+    url: "https://newrepublic.com/rss.xml",
+  },
+  {
+    aliases: ["http://www.redstate.com/feed/"],
+    categoryId: "us-politics",
+    id: "redstate",
+    label: "RedState",
+    source: "redstate.com",
+    url: "https://redstate.com/feed/",
+  },
+  {
+    aliases: ["http://humanevents.com/feed/", "https://humanevents.com/feed/"],
+    categoryId: "us-politics",
+    id: "human-events",
+    label: "Human Events",
+    source: "humanevents.com",
+    url: "https://humanevents.com/rss.xml",
+  },
+  {
+    aliases: ["http://twitchy.com/category/us-politics/feed/"],
+    categoryId: "us-politics",
+    id: "twitchy-politics",
+    label: "Twitchy - U.S. Politics",
+    source: "twitchy.com",
+    url: "https://twitchy.com/category/us-politics/feed/",
+  },
+  {
+    aliases: ["http://talkingpointsmemo.com/feed/all"],
+    categoryId: "us-politics",
+    id: "talking-points-memo-politics",
+    label: "Talking Points Memo",
+    source: "talkingpointsmemo.com",
+    url: "https://talkingpointsmemo.com/feed",
+  },
+]
+
+const expectedFeedRecords = [
+  ...expectedUsGeneralFeedRecords,
+  ...expectedUsPoliticsFeedRecords,
+]
+
+const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedUsPoliticsFeedIds = expectedUsPoliticsFeedRecords.map(
+  (feed) => feed.id
+)
 
 describe("feed directory catalog", () => {
-  it("contains the approved category and validates without errors", () => {
+  it("contains the approved categories and validates without errors", () => {
     expect(feedDirectoryCategories).toEqual([
       {
         description:
@@ -244,11 +526,17 @@ describe("feed directory catalog", () => {
         id: "us-general",
         label: "US General",
       },
+      {
+        description:
+          "Campaigns, Congress, policy, and political analysis from U.S. outlets.",
+        id: "us-politics",
+        label: "US Politics",
+      },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
   })
 
-  it("reports duplicate normalized URLs when the first feed ID is empty", () => {
+  it("reports duplicate normalized URLs within one category", () => {
     const runtimeCatalog =
       feedDirectoryFeeds as unknown as FeedDirectoryFeed[]
     const originalLength = runtimeCatalog.length
@@ -296,6 +584,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-general")).toBe(
       feedDirectoryCategories[0]
     )
+    expect(getFeedDirectoryCategory("us-politics")).toBe(
+      feedDirectoryCategories[1]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -304,19 +595,29 @@ describe("feed directory catalog", () => {
 
   it("looks up feeds and lists category feeds in catalog order", () => {
     expect(getFeedDirectoryFeed("nyt-us")).toBe(feedDirectoryFeeds[3])
+    expect(getFeedDirectoryFeed("npr-politics")?.url).toBe(
+      "https://feeds.npr.org/1014/rss.xml"
+    )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
-      expectedFeedIds
+      expectedUsGeneralFeedIds
     )
+    expect(
+      listFeedDirectoryFeeds("us-politics").map((feed) => feed.id)
+    ).toEqual(expectedUsPoliticsFeedIds)
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times and NBC legacy aliases", () => {
+  it("matches New York Times, NBC, and politics legacy aliases", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
+    const politics = getFeedDirectoryFeed("npr-politics")
+    const huffpost = getFeedDirectoryFeed("huffpost-politics")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
+    expect(politics).toBeDefined()
+    expect(huffpost).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -325,6 +626,16 @@ describe("feed directory catalog", () => {
     expect(
       isDirectoryFeedSubscribed(nbc!, [
         "http://feeds.nbcnews.com/feeds/topstories",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(politics!, [
+        "http://www.npr.org/rss/rss.php?id=1014",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(huffpost!, [
+        "http://www.huffingtonpost.com/feeds/verticals/politics/index.xml",
       ])
     ).toBe(true)
   })
@@ -340,6 +651,17 @@ describe("feed directory catalog", () => {
     ).toBe(true)
   })
 
+  it("allows the same verified feed to appear in multiple categories", () => {
+    const generalPolitico = getFeedDirectoryFeed("politico-politics")
+    const politicsPolitico = getFeedDirectoryFeed("politico-politics-news")
+    const generalTpm = getFeedDirectoryFeed("talking-points-memo")
+    const politicsTpm = getFeedDirectoryFeed("talking-points-memo-politics")
+
+    expect(generalPolitico?.url).toBe(politicsPolitico?.url)
+    expect(generalTpm?.url).toBe(politicsTpm?.url)
+    expect(validateFeedDirectoryCatalog()).toEqual([])
+  })
+
   it("ignores invalid stored URLs and does not match unrelated URLs", () => {
     const feed = getFeedDirectoryFeed("nyt-us")
 
@@ -353,7 +675,7 @@ describe("feed directory catalog", () => {
     ).toBe(false)
   })
 
-  it("does not include the hijacked Atlantic Wire feed", () => {
+  it("does not include retired or hijacked feeds", () => {
     const directoryUrls = feedDirectoryFeeds.flatMap((feed) => [
       feed.url,
       ...(feed.aliases ?? []),
@@ -361,6 +683,12 @@ describe("feed directory catalog", () => {
 
     expect(directoryUrls).not.toContain(
       "http://feeds.feedburner.com/TheAtlanticWire"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.weeklystandard.com/rss/site.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.reuters.com/Reuters/PoliticsNews"
     )
   })
 })
