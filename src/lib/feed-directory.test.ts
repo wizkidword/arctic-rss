@@ -1139,12 +1139,112 @@ const expectedUsScienceFeedRecords = [
   },
 ]
 
+const expectedUsSportsFeedRecords = [
+  {
+    aliases: ["http://rss.nytimes.com/services/xml/rss/nyt/Sports.xml"],
+    categoryId: "us-sports",
+    id: "nyt-sports",
+    label: "New York Times - Sports",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml",
+  },
+  {
+    aliases: ["http://www.buzzfeed.com/sports.xml"],
+    categoryId: "us-sports",
+    id: "buzzfeed-sports",
+    label: "BuzzFeed - Sports",
+    source: "buzzfeed.com",
+    url: "https://www.buzzfeed.com/sports.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "us-sports",
+    id: "fox-news-sports",
+    label: "Fox News - Sports",
+    source: "foxnews.com",
+    url: "http://feeds.foxnews.com/foxnews/sports",
+  },
+  {
+    aliases: [],
+    categoryId: "us-sports",
+    id: "sb-nation",
+    label: "SB Nation",
+    source: "sbnation.com",
+    url: "http://feeds.sbnation.com/rss/streams",
+  },
+  {
+    aliases: ["http://sports.espn.go.com/espn/rss/news"],
+    categoryId: "us-sports",
+    id: "espn-top-news",
+    label: "ESPN - Top News",
+    source: "espn.com",
+    url: "https://www.espn.com/espn/rss/news",
+  },
+  {
+    aliases: ["http://www.latimes.com/sports/rss2.0.xml"],
+    categoryId: "us-sports",
+    id: "la-times-sports",
+    label: "Los Angeles Times - Sports",
+    source: "latimes.com",
+    url: "https://www.latimes.com/sports/rss2.0.xml",
+  },
+  {
+    aliases: ["http://www.cbssports.com/partners/feeds/rss/home_news"],
+    categoryId: "us-sports",
+    id: "cbs-sports-headlines",
+    label: "CBS Sports - Headlines",
+    source: "cbssports.com",
+    url: "https://www.cbssports.com/rss/headlines/",
+  },
+  {
+    aliases: ["http://www.si.com/rss/si_topstories.rss"],
+    categoryId: "us-sports",
+    id: "sports-illustrated",
+    label: "Sports Illustrated",
+    source: "si.com",
+    url: "https://www.si.com/feed",
+  },
+  {
+    aliases: ["http://feeds.gawker.com/deadspin/full"],
+    categoryId: "us-sports",
+    id: "deadspin",
+    label: "Deadspin",
+    source: "deadspin.com",
+    url: "https://deadspin.com/rss/",
+  },
+  {
+    aliases: ["https://sports.yahoo.com/top/rss.xml"],
+    categoryId: "us-sports",
+    id: "yahoo-sports",
+    label: "Yahoo Sports",
+    source: "yahoo.com",
+    url: "https://sports.yahoo.com/rss/",
+  },
+  {
+    aliases: ["http://feeds.washingtonpost.com/rss/rss_early-lead"],
+    categoryId: "us-sports",
+    id: "washington-post-early-lead",
+    label: "Washington Post - The Early Lead",
+    source: "washingtonpost.com",
+    url: "https://feeds.washingtonpost.com/rss/rss_early-lead",
+  },
+  {
+    aliases: ["http://www.theguardian.com/sport/us-sport/rss"],
+    categoryId: "us-sports",
+    id: "guardian-us-sports",
+    label: "The Guardian - U.S. Sports",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/sport/us-sport/rss",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
   ...expectedUsBusinessFeedRecords,
   ...expectedUsHealthFeedRecords,
   ...expectedUsScienceFeedRecords,
+  ...expectedUsSportsFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -1160,6 +1260,9 @@ const expectedUsHealthFeedIds = expectedUsHealthFeedRecords.map(
   (feed) => feed.id
 )
 const expectedUsScienceFeedIds = expectedUsScienceFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedUsSportsFeedIds = expectedUsSportsFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -1195,6 +1298,12 @@ describe("feed directory catalog", () => {
           "Science news, space, research, environment, and discovery coverage from major outlets and journals.",
         id: "us-science",
         label: "US Science",
+      },
+      {
+        description:
+          "Sports headlines, analysis, scores, and commentary from national outlets and sports publications.",
+        id: "us-sports",
+        label: "US Sports",
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
@@ -1260,6 +1369,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-science")).toBe(
       feedDirectoryCategories[4]
     )
+    expect(getFeedDirectoryCategory("us-sports")).toBe(
+      feedDirectoryCategories[5]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -1280,6 +1392,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryFeed("wired-science")?.url).toBe(
       "https://www.wired.com/feed/category/science/latest/rss"
     )
+    expect(getFeedDirectoryFeed("sports-illustrated")?.url).toBe(
+      "https://www.si.com/feed"
+    )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
       expectedUsGeneralFeedIds
@@ -1296,10 +1411,13 @@ describe("feed directory catalog", () => {
     expect(listFeedDirectoryFeeds("us-science").map((feed) => feed.id)).toEqual(
       expectedUsScienceFeedIds
     )
+    expect(listFeedDirectoryFeeds("us-sports").map((feed) => feed.id)).toEqual(
+      expectedUsSportsFeedIds
+    )
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times, NBC, politics, business, health, and science legacy aliases", () => {
+  it("matches New York Times, NBC, politics, business, health, science, and sports legacy aliases", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -1314,6 +1432,14 @@ describe("feed directory catalog", () => {
     const nprScience = getFeedDirectoryFeed("npr-science")
     const scienceDaily = getFeedDirectoryFeed("science-daily")
     const vergeScience = getFeedDirectoryFeed("the-verge-science")
+    const espn = getFeedDirectoryFeed("espn-top-news")
+    const cbsSports = getFeedDirectoryFeed("cbs-sports-headlines")
+    const si = getFeedDirectoryFeed("sports-illustrated")
+    const deadspin = getFeedDirectoryFeed("deadspin")
+    const yahooSports = getFeedDirectoryFeed("yahoo-sports")
+    const washingtonPostSports = getFeedDirectoryFeed(
+      "washington-post-early-lead"
+    )
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -1329,6 +1455,12 @@ describe("feed directory catalog", () => {
     expect(nprScience).toBeDefined()
     expect(scienceDaily).toBeDefined()
     expect(vergeScience).toBeDefined()
+    expect(espn).toBeDefined()
+    expect(cbsSports).toBeDefined()
+    expect(si).toBeDefined()
+    expect(deadspin).toBeDefined()
+    expect(yahooSports).toBeDefined()
+    expect(washingtonPostSports).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -1395,6 +1527,34 @@ describe("feed directory catalog", () => {
     expect(
       isDirectoryFeedSubscribed(vergeScience!, [
         "http://www.theverge.com/science/rss/index.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(espn!, [
+        "http://sports.espn.go.com/espn/rss/news",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(cbsSports!, [
+        "http://www.cbssports.com/partners/feeds/rss/home_news",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(si!, ["http://www.si.com/rss/si_topstories.rss"])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(deadspin!, [
+        "http://feeds.gawker.com/deadspin/full",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(yahooSports!, [
+        "https://sports.yahoo.com/top/rss.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(washingtonPostSports!, [
+        "http://feeds.washingtonpost.com/rss/rss_early-lead",
       ])
     ).toBe(true)
   })
@@ -1514,6 +1674,12 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://feeds.nature.com/nbt/rss/current"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://content.usatoday.com/marketing/rss/rsstrans.aspx?feedId=sports1"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://hosted.ap.org/lineups/SPORTSHEADS.rss?SITE=AP&SECTION=HOME"
     )
   })
 })
