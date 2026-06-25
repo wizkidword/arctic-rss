@@ -48,16 +48,25 @@ export function FeedDirectorySubscribeButton({
 }) {
   const [open, setOpen] = useState(false)
   const [openSession, setOpenSession] = useState(0)
+  const [announcement, setAnnouncement] = useState({
+    feedId: "",
+    message: "",
+  })
   const closeDialog = useCallback(() => setOpen(false), [])
+  const handleActionMessage = useCallback(
+    (message: string) => setAnnouncement({ feedId, message }),
+    [feedId]
+  )
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (nextOpen && !open) {
         setOpenSession((session) => session + 1)
+        setAnnouncement({ feedId, message: "" })
       }
 
       setOpen(nextOpen)
     },
-    [open]
+    [feedId, open]
   )
 
   if (subscribed) {
@@ -71,24 +80,34 @@ export function FeedDirectorySubscribeButton({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogTrigger
-        render={<Button size="sm" variant="outline" />}
+    <>
+      <span
+        aria-atomic="true"
+        aria-live="polite"
+        className="sr-only"
       >
-        <RssIcon data-icon="inline-start" />
-        Subscribe
-        <span className="sr-only"> to {feedLabel}</span>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <FeedDirectorySubscribeActionForm
-          key={`${feedId}:${openSession}`}
-          feedId={feedId}
-          feedLabel={feedLabel}
-          folders={folders}
-          onSuccess={closeDialog}
-        />
-      </AlertDialogContent>
-    </AlertDialog>
+        {announcement.feedId === feedId ? announcement.message : ""}
+      </span>
+      <AlertDialog open={open} onOpenChange={handleOpenChange}>
+        <AlertDialogTrigger
+          render={<Button size="sm" variant="outline" />}
+        >
+          <RssIcon data-icon="inline-start" />
+          Subscribe
+          <span className="sr-only"> to {feedLabel}</span>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <FeedDirectorySubscribeActionForm
+            key={`${feedId}:${openSession}`}
+            feedId={feedId}
+            feedLabel={feedLabel}
+            folders={folders}
+            onActionMessage={handleActionMessage}
+            onSuccess={closeDialog}
+          />
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -96,11 +115,13 @@ function FeedDirectorySubscribeActionForm({
   feedId,
   feedLabel,
   folders,
+  onActionMessage,
   onSuccess,
 }: {
   feedId: string
   feedLabel: string
   folders: DirectoryFolder[]
+  onActionMessage: (message: string) => void
   onSuccess: () => void
 }) {
   const [state, action, pending] = useActionState(
@@ -109,10 +130,14 @@ function FeedDirectorySubscribeActionForm({
   )
 
   useEffect(() => {
+    if (state.status === "error" || state.status === "success") {
+      onActionMessage(state.message)
+    }
+
     if (state.status === "success") {
       onSuccess()
     }
-  }, [onSuccess, state.status])
+  }, [onActionMessage, onSuccess, state.message, state.status])
 
   return (
     <FeedDirectorySubscribeDialogContent

@@ -3,6 +3,10 @@ import { cache } from "react"
 
 import { countUnreadArticlesForFeed } from "./articles"
 import { discoverFeedFromUrl } from "./feed-discovery"
+import {
+  feedDirectoryFeeds,
+  isDirectoryFeedSubscribed,
+} from "./feed-directory"
 import { getPrisma } from "./db"
 
 export class FeedSubscriptionError extends Error {
@@ -147,6 +151,33 @@ export async function subscribeToFeed({
   }
 
   const discoveredFeed = await discoverFeedFromUrl(url)
+  const directoryFeed = feedDirectoryFeeds.find((feed) =>
+    isDirectoryFeedSubscribed(feed, [discoveredFeed.feedUrl])
+  )
+
+  if (directoryFeed) {
+    const existingSubscriptions = await prisma.feedSubscription.findMany({
+      where: { userId },
+      select: {
+        feed: {
+          select: {
+            feedUrl: true,
+            title: true,
+          },
+        },
+      },
+    })
+    const existingSubscription = existingSubscriptions.find((subscription) =>
+      isDirectoryFeedSubscribed(directoryFeed, [subscription.feed.feedUrl])
+    )
+
+    if (existingSubscription) {
+      throw new FeedSubscriptionError(
+        `You are already subscribed to ${existingSubscription.feed.title}.`
+      )
+    }
+  }
+
   const now = new Date()
 
   const feed = await prisma.feed.upsert({

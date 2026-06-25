@@ -5,18 +5,26 @@ const {
   articleStateDeleteMany,
   countUnreadArticlesForFeed,
   deleteMany,
+  discoverFeedFromUrl,
+  feedSubscriptionCreate,
   feedDelete,
+  feedUpsert,
   findFirst,
   findMany,
+  folderFindFirst,
   reactCache,
 } = vi.hoisted(() => ({
   articleDeleteMany: vi.fn(),
   articleStateDeleteMany: vi.fn(),
   countUnreadArticlesForFeed: vi.fn(),
   deleteMany: vi.fn(),
+  discoverFeedFromUrl: vi.fn(),
+  feedSubscriptionCreate: vi.fn(),
   feedDelete: vi.fn(),
+  feedUpsert: vi.fn(),
   findFirst: vi.fn(),
   findMany: vi.fn(),
+  folderFindFirst: vi.fn(),
   reactCache: vi.fn((loader) => loader),
 }))
 
@@ -34,11 +42,16 @@ vi.mock("./db", () => ({
     },
     feed: {
       delete: feedDelete,
+      upsert: feedUpsert,
     },
     feedSubscription: {
+      create: feedSubscriptionCreate,
       deleteMany,
       findFirst,
       findMany,
+    },
+    folder: {
+      findFirst: folderFindFirst,
     },
   }),
 }))
@@ -47,9 +60,14 @@ vi.mock("./articles", () => ({
   countUnreadArticlesForFeed,
 }))
 
+vi.mock("./feed-discovery", () => ({
+  discoverFeedFromUrl,
+}))
+
 import {
   FeedSubscriptionError,
   listUserFeedSubscriptions,
+  subscribeToFeed,
   unsubscribeFromFeed,
 } from "./feed-subscriptions"
 
@@ -59,9 +77,13 @@ describe("feed subscriptions", () => {
     articleStateDeleteMany.mockReset()
     countUnreadArticlesForFeed.mockReset()
     deleteMany.mockReset()
+    discoverFeedFromUrl.mockReset()
+    feedSubscriptionCreate.mockReset()
     feedDelete.mockReset()
+    feedUpsert.mockReset()
     findFirst.mockReset()
     findMany.mockReset()
+    folderFindFirst.mockReset()
     countUnreadArticlesForFeed.mockResolvedValue(3)
   })
 
@@ -228,5 +250,60 @@ describe("feed subscriptions", () => {
         userId: "user-1",
       },
     })
+  })
+
+  it("rejects directory alias-equivalent duplicate subscriptions before upserting a feed", async () => {
+    discoverFeedFromUrl.mockResolvedValue({
+      description: "Latest reporting from The Daily Beast.",
+      faviconUrl: "https://www.thedailybeast.com/favicon.ico",
+      feedUrl: "http://feeds.feedburner.com/thedailybeast/articles",
+      format: "rss",
+      language: "en",
+      siteUrl: "https://www.thedailybeast.com",
+      title: "The Daily Beast",
+    })
+    findMany.mockResolvedValue([
+      {
+        feed: {
+          feedUrl: "https://feeds.feedburner.com/thedailybeast/articles",
+          title: "The Daily Beast - Latest",
+        },
+      },
+    ])
+    feedUpsert.mockResolvedValue({
+      id: "daily-beast-http-feed",
+      title: "The Daily Beast",
+    })
+    feedSubscriptionCreate.mockResolvedValue({
+      feed: {
+        title: "The Daily Beast",
+      },
+      id: "subscription-1",
+    })
+
+    await expect(
+      subscribeToFeed({
+        url: "http://feeds.feedburner.com/thedailybeast/articles",
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new FeedSubscriptionError(
+        "You are already subscribed to The Daily Beast - Latest."
+      )
+    )
+
+    expect(findMany).toHaveBeenCalledWith({
+      select: {
+        feed: {
+          select: {
+            feedUrl: true,
+            title: true,
+          },
+        },
+      },
+      where: { userId: "user-1" },
+    })
+    expect(feedUpsert).not.toHaveBeenCalled()
+    expect(feedSubscriptionCreate).not.toHaveBeenCalled()
   })
 })

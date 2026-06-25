@@ -37,6 +37,22 @@ function createDeferred<T>() {
   return { promise, resolve }
 }
 
+function getPersistentAnnouncement() {
+  const dialogs = Array.from(
+    document.querySelectorAll('[role="dialog"], [role="alertdialog"]')
+  )
+
+  return (
+    Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[aria-live="polite"][aria-atomic="true"]'
+      )
+    ).find(
+      (region) => !dialogs.some((dialog) => dialog.contains(region))
+    ) ?? null
+  )
+}
+
 afterEach(() => {
   cleanup()
 })
@@ -188,8 +204,9 @@ describe("FeedDirectorySubscribeButton", () => {
 
   it("clears an action error after the dialog is closed and reopened", async () => {
     const user = userEvent.setup()
+    const errorMessage = "NPR - National could not be subscribed. Try again."
     subscribeDirectoryFeedAction.mockResolvedValueOnce({
-      message: "NPR - National could not be subscribed. Try again.",
+      message: errorMessage,
       status: "error",
     })
 
@@ -214,10 +231,11 @@ describe("FeedDirectorySubscribeButton", () => {
     )
 
     expect(
-      await screen.findByText(
-        "NPR - National could not be subscribed. Try again."
-      )
+      await within(screen.getByRole("dialog")).findByText(errorMessage)
     ).toBeTruthy()
+    await waitFor(() => {
+      expect(getPersistentAnnouncement()?.textContent).toBe(errorMessage)
+    })
 
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
@@ -232,20 +250,26 @@ describe("FeedDirectorySubscribeButton", () => {
       name: /Subscribe.*NPR - National/,
     })
     expect(document.activeElement).toBe(subscribeTrigger)
+    await waitFor(() => {
+      expect(getPersistentAnnouncement()?.textContent).toBe(errorMessage)
+    })
 
     await user.click(subscribeTrigger)
 
     expect(
-      screen.queryByText(
-        "NPR - National could not be subscribed. Try again."
-      )
+      within(screen.getByRole("dialog")).queryByText(errorMessage)
     ).toBeNull()
+    await waitFor(() => {
+      expect(getPersistentAnnouncement()?.textContent).toBe("")
+    })
   })
 
-  it("closes the dialog after a successful subscription", async () => {
+  it("keeps a successful subscription message in a persistent live region after closing the dialog", async () => {
     const user = userEvent.setup()
+    const successMessage =
+      "Subscribed to NPR - National. Imported 12 articles."
     subscribeDirectoryFeedAction.mockResolvedValueOnce({
-      message: "Subscribed to NPR - National.",
+      message: successMessage,
       status: "success",
     })
 
@@ -273,6 +297,8 @@ describe("FeedDirectorySubscribeButton", () => {
       expect(screen.queryByRole("dialog")).toBeNull()
     })
 
+    expect(screen.getByText(successMessage)).toBeTruthy()
+    expect(getPersistentAnnouncement()?.textContent).toBe(successMessage)
     expect(document.activeElement).toBe(
       screen.getByRole("button", {
         name: /Subscribe.*NPR - National/,
@@ -359,7 +385,7 @@ describe("FeedDirectorySubscribeButton", () => {
       })
     )
     expect(
-      await screen.findByText(
+      await within(screen.getByRole("dialog")).findByText(
         "NPR - National could not be subscribed. Try again."
       )
     ).toBeTruthy()
