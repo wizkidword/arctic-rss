@@ -143,6 +143,12 @@ import {
 } from "./actions"
 
 describe("subscribeDirectoryFeedAction", () => {
+  function expectNoPostCommitOperations() {
+    expect(mocks.refreshFeed).not.toHaveBeenCalled()
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  }
+
   beforeEach(() => {
     mocks.auth.mockReset()
     mocks.refresh.mockReset()
@@ -169,7 +175,7 @@ describe("subscribeDirectoryFeedAction", () => {
       status: "error",
     })
     expect(mocks.subscribeToFeed).not.toHaveBeenCalled()
-    expect(mocks.refresh).not.toHaveBeenCalled()
+    expectNoPostCommitOperations()
   })
 
   it("rejects an unknown or tampered directory feed ID", async () => {
@@ -194,7 +200,7 @@ describe("subscribeDirectoryFeedAction", () => {
       status: "error",
     })
     expect(mocks.subscribeToFeed).not.toHaveBeenCalled()
-    expect(mocks.refresh).not.toHaveBeenCalled()
+    expectNoPostCommitOperations()
   })
 
   it("subscribes to NPR National without a folder and refreshes the app", async () => {
@@ -294,8 +300,7 @@ describe("subscribeDirectoryFeedAction", () => {
       message: "That folder does not exist.",
       status: "error",
     })
-    expect(mocks.refreshFeed).not.toHaveBeenCalled()
-    expect(mocks.refresh).not.toHaveBeenCalled()
+    expectNoPostCommitOperations()
   })
 
   it("returns a readable duplicate subscription error without refreshing the client", async () => {
@@ -324,8 +329,7 @@ describe("subscribeDirectoryFeedAction", () => {
       message: "You are already subscribed to NPR Topics: National.",
       status: "error",
     })
-    expect(mocks.refreshFeed).not.toHaveBeenCalled()
-    expect(mocks.refresh).not.toHaveBeenCalled()
+    expectNoPostCommitOperations()
   })
 
   it("returns a readable feed validation error without refreshing the client", async () => {
@@ -354,8 +358,32 @@ describe("subscribeDirectoryFeedAction", () => {
       message: "That address did not expose a readable RSS or Atom feed.",
       status: "error",
     })
-    expect(mocks.refreshFeed).not.toHaveBeenCalled()
-    expect(mocks.refresh).not.toHaveBeenCalled()
+    expectNoPostCommitOperations()
+  })
+
+  it("returns a generic error when the subscription service fails unexpectedly", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.subscribeToFeed.mockRejectedValue(new Error("Database unavailable"))
+    const formData = new FormData()
+    formData.set("directoryFeedId", "npr-national")
+
+    const result = await subscribeDirectoryFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData
+    )
+
+    expect(result).toEqual({
+      message: "Arctic RSS could not subscribe to that directory feed.",
+      status: "error",
+    })
+    expectNoPostCommitOperations()
   })
 
   it("preserves the subscription when the immediate article refresh fails", async () => {
@@ -385,6 +413,74 @@ describe("subscribeDirectoryFeedAction", () => {
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Subscribed to NPR - National. Article refresh will retry.",
+      status: "success",
+    })
+  })
+
+  it("returns success and attempts refresh when app revalidation fails", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.subscribeToFeed.mockResolvedValue({
+      feedId: "feed-1",
+    })
+    mocks.refreshFeed.mockResolvedValue({
+      articleCount: 12,
+    })
+    mocks.revalidatePath.mockImplementation(() => {
+      throw new Error("Cache unavailable")
+    })
+    const formData = new FormData()
+    formData.set("directoryFeedId", "npr-national")
+
+    const result = await subscribeDirectoryFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData
+    )
+
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.refresh).toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "Subscribed to NPR - National. Imported 12 articles.",
+      status: "success",
+    })
+  })
+
+  it("returns success when the client refresh fails", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.subscribeToFeed.mockResolvedValue({
+      feedId: "feed-1",
+    })
+    mocks.refreshFeed.mockResolvedValue({
+      articleCount: 12,
+    })
+    mocks.refresh.mockImplementation(() => {
+      throw new Error("Client refresh unavailable")
+    })
+    const formData = new FormData()
+    formData.set("directoryFeedId", "npr-national")
+
+    const result = await subscribeDirectoryFeedAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData
+    )
+
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.refresh).toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "Subscribed to NPR - National. Imported 12 articles.",
       status: "success",
     })
   })

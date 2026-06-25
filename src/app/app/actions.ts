@@ -206,7 +206,7 @@ export async function subscribeDirectoryFeedAction(
     }
   }
 
-  let subscription
+  let subscription: Awaited<ReturnType<typeof subscribeToFeed>>
 
   try {
     subscription = await subscribeToFeed({
@@ -242,8 +242,17 @@ export async function subscribeDirectoryFeedAction(
     // The subscription is committed and the worker can retry the refresh.
   }
 
-  revalidatePath("/app", "layout")
-  refresh()
+  try {
+    revalidatePath("/app", "layout")
+  } catch {
+    // The subscription is committed; cache invalidation is best effort.
+  }
+
+  try {
+    refresh()
+  } catch {
+    // The subscription is committed; client refresh is best effort.
+  }
 
   return {
     message: `Subscribed to ${directoryFeed.label}. ${refreshMessage}`,
