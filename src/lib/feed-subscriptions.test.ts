@@ -306,4 +306,63 @@ describe("feed subscriptions", () => {
     expect(feedUpsert).not.toHaveBeenCalled()
     expect(feedSubscriptionCreate).not.toHaveBeenCalled()
   })
+
+  it("persists directory alias discoveries under the canonical catalog feed URL", async () => {
+    discoverFeedFromUrl.mockResolvedValue({
+      description: "Latest reporting from The Daily Beast.",
+      faviconUrl: "https://www.thedailybeast.com/favicon.ico",
+      feedUrl: "http://feeds.feedburner.com/thedailybeast/articles",
+      format: "rss",
+      language: "en",
+      siteUrl: "https://www.thedailybeast.com",
+      title: "The Daily Beast",
+    })
+    findMany.mockResolvedValue([])
+    feedUpsert.mockResolvedValue({
+      id: "daily-beast-feed",
+      title: "The Daily Beast",
+    })
+    feedSubscriptionCreate.mockResolvedValue({
+      feed: {
+        title: "The Daily Beast",
+      },
+      id: "subscription-1",
+    })
+
+    await subscribeToFeed({
+      url: "http://feeds.feedburner.com/thedailybeast/articles",
+      userId: "user-1",
+    })
+
+    expect(feedUpsert).toHaveBeenCalledWith({
+      where: {
+        feedUrl: "https://feeds.feedburner.com/thedailybeast/articles",
+      },
+      create: expect.objectContaining({
+        description: "Latest reporting from The Daily Beast.",
+        faviconUrl: "https://www.thedailybeast.com/favicon.ico",
+        feedUrl: "https://feeds.feedburner.com/thedailybeast/articles",
+        language: "en",
+        siteUrl: "https://www.thedailybeast.com",
+        title: "The Daily Beast",
+      }),
+      update: expect.objectContaining({
+        description: "Latest reporting from The Daily Beast.",
+        faviconUrl: "https://www.thedailybeast.com/favicon.ico",
+        language: "en",
+        siteUrl: "https://www.thedailybeast.com",
+        title: "The Daily Beast",
+      }),
+    })
+    expect(feedSubscriptionCreate).toHaveBeenCalledWith({
+      data: {
+        feedId: "daily-beast-feed",
+        folderId: undefined,
+        userId: "user-1",
+      },
+      include: {
+        feed: true,
+      },
+    })
+  })
 })

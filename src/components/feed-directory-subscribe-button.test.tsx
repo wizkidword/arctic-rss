@@ -53,6 +53,12 @@ function getPersistentAnnouncement() {
   )
 }
 
+function getPoliteLiveRegions() {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>('[aria-live="polite"]')
+  )
+}
+
 afterEach(() => {
   cleanup()
 })
@@ -233,6 +239,12 @@ describe("FeedDirectorySubscribeButton", () => {
     expect(
       await within(screen.getByRole("dialog")).findByText(errorMessage)
     ).toBeTruthy()
+    const visibleError = within(screen.getByRole("dialog")).getByText(
+      errorMessage
+    )
+    expect(visibleError.getAttribute("aria-live")).toBeNull()
+    expect(visibleError.getAttribute("aria-atomic")).toBeNull()
+    expect(getPoliteLiveRegions()).toEqual([getPersistentAnnouncement()])
     await waitFor(() => {
       expect(getPersistentAnnouncement()?.textContent).toBe(errorMessage)
     })
@@ -304,6 +316,57 @@ describe("FeedDirectorySubscribeButton", () => {
         name: /Subscribe.*NPR - National/,
       })
     )
+  })
+
+  it("preserves the success announcement when a refresh renders the subscribed state", async () => {
+    const user = userEvent.setup()
+    const successMessage =
+      "Subscribed to NPR - National. Imported 12 articles."
+    subscribeDirectoryFeedAction.mockResolvedValueOnce({
+      message: successMessage,
+      status: "success",
+    })
+
+    const { rerender } = render(
+      <FeedDirectorySubscribeButton
+        feedId="npr-national"
+        feedLabel="NPR - National"
+        folders={folders}
+        subscribed={false}
+      />
+    )
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+    )
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Subscribe",
+      })
+    )
+
+    await waitFor(() => {
+      expect(getPersistentAnnouncement()?.textContent).toBe(successMessage)
+    })
+
+    rerender(
+      <FeedDirectorySubscribeButton
+        feedId="npr-national"
+        feedLabel="NPR - National"
+        folders={folders}
+        subscribed
+      />
+    )
+
+    expect(screen.queryByRole("dialog")).toBeNull()
+    expect(
+      screen.getByRole("button", {
+        name: /Subscribed.*NPR - National/,
+      })
+    ).toHaveProperty("disabled", true)
+    expect(getPersistentAnnouncement()?.textContent).toBe(successMessage)
   })
 
   it("disables the folder picker and dialog actions while pending", async () => {

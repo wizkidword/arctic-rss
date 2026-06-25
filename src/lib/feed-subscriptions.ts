@@ -179,13 +179,14 @@ export async function subscribeToFeed({
   }
 
   const now = new Date()
+  const persistedFeedUrl = directoryFeed?.url ?? discoveredFeed.feedUrl
 
   const feed = await prisma.feed.upsert({
-    where: { feedUrl: discoveredFeed.feedUrl },
+    where: { feedUrl: persistedFeedUrl },
     create: {
       description: discoveredFeed.description,
       faviconUrl: discoveredFeed.faviconUrl,
-      feedUrl: discoveredFeed.feedUrl,
+      feedUrl: persistedFeedUrl,
       language: discoveredFeed.language,
       lastError: null,
       lastFetchedAt: now,

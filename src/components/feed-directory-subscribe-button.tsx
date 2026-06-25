@@ -69,25 +69,32 @@ export function FeedDirectorySubscribeButton({
     [feedId, open]
   )
 
+  const liveRegion = (
+    <span
+      aria-atomic="true"
+      aria-live="polite"
+      className="sr-only"
+    >
+      {announcement.feedId === feedId ? announcement.message : ""}
+    </span>
+  )
+
   if (subscribed) {
     return (
-      <Button disabled size="sm" variant="secondary">
-        <CheckIcon data-icon="inline-start" />
-        Subscribed
-        <span className="sr-only"> to {feedLabel}</span>
-      </Button>
+      <>
+        {liveRegion}
+        <Button disabled size="sm" variant="secondary">
+          <CheckIcon data-icon="inline-start" />
+          Subscribed
+          <span className="sr-only"> to {feedLabel}</span>
+        </Button>
+      </>
     )
   }
 
   return (
     <>
-      <span
-        aria-atomic="true"
-        aria-live="polite"
-        className="sr-only"
-      >
-        {announcement.feedId === feedId ? announcement.message : ""}
-      </span>
+      {liveRegion}
       <AlertDialog open={open} onOpenChange={handleOpenChange}>
         <AlertDialogTrigger
           render={<Button size="sm" variant="outline" />}
@@ -204,11 +211,7 @@ export function FeedDirectorySubscribeDialogContent({
         </div>
       </div>
 
-      <p
-        aria-atomic="true"
-        aria-live="polite"
-        className="text-sm text-destructive"
-      >
+      <p className="text-sm text-destructive">
         {state.status === "error" ? state.message : ""}
       </p>
 
