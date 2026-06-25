@@ -25,6 +25,12 @@ export const feedDirectoryCategories: readonly FeedDirectoryCategory[] = [
     id: "us-politics",
     label: "US Politics",
   },
+  {
+    description:
+      "Markets, companies, economy, and workplace coverage from business outlets.",
+    id: "us-business",
+    label: "US Business",
+  },
 ]
 
 export const feedDirectoryFeeds: readonly FeedDirectoryFeed[] = [
@@ -509,6 +515,101 @@ export const feedDirectoryFeeds: readonly FeedDirectoryFeed[] = [
     label: "Talking Points Memo",
     source: "talkingpointsmemo.com",
     url: "https://talkingpointsmemo.com/feed",
+  },
+  {
+    aliases: ["http://online.wsj.com/xml/rss/3_7014.xml"],
+    categoryId: "us-business",
+    id: "wsj-us-business",
+    label: "Wall Street Journal - U.S. Business",
+    source: "wsj.com",
+    url: "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness",
+  },
+  {
+    aliases: [
+      "http://www.nytimes.com/services/xml/rss/nyt/Business.xml",
+      "http://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+    ],
+    categoryId: "us-business",
+    id: "nyt-business",
+    label: "New York Times - Business",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+  },
+  {
+    aliases: [
+      "http://feeds.washingtonpost.com/rss/rss_storyline",
+      "http://feeds.washingtonpost.com/rss/rss_wonkblog",
+    ],
+    categoryId: "us-business",
+    id: "washington-post-business",
+    label: "Washington Post - Business",
+    source: "washingtonpost.com",
+    url: "https://feeds.washingtonpost.com/rss/business",
+  },
+  {
+    aliases: ["http://www.economist.com/feeds/print-sections/77/business.xml"],
+    categoryId: "us-business",
+    id: "economist-business",
+    label: "The Economist - Business",
+    source: "economist.com",
+    url: "https://www.economist.com/business/rss.xml",
+  },
+  {
+    categoryId: "us-business",
+    id: "harvard-business-review",
+    label: "Harvard Business Review",
+    source: "hbr.org",
+    url: "http://feeds.harvardbusiness.org/harvardbusiness?format=xml",
+  },
+  {
+    aliases: ["http://au.ibtimes.com/rss/articles/region/1.rss"],
+    categoryId: "us-business",
+    id: "ibtimes-business",
+    label: "International Business Times - Business",
+    source: "ibtimes.com",
+    url: "https://www.ibtimes.com/rss/business",
+  },
+  {
+    aliases: ["http://www.businessweek.com/search/rssfeed.htm"],
+    categoryId: "us-business",
+    id: "bloomberg-businessweek",
+    label: "Bloomberg Businessweek",
+    source: "bloomberg.com",
+    url: "https://feeds.bloomberg.com/businessweek/news.rss",
+  },
+  {
+    aliases: ["http://www.huffingtonpost.com/feeds/verticals/business/news.xml"],
+    categoryId: "us-business",
+    id: "huffpost-business",
+    label: "HuffPost - Business",
+    source: "huffpost.com",
+    url: "https://www.huffpost.com/section/business/feed",
+  },
+  {
+    aliases: [
+      "http://www.ft.com/rss/home/us",
+      "https://www.ft.com/world/us?format=rss",
+    ],
+    categoryId: "us-business",
+    id: "financial-times-us",
+    label: "Financial Times - U.S.",
+    source: "ft.com",
+    url: "https://www.ft.com/us?format=rss",
+  },
+  {
+    categoryId: "us-business",
+    id: "cnn-business",
+    label: "CNN Business",
+    source: "cnn.com",
+    url: "http://rss.cnn.com/rss/edition_business.rss",
+  },
+  {
+    aliases: ["http://www.bloomberg.com/feed/podcast/law.xml"],
+    categoryId: "us-business",
+    id: "bloomberg-law",
+    label: "Bloomberg Law",
+    source: "bloomberg.com",
+    url: "https://feeds.bloomberg.com/podcasts/law.xml",
   },
 ]
 
