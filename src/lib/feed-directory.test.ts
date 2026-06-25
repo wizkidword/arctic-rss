@@ -1238,6 +1238,378 @@ const expectedUsSportsFeedRecords = [
   },
 ]
 
+const expectedUsTechFeedRecords = [
+  {
+    aliases: ["http://www.huffingtonpost.com/feeds/verticals/technology/news.xml"],
+    categoryId: "us-tech",
+    id: "huffpost-technology",
+    label: "HuffPost - Technology",
+    source: "huffpost.com",
+    url: "https://www.huffpost.com/section/technology/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "us-tech",
+    id: "cnn-tech",
+    label: "CNN Tech",
+    source: "cnn.com",
+    url: "http://rss.cnn.com/rss/cnn_tech.rss",
+  },
+  {
+    aliases: ["http://rss.nytimes.com/services/xml/rss/nyt/Technology.xml"],
+    categoryId: "us-tech",
+    id: "nyt-technology",
+    label: "New York Times - Technology",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
+  },
+  {
+    aliases: ["http://feeds.foxnews.com/foxnews/tech"],
+    categoryId: "us-tech",
+    id: "fox-news-tech",
+    label: "Fox News - Tech",
+    source: "foxnews.com",
+    url: "https://moxie.foxnews.com/google-publisher/tech.xml",
+  },
+  {
+    aliases: ["http://www.theverge.com/rss/group/features/index.xml"],
+    categoryId: "us-tech",
+    id: "the-verge-features",
+    label: "The Verge - Features",
+    source: "theverge.com",
+    url: "https://www.theverge.com/rss/features/index.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "us-tech",
+    id: "techcrunch",
+    label: "TechCrunch",
+    source: "techcrunch.com",
+    url: "https://techcrunch.com/feed/",
+  },
+  {
+    aliases: ["http://feeds.wired.com/wired/index"],
+    categoryId: "us-tech",
+    id: "wired",
+    label: "WIRED",
+    source: "wired.com",
+    url: "https://www.wired.com/feed",
+  },
+  {
+    aliases: ["http://www.cnet.com/rss/news/"],
+    categoryId: "us-tech",
+    id: "cnet-news",
+    label: "CNET - News",
+    source: "cnet.com",
+    url: "https://www.cnet.com/rss/news/",
+  },
+  {
+    aliases: ["http://www.cnet.com/rss/iphone-update/"],
+    categoryId: "us-tech",
+    id: "cnet-iphone-update",
+    label: "CNET - iPhone Update",
+    source: "cnet.com",
+    url: "https://www.cnet.com/rss/iphone-update/",
+  },
+  {
+    aliases: [
+      "http://online.wsj.com/xml/rss/3_7455.xml",
+      "http://www.wsj.com/xml/rss/3_7455.xml",
+    ],
+    categoryId: "us-tech",
+    id: "wsj-technology",
+    label: "Wall Street Journal - Technology",
+    source: "wsj.com",
+    url: "https://feeds.content.dowjones.io/public/rss/RSSWSJD",
+  },
+  {
+    aliases: ["http://www.npr.org/rss/rss.php?id=1019"],
+    categoryId: "us-tech",
+    id: "npr-technology",
+    label: "NPR - Technology",
+    source: "npr.org",
+    url: "https://feeds.npr.org/1019/rss.xml",
+  },
+  {
+    aliases: ["http://www.macworld.com/index.rss"],
+    categoryId: "us-tech",
+    id: "macworld",
+    label: "Macworld",
+    source: "macworld.com",
+    url: "https://www.macworld.com/feed",
+  },
+  {
+    aliases: ["http://www.pcworld.com/index.rss"],
+    categoryId: "us-tech",
+    id: "pcworld",
+    label: "PCWorld",
+    source: "pcworld.com",
+    url: "https://www.pcworld.com/feed",
+  },
+  {
+    aliases: [
+      "http://recode.net/category/general/feed/",
+      "http://recode.net/category/mobile/feed/",
+      "http://recode.net/category/security/feed/",
+      "http://recode.net/category/enterprise/feed/",
+      "http://recode.net/feed/",
+    ],
+    categoryId: "us-tech",
+    id: "the-verge-recode",
+    label: "The Verge - Recode",
+    source: "theverge.com",
+    url: "https://www.theverge.com/rss/recode/index.xml",
+  },
+  {
+    aliases: ["http://www.engadget.com/rss.xml"],
+    categoryId: "us-tech",
+    id: "engadget",
+    label: "Engadget",
+    source: "engadget.com",
+    url: "https://www.engadget.com/rss.xml",
+  },
+  {
+    aliases: ["http://feeds.gawker.com/gizmodo/full"],
+    categoryId: "us-tech",
+    id: "gizmodo",
+    label: "Gizmodo",
+    source: "gizmodo.com",
+    url: "https://gizmodo.com/feed",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/techcrunch/startups?format=xml"],
+    categoryId: "us-tech",
+    id: "techcrunch-startups",
+    label: "TechCrunch - Startups",
+    source: "techcrunch.com",
+    url: "https://techcrunch.com/category/startups/feed/",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/TechCrunch/Gaming?format=xml"],
+    categoryId: "us-tech",
+    id: "techcrunch-gaming",
+    label: "TechCrunch - Gaming",
+    source: "techcrunch.com",
+    url: "https://techcrunch.com/category/gaming/feed/",
+  },
+  {
+    aliases: ["http://feeds.venturebeat.com/VentureBeat"],
+    categoryId: "us-tech",
+    id: "venturebeat",
+    label: "VentureBeat",
+    source: "venturebeat.com",
+    url: "https://venturebeat.com/feed",
+  },
+  {
+    aliases: ["http://www.latimes.com/business/technology/rss2.0.xml"],
+    categoryId: "us-tech",
+    id: "la-times-technology",
+    label: "Los Angeles Times - Technology",
+    source: "latimes.com",
+    url: "https://www.latimes.com/business/technology/rss2.0.xml",
+  },
+  {
+    aliases: ["http://feeds.abcnews.com/abcnews/technologyheadlines"],
+    categoryId: "us-tech",
+    id: "abc-news-technology",
+    label: "ABC News - Technology",
+    source: "abcnews.com",
+    url: "https://abcnews.com/abcnews/technologyheadlines",
+  },
+  {
+    aliases: ["http://www.buzzfeed.com/tech.xml"],
+    categoryId: "us-tech",
+    id: "buzzfeed-tech",
+    label: "BuzzFeed - Tech",
+    source: "buzzfeed.com",
+    url: "https://www.buzzfeed.com/tech.xml",
+  },
+  {
+    aliases: ["http://feeds.webservice.techradar.com/us/rss/new"],
+    categoryId: "us-tech",
+    id: "techradar",
+    label: "TechRadar",
+    source: "techradar.com",
+    url: "https://www.techradar.com/feeds.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "us-tech",
+    id: "gigaom",
+    label: "Gigaom",
+    source: "gigaom.com",
+    url: "http://gigaom.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "us-tech",
+    id: "ars-technica-tech",
+    label: "Ars Technica - Tech",
+    source: "arstechnica.com",
+    url: "http://feeds.arstechnica.com/arstechnica/gadgets",
+  },
+  {
+    aliases: ["http://www.computerweekly.com/rss/All-Computer-Weekly-content.xml"],
+    categoryId: "us-tech",
+    id: "computerweekly",
+    label: "ComputerWeekly",
+    source: "computerweekly.com",
+    url: "https://www.computerweekly.com/rss/All-Computer-Weekly-content.xml",
+  },
+  {
+    aliases: ["http://techrepublic.com.feedsportal.com/c/35463/f/670841/index.rss"],
+    categoryId: "us-tech",
+    id: "techrepublic",
+    label: "TechRepublic",
+    source: "techrepublic.com",
+    url: "https://www.techrepublic.com/rssfeeds/articles/",
+  },
+  {
+    aliases: ["http://zdnet.com.feedsportal.com/c/35462/f/675634/index.rss"],
+    categoryId: "us-tech",
+    id: "zdnet",
+    label: "ZDNET",
+    source: "zdnet.com",
+    url: "https://www.zdnet.com/news/rss.xml",
+  },
+  {
+    aliases: ["http://www.forbes.com/technology/feed/"],
+    categoryId: "us-tech",
+    id: "forbes-technology",
+    label: "Forbes - Technology",
+    source: "forbes.com",
+    url: "https://www.forbes.com/technology/feed/",
+  },
+  {
+    aliases: ["http://time.com/tech/feed/"],
+    categoryId: "us-tech",
+    id: "time-technology",
+    label: "TIME - Tech",
+    source: "time.com",
+    url: "https://time.com/tech/feed/",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/technology/rss.xml"],
+    categoryId: "us-tech",
+    id: "bbc-technology",
+    label: "BBC News - Technology",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/technology/rss.xml",
+  },
+  {
+    aliases: ["http://techreport.com/news.rss"],
+    categoryId: "us-tech",
+    id: "techreport",
+    label: "TechReport",
+    source: "techreport.com",
+    url: "https://techreport.com/feed/",
+  },
+  {
+    aliases: ["http://www.techspot.com/backend.xml"],
+    categoryId: "us-tech",
+    id: "techspot",
+    label: "TechSpot",
+    source: "techspot.com",
+    url: "https://www.techspot.com/backend.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "us-tech",
+    id: "digital-trends",
+    label: "Digital Trends",
+    source: "digitaltrends.com",
+    url: "http://www.digitaltrends.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "us-tech",
+    id: "ars-technica-biz-it",
+    label: "Ars Technica - Biz & IT",
+    source: "arstechnica.com",
+    url: "http://feeds.arstechnica.com/arstechnica/technology-lab",
+  },
+  {
+    aliases: [],
+    categoryId: "us-tech",
+    id: "ars-technica-business",
+    label: "Ars Technica - Business",
+    source: "arstechnica.com",
+    url: "http://feeds.arstechnica.com/arstechnica/business",
+  },
+  {
+    aliases: ["http://www.informationweek.com/rss_simple.asp"],
+    categoryId: "us-tech",
+    id: "informationweek",
+    label: "InformationWeek",
+    source: "informationweek.com",
+    url: "https://www.informationweek.com/rss.xml",
+  },
+  {
+    aliases: ["http://feeds.newscientist.com/tech"],
+    categoryId: "us-tech",
+    id: "new-scientist-technology",
+    label: "New Scientist - Technology",
+    source: "newscientist.com",
+    url: "https://www.newscientist.com/subject/technology/feed/",
+  },
+  {
+    aliases: ["http://feeds.nature.com/news/rss/news_s16"],
+    categoryId: "us-tech",
+    id: "nature-technology",
+    label: "Nature - Technology",
+    source: "nature.com",
+    url: "https://www.nature.com/subjects/technology.rss",
+  },
+  {
+    aliases: ["http://www.technologyreview.com/stream/rss/"],
+    categoryId: "us-tech",
+    id: "mit-technology-review",
+    label: "MIT Technology Review",
+    source: "technologyreview.com",
+    url: "https://www.technologyreview.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "us-tech",
+    id: "science-daily-technology",
+    label: "ScienceDaily - Technology",
+    source: "sciencedaily.com",
+    url: "https://www.sciencedaily.com/rss/top/technology.xml",
+  },
+  {
+    aliases: ["http://feeds.washingtonpost.com/rss/business/technology"],
+    categoryId: "us-tech",
+    id: "washington-post-technology",
+    label: "Washington Post - Technology",
+    source: "washingtonpost.com",
+    url: "https://feeds.washingtonpost.com/rss/business/technology",
+  },
+  {
+    aliases: ["http://www.techinsider.io/rss"],
+    categoryId: "us-tech",
+    id: "business-insider",
+    label: "Business Insider",
+    source: "businessinsider.com",
+    url: "https://feeds.businessinsider.com/custom/all",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/IeeeSpectrumRoboticsChannel"],
+    categoryId: "us-tech",
+    id: "ieee-spectrum-robotics",
+    label: "IEEE Spectrum - Robotics",
+    source: "spectrum.ieee.org",
+    url: "https://spectrum.ieee.org/feeds/topic/robotics.rss",
+  },
+  {
+    aliases: ["http://www.theverge.com/tech/rss/index.xml"],
+    categoryId: "us-tech",
+    id: "the-verge-tech",
+    label: "The Verge - Tech",
+    source: "theverge.com",
+    url: "https://www.theverge.com/rss/tech/index.xml",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
@@ -1245,6 +1617,7 @@ const expectedFeedRecords = [
   ...expectedUsHealthFeedRecords,
   ...expectedUsScienceFeedRecords,
   ...expectedUsSportsFeedRecords,
+  ...expectedUsTechFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -1265,6 +1638,7 @@ const expectedUsScienceFeedIds = expectedUsScienceFeedRecords.map(
 const expectedUsSportsFeedIds = expectedUsSportsFeedRecords.map(
   (feed) => feed.id
 )
+const expectedUsTechFeedIds = expectedUsTechFeedRecords.map((feed) => feed.id)
 
 describe("feed directory catalog", () => {
   it("contains the approved categories and validates without errors", () => {
@@ -1304,6 +1678,12 @@ describe("feed directory catalog", () => {
           "Sports headlines, analysis, scores, and commentary from national outlets and sports publications.",
         id: "us-sports",
         label: "US Sports",
+      },
+      {
+        description:
+          "Technology news, startups, gadgets, platforms, security, and digital culture from tech outlets.",
+        id: "us-tech",
+        label: "US Tech",
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
@@ -1372,6 +1752,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-sports")).toBe(
       feedDirectoryCategories[5]
     )
+    expect(getFeedDirectoryCategory("us-tech")).toBe(
+      feedDirectoryCategories[6]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -1395,6 +1778,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryFeed("sports-illustrated")?.url).toBe(
       "https://www.si.com/feed"
     )
+    expect(getFeedDirectoryFeed("techcrunch")?.url).toBe(
+      "https://techcrunch.com/feed/"
+    )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
       expectedUsGeneralFeedIds
@@ -1414,10 +1800,13 @@ describe("feed directory catalog", () => {
     expect(listFeedDirectoryFeeds("us-sports").map((feed) => feed.id)).toEqual(
       expectedUsSportsFeedIds
     )
+    expect(listFeedDirectoryFeeds("us-tech").map((feed) => feed.id)).toEqual(
+      expectedUsTechFeedIds
+    )
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times, NBC, politics, business, health, science, and sports legacy aliases", () => {
+  it("matches New York Times, NBC, politics, business, health, science, sports, and tech legacy aliases", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -1440,6 +1829,14 @@ describe("feed directory catalog", () => {
     const washingtonPostSports = getFeedDirectoryFeed(
       "washington-post-early-lead"
     )
+    const huffpostTech = getFeedDirectoryFeed("huffpost-technology")
+    const wsjTech = getFeedDirectoryFeed("wsj-technology")
+    const recode = getFeedDirectoryFeed("the-verge-recode")
+    const gizmodo = getFeedDirectoryFeed("gizmodo")
+    const techrepublic = getFeedDirectoryFeed("techrepublic")
+    const zdnet = getFeedDirectoryFeed("zdnet")
+    const techInsider = getFeedDirectoryFeed("business-insider")
+    const vergeTech = getFeedDirectoryFeed("the-verge-tech")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -1461,6 +1858,14 @@ describe("feed directory catalog", () => {
     expect(deadspin).toBeDefined()
     expect(yahooSports).toBeDefined()
     expect(washingtonPostSports).toBeDefined()
+    expect(huffpostTech).toBeDefined()
+    expect(wsjTech).toBeDefined()
+    expect(recode).toBeDefined()
+    expect(gizmodo).toBeDefined()
+    expect(techrepublic).toBeDefined()
+    expect(zdnet).toBeDefined()
+    expect(techInsider).toBeDefined()
+    expect(vergeTech).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -1555,6 +1960,44 @@ describe("feed directory catalog", () => {
     expect(
       isDirectoryFeedSubscribed(washingtonPostSports!, [
         "http://feeds.washingtonpost.com/rss/rss_early-lead",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(huffpostTech!, [
+        "http://www.huffingtonpost.com/feeds/verticals/technology/news.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(wsjTech!, [
+        "http://online.wsj.com/xml/rss/3_7455.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(recode!, [
+        "http://recode.net/category/security/feed/",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(gizmodo!, [
+        "http://feeds.gawker.com/gizmodo/full",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(techrepublic!, [
+        "http://techrepublic.com.feedsportal.com/c/35463/f/670841/index.rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(zdnet!, [
+        "http://zdnet.com.feedsportal.com/c/35462/f/675634/index.rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(techInsider!, ["http://www.techinsider.io/rss"])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(vergeTech!, [
+        "http://www.theverge.com/tech/rss/index.xml",
       ])
     ).toBe(true)
   })
@@ -1680,6 +2123,36 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://hosted.ap.org/lineups/SPORTSHEADS.rss?SITE=AP&SECTION=HOME"
+    )
+    expect(directoryUrls).not.toContain("http://feeds.feedburner.com/TechCrunch/")
+    expect(directoryUrls).not.toContain("http://mashable.com/category/rss/")
+    expect(directoryUrls).not.toContain("http://www.cnet.com/rss/android-update/")
+    expect(directoryUrls).not.toContain("http://feeds.venturebeat.com/smallbiz")
+    expect(directoryUrls).not.toContain("http://feeds.gawker.com/valleywag/full")
+    expect(directoryUrls).not.toContain("http://feeds.bizjournals.com/industry_7")
+    expect(directoryUrls).not.toContain("http://www.geek.com/feed/")
+    expect(directoryUrls).not.toContain(
+      "http://feeds.reuters.com/reuters/technologyNews?format=xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rss.feedsportal.com/c/270/f/3547/index.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rssfeeds.usatoday.com/usatoday-TechTopStories"
+    )
+    expect(directoryUrls).not.toContain("http://www.theinquirer.net/feeds/rss")
+    expect(directoryUrls).not.toContain(
+      "http://www.techtarget.com/html/pr/tt_pr.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.feedburner.com/geekologie/iShm"
+    )
+    expect(directoryUrls).not.toContain("http://www.dailytech.com/rss.aspx")
+    expect(directoryUrls).not.toContain(
+      "http://feeds2.feedburner.com/bit-tech/all"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://hosted2.ap.org/atom/APDEFAULT/495d344a0d10421e9baa8ee77029cfbd"
     )
   })
 })
