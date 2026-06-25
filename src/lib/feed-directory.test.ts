@@ -605,10 +605,225 @@ const expectedUsBusinessFeedRecords = [
   },
 ]
 
+const expectedUsHealthFeedRecords = [
+  {
+    aliases: [],
+    categoryId: "us-health",
+    id: "cnn-health",
+    label: "CNN Health",
+    source: "cnn.com",
+    url: "http://rss.cnn.com/rss/cnn_health.rss",
+  },
+  {
+    aliases: [
+      "http://www.nytimes.com/services/xml/rss/nyt/Health.xml",
+      "http://rss.nytimes.com/services/xml/rss/nyt/Health.xml",
+    ],
+    categoryId: "us-health",
+    id: "nyt-health",
+    label: "New York Times - Health",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/Health.xml",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/health/rss.xml?edition=us"],
+    categoryId: "us-health",
+    id: "bbc-health",
+    label: "BBC News - Health",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/health/rss.xml?edition=us",
+  },
+  {
+    aliases: ["http://feeds.abcnews.com/abcnews/healthheadlines"],
+    categoryId: "us-health",
+    id: "abc-news-health",
+    label: "ABC News - Health",
+    source: "abcnews.com",
+    url: "https://abcnews.com/abcnews/healthheadlines",
+  },
+  {
+    aliases: ["http://feeds.nbcnews.com/feeds/health"],
+    categoryId: "us-health",
+    id: "nbc-health",
+    label: "NBC News - Health",
+    source: "nbcnews.com",
+    url: "https://feeds.nbcnews.com/nbcnews/public/health",
+  },
+  {
+    aliases: ["http://feeds.huffingtonpost.com/c/35496/f/677071/index.rss"],
+    categoryId: "us-health",
+    id: "huffpost-health",
+    label: "HuffPost - Health",
+    source: "huffpost.com",
+    url: "https://www.huffpost.com/section/health/feed",
+  },
+  {
+    aliases: ["http://www.theguardian.com/society/health/rss"],
+    categoryId: "us-health",
+    id: "guardian-health",
+    label: "The Guardian - Health",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/society/health/rss",
+  },
+  {
+    aliases: ["http://www.menshealth.com/events-promotions/washpofeed"],
+    categoryId: "us-health",
+    id: "mens-health",
+    label: "Men's Health",
+    source: "menshealth.com",
+    url: "https://www.menshealth.com/rss/all.xml/",
+  },
+  {
+    aliases: ["http://feeds.glamour.com/glamour/health_fitness"],
+    categoryId: "us-health",
+    id: "glamour-health-fitness",
+    label: "Glamour - Health & Fitness",
+    source: "glamour.com",
+    url: "https://www.glamour.com/feed/health-fitness/rss",
+  },
+  {
+    aliases: ["http://feeds.newscientist.com/health"],
+    categoryId: "us-health",
+    id: "new-scientist-health",
+    label: "New Scientist - Health",
+    source: "newscientist.com",
+    url: "https://www.newscientist.com/subject/health/feed/",
+  },
+  {
+    aliases: ["http://time.com/health/feed/"],
+    categoryId: "us-health",
+    id: "time-health",
+    label: "TIME - Health",
+    source: "time.com",
+    url: "https://time.com/health/feed/",
+  },
+  {
+    aliases: ["http://news.yahoo.com/rss/health"],
+    categoryId: "us-health",
+    id: "yahoo-health",
+    label: "Yahoo News - Health",
+    source: "yahoo.com",
+    url: "https://news.yahoo.com/rss/health",
+  },
+  {
+    aliases: ["http://www.wsj.com/xml/rss/3_7201.xml"],
+    categoryId: "us-health",
+    id: "wsj-health",
+    label: "Wall Street Journal - Health",
+    source: "wsj.com",
+    url: "https://feeds.content.dowjones.io/public/rss/socialhealth",
+  },
+  {
+    aliases: ["http://feeds.sciencedaily.com/sciencedaily/top_news/top_health"],
+    categoryId: "us-health",
+    id: "science-daily-health",
+    label: "ScienceDaily - Top Health",
+    source: "sciencedaily.com",
+    url: "https://www.sciencedaily.com/rss/top/health.xml",
+  },
+  {
+    aliases: ["http://khn.org/feed/"],
+    categoryId: "us-health",
+    id: "kff-health-news",
+    label: "KFF Health News",
+    source: "kffhealthnews.org",
+    url: "https://kffhealthnews.org/feed/",
+  },
+  {
+    aliases: ["http://feeds.lexblog.com/foodsafetynews/mRcs"],
+    categoryId: "us-health",
+    id: "food-safety-news",
+    label: "Food Safety News",
+    source: "foodsafetynews.com",
+    url: "https://www.foodsafetynews.com/rss/",
+  },
+  {
+    aliases: ["http://feeds.washingtonpost.com/rss/lifestyle"],
+    categoryId: "us-health",
+    id: "washington-post-lifestyle",
+    label: "Washington Post - Lifestyle",
+    source: "washingtonpost.com",
+    url: "https://feeds.washingtonpost.com/rss/lifestyle",
+  },
+  {
+    aliases: ["http://www.buzzfeed.com/health.xml"],
+    categoryId: "us-health",
+    id: "buzzfeed-health",
+    label: "BuzzFeed - Health",
+    source: "buzzfeed.com",
+    url: "https://www.buzzfeed.com/health.xml",
+  },
+  {
+    aliases: ["http://vitals.lifehacker.com/rss"],
+    categoryId: "us-health",
+    id: "lifehacker",
+    label: "Lifehacker",
+    source: "lifehacker.com",
+    url: "https://lifehacker.com/feed/rss",
+  },
+  {
+    aliases: ["http://www.self.com/feed/fitness-news/"],
+    categoryId: "us-health",
+    id: "self",
+    label: "SELF",
+    source: "self.com",
+    url: "https://www.self.com/feed/rss",
+  },
+  {
+    aliases: ["http://feeds.huffingtonpost.com/c/35496/f/677070/index.rss"],
+    categoryId: "us-health",
+    id: "huffpost-wellness",
+    label: "HuffPost - Wellness",
+    source: "huffpost.com",
+    url: "https://chaski.huffpost.com/us/auto/vertical/healthy-living",
+  },
+  {
+    aliases: ["http://www.cpsc.gov/en/Newsroom/CPSC-RSS-Feed/Recalls-RSS/"],
+    categoryId: "us-health",
+    id: "cpsc-recalls",
+    label: "CPSC - Recalls",
+    source: "cpsc.gov",
+    url: "https://www.cpsc.gov/Newsroom/CPSC-RSS-Feed/Recalls-RSS",
+  },
+  {
+    aliases: ["http://www.medpagetoday.com/rss/Headlines.xml"],
+    categoryId: "us-health",
+    id: "medpage-today",
+    label: "MedPage Today",
+    source: "medpagetoday.com",
+    url: "https://www.medpagetoday.com/rss/headlines.xml",
+  },
+  {
+    aliases: ["http://www.medscape.com/cx/rssfeeds/2700.xml"],
+    categoryId: "us-health",
+    id: "medscape",
+    label: "Medscape Medical News",
+    source: "medscape.com",
+    url: "https://www.medscape.com/cx/rssfeeds/2700.xml",
+  },
+  {
+    aliases: ["http://www.theguardian.com/lifeandstyle/health-and-wellbeing/rss"],
+    categoryId: "us-health",
+    id: "guardian-health-wellbeing",
+    label: "The Guardian - Health & Wellbeing",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/lifeandstyle/health-and-wellbeing/rss",
+  },
+  {
+    aliases: ["http://www.npr.org/rss/rss.php?id=1128"],
+    categoryId: "us-health",
+    id: "npr-health",
+    label: "NPR - Health",
+    source: "npr.org",
+    url: "https://feeds.npr.org/1128/rss.xml",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
   ...expectedUsBusinessFeedRecords,
+  ...expectedUsHealthFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -618,6 +833,9 @@ const expectedUsPoliticsFeedIds = expectedUsPoliticsFeedRecords.map(
   (feed) => feed.id
 )
 const expectedUsBusinessFeedIds = expectedUsBusinessFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedUsHealthFeedIds = expectedUsHealthFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -641,6 +859,12 @@ describe("feed directory catalog", () => {
           "Markets, companies, economy, and workplace coverage from business outlets.",
         id: "us-business",
         label: "US Business",
+      },
+      {
+        description:
+          "Health news, wellness, medicine, and public-health reporting from trusted outlets.",
+        id: "us-health",
+        label: "US Health",
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
@@ -700,6 +924,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-business")).toBe(
       feedDirectoryCategories[2]
     )
+    expect(getFeedDirectoryCategory("us-health")).toBe(
+      feedDirectoryCategories[3]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -714,6 +941,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryFeed("wsj-us-business")?.url).toBe(
       "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness"
     )
+    expect(getFeedDirectoryFeed("npr-health")?.url).toBe(
+      "https://feeds.npr.org/1128/rss.xml"
+    )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
       expectedUsGeneralFeedIds
@@ -724,10 +954,13 @@ describe("feed directory catalog", () => {
     expect(
       listFeedDirectoryFeeds("us-business").map((feed) => feed.id)
     ).toEqual(expectedUsBusinessFeedIds)
+    expect(listFeedDirectoryFeeds("us-health").map((feed) => feed.id)).toEqual(
+      expectedUsHealthFeedIds
+    )
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times, NBC, politics, and business legacy aliases", () => {
+  it("matches New York Times, NBC, politics, business, and health legacy aliases", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -735,6 +968,9 @@ describe("feed directory catalog", () => {
     const wsjBusiness = getFeedDirectoryFeed("wsj-us-business")
     const ft = getFeedDirectoryFeed("financial-times-us")
     const bloombergLaw = getFeedDirectoryFeed("bloomberg-law")
+    const wsjHealth = getFeedDirectoryFeed("wsj-health")
+    const nprHealth = getFeedDirectoryFeed("npr-health")
+    const huffpostWellness = getFeedDirectoryFeed("huffpost-wellness")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -743,6 +979,9 @@ describe("feed directory catalog", () => {
     expect(wsjBusiness).toBeDefined()
     expect(ft).toBeDefined()
     expect(bloombergLaw).toBeDefined()
+    expect(wsjHealth).toBeDefined()
+    expect(nprHealth).toBeDefined()
+    expect(huffpostWellness).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -774,6 +1013,21 @@ describe("feed directory catalog", () => {
     expect(
       isDirectoryFeedSubscribed(bloombergLaw!, [
         "http://www.bloomberg.com/feed/podcast/law.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(wsjHealth!, [
+        "http://www.wsj.com/xml/rss/3_7201.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(nprHealth!, [
+        "http://www.npr.org/rss/rss.php?id=1128",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(huffpostWellness!, [
+        "http://feeds.huffingtonpost.com/c/35496/f/677070/index.rss",
       ])
     ).toBe(true)
   })
@@ -839,6 +1093,41 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://www.business-standard.com/rss/home_page_top_stories.rss"
+    )
+    expect(directoryUrls).not.toContain("http://www.health.harvard.edu/rss.php")
+    expect(directoryUrls).not.toContain(
+      "http://www.health.com/health/healthy-happy/feed"
+    )
+    expect(directoryUrls).not.toContain("http://www.forbes.com/health/feed2/")
+    expect(directoryUrls).not.toContain(
+      "http://feeds.reuters.com/reuters/healthNews"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.chicagotribune.com/lifestyles/health/rss2.0.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.nydailynews.com/lifestyle/health/index_rss.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://hosted2.ap.org/atom/APDEFAULT/bbd825583c8542898e6fa7d440b9febc"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.womenshealthandfitness.com.au/component/obrss/women-s-health-fitnesscombined-feed"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.usnews.com/rss/health?int=a7fe09"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.healthcareitnews.com/home/feed"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.modernhealthcare.com/section/rss01&mime=xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.mayoclinic.org/rss/all-health-information-topics"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rss.medicalnewstoday.com/featurednews.xml"
     )
   })
 })
