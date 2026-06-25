@@ -33,7 +33,7 @@
 - Create: `src/lib/feed-directory.test.ts`
 - Create: `src/lib/feed-directory.ts`
 
-- [ ] **Step 1: Write failing catalog integrity tests**
+- [x] **Step 1: Write failing catalog integrity tests**
 
 Create `src/lib/feed-directory.test.ts`:
 
@@ -139,7 +139,7 @@ describe("feed directory catalog", () => {
 })
 ```
 
-- [ ] **Step 2: Run the catalog test to verify RED**
+- [x] **Step 2: Run the catalog test to verify RED**
 
 Run:
 
@@ -149,7 +149,7 @@ npm test -- src/lib/feed-directory.test.ts
 
 Expected: FAIL because `src/lib/feed-directory.ts` does not exist.
 
-- [ ] **Step 3: Implement the typed catalog and matching helpers**
+- [x] **Step 3: Implement the typed catalog and matching helpers**
 
 Create `src/lib/feed-directory.ts`:
 
@@ -504,7 +504,7 @@ function directoryUrlKey(input: string) {
 }
 ```
 
-- [ ] **Step 4: Run the catalog tests to verify GREEN**
+- [x] **Step 4: Run the catalog tests to verify GREEN**
 
 Run:
 
@@ -515,7 +515,7 @@ npm run typecheck
 
 Expected: 4 catalog tests PASS and TypeScript exits successfully.
 
-- [ ] **Step 5: Commit the catalog**
+- [x] **Step 5: Commit the catalog**
 
 ```powershell
 git add src/lib/feed-directory.ts src/lib/feed-directory.test.ts
@@ -528,7 +528,7 @@ git commit -m "Add curated feed directory catalog"
 - Modify: `src/lib/feed-subscriptions.test.ts`
 - Modify: `src/lib/feed-subscriptions.ts`
 
-- [ ] **Step 1: Write the failing navigation-data assertion**
+- [x] **Step 1: Write the failing navigation-data assertion**
 
 In the existing `includes folder metadata for reader navigation` test, add
 `feedUrl` to the mocked feed:
@@ -549,7 +549,7 @@ Add this expected property:
 feedUrl: "https://example.com/feed.xml",
 ```
 
-- [ ] **Step 2: Run the subscription test to verify RED**
+- [x] **Step 2: Run the subscription test to verify RED**
 
 Run:
 
@@ -559,7 +559,7 @@ npm test -- src/lib/feed-subscriptions.test.ts
 
 Expected: FAIL because `listUserFeedSubscriptions` does not return `feedUrl`.
 
-- [ ] **Step 3: Add `feedUrl` to navigation subscription data**
+- [x] **Step 3: Add `feedUrl` to navigation subscription data**
 
 Update `FeedSubscriptionNavItem`:
 
@@ -585,7 +585,7 @@ Update the mapper in `listUserFeedSubscriptions`:
 feedUrl: subscription.feed.feedUrl,
 ```
 
-- [ ] **Step 4: Run focused tests and typecheck**
+- [x] **Step 4: Run focused tests and typecheck**
 
 Run:
 
@@ -596,7 +596,7 @@ npm run typecheck
 
 Expected: all focused tests PASS and TypeScript exits successfully.
 
-- [ ] **Step 5: Commit canonical URL exposure**
+- [x] **Step 5: Commit canonical URL exposure**
 
 ```powershell
 git add src/lib/feed-subscriptions.ts src/lib/feed-subscriptions.test.ts
@@ -609,7 +609,7 @@ git commit -m "Expose feed URLs for directory matching"
 - Modify: `src/app/app/actions.test.ts`
 - Modify: `src/app/app/actions.ts`
 
-- [ ] **Step 1: Extend action mocks**
+- [x] **Step 1: Extend action mocks**
 
 Add a discovery error class beside the existing hoisted error classes:
 
@@ -652,7 +652,7 @@ vi.mock("@/lib/feed-subscriptions", () => ({
 
 Import `subscribeDirectoryFeedAction` from `./actions`.
 
-- [ ] **Step 2: Write failing action tests**
+- [x] **Step 2: Write failing action tests**
 
 Add:
 
@@ -846,7 +846,7 @@ describe("subscribeDirectoryFeedAction", () => {
 })
 ```
 
-- [ ] **Step 3: Run action tests to verify RED**
+- [x] **Step 3: Run action tests to verify RED**
 
 Run:
 
@@ -856,7 +856,7 @@ npm test -- src/app/app/actions.test.ts
 
 Expected: FAIL because `subscribeDirectoryFeedAction` is missing.
 
-- [ ] **Step 4: Implement the directory action**
+- [x] **Step 4: Implement the directory action**
 
 Add the catalog import:
 
@@ -951,7 +951,7 @@ export async function subscribeDirectoryFeedAction(
 Keep cache refresh outside the subscription `try` block so a framework cache
 failure is not mislabeled as a feed validation failure.
 
-- [ ] **Step 5: Verify action tests, typecheck, and lint**
+- [x] **Step 5: Verify action tests, typecheck, and lint**
 
 Run:
 
@@ -963,7 +963,7 @@ npm run lint -- src/app/app/actions.ts src/app/app/actions.test.ts
 
 Expected: all action tests PASS; typecheck and lint exit successfully.
 
-- [ ] **Step 6: Commit the directory action**
+- [x] **Step 6: Commit the directory action**
 
 ```powershell
 git add src/app/app/actions.ts src/app/app/actions.test.ts
@@ -976,7 +976,7 @@ git commit -m "Add secure directory subscription action"
 - Create: `src/components/feed-directory-subscribe-button.test.tsx`
 - Create: `src/components/feed-directory-subscribe-button.tsx`
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Create `src/components/feed-directory-subscribe-button.test.tsx`:
 
@@ -1117,7 +1117,7 @@ describe("FeedDirectorySubscribeButton", () => {
 })
 ```
 
-- [ ] **Step 2: Run component tests to verify RED**
+- [x] **Step 2: Run component tests to verify RED**
 
 Run:
 
@@ -1127,7 +1127,7 @@ npm test -- src/components/feed-directory-subscribe-button.test.tsx
 
 Expected: FAIL because the component does not exist.
 
-- [ ] **Step 3: Implement the Subscribe/Subscribed control**
+- [x] **Step 3: Implement the Subscribe/Subscribed control**
 
 Create `src/components/feed-directory-subscribe-button.tsx`:
 
@@ -1285,7 +1285,7 @@ export function FeedDirectorySubscribeDialogContent({
 }
 ```
 
-- [ ] **Step 4: Run component tests, typecheck, and lint**
+- [x] **Step 4: Run component tests, typecheck, and lint**
 
 Run:
 
@@ -1297,7 +1297,7 @@ npm run lint -- src/components/feed-directory-subscribe-button.tsx src/component
 
 Expected: 3 component tests PASS; typecheck and lint exit successfully.
 
-- [ ] **Step 5: Commit the folder picker**
+- [x] **Step 5: Commit the folder picker**
 
 ```powershell
 git add src/components/feed-directory-subscribe-button.tsx src/components/feed-directory-subscribe-button.test.tsx
@@ -1310,7 +1310,7 @@ git commit -m "Add feed directory folder picker"
 - Create: `src/app/app/discover/page.test.tsx`
 - Create: `src/app/app/discover/page.tsx`
 
-- [ ] **Step 1: Write the failing page test**
+- [x] **Step 1: Write the failing page test**
 
 Create `src/app/app/discover/page.test.tsx`:
 
@@ -1445,7 +1445,7 @@ describe("DiscoverFeedsPage", () => {
 })
 ```
 
-- [ ] **Step 2: Run the page test to verify RED**
+- [x] **Step 2: Run the page test to verify RED**
 
 Run:
 
@@ -1455,7 +1455,7 @@ npm test -- src/app/app/discover/page.test.tsx
 
 Expected: FAIL because the Discover page does not exist.
 
-- [ ] **Step 3: Implement the data-driven Discover page**
+- [x] **Step 3: Implement the data-driven Discover page**
 
 Create `src/app/app/discover/page.tsx`:
 
@@ -1594,7 +1594,7 @@ function firstSearchParam(value: string | string[] | undefined) {
 }
 ```
 
-- [ ] **Step 4: Run page and feature tests**
+- [x] **Step 4: Run page and feature tests**
 
 Run:
 
@@ -1606,7 +1606,7 @@ npm run lint -- src/app/app/discover/page.tsx src/app/app/discover/page.test.tsx
 
 Expected: all focused tests PASS; typecheck and lint exit successfully.
 
-- [ ] **Step 5: Commit the directory page**
+- [x] **Step 5: Commit the directory page**
 
 ```powershell
 git add src/app/app/discover/page.tsx src/app/app/discover/page.test.tsx
@@ -1619,7 +1619,7 @@ git commit -m "Add curated feed directory page"
 - Create: `src/components/app-shell.test.tsx`
 - Modify: `src/components/app-shell.tsx`
 
-- [ ] **Step 1: Write the failing shell navigation test**
+- [x] **Step 1: Write the failing shell navigation test**
 
 Create `src/components/app-shell.test.tsx`:
 
@@ -1722,7 +1722,7 @@ describe("AppShell", () => {
 })
 ```
 
-- [ ] **Step 2: Run the shell test to verify RED**
+- [x] **Step 2: Run the shell test to verify RED**
 
 Run:
 
@@ -1732,7 +1732,7 @@ npm test -- src/components/app-shell.test.tsx
 
 Expected: FAIL because the shell does not render Discover Feeds.
 
-- [ ] **Step 3: Add the navigation command**
+- [x] **Step 3: Add the navigation command**
 
 Add `CompassIcon` to the `lucide-react` imports in `app-shell.tsx`.
 
@@ -1756,7 +1756,7 @@ Immediately after `<AddFeedSheet folders={folders} />`, add:
 Because `ReaderNav` is reused by desktop and mobile navigation, one change
 exposes both entry points.
 
-- [ ] **Step 4: Run shell and page tests**
+- [x] **Step 4: Run shell and page tests**
 
 Run:
 
@@ -1768,7 +1768,7 @@ npm run lint -- src/components/app-shell.tsx src/components/app-shell.test.tsx
 
 Expected: both test files PASS; typecheck and lint exit successfully.
 
-- [ ] **Step 5: Commit navigation**
+- [x] **Step 5: Commit navigation**
 
 ```powershell
 git add src/components/app-shell.tsx src/components/app-shell.test.tsx
@@ -1781,7 +1781,7 @@ git commit -m "Expose feed discovery in reader navigation"
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-06-25-feed-directory.md`
 
-- [ ] **Step 1: Document the completed capability**
+- [x] **Step 1: Document the completed capability**
 
 Add to the README Done list:
 
