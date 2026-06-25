@@ -1790,7 +1790,7 @@ Add to the README Done list:
 - One-click catalog subscription with Uncategorized or folder assignment
 ```
 
-- [ ] **Step 2: Run the full repository verification**
+- [x] **Step 2: Run the full repository verification**
 
 Run:
 
@@ -1811,7 +1811,17 @@ Expected:
 - Next.js builds all application routes including `/app/discover`.
 - Docker Compose configuration is valid.
 
-- [ ] **Step 3: Mark implementation checklist items and commit documentation**
+Completed verification evidence:
+
+- `npm test`: 38 test files and 143 tests passed.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npx prisma validate`: schema valid.
+- `npm run build`: passed and included `/app/discover`.
+- `docker compose config --quiet`: passed using the main checkout project
+  directory and environment file.
+
+- [x] **Step 3: Mark implementation checklist items and commit documentation**
 
 Mark completed implementation steps in this plan, then run:
 
