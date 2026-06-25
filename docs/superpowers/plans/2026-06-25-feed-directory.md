@@ -1833,7 +1833,7 @@ git add README.md docs/superpowers/plans/2026-06-25-feed-directory.md
 git commit -m "Document curated feed directory"
 ```
 
-- [ ] **Step 4: Rebuild the live application**
+- [x] **Step 4: Rebuild the live application**
 
 Run:
 
@@ -1848,7 +1848,16 @@ Expected:
 - Web is healthy on `127.0.0.1:3003`.
 - Worker is running.
 
-- [ ] **Step 5: Seed an isolated QA reader and folder**
+Completed evidence:
+
+- Added `.worktrees` and `worktrees` to `.dockerignore`, reducing Docker build
+  context from hundreds of MB to 1.60 MB.
+- `docker compose up -d --build web worker`: rebuilt web, worker, and migrate
+  images; Next build included `/app/discover`.
+- `docker compose ps`: PostgreSQL and Redis healthy, web healthy on
+  `127.0.0.1:3003`, worker running.
+
+- [x] **Step 5: Seed an isolated QA reader and folder**
 
 Run:
 
@@ -1914,7 +1923,12 @@ $env:QA_DIRECTORY_PREEXISTING_FEED_IDS = ConvertTo-Json `
 $env:QA_DIRECTORY_USER_ID = $qa.userId
 ```
 
-- [ ] **Step 6: Browser-smoke both folder choices**
+Completed evidence:
+
+- Created an isolated QA reader and `Directory QA Folder` in the live Docker
+  stack. Temporary credentials were not recorded in this plan.
+
+- [x] **Step 6: Browser-smoke both folder choices**
 
 Using the in-app browser and the isolated credentials:
 
@@ -1931,7 +1945,15 @@ Using the in-app browser and the isolated credentials:
 10. Confirm neither feed still offers Subscribe.
 11. Confirm no relevant browser console errors.
 
-- [ ] **Step 7: Verify database assignments and clean QA records**
+Completed evidence:
+
+- In-app browser QA signed in as the isolated reader, opened Discover Feeds from
+  the sidebar, confirmed US General shows 27 subscribe controls, verified
+  Uncategorized is the default folder choice, subscribed NPR National as
+  Uncategorized, subscribed NPR World into `Directory QA Folder`, and confirmed
+  both rows changed to Subscribed with no relevant console warnings/errors.
+
+- [x] **Step 7: Verify database assignments and clean QA records**
 
 Run:
 
@@ -2009,6 +2031,12 @@ Expected JSON:
 ```json
 {"nationalFolderId":null,"subscriptionCount":2,"worldFolderId":"<QA folder ID>"}
 ```
+
+Completed evidence:
+
+- Database verification returned
+  `{"nationalFolderId":null,"subscriptionCount":2,"worldFolderId":"<QA folder ID>"}`.
+- Cleanup confirmation returned `{"leftoverSubscriptions":0,"userCount":0}`.
 
 - [ ] **Step 8: Verify public health and push**
 

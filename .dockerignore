@@ -1,4 +1,6 @@
 .git
+.worktrees
+worktrees
 .next
 coverage
 node_modules
