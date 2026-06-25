@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest"
 
+const { reactCache } = vi.hoisted(() => ({
+  reactCache: vi.fn((loader) => loader),
+}))
+
+vi.mock("react", () => ({
+  cache: reactCache,
+}))
+
 import {
   createFolderWithClient,
   deleteFolderWithClient,
@@ -24,6 +32,12 @@ function createFolderStore() {
 }
 
 describe("folders", () => {
+  it("creates the reader loader through React cache", () => {
+    expect(reactCache).toHaveBeenCalledTimes(1)
+    expect(reactCache).toHaveBeenCalledWith(expect.any(Function))
+    expect(reactCache.mock.calls[0]?.[0].name).toBe("listUserFolders")
+  })
+
   it("creates a folder scoped to the current user", async () => {
     const store = createFolderStore()
 

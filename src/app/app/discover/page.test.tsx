@@ -115,6 +115,17 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("abcnews.com")
     expect(markup).toContain("Fox News - Latest")
     expect(markup).toContain("foxnews.com")
+    expect(markup).toContain('<nav aria-label="Feed categories"')
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1)
+    expect(markup).toContain("<ul")
+    expect(markup.match(/<li /g)).toHaveLength(27)
+    expect(markup).toContain("w-full shrink-0 sm:w-auto sm:pl-4")
+    expect(markup).toContain(
+      "[&amp;_[data-slot=button]]:w-full [&amp;_[data-slot=button]]:min-h-9"
+    )
+    expect(markup).toContain(
+      "sm:[&amp;_[data-slot=button]]:w-auto sm:[&amp;_[data-slot=button]]:min-h-7"
+    )
     expect(markup.match(/Directory control:/g)).toHaveLength(27)
     expect(markup).toContain(
       "Directory control: npr-national | NPR - National | subscribed=true | folders=folder-1:Morning News"
@@ -132,7 +143,9 @@ describe("DiscoverPage", () => {
     )
 
     expect(markup).toContain("US General")
-    expect(markup).toContain('href="/app/discover?category=us-general"')
+    expect(markup).toContain(
+      'href="/app/discover?category=us-general" aria-current="page"'
+    )
     expect(markup).toContain("27 feeds")
   })
 

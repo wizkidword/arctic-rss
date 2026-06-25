@@ -62,12 +62,15 @@ export default async function DiscoverPage({
           </p>
         </div>
 
-        <div
+        <nav
           aria-label="Feed categories"
           className="flex flex-wrap items-center gap-2"
         >
           {feedDirectoryCategories.map((category) => (
             <Link
+              aria-current={
+                category.id === selectedCategory.id ? "page" : undefined
+              }
               className={cn(
                 buttonVariants({
                   size: "sm",
@@ -83,7 +86,7 @@ export default async function DiscoverPage({
               {category.label}
             </Link>
           ))}
-        </div>
+        </nav>
       </section>
 
       <section className="rounded-lg border bg-card">
@@ -99,9 +102,9 @@ export default async function DiscoverPage({
           <Badge variant="secondary">{feeds.length} feeds</Badge>
         </div>
 
-        <div className="divide-y">
+        <ul className="divide-y">
           {feeds.map((feed) => (
-            <div
+            <li
               className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4"
               key={feed.id}
             >
@@ -117,7 +120,7 @@ export default async function DiscoverPage({
                 </div>
               </div>
 
-              <div className="shrink-0 sm:pl-4">
+              <div className="w-full shrink-0 sm:w-auto sm:pl-4 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:min-h-9 sm:[&_[data-slot=button]]:w-auto sm:[&_[data-slot=button]]:min-h-7">
                 <FeedDirectorySubscribeButton
                   feedId={feed.id}
                   feedLabel={feed.label}
@@ -128,9 +131,9 @@ export default async function DiscoverPage({
                   )}
                 />
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
     </div>
   )

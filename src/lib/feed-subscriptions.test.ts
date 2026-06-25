@@ -8,6 +8,7 @@ const {
   feedDelete,
   findFirst,
   findMany,
+  reactCache,
 } = vi.hoisted(() => ({
   articleDeleteMany: vi.fn(),
   articleStateDeleteMany: vi.fn(),
@@ -16,6 +17,11 @@ const {
   feedDelete: vi.fn(),
   findFirst: vi.fn(),
   findMany: vi.fn(),
+  reactCache: vi.fn((loader) => loader),
+}))
+
+vi.mock("react", () => ({
+  cache: reactCache,
 }))
 
 vi.mock("./db", () => ({
@@ -49,8 +55,22 @@ import {
 
 describe("feed subscriptions", () => {
   beforeEach(() => {
-    vi.resetAllMocks()
+    articleDeleteMany.mockReset()
+    articleStateDeleteMany.mockReset()
+    countUnreadArticlesForFeed.mockReset()
+    deleteMany.mockReset()
+    feedDelete.mockReset()
+    findFirst.mockReset()
+    findMany.mockReset()
     countUnreadArticlesForFeed.mockResolvedValue(3)
+  })
+
+  it("creates the reader loader through React cache", () => {
+    expect(reactCache).toHaveBeenCalledTimes(1)
+    expect(reactCache).toHaveBeenCalledWith(expect.any(Function))
+    expect(reactCache.mock.calls[0]?.[0].name).toBe(
+      "listUserFeedSubscriptions"
+    )
   })
 
   it("includes folder metadata for reader navigation", async () => {

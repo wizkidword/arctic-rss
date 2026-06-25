@@ -1,4 +1,5 @@
 import { Prisma } from "../generated/prisma/client"
+import { cache } from "react"
 
 import { countUnreadArticlesForFeed } from "./articles"
 import { discoverFeedFromUrl } from "./feed-discovery"
@@ -25,7 +26,7 @@ export type FeedSubscriptionNavItem = {
   unreadCount: number
 }
 
-export async function listUserFeedSubscriptions(
+export const listUserFeedSubscriptions = cache(async function listUserFeedSubscriptions(
   userId: string
 ): Promise<FeedSubscriptionNavItem[]> {
   const subscriptions = await getPrisma().feedSubscription.findMany({
@@ -52,7 +53,7 @@ export async function listUserFeedSubscriptions(
       unreadCount: await countUnreadArticlesForFeed(userId, subscription.feedId),
     }))
   )
-}
+})
 
 export async function getUserFeedSubscription(
   userId: string,
