@@ -1786,6 +1786,173 @@ const expectedUsEntertainmentFeedRecords = [
   },
 ]
 
+const expectedUsGamingFeedRecords = [
+  {
+    aliases: ["http://feeds.ign.com/ign/all"],
+    categoryId: "us-gaming",
+    id: "ign",
+    label: "IGN",
+    source: "ign.com",
+    url: "https://www.ign.com/rss/articles/feed",
+  },
+  {
+    aliases: [
+      "http://feeds.gawker.com/kotaku/full#_ga=1.111114893.94307673.1446233598",
+    ],
+    categoryId: "us-gaming",
+    id: "kotaku",
+    label: "Kotaku",
+    source: "kotaku.com",
+    url: "https://kotaku.com/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "us-gaming",
+    id: "rock-paper-shotgun",
+    label: "Rock Paper Shotgun",
+    source: "rockpapershotgun.com",
+    url: "http://feeds.feedburner.com/RockPaperShotgun",
+  },
+  {
+    aliases: [],
+    categoryId: "us-gaming",
+    id: "vgchartz",
+    label: "VGChartz",
+    source: "vgchartz.com",
+    url: "http://feeds.feedburner.com/VGChartz",
+  },
+  {
+    aliases: ["http://www.gamesindustry.biz/rss/gamesindustry_news_feed.rss"],
+    categoryId: "us-gaming",
+    id: "gamesindustry",
+    label: "GamesIndustry.biz",
+    source: "gamesindustry.biz",
+    url: "https://www.gamesindustry.biz/feed",
+  },
+  {
+    aliases: ["http://www.gamespot.com/feeds/mashup/"],
+    categoryId: "us-gaming",
+    id: "gamespot",
+    label: "GameSpot",
+    source: "gamespot.com",
+    url: "https://www.gamespot.com/feeds/mashup/",
+  },
+  {
+    aliases: ["http://www.pcworld.com/column/game-on/index.rss"],
+    categoryId: "us-gaming",
+    id: "pcworld-gaming",
+    label: "PCWorld - Gaming",
+    source: "pcworld.com",
+    url: "https://www.pcworld.com/gaming/feed",
+  },
+  {
+    aliases: ["http://www.gamasutra.com/static2/rssfeeds.html"],
+    categoryId: "us-gaming",
+    id: "game-developer",
+    label: "Game Developer",
+    source: "gamedeveloper.com",
+    url: "https://www.gamedeveloper.com/rss.xml",
+  },
+  {
+    aliases: ["http://www.eurogamer.net/?format=rss"],
+    categoryId: "us-gaming",
+    id: "eurogamer",
+    label: "Eurogamer",
+    source: "eurogamer.net",
+    url: "https://www.eurogamer.net/feed",
+  },
+  {
+    aliases: ["http://rss.escapistmagazine.com/tags/video-games.xml"],
+    categoryId: "us-gaming",
+    id: "escapist",
+    label: "The Escapist",
+    source: "escapistmagazine.com",
+    url: "https://www.escapistmagazine.com/feed/",
+  },
+  {
+    aliases: ["http://www.destructoid.com/?mode=atom"],
+    categoryId: "us-gaming",
+    id: "destructoid",
+    label: "Destructoid",
+    source: "destructoid.com",
+    url: "https://www.destructoid.com/feed/",
+  },
+  {
+    aliases: [
+      "https://www.cheapassgamer.com/rss/forums/1-cheap-ass-gamer-video-game-dealsforum/",
+    ],
+    categoryId: "us-gaming",
+    id: "cheapassgamer",
+    label: "Cheap Ass Gamer - Video Game Deals",
+    source: "cheapassgamer.com",
+    url: "https://www.cheapassgamer.com/forums/video-game-deals.2196/index.rss",
+  },
+  {
+    aliases: ["http://www.gametrailers.com/about/rss"],
+    categoryId: "us-gaming",
+    id: "gametrailers",
+    label: "GameTrailers",
+    source: "youtube.com",
+    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCJx5KP-pCUmL9eZUv-mIcNw",
+  },
+  {
+    aliases: [],
+    categoryId: "us-gaming",
+    id: "rpg-cast",
+    label: "RPG Cast",
+    source: "rpgamer.com",
+    url: "http://feeds.feedburner.com/Rpgcast",
+  },
+  {
+    aliases: ["http://www.pocketgamer.co.uk/rss.asp"],
+    categoryId: "us-gaming",
+    id: "pocket-gamer",
+    label: "Pocket Gamer",
+    source: "pocketgamer.com",
+    url: "https://www.pocketgamer.com/index.rss",
+  },
+  {
+    aliases: ["http://www.polygon.com/rss/index.xml"],
+    categoryId: "us-gaming",
+    id: "polygon",
+    label: "Polygon",
+    source: "polygon.com",
+    url: "https://www.polygon.com/feed/",
+  },
+  {
+    aliases: ["http://www.gamesradar.com/all-platforms/news/rss/"],
+    categoryId: "us-gaming",
+    id: "gamesradar",
+    label: "GamesRadar+",
+    source: "gamesradar.com",
+    url: "https://www.gamesradar.com/all-platforms/news/rss/",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/TechCrunch/gaming"],
+    categoryId: "us-gaming",
+    id: "techcrunch-gaming-feed",
+    label: "TechCrunch - Gaming",
+    source: "techcrunch.com",
+    url: "https://techcrunch.com/category/gaming/feed/",
+  },
+  {
+    aliases: ["http://feeds.webservice.techradar.com/us/rss/news/gaming"],
+    categoryId: "us-gaming",
+    id: "techradar-gaming",
+    label: "TechRadar - Gaming",
+    source: "techradar.com",
+    url: "https://www.techradar.com/feeds/tag/gaming",
+  },
+  {
+    aliases: [],
+    categoryId: "us-gaming",
+    id: "ars-technica-gaming",
+    label: "Ars Technica - Gaming",
+    source: "arstechnica.com",
+    url: "http://feeds.arstechnica.com/arstechnica/gaming",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
@@ -1795,6 +1962,7 @@ const expectedFeedRecords = [
   ...expectedUsSportsFeedRecords,
   ...expectedUsTechFeedRecords,
   ...expectedUsEntertainmentFeedRecords,
+  ...expectedUsGamingFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -1817,6 +1985,9 @@ const expectedUsSportsFeedIds = expectedUsSportsFeedRecords.map(
 )
 const expectedUsTechFeedIds = expectedUsTechFeedRecords.map((feed) => feed.id)
 const expectedUsEntertainmentFeedIds = expectedUsEntertainmentFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedUsGamingFeedIds = expectedUsGamingFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -1870,6 +2041,12 @@ describe("feed directory catalog", () => {
           "Entertainment news, TV, movies, music, celebrity coverage, and culture from major outlets.",
         id: "us-entertainment",
         label: "US Entertainment",
+      },
+      {
+        description:
+          "Video game news, reviews, deals, industry coverage, and gaming culture from major outlets.",
+        id: "us-gaming",
+        label: "US Gaming",
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
@@ -1944,6 +2121,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-entertainment")).toBe(
       feedDirectoryCategories[7]
     )
+    expect(getFeedDirectoryCategory("us-gaming")).toBe(
+      feedDirectoryCategories[8]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -1973,6 +2153,7 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryFeed("deadline")?.url).toBe(
       "https://deadline.com/feed/"
     )
+    expect(getFeedDirectoryFeed("kotaku")?.url).toBe("https://kotaku.com/feed")
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
       expectedUsGeneralFeedIds
@@ -1998,10 +2179,13 @@ describe("feed directory catalog", () => {
     expect(
       listFeedDirectoryFeeds("us-entertainment").map((feed) => feed.id)
     ).toEqual(expectedUsEntertainmentFeedIds)
+    expect(listFeedDirectoryFeeds("us-gaming").map((feed) => feed.id)).toEqual(
+      expectedUsGamingFeedIds
+    )
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times, NBC, politics, business, health, science, sports, tech, and entertainment legacy aliases", () => {
+  it("matches New York Times, NBC, politics, business, health, science, sports, tech, entertainment, and gaming legacy aliases", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -2040,6 +2224,17 @@ describe("feed directory catalog", () => {
     const washingtonPostEntertainment = getFeedDirectoryFeed(
       "washington-post-entertainment"
     )
+    const ign = getFeedDirectoryFeed("ign")
+    const kotaku = getFeedDirectoryFeed("kotaku")
+    const gamesIndustry = getFeedDirectoryFeed("gamesindustry")
+    const pcworldGaming = getFeedDirectoryFeed("pcworld-gaming")
+    const gameDeveloper = getFeedDirectoryFeed("game-developer")
+    const escapist = getFeedDirectoryFeed("escapist")
+    const cheapAssGamer = getFeedDirectoryFeed("cheapassgamer")
+    const gametrailers = getFeedDirectoryFeed("gametrailers")
+    const pocketGamer = getFeedDirectoryFeed("pocket-gamer")
+    const techcrunchGaming = getFeedDirectoryFeed("techcrunch-gaming-feed")
+    const techradarGaming = getFeedDirectoryFeed("techradar-gaming")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -2075,6 +2270,17 @@ describe("feed directory catalog", () => {
     expect(entertainmentTonight).toBeDefined()
     expect(usWeekly).toBeDefined()
     expect(washingtonPostEntertainment).toBeDefined()
+    expect(ign).toBeDefined()
+    expect(kotaku).toBeDefined()
+    expect(gamesIndustry).toBeDefined()
+    expect(pcworldGaming).toBeDefined()
+    expect(gameDeveloper).toBeDefined()
+    expect(escapist).toBeDefined()
+    expect(cheapAssGamer).toBeDefined()
+    expect(gametrailers).toBeDefined()
+    expect(pocketGamer).toBeDefined()
+    expect(techcrunchGaming).toBeDefined()
+    expect(techradarGaming).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -2237,6 +2443,59 @@ describe("feed directory catalog", () => {
     expect(
       isDirectoryFeedSubscribed(washingtonPostEntertainment!, [
         "http://www.washingtonpost.com/rss/entertainment",
+      ])
+    ).toBe(true)
+    expect(isDirectoryFeedSubscribed(ign!, ["http://feeds.ign.com/ign/all"])).toBe(
+      true
+    )
+    expect(
+      isDirectoryFeedSubscribed(kotaku!, [
+        "http://feeds.gawker.com/kotaku/full#_ga=1.111114893.94307673.1446233598",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(gamesIndustry!, [
+        "http://www.gamesindustry.biz/rss/gamesindustry_news_feed.rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(pcworldGaming!, [
+        "http://www.pcworld.com/column/game-on/index.rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(gameDeveloper!, [
+        "http://www.gamasutra.com/static2/rssfeeds.html",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(escapist!, [
+        "http://rss.escapistmagazine.com/tags/video-games.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(cheapAssGamer!, [
+        "https://www.cheapassgamer.com/rss/forums/1-cheap-ass-gamer-video-game-dealsforum/",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(gametrailers!, [
+        "http://www.gametrailers.com/about/rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(pocketGamer!, [
+        "http://www.pocketgamer.co.uk/rss.asp",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(techcrunchGaming!, [
+        "http://feeds.feedburner.com/TechCrunch/gaming",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(techradarGaming!, [
+        "http://feeds.webservice.techradar.com/us/rss/news/gaming",
       ])
     ).toBe(true)
   })
@@ -2423,5 +2682,25 @@ describe("feed directory catalog", () => {
     expect(directoryUrls).not.toContain(
       "http://feeds.reuters.com/reuters/entertainment"
     )
+    expect(directoryUrls).not.toContain("http://toucharcade.com/feed/")
+    expect(directoryUrls).not.toContain(
+      "http://killscreendaily.com/articles/latest/"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.engadget.com/tag/@gaming/rss.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://fulltextrssfeed.com/feed.php?url=www.joystiq.com%2Frss.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.giantbomb.com/feeds/mashup/"
+    )
+    expect(directoryUrls).not.toContain("http://gamepolitics.com/feed/")
+    expect(directoryUrls).not.toContain("http://www.tigsource.com/feed/")
+    expect(directoryUrls).not.toContain(
+      "http://www.wired.com/category/underwire/feed/"
+    )
+    expect(directoryUrls).not.toContain("http://www.cnet.com/rss/gaming/")
+    expect(directoryUrls).not.toContain("http://rssfeeds.usatoday.com/topgaming")
   })
 })
