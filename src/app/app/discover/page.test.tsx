@@ -117,13 +117,15 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("US Science")
     expect(markup).toContain("US Sports")
     expect(markup).toContain("US Tech")
-    expect(markup).toContain("193 feeds")
+    expect(markup).toContain("US Entertainment")
+    expect(markup).toContain("214 feeds")
     expect(markup).toContain("Campaigns, Congress, policy")
     expect(markup).toContain("Markets, companies, economy")
     expect(markup).toContain("Health news, wellness, medicine")
     expect(markup).toContain("Science news, space, research")
     expect(markup).toContain("Sports headlines, analysis, scores")
     expect(markup).toContain("Technology news, startups, gadgets")
+    expect(markup).toContain("Entertainment news, TV, movies")
     expect(markup).toContain("27 feeds")
     expect(markup).toContain("33 feeds")
     expect(markup).toContain("11 feeds")
@@ -131,6 +133,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("39 feeds")
     expect(markup).toContain("12 feeds")
     expect(markup).toContain("45 feeds")
+    expect(markup).toContain("21 feeds")
     expect(markup).toContain("ABC News - U.S.")
     expect(markup).toContain("abcnews.com")
     expect(markup).toContain("Fox News - Latest")
@@ -147,6 +150,8 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("Sports Illustrated")
     expect(markup).toContain("TechCrunch")
     expect(markup).toContain("The Verge - Tech")
+    expect(markup).toContain("Variety")
+    expect(markup).toContain("Deadline")
     expect(markup).toContain('<nav aria-label="Feed categories"')
     expect(markup.match(/aria-current="page"/g)).toHaveLength(1)
     expect(markup).toContain(
@@ -170,7 +175,10 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-tech#directory-category-us-tech"'
     )
-    expect(detailTags).toHaveLength(7)
+    expect(markup).toContain(
+      'href="/app/discover?category=us-entertainment#directory-category-us-entertainment"'
+    )
+    expect(detailTags).toHaveLength(8)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -185,9 +193,11 @@ describe("DiscoverPage", () => {
     expect(detailTags[5]).not.toContain("open")
     expect(detailTags[6]).toContain('id="directory-category-us-tech"')
     expect(detailTags[6]).not.toContain("open")
+    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
+    expect(detailTags[7]).not.toContain("open")
     expect(markup).toContain("<summary")
     expect(markup).toContain("<ul")
-    expect(markup.match(/<li /g)).toHaveLength(193)
+    expect(markup.match(/<li /g)).toHaveLength(214)
     expect(markup).toContain("w-full shrink-0 sm:w-auto sm:pl-4")
     expect(markup).toContain(
       "[&amp;_[data-slot=button]]:w-full [&amp;_[data-slot=button]]:min-h-9"
@@ -195,7 +205,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "sm:[&amp;_[data-slot=button]]:w-auto sm:[&amp;_[data-slot=button]]:min-h-7"
     )
-    expect(markup.match(/Directory control:/g)).toHaveLength(193)
+    expect(markup.match(/Directory control:/g)).toHaveLength(214)
     expect(markup).toContain(
       "Directory control: npr-national | NPR - National | subscribed=true | folders=folder-1:Morning News"
     )
@@ -220,6 +230,9 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "Directory control: techcrunch | TechCrunch | subscribed=false | folders=folder-1:Morning News"
     )
+    expect(markup).toContain(
+      "Directory control: deadline | Deadline | subscribed=false | folders=folder-1:Morning News"
+    )
   })
 
   it("marks US Politics in navigation without opening it by default", async () => {
@@ -233,7 +246,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-politics#directory-category-us-politics" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(7)
+    expect(detailTags).toHaveLength(8)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -248,6 +261,8 @@ describe("DiscoverPage", () => {
     expect(detailTags[5]).not.toContain("open")
     expect(detailTags[6]).toContain('id="directory-category-us-tech"')
     expect(detailTags[6]).not.toContain("open")
+    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
+    expect(detailTags[7]).not.toContain("open")
     expect(markup).toContain("Politico Magazine")
     expect(markup).toContain("NPR - Politics")
   })
@@ -263,7 +278,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-business#directory-category-us-business" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(7)
+    expect(detailTags).toHaveLength(8)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -278,6 +293,8 @@ describe("DiscoverPage", () => {
     expect(detailTags[5]).not.toContain("open")
     expect(detailTags[6]).toContain('id="directory-category-us-tech"')
     expect(detailTags[6]).not.toContain("open")
+    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
+    expect(detailTags[7]).not.toContain("open")
     expect(markup).toContain("Wall Street Journal - U.S. Business")
     expect(markup).toContain("Bloomberg Law")
   })
@@ -293,7 +310,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-health#directory-category-us-health" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(7)
+    expect(detailTags).toHaveLength(8)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -308,6 +325,8 @@ describe("DiscoverPage", () => {
     expect(detailTags[5]).not.toContain("open")
     expect(detailTags[6]).toContain('id="directory-category-us-tech"')
     expect(detailTags[6]).not.toContain("open")
+    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
+    expect(detailTags[7]).not.toContain("open")
     expect(markup).toContain("CNN Health")
     expect(markup).toContain("NPR - Health")
   })
@@ -323,7 +342,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-science#directory-category-us-science" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(7)
+    expect(detailTags).toHaveLength(8)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -338,6 +357,8 @@ describe("DiscoverPage", () => {
     expect(detailTags[5]).not.toContain("open")
     expect(detailTags[6]).toContain('id="directory-category-us-tech"')
     expect(detailTags[6]).not.toContain("open")
+    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
+    expect(detailTags[7]).not.toContain("open")
     expect(markup).toContain("WIRED - Science")
     expect(markup).toContain("NPR - Science")
   })
@@ -353,7 +374,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-sports#directory-category-us-sports" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(7)
+    expect(detailTags).toHaveLength(8)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -368,6 +389,8 @@ describe("DiscoverPage", () => {
     expect(detailTags[5]).not.toContain("open")
     expect(detailTags[6]).toContain('id="directory-category-us-tech"')
     expect(detailTags[6]).not.toContain("open")
+    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
+    expect(detailTags[7]).not.toContain("open")
     expect(markup).toContain("ESPN - Top News")
     expect(markup).toContain("Sports Illustrated")
   })
@@ -383,7 +406,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-tech#directory-category-us-tech" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(7)
+    expect(detailTags).toHaveLength(8)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -398,8 +421,42 @@ describe("DiscoverPage", () => {
     expect(detailTags[5]).not.toContain("open")
     expect(detailTags[6]).toContain('id="directory-category-us-tech"')
     expect(detailTags[6]).not.toContain("open")
+    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
+    expect(detailTags[7]).not.toContain("open")
     expect(markup).toContain("TechCrunch")
     expect(markup).toContain("The Verge - Tech")
+  })
+
+  it("marks US Entertainment in navigation without opening it by default", async () => {
+    const markup = renderToStaticMarkup(
+      await DiscoverPage({
+        searchParams: Promise.resolve({ category: "us-entertainment" }),
+      })
+    )
+    const detailTags = markup.match(/<details[^>]*>/g) ?? []
+
+    expect(markup).toContain(
+      'href="/app/discover?category=us-entertainment#directory-category-us-entertainment" aria-current="page"'
+    )
+    expect(detailTags).toHaveLength(8)
+    expect(detailTags[0]).toContain('id="directory-category-us-general"')
+    expect(detailTags[0]).not.toContain("open")
+    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
+    expect(detailTags[1]).not.toContain("open")
+    expect(detailTags[2]).toContain('id="directory-category-us-business"')
+    expect(detailTags[2]).not.toContain("open")
+    expect(detailTags[3]).toContain('id="directory-category-us-health"')
+    expect(detailTags[3]).not.toContain("open")
+    expect(detailTags[4]).toContain('id="directory-category-us-science"')
+    expect(detailTags[4]).not.toContain("open")
+    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
+    expect(detailTags[5]).not.toContain("open")
+    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
+    expect(detailTags[6]).not.toContain("open")
+    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
+    expect(detailTags[7]).not.toContain("open")
+    expect(markup).toContain("Variety")
+    expect(markup).toContain("Deadline")
   })
 
   it("falls back to US General for an unknown category", async () => {

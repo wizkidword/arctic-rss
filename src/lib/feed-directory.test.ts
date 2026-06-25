@@ -1610,6 +1610,182 @@ const expectedUsTechFeedRecords = [
   },
 ]
 
+const expectedUsEntertainmentFeedRecords = [
+  {
+    aliases: ["http://blogs.wsj.com/speakeasy/feed/"],
+    categoryId: "us-entertainment",
+    id: "wsj-lifestyle",
+    label: "Wall Street Journal - Lifestyle",
+    source: "wsj.com",
+    url: "https://feeds.content.dowjones.io/public/rss/RSSLifestyle",
+  },
+  {
+    aliases: [
+      "http://www.hollywoodreporter.com/blogs/live-feed/rss",
+      "https://www.hollywoodreporter.com/blogs/live-feed/feed/",
+    ],
+    categoryId: "us-entertainment",
+    id: "hollywood-reporter-live-feed",
+    label: "The Hollywood Reporter - Live Feed",
+    source: "hollywoodreporter.com",
+    url: "https://www.hollywoodreporter.com/e/live-feed/feed/",
+  },
+  {
+    aliases: ["http://variety.com/feed/"],
+    categoryId: "us-entertainment",
+    id: "variety",
+    label: "Variety",
+    source: "variety.com",
+    url: "https://variety.com/feed/",
+  },
+  {
+    aliases: ["http://www.rollingstone.com/news.rss"],
+    categoryId: "us-entertainment",
+    id: "rolling-stone",
+    label: "Rolling Stone",
+    source: "rollingstone.com",
+    url: "https://www.rollingstone.com/feed/",
+  },
+  {
+    aliases: ["http://www.latimes.com/entertainment/rss2.0.xml"],
+    categoryId: "us-entertainment",
+    id: "la-times-entertainment",
+    label: "Los Angeles Times - Entertainment",
+    source: "latimes.com",
+    url: "https://www.latimes.com/entertainment/rss2.0.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "us-entertainment",
+    id: "vulture",
+    label: "Vulture",
+    source: "vulture.com",
+    url: "http://feeds.feedburner.com/nymag/vulture",
+  },
+  {
+    aliases: ["http://www.newyorker.com/feed/culture"],
+    categoryId: "us-entertainment",
+    id: "new-yorker-culture",
+    label: "The New Yorker - Culture",
+    source: "newyorker.com",
+    url: "https://www.newyorker.com/feed/culture",
+  },
+  {
+    aliases: ["http://www.buzzfeed.com/tvandmovies.xml"],
+    categoryId: "us-entertainment",
+    id: "buzzfeed-tv-movies",
+    label: "BuzzFeed - TV & Movies",
+    source: "buzzfeed.com",
+    url: "https://www.buzzfeed.com/tvandmovies.xml",
+  },
+  {
+    aliases: ["http://www.tmz.com/rss.xml"],
+    categoryId: "us-entertainment",
+    id: "tmz",
+    label: "TMZ",
+    source: "tmz.com",
+    url: "https://www.tmz.com/rss.xml",
+  },
+  {
+    aliases: ["http://www.cbsnews.com/latest/rss/entertainment"],
+    categoryId: "us-entertainment",
+    id: "cbs-entertainment",
+    label: "CBS News - Entertainment",
+    source: "cbsnews.com",
+    url: "https://www.cbsnews.com/latest/rss/entertainment",
+  },
+  {
+    aliases: ["http://feeds.abcnews.com/abcnews/entertainmentheadlines"],
+    categoryId: "us-entertainment",
+    id: "abc-news-entertainment",
+    label: "ABC News - Entertainment",
+    source: "abcnews.com",
+    url: "https://abcnews.com/abcnews/entertainmentheadlines",
+  },
+  {
+    aliases: [
+      "http://www.huffingtonpost.com/feeds/verticals/entertainment/index.xml",
+    ],
+    categoryId: "us-entertainment",
+    id: "huffpost-entertainment",
+    label: "HuffPost - Entertainment",
+    source: "huffpost.com",
+    url: "https://www.huffpost.com/section/entertainment/feed",
+  },
+  {
+    aliases: ["http://deadline.com/feed/"],
+    categoryId: "us-entertainment",
+    id: "deadline",
+    label: "Deadline",
+    source: "deadline.com",
+    url: "https://deadline.com/feed/",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/EtsBreakingNews"],
+    categoryId: "us-entertainment",
+    id: "entertainment-tonight",
+    label: "Entertainment Tonight",
+    source: "etonline.com",
+    url: "https://www.etonline.com/news/rss",
+  },
+  {
+    aliases: ["http://feeds.nbcnews.com/feeds/todayentertainment"],
+    categoryId: "us-entertainment",
+    id: "nbc-today-pop-culture",
+    label: "TODAY - Pop Culture",
+    source: "today.com",
+    url: "https://feeds.nbcnews.com/today/public/popculture",
+  },
+  {
+    aliases: ["http://www.popsugar.com/feed"],
+    categoryId: "us-entertainment",
+    id: "popsugar",
+    label: "POPSUGAR",
+    source: "popsugar.com",
+    url: "https://www.popsugar.com/feed",
+  },
+  {
+    aliases: ["http://feed2.hollywood.com/hollywood/RhHn"],
+    categoryId: "us-entertainment",
+    id: "hollywood-com",
+    label: "Hollywood.com",
+    source: "hollywood.com",
+    url: "https://www.hollywood.com/feed",
+  },
+  {
+    aliases: ["http://www.esquire.com/blogs/culture/culture-rss"],
+    categoryId: "us-entertainment",
+    id: "esquire-entertainment",
+    label: "Esquire - Entertainment",
+    source: "esquire.com",
+    url: "https://www.esquire.com/rss/entertainment.xml/",
+  },
+  {
+    aliases: ["http://www.usmagazine.com/feeds/movies_tv_music/atom"],
+    categoryId: "us-entertainment",
+    id: "us-weekly-entertainment",
+    label: "Us Weekly - Entertainment",
+    source: "usmagazine.com",
+    url: "https://www.usmagazine.com/category/entertainment/feed/",
+  },
+  {
+    aliases: ["http://feeds2.feedburner.com/nmecom/rss/newsxml"],
+    categoryId: "us-entertainment",
+    id: "nme",
+    label: "NME",
+    source: "nme.com",
+    url: "https://www.nme.com/feed",
+  },
+  {
+    aliases: ["http://www.washingtonpost.com/rss/entertainment"],
+    categoryId: "us-entertainment",
+    id: "washington-post-entertainment",
+    label: "Washington Post - Arts & Entertainment",
+    source: "washingtonpost.com",
+    url: "https://feeds.washingtonpost.com/rss/entertainment",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
@@ -1618,6 +1794,7 @@ const expectedFeedRecords = [
   ...expectedUsScienceFeedRecords,
   ...expectedUsSportsFeedRecords,
   ...expectedUsTechFeedRecords,
+  ...expectedUsEntertainmentFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -1639,6 +1816,9 @@ const expectedUsSportsFeedIds = expectedUsSportsFeedRecords.map(
   (feed) => feed.id
 )
 const expectedUsTechFeedIds = expectedUsTechFeedRecords.map((feed) => feed.id)
+const expectedUsEntertainmentFeedIds = expectedUsEntertainmentFeedRecords.map(
+  (feed) => feed.id
+)
 
 describe("feed directory catalog", () => {
   it("contains the approved categories and validates without errors", () => {
@@ -1684,6 +1864,12 @@ describe("feed directory catalog", () => {
           "Technology news, startups, gadgets, platforms, security, and digital culture from tech outlets.",
         id: "us-tech",
         label: "US Tech",
+      },
+      {
+        description:
+          "Entertainment news, TV, movies, music, celebrity coverage, and culture from major outlets.",
+        id: "us-entertainment",
+        label: "US Entertainment",
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
@@ -1755,6 +1941,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-tech")).toBe(
       feedDirectoryCategories[6]
     )
+    expect(getFeedDirectoryCategory("us-entertainment")).toBe(
+      feedDirectoryCategories[7]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -1781,6 +1970,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryFeed("techcrunch")?.url).toBe(
       "https://techcrunch.com/feed/"
     )
+    expect(getFeedDirectoryFeed("deadline")?.url).toBe(
+      "https://deadline.com/feed/"
+    )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
       expectedUsGeneralFeedIds
@@ -1803,10 +1995,13 @@ describe("feed directory catalog", () => {
     expect(listFeedDirectoryFeeds("us-tech").map((feed) => feed.id)).toEqual(
       expectedUsTechFeedIds
     )
+    expect(
+      listFeedDirectoryFeeds("us-entertainment").map((feed) => feed.id)
+    ).toEqual(expectedUsEntertainmentFeedIds)
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times, NBC, politics, business, health, science, sports, and tech legacy aliases", () => {
+  it("matches New York Times, NBC, politics, business, health, science, sports, tech, and entertainment legacy aliases", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -1837,6 +2032,14 @@ describe("feed directory catalog", () => {
     const zdnet = getFeedDirectoryFeed("zdnet")
     const techInsider = getFeedDirectoryFeed("business-insider")
     const vergeTech = getFeedDirectoryFeed("the-verge-tech")
+    const hollywoodReporter = getFeedDirectoryFeed("hollywood-reporter-live-feed")
+    const rollingStone = getFeedDirectoryFeed("rolling-stone")
+    const huffpostEntertainment = getFeedDirectoryFeed("huffpost-entertainment")
+    const entertainmentTonight = getFeedDirectoryFeed("entertainment-tonight")
+    const usWeekly = getFeedDirectoryFeed("us-weekly-entertainment")
+    const washingtonPostEntertainment = getFeedDirectoryFeed(
+      "washington-post-entertainment"
+    )
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -1866,6 +2069,12 @@ describe("feed directory catalog", () => {
     expect(zdnet).toBeDefined()
     expect(techInsider).toBeDefined()
     expect(vergeTech).toBeDefined()
+    expect(hollywoodReporter).toBeDefined()
+    expect(rollingStone).toBeDefined()
+    expect(huffpostEntertainment).toBeDefined()
+    expect(entertainmentTonight).toBeDefined()
+    expect(usWeekly).toBeDefined()
+    expect(washingtonPostEntertainment).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -1998,6 +2207,36 @@ describe("feed directory catalog", () => {
     expect(
       isDirectoryFeedSubscribed(vergeTech!, [
         "http://www.theverge.com/tech/rss/index.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(hollywoodReporter!, [
+        "http://www.hollywoodreporter.com/blogs/live-feed/rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(rollingStone!, [
+        "http://www.rollingstone.com/news.rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(huffpostEntertainment!, [
+        "http://www.huffingtonpost.com/feeds/verticals/entertainment/index.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(entertainmentTonight!, [
+        "http://feeds.feedburner.com/EtsBreakingNews",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(usWeekly!, [
+        "http://www.usmagazine.com/feeds/movies_tv_music/atom",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(washingtonPostEntertainment!, [
+        "http://www.washingtonpost.com/rss/entertainment",
       ])
     ).toBe(true)
   })
@@ -2153,6 +2392,36 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://hosted2.ap.org/atom/APDEFAULT/495d344a0d10421e9baa8ee77029cfbd"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.mtv.com/rss/news/news_full.jhtml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rss.ew.com/web/ew/rss/todayslatest/index.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://grantland.com/hollywood-prospectus/feed/"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rssfeeds.usatoday.com/usatoday-LifeTopStories"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.accesshollywood.com/AccessHollywood/LatestNews"
+    )
+    expect(directoryUrls).not.toContain("http://feeds.feedburner.com/fuse/latest")
+    expect(directoryUrls).not.toContain(
+      "http://feeds.feedburner.com/nydnrss/entertainment"
+    )
+    expect(directoryUrls).not.toContain("http://www.vice.com/music/rss")
+    expect(directoryUrls).not.toContain("http://rss.cnn.com/rss/cnn_showbiz.rss")
+    expect(directoryUrls).not.toContain("http://feeds.bet.com/AllBetcom")
+    expect(directoryUrls).not.toContain("http://www.hitfix.com/headlines.rss")
+    expect(directoryUrls).not.toContain(
+      "http://rss.people.com/web/people/rss/topheadlines/index.xml"
+    )
+    expect(directoryUrls).not.toContain("http://news.yahoo.com/rss/entertainment")
+    expect(directoryUrls).not.toContain(
+      "http://feeds.reuters.com/reuters/entertainment"
     )
   })
 })
