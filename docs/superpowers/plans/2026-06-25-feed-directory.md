@@ -2038,7 +2038,7 @@ Completed evidence:
   `{"nationalFolderId":null,"subscriptionCount":2,"worldFolderId":"<QA folder ID>"}`.
 - Cleanup confirmation returned `{"leftoverSubscriptions":0,"userCount":0}`.
 
-- [ ] **Step 8: Verify public health and push**
+- [x] **Step 8: Verify public health and push**
 
 Run:
 
@@ -2055,3 +2055,11 @@ Expected:
 - Public health returns database and Redis `ok`.
 - The worktree is clean.
 - Local and remote `main` SHAs match.
+
+Completed evidence:
+
+- `curl.exe --fail https://arcticrss.taverncellar.com/api/health` returned
+  `{"checks":{"database":"ok","redis":"ok"},"status":"ok"}`.
+- `git push origin main` succeeded.
+- Local and remote `main` matched at
+  `cc054f569a965658a08e7db23f2a7a29f4ea9e1b`.
