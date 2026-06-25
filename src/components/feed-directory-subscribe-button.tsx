@@ -2,6 +2,7 @@
 
 import {
   useActionState,
+  useCallback,
   useEffect,
   useState,
   type ComponentProps,
@@ -46,17 +47,7 @@ export function FeedDirectorySubscribeButton({
   subscribed: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const [state, action, pending] = useActionState(
-    subscribeDirectoryFeedAction,
-    initialState
-  )
-
-  useEffect(() => {
-    if (state.status === "success") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Action success closes the controlled dialog.
-      setOpen(false)
-    }
-  }, [state.status])
+  const closeDialog = useCallback(() => setOpen(false), [])
 
   if (subscribed) {
     return (
@@ -77,17 +68,52 @@ export function FeedDirectorySubscribeButton({
         Subscribe
         <span className="sr-only"> to {feedLabel}</span>
       </AlertDialogTrigger>
-      <AlertDialogContent>
-        <FeedDirectorySubscribeDialogContent
-          action={action}
-          feedId={feedId}
-          feedLabel={feedLabel}
-          folders={folders}
-          pending={pending}
-          state={state}
-        />
-      </AlertDialogContent>
+      {open && (
+        <AlertDialogContent>
+          <FeedDirectorySubscribeActionForm
+            key={feedId}
+            feedId={feedId}
+            feedLabel={feedLabel}
+            folders={folders}
+            onSuccess={closeDialog}
+          />
+        </AlertDialogContent>
+      )}
     </AlertDialog>
+  )
+}
+
+function FeedDirectorySubscribeActionForm({
+  feedId,
+  feedLabel,
+  folders,
+  onSuccess,
+}: {
+  feedId: string
+  feedLabel: string
+  folders: DirectoryFolder[]
+  onSuccess: () => void
+}) {
+  const [state, action, pending] = useActionState(
+    subscribeDirectoryFeedAction,
+    initialState
+  )
+
+  useEffect(() => {
+    if (state.status === "success") {
+      onSuccess()
+    }
+  }, [onSuccess, state.status])
+
+  return (
+    <FeedDirectorySubscribeDialogContent
+      action={action}
+      feedId={feedId}
+      feedLabel={feedLabel}
+      folders={folders}
+      pending={pending}
+      state={state}
+    />
   )
 }
 
@@ -144,11 +170,13 @@ export function FeedDirectorySubscribeDialogContent({
         </div>
       </div>
 
-      {state.status === "error" && (
-        <p aria-live="polite" className="text-sm text-destructive">
-          {state.message}
-        </p>
-      )}
+      <p
+        aria-atomic="true"
+        aria-live="polite"
+        className="text-sm text-destructive"
+      >
+        {state.status === "error" ? state.message : ""}
+      </p>
 
       <AlertDialogFooter>
         <AlertDialogCancel disabled={pending} type="button">

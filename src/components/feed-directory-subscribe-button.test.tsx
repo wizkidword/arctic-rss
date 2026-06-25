@@ -1,86 +1,26 @@
-import { renderToStaticMarkup } from "react-dom/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+// @vitest-environment jsdom
 
-const hooks = vi.hoisted(() => ({
-  action: vi.fn(),
-  actionState: null as null | {
-    message: string
-    status: "idle" | "success" | "error"
-  },
-  pending: false,
-  setOpen: vi.fn(),
-}))
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react")>()
-
-  return {
-    ...actual,
-    useActionState: vi.fn((_action, initialState) => [
-      hooks.actionState ?? initialState,
-      hooks.action,
-      hooks.pending,
-    ]),
-    useEffect: vi.fn((effect) => effect()),
-    useState: vi.fn((initialState) => [initialState, hooks.setOpen]),
-  }
-})
-
-vi.mock("@/app/app/actions", () => ({
+const { subscribeDirectoryFeedAction } = vi.hoisted(() => ({
   subscribeDirectoryFeedAction: vi.fn(),
 }))
 
-vi.mock("@/components/ui/alert-dialog", () => ({
-  AlertDialog: ({
-    children,
-  }: {
-    children: React.ReactNode
-    onOpenChange?: (open: boolean) => void
-    open?: boolean
-  }) => <div>{children}</div>,
-  AlertDialogCancel: ({
-    children,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-  AlertDialogContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  AlertDialogDescription: ({ children }: { children: React.ReactNode }) => (
-    <p>{children}</p>
-  ),
-  AlertDialogFooter: ({ children }: { children: React.ReactNode }) => (
-    <footer>{children}</footer>
-  ),
-  AlertDialogHeader: ({ children }: { children: React.ReactNode }) => (
-    <header>{children}</header>
-  ),
-  AlertDialogTitle: ({ children }: { children: React.ReactNode }) => (
-    <h2>{children}</h2>
-  ),
-  AlertDialogTrigger: ({
-    children,
-  }: {
-    children: React.ReactNode
-    render?: React.ReactElement
-  }) => <div>{children}</div>,
-}))
-
-vi.mock("@/components/ui/button", () => ({
-  Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    size?: string
-    variant?: string
-  }) => (
-    <button className={props.className} disabled={props.disabled} type={props.type}>
-      {props.children}
-    </button>
-  ),
+vi.mock("@/app/app/actions", () => ({
+  subscribeDirectoryFeedAction,
 }))
 
 import {
   FeedDirectorySubscribeButton,
-  FeedDirectorySubscribeDialogContent,
 } from "./feed-directory-subscribe-button"
 
 const folders = [
@@ -88,64 +28,27 @@ const folders = [
   { id: "research", name: "Research" },
 ]
 
-describe("FeedDirectorySubscribeDialogContent", () => {
-  it("names the feed and defaults the folder picker to Uncategorized", () => {
-    const markup = renderToStaticMarkup(
-      <FeedDirectorySubscribeDialogContent
-        action={() => undefined}
-        feedId="npr-national"
-        feedLabel="NPR - National"
-        folders={folders}
-        pending={false}
-        state={{ message: "", status: "idle" }}
-      />
-    )
-
-    expect(markup).toContain("Subscribe to NPR - National")
-    expect(markup).toContain('name="directoryFeedId"')
-    expect(markup).toContain('value="npr-national"')
-    expect(markup).toContain('name="folderId"')
-    expect(markup).toContain(
-      '<option value="" selected="">Uncategorized</option>'
-    )
-    expect(markup).toContain(">Morning News</option>")
-    expect(markup).toContain(">Research</option>")
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
   })
 
-  it("disables every action while pending and announces feed-specific errors", () => {
-    const markup = renderToStaticMarkup(
-      <FeedDirectorySubscribeDialogContent
-        action={() => undefined}
-        feedId="npr-national"
-        feedLabel="NPR - National"
-        folders={folders}
-        pending
-        state={{
-          message: "NPR - National could not be subscribed. Try again.",
-          status: "error",
-        }}
-      />
-    )
+  return { promise, resolve }
+}
 
-    expect(markup.match(/disabled=""/g)).toHaveLength(3)
-    expect(markup).toContain("Subscribing")
-    expect(markup).toContain(
-      "NPR - National could not be subscribed. Try again."
-    )
-    expect(markup).toContain('aria-live="polite"')
-  })
+afterEach(() => {
+  cleanup()
 })
 
-describe("FeedDirectorySubscribeButton", () => {
-  beforeEach(() => {
-    hooks.action.mockReset()
-    hooks.actionState = null
-    hooks.pending = false
-    hooks.setOpen.mockReset()
-  })
+beforeEach(() => {
+  subscribeDirectoryFeedAction.mockReset()
+})
 
-  it("renders an available feed-specific Subscribe command", () => {
-    const markup = renderToStaticMarkup(
+describe("FeedDirectorySubscribeDialogContent", () => {
+  it("names the feed and defaults the folder picker to Uncategorized", async () => {
+    const user = userEvent.setup()
+    render(
       <FeedDirectorySubscribeButton
         feedId="npr-national"
         feedLabel="NPR - National"
@@ -154,14 +57,256 @@ describe("FeedDirectorySubscribeButton", () => {
       />
     )
 
-    expect(markup).toContain("Subscribe")
-    expect(markup).toContain(
-      '<span class="sr-only"> to NPR - National</span>'
+    await user.click(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
     )
+
+    expect(
+      screen.getByRole("heading", { name: "Subscribe to NPR - National" })
+    ).toBeTruthy()
+
+    const hiddenFeedId = document.querySelector<HTMLInputElement>(
+      'input[name="directoryFeedId"]'
+    )
+    expect(hiddenFeedId?.value).toBe("npr-national")
+
+    const folderSelect = screen.getByRole("combobox", { name: "Folder" })
+    expect(folderSelect).toHaveProperty("value", "")
+    expect(
+      within(folderSelect).getByRole("option", { name: "Uncategorized" })
+    ).toHaveProperty("selected", true)
+    expect(
+      within(folderSelect).getByRole("option", { name: "Morning News" })
+    ).toBeTruthy()
+    expect(
+      within(folderSelect).getByRole("option", { name: "Research" })
+    ).toBeTruthy()
+
+    const liveRegion = document.querySelector('[aria-live="polite"]')
+    expect(liveRegion?.getAttribute("aria-atomic")).toBe("true")
+    expect(liveRegion?.textContent).toBe("")
+  })
+})
+
+describe("FeedDirectorySubscribeButton", () => {
+  it("opens the real dialog from the feed-specific Subscribe trigger", async () => {
+    const user = userEvent.setup()
+
+    render(
+      <FeedDirectorySubscribeButton
+        feedId="npr-national"
+        feedLabel="NPR - National"
+        folders={folders}
+        subscribed={false}
+      />
+    )
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+    )
+
+    expect(
+      screen.getByRole("dialog", { name: "Subscribe to NPR - National" })
+    ).toBeTruthy()
+  })
+
+  it("clears an action error after the dialog is closed and reopened", async () => {
+    const user = userEvent.setup()
+    subscribeDirectoryFeedAction.mockResolvedValueOnce({
+      message: "NPR - National could not be subscribed. Try again.",
+      status: "error",
+    })
+
+    render(
+      <FeedDirectorySubscribeButton
+        feedId="npr-national"
+        feedLabel="NPR - National"
+        folders={folders}
+        subscribed={false}
+      />
+    )
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+    )
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Subscribe",
+      })
+    )
+
+    expect(
+      await screen.findByText(
+        "NPR - National could not be subscribed. Try again."
+      )
+    ).toBeTruthy()
+
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Cancel",
+      })
+    )
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull()
+    })
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+    )
+
+    expect(
+      screen.queryByText(
+        "NPR - National could not be subscribed. Try again."
+      )
+    ).toBeNull()
+  })
+
+  it("closes the dialog after a successful subscription", async () => {
+    const user = userEvent.setup()
+    subscribeDirectoryFeedAction.mockResolvedValueOnce({
+      message: "Subscribed to NPR - National.",
+      status: "success",
+    })
+
+    render(
+      <FeedDirectorySubscribeButton
+        feedId="npr-national"
+        feedLabel="NPR - National"
+        folders={folders}
+        subscribed={false}
+      />
+    )
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+    )
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Subscribe",
+      })
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull()
+    })
+  })
+
+  it("disables the folder picker and dialog actions while pending", async () => {
+    const user = userEvent.setup()
+    const deferred =
+      createDeferred<Awaited<ReturnType<typeof subscribeDirectoryFeedAction>>>()
+    subscribeDirectoryFeedAction.mockReturnValueOnce(deferred.promise)
+
+    render(
+      <FeedDirectorySubscribeButton
+        feedId="npr-national"
+        feedLabel="NPR - National"
+        folders={folders}
+        subscribed={false}
+      />
+    )
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+    )
+
+    const dialog = screen.getByRole("dialog")
+    const submitButton = within(dialog).getByRole("button", {
+      name: "Subscribe",
+    })
+    await user.click(submitButton)
+
+    await waitFor(() => {
+      expect(within(dialog).getByRole("combobox", { name: "Folder" })).toHaveProperty(
+        "disabled",
+        true
+      )
+      expect(
+        within(dialog).getByRole("button", { name: "Cancel" })
+      ).toHaveProperty("disabled", true)
+      expect(
+        within(dialog).getByRole("button", { name: "Subscribing" })
+      ).toHaveProperty("disabled", true)
+    })
+
+    await act(async () => {
+      deferred.resolve({ message: "", status: "idle" })
+      await deferred.promise
+    })
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByRole("button", { name: "Subscribe" })
+      ).toHaveProperty("disabled", false)
+    })
+  })
+
+  it("resets action state when the open control receives a new feed", async () => {
+    const user = userEvent.setup()
+    subscribeDirectoryFeedAction.mockResolvedValueOnce({
+      message: "NPR - National could not be subscribed. Try again.",
+      status: "error",
+    })
+
+    const { rerender } = render(
+      <FeedDirectorySubscribeButton
+        feedId="npr-national"
+        feedLabel="NPR - National"
+        folders={folders}
+        subscribed={false}
+      />
+    )
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Subscribe.*NPR - National/,
+      })
+    )
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Subscribe",
+      })
+    )
+    expect(
+      await screen.findByText(
+        "NPR - National could not be subscribed. Try again."
+      )
+    ).toBeTruthy()
+
+    rerender(
+      <FeedDirectorySubscribeButton
+        feedId="science-friday"
+        feedLabel="Science Friday"
+        folders={folders}
+        subscribed={false}
+      />
+    )
+
+    expect(
+      screen.getByRole("dialog", { name: "Subscribe to Science Friday" })
+    ).toBeTruthy()
+    expect(
+      screen.queryByText(
+        "NPR - National could not be subscribed. Try again."
+      )
+    ).toBeNull()
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toBe("")
   })
 
   it("renders a disabled feed-specific Subscribed state", () => {
-    const markup = renderToStaticMarkup(
+    render(
       <FeedDirectorySubscribeButton
         feedId="npr-national"
         feedLabel="NPR - National"
@@ -170,28 +315,11 @@ describe("FeedDirectorySubscribeButton", () => {
       />
     )
 
-    expect(markup).toContain("disabled")
-    expect(markup).toContain("Subscribed")
-    expect(markup).toContain(
-      '<span class="sr-only"> to NPR - National</span>'
-    )
-  })
-
-  it("closes the dialog when the action state becomes successful", () => {
-    hooks.actionState = {
-      message: "Subscribed to NPR - National.",
-      status: "success",
-    }
-
-    renderToStaticMarkup(
-      <FeedDirectorySubscribeButton
-        feedId="npr-national"
-        feedLabel="NPR - National"
-        folders={folders}
-        subscribed={false}
-      />
-    )
-
-    expect(hooks.setOpen).toHaveBeenCalledWith(false)
+    expect(
+      screen.getByRole("button", {
+        name: /Subscribed.*NPR - National/,
+      })
+    ).toHaveProperty("disabled", true)
+    expect(screen.queryByRole("dialog")).toBeNull()
   })
 })
