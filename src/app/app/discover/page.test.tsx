@@ -113,12 +113,15 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("US General")
     expect(markup).toContain("US Politics")
     expect(markup).toContain("US Business")
-    expect(markup).toContain("71 feeds")
+    expect(markup).toContain("US Health")
+    expect(markup).toContain("97 feeds")
     expect(markup).toContain("Campaigns, Congress, policy")
     expect(markup).toContain("Markets, companies, economy")
+    expect(markup).toContain("Health news, wellness, medicine")
     expect(markup).toContain("27 feeds")
     expect(markup).toContain("33 feeds")
     expect(markup).toContain("11 feeds")
+    expect(markup).toContain("26 feeds")
     expect(markup).toContain("ABC News - U.S.")
     expect(markup).toContain("abcnews.com")
     expect(markup).toContain("Fox News - Latest")
@@ -127,6 +130,8 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("NPR - Politics")
     expect(markup).toContain("Wall Street Journal - U.S. Business")
     expect(markup).toContain("Bloomberg Law")
+    expect(markup).toContain("CNN Health")
+    expect(markup).toContain("NPR - Health")
     expect(markup).toContain('<nav aria-label="Feed categories"')
     expect(markup.match(/aria-current="page"/g)).toHaveLength(1)
     expect(markup).toContain(
@@ -138,16 +143,21 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-business#directory-category-us-business"'
     )
-    expect(detailTags).toHaveLength(3)
+    expect(markup).toContain(
+      'href="/app/discover?category=us-health#directory-category-us-health"'
+    )
+    expect(detailTags).toHaveLength(4)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
     expect(detailTags[1]).not.toContain("open")
     expect(detailTags[2]).toContain('id="directory-category-us-business"')
     expect(detailTags[2]).not.toContain("open")
+    expect(detailTags[3]).toContain('id="directory-category-us-health"')
+    expect(detailTags[3]).not.toContain("open")
     expect(markup).toContain("<summary")
     expect(markup).toContain("<ul")
-    expect(markup.match(/<li /g)).toHaveLength(71)
+    expect(markup.match(/<li /g)).toHaveLength(97)
     expect(markup).toContain("w-full shrink-0 sm:w-auto sm:pl-4")
     expect(markup).toContain(
       "[&amp;_[data-slot=button]]:w-full [&amp;_[data-slot=button]]:min-h-9"
@@ -155,7 +165,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "sm:[&amp;_[data-slot=button]]:w-auto sm:[&amp;_[data-slot=button]]:min-h-7"
     )
-    expect(markup.match(/Directory control:/g)).toHaveLength(71)
+    expect(markup.match(/Directory control:/g)).toHaveLength(97)
     expect(markup).toContain(
       "Directory control: npr-national | NPR - National | subscribed=true | folders=folder-1:Morning News"
     )
@@ -167,6 +177,9 @@ describe("DiscoverPage", () => {
     )
     expect(markup).toContain(
       "Directory control: wsj-us-business | Wall Street Journal - U.S. Business | subscribed=false | folders=folder-1:Morning News"
+    )
+    expect(markup).toContain(
+      "Directory control: npr-health | NPR - Health | subscribed=false | folders=folder-1:Morning News"
     )
   })
 
@@ -181,13 +194,15 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-politics#directory-category-us-politics" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(3)
+    expect(detailTags).toHaveLength(4)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
     expect(detailTags[1]).toContain("open")
     expect(detailTags[2]).toContain('id="directory-category-us-business"')
     expect(detailTags[2]).not.toContain("open")
+    expect(detailTags[3]).toContain('id="directory-category-us-health"')
+    expect(detailTags[3]).not.toContain("open")
     expect(markup).toContain("Politico Magazine")
     expect(markup).toContain("NPR - Politics")
   })
@@ -203,15 +218,41 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-business#directory-category-us-business" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(3)
+    expect(detailTags).toHaveLength(4)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
     expect(detailTags[1]).not.toContain("open")
     expect(detailTags[2]).toContain('id="directory-category-us-business"')
     expect(detailTags[2]).toContain("open")
+    expect(detailTags[3]).toContain('id="directory-category-us-health"')
+    expect(detailTags[3]).not.toContain("open")
     expect(markup).toContain("Wall Street Journal - U.S. Business")
     expect(markup).toContain("Bloomberg Law")
+  })
+
+  it("opens US Health when requested from the category navigation", async () => {
+    const markup = renderToStaticMarkup(
+      await DiscoverPage({
+        searchParams: Promise.resolve({ category: "us-health" }),
+      })
+    )
+    const detailTags = markup.match(/<details[^>]*>/g) ?? []
+
+    expect(markup).toContain(
+      'href="/app/discover?category=us-health#directory-category-us-health" aria-current="page"'
+    )
+    expect(detailTags).toHaveLength(4)
+    expect(detailTags[0]).toContain('id="directory-category-us-general"')
+    expect(detailTags[0]).not.toContain("open")
+    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
+    expect(detailTags[1]).not.toContain("open")
+    expect(detailTags[2]).toContain('id="directory-category-us-business"')
+    expect(detailTags[2]).not.toContain("open")
+    expect(detailTags[3]).toContain('id="directory-category-us-health"')
+    expect(detailTags[3]).toContain("open")
+    expect(markup).toContain("CNN Health")
+    expect(markup).toContain("NPR - Health")
   })
 
   it("falls back to US General for an unknown category", async () => {
