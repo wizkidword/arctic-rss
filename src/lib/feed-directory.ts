@@ -1,0 +1,365 @@
+export type FeedDirectoryCategory = {
+  readonly description: string
+  readonly id: string
+  readonly label: string
+}
+
+export type FeedDirectoryFeed = {
+  readonly aliases?: readonly string[]
+  readonly categoryId: string
+  readonly id: string
+  readonly label: string
+  readonly source: string
+  readonly url: string
+}
+
+export const feedDirectoryCategories: readonly FeedDirectoryCategory[] = [
+  {
+    description: "National and world reporting from established U.S. newsrooms.",
+    id: "us-general",
+    label: "US General",
+  },
+]
+
+export const feedDirectoryFeeds: readonly FeedDirectoryFeed[] = [
+  {
+    aliases: ["http://feeds.abcnews.com/abcnews/usheadlines"],
+    categoryId: "us-general",
+    id: "abc-news-us",
+    label: "ABC News - U.S.",
+    source: "abcnews.com",
+    url: "https://abcnews.com/abcnews/usheadlines",
+  },
+  {
+    categoryId: "us-general",
+    id: "cnn-top-stories",
+    label: "CNN Top Stories",
+    source: "cnn.com",
+    url: "http://rss.cnn.com/rss/cnn_topstories.rss",
+  },
+  {
+    aliases: ["http://www.cbsnews.com/latest/rss/main"],
+    categoryId: "us-general",
+    id: "cbs-news-latest",
+    label: "CBS News - Latest",
+    source: "cbsnews.com",
+    url: "https://www.cbsnews.com/latest/rss/main",
+  },
+  {
+    aliases: [
+      "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
+      "https://www.nytimes.com/services/xml/rss/nyt/National.xml",
+    ],
+    categoryId: "us-general",
+    id: "nyt-us",
+    label: "New York Times - U.S.",
+    source: "nytimes.com",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/US.xml",
+  },
+  {
+    aliases: ["http://online.wsj.com/xml/rss/3_7085.xml"],
+    categoryId: "us-general",
+    id: "wsj-us-news",
+    label: "Wall Street Journal - U.S. News",
+    source: "wsj.com",
+    url: "https://feeds.content.dowjones.io/public/rss/RSSUSnews",
+  },
+  {
+    aliases: ["http://rss.csmonitor.com/feeds/usa"],
+    categoryId: "us-general",
+    id: "cs-monitor-usa",
+    label: "Christian Science Monitor - USA",
+    source: "csmonitor.com",
+    url: "https://rss.csmonitor.com/feeds/usa",
+  },
+  {
+    aliases: ["http://feeds.nbcnews.com/feeds/topstories"],
+    categoryId: "us-general",
+    id: "nbc-top-stories",
+    label: "NBC News - Top Stories",
+    source: "nbcnews.com",
+    url: "https://feeds.nbcnews.com/nbcnews/public/news",
+  },
+  {
+    aliases: ["http://feeds.nbcnews.com/feeds/worldnews"],
+    categoryId: "us-general",
+    id: "nbc-world",
+    label: "NBC News - World",
+    source: "nbcnews.com",
+    url: "https://feeds.nbcnews.com/nbcnews/public/world",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml"],
+    categoryId: "us-general",
+    id: "bbc-us-canada",
+    label: "BBC News - U.S. & Canada",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml",
+  },
+  {
+    aliases: ["http://news.yahoo.com/rss/us"],
+    categoryId: "us-general",
+    id: "yahoo-us",
+    label: "Yahoo News - U.S.",
+    source: "yahoo.com",
+    url: "https://news.yahoo.com/rss/us",
+  },
+  {
+    aliases: ["http://rss.news.yahoo.com/rss/world"],
+    categoryId: "us-general",
+    id: "yahoo-world",
+    label: "Yahoo News - World",
+    source: "yahoo.com",
+    url: "https://news.yahoo.com/rss/world",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/thedailybeast/articles"],
+    categoryId: "us-general",
+    id: "daily-beast-latest",
+    label: "The Daily Beast - Latest",
+    source: "thedailybeast.com",
+    url: "https://feeds.feedburner.com/thedailybeast/articles",
+  },
+  {
+    aliases: ["http://qz.com/feed"],
+    categoryId: "us-general",
+    id: "quartz",
+    label: "Quartz",
+    source: "qz.com",
+    url: "https://qz.com/rss",
+  },
+  {
+    aliases: ["http://www.theguardian.com/world/usa/rss"],
+    categoryId: "us-general",
+    id: "guardian-us",
+    label: "The Guardian - U.S. News",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/us-news/rss",
+  },
+  {
+    aliases: ["http://www.politico.com/rss/politicopicks.xml"],
+    categoryId: "us-general",
+    id: "politico-politics",
+    label: "Politico - Politics",
+    source: "politico.com",
+    url: "https://rss.politico.com/politics-news.xml",
+  },
+  {
+    aliases: ["http://www.newyorker.com/feed/news"],
+    categoryId: "us-general",
+    id: "new-yorker-news",
+    label: "The New Yorker - News",
+    source: "newyorker.com",
+    url: "https://www.newyorker.com/feed/news",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/NationPBSNewsHour"],
+    categoryId: "us-general",
+    id: "pbs-newshour-nation",
+    label: "PBS NewsHour - Nation",
+    source: "pbs.org",
+    url: "https://feeds.feedburner.com/NationPBSNewsHour",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/NewshourWorld"],
+    categoryId: "us-general",
+    id: "pbs-newshour-world",
+    label: "PBS NewsHour - World",
+    source: "pbs.org",
+    url: "https://feeds.feedburner.com/NewshourWorld",
+  },
+  {
+    aliases: ["http://www.npr.org/rss/rss.php?id=1003"],
+    categoryId: "us-general",
+    id: "npr-national",
+    label: "NPR - National",
+    source: "npr.org",
+    url: "https://feeds.npr.org/1003/rss.xml",
+  },
+  {
+    aliases: ["http://www.npr.org/rss/rss.php?id=1004"],
+    categoryId: "us-general",
+    id: "npr-world",
+    label: "NPR - World",
+    source: "npr.org",
+    url: "https://feeds.npr.org/1004/rss.xml",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/AtlanticNational"],
+    categoryId: "us-general",
+    id: "atlantic-us",
+    label: "The Atlantic - U.S.",
+    source: "theatlantic.com",
+    url: "https://feeds.feedburner.com/AtlanticNational",
+  },
+  {
+    aliases: ["http://www.latimes.com/nation/rss2.0.xml"],
+    categoryId: "us-general",
+    id: "la-times-nation",
+    label: "Los Angeles Times - Nation",
+    source: "latimes.com",
+    url: "https://www.latimes.com/nation/rss2.0.xml",
+  },
+  {
+    aliases: ["http://www.latimes.com/world/rss2.0.xml"],
+    categoryId: "us-general",
+    id: "la-times-world",
+    label: "Los Angeles Times - World",
+    source: "latimes.com",
+    url: "https://www.latimes.com/world/rss2.0.xml",
+  },
+  {
+    aliases: ["http://talkingpointsmemo.com/feed/livewire"],
+    categoryId: "us-general",
+    id: "talking-points-memo",
+    label: "Talking Points Memo",
+    source: "talkingpointsmemo.com",
+    url: "https://talkingpointsmemo.com/feed",
+  },
+  {
+    aliases: ["http://www.salon.com/category/news/feed/rss/"],
+    categoryId: "us-general",
+    id: "salon-news",
+    label: "Salon - News",
+    source: "salon.com",
+    url: "https://www.salon.com/category/news/feed",
+  },
+  {
+    aliases: ["http://time.com/newsfeed/feed/"],
+    categoryId: "us-general",
+    id: "time",
+    label: "TIME",
+    source: "time.com",
+    url: "https://time.com/newsfeed/feed/",
+  },
+  {
+    aliases: ["http://feeds.foxnews.com/foxnews/latest?format=xml"],
+    categoryId: "us-general",
+    id: "fox-news-latest",
+    label: "Fox News - Latest",
+    source: "foxnews.com",
+    url: "https://moxie.foxnews.com/google-publisher/latest.xml?format=xml",
+  },
+]
+
+export function getFeedDirectoryCategory(categoryId?: string) {
+  return (
+    feedDirectoryCategories.find((category) => category.id === categoryId) ??
+    feedDirectoryCategories[0]
+  )
+}
+
+export function getFeedDirectoryFeed(feedId: string) {
+  return feedDirectoryFeeds.find((feed) => feed.id === feedId)
+}
+
+export function listFeedDirectoryFeeds(categoryId: string) {
+  return feedDirectoryFeeds.filter((feed) => feed.categoryId === categoryId)
+}
+
+export function isDirectoryFeedSubscribed(
+  feed: FeedDirectoryFeed,
+  subscriptionUrls: readonly string[]
+) {
+  const feedUrls = new Set(
+    [feed.url, ...(feed.aliases ?? [])]
+      .map(normalizeDirectoryUrl)
+      .filter((url): url is string => url !== null)
+  )
+
+  return subscriptionUrls.some((url) => {
+    const normalizedUrl = normalizeDirectoryUrl(url)
+    return normalizedUrl !== null && feedUrls.has(normalizedUrl)
+  })
+}
+
+export function validateFeedDirectoryCatalog() {
+  const errors: string[] = []
+  const categoryIds = new Set<string>()
+
+  for (const category of feedDirectoryCategories) {
+    if (!hasText(category.description) || !hasText(category.id) || !hasText(category.label)) {
+      errors.push(`Incomplete category: ${category.id || "(missing id)"}`)
+    }
+
+    if (categoryIds.has(category.id)) {
+      errors.push(`Duplicate category ID: ${category.id}`)
+    }
+
+    categoryIds.add(category.id)
+  }
+
+  const feedIds = new Set<string>()
+  const urlOwners = new Map<string, string>()
+
+  for (const feed of feedDirectoryFeeds) {
+    if (
+      !hasText(feed.categoryId) ||
+      !hasText(feed.id) ||
+      !hasText(feed.label) ||
+      !hasText(feed.source) ||
+      !hasText(feed.url)
+    ) {
+      errors.push(`Incomplete feed: ${feed.id || "(missing id)"}`)
+    }
+
+    if (feedIds.has(feed.id)) {
+      errors.push(`Duplicate feed ID: ${feed.id}`)
+    }
+
+    feedIds.add(feed.id)
+
+    if (!categoryIds.has(feed.categoryId)) {
+      errors.push(`Unknown category "${feed.categoryId}" for feed "${feed.id}"`)
+    }
+
+    for (const url of [feed.url, ...(feed.aliases ?? [])]) {
+      const normalizedUrl = normalizeDirectoryUrl(url)
+
+      if (!normalizedUrl) {
+        errors.push(`Invalid or unsupported URL for feed "${feed.id}": ${url}`)
+        continue
+      }
+
+      const owner = urlOwners.get(normalizedUrl)
+
+      if (owner && owner !== feed.id) {
+        errors.push(
+          `Duplicate normalized URL "${normalizedUrl}" for feeds "${owner}" and "${feed.id}"`
+        )
+      } else {
+        urlOwners.set(normalizedUrl, feed.id)
+      }
+    }
+  }
+
+  return errors
+}
+
+function hasText(value: string) {
+  return typeof value === "string" && value.trim().length > 0
+}
+
+function normalizeDirectoryUrl(value: string) {
+  try {
+    const url = new URL(value)
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null
+    }
+
+    url.protocol = "https:"
+    url.hostname = url.hostname.toLowerCase()
+    url.port = ""
+    url.hash = ""
+    url.searchParams.sort()
+
+    if (url.pathname !== "/") {
+      url.pathname = url.pathname.replace(/\/+$/, "") || "/"
+    }
+
+    return url.href
+  } catch {
+    return null
+  }
+}
