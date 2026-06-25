@@ -1813,13 +1813,16 @@ Expected:
 
 Completed verification evidence:
 
-- `npm test`: 38 test files and 143 tests passed.
+- `npm test`: 38 test files and 145 tests passed.
 - `npm run typecheck`: passed.
 - `npm run lint`: passed.
 - `npx prisma validate`: schema valid.
 - `npm run build`: passed and included `/app/discover`.
 - `docker compose config --quiet`: passed using the main checkout project
   directory and environment file.
+- Post-merge Vitest and ESLint config now exclude local `.worktrees/` folders
+  so archived feature worktrees and generated `.next/` output are not included
+  in root verification.
 
 - [x] **Step 3: Mark implementation checklist items and commit documentation**
 
