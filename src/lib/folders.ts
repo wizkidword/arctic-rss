@@ -1,4 +1,6 @@
 import { Prisma } from "../generated/prisma/client"
+import { cache } from "react"
+
 import { getPrisma } from "./db"
 
 type FolderLookup = {
@@ -74,7 +76,9 @@ export class FolderError extends Error {
   }
 }
 
-export async function listUserFolders(userId: string): Promise<FolderNavItem[]> {
+export const listUserFolders = cache(async function listUserFolders(
+  userId: string
+): Promise<FolderNavItem[]> {
   const folders = await getPrisma().folder.findMany({
     include: {
       subscriptions: {
@@ -95,7 +99,7 @@ export async function listUserFolders(userId: string): Promise<FolderNavItem[]> 
       unreadCount: await countUnreadArticlesForFolder(userId, folder.id),
     }))
   )
-}
+})
 
 export async function getUserFolder(
   userId: string,

@@ -117,6 +117,8 @@ Done:
 - Safe feed URL validation and SSRF checks
 - RSS/Atom feed discovery from website URLs
 - Feed subscription persistence
+- Curated Feed Directory with extensible categories
+- One-click catalog subscription with Uncategorized or folder assignment
 - Sidebar feed display
 - RSS/Atom article parsing
 - Article upsert and duplicate prevention

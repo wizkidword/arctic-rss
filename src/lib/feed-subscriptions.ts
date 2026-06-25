@@ -1,7 +1,12 @@
 import { Prisma } from "../generated/prisma/client"
+import { cache } from "react"
 
 import { countUnreadArticlesForFeed } from "./articles"
 import { discoverFeedFromUrl } from "./feed-discovery"
+import {
+  feedDirectoryFeeds,
+  isDirectoryFeedSubscribed,
+} from "./feed-directory"
 import { getPrisma } from "./db"
 
 export class FeedSubscriptionError extends Error {
@@ -14,6 +19,7 @@ export class FeedSubscriptionError extends Error {
 export type FeedSubscriptionNavItem = {
   faviconUrl: string | null
   feedId: string
+  feedUrl: string
   folderId: string | null
   folderName: string | null
   id: string
@@ -24,7 +30,7 @@ export type FeedSubscriptionNavItem = {
   unreadCount: number
 }
 
-export async function listUserFeedSubscriptions(
+export const listUserFeedSubscriptions = cache(async function listUserFeedSubscriptions(
   userId: string
 ): Promise<FeedSubscriptionNavItem[]> {
   const subscriptions = await getPrisma().feedSubscription.findMany({
@@ -40,6 +46,7 @@ export async function listUserFeedSubscriptions(
     subscriptions.map(async (subscription) => ({
       faviconUrl: subscription.feed.faviconUrl,
       feedId: subscription.feedId,
+      feedUrl: subscription.feed.feedUrl,
       folderId: subscription.folderId,
       folderName: subscription.folder?.name ?? null,
       id: subscription.id,
@@ -50,7 +57,7 @@ export async function listUserFeedSubscriptions(
       unreadCount: await countUnreadArticlesForFeed(userId, subscription.feedId),
     }))
   )
-}
+})
 
 export async function getUserFeedSubscription(
   userId: string,
@@ -144,14 +151,42 @@ export async function subscribeToFeed({
   }
 
   const discoveredFeed = await discoverFeedFromUrl(url)
+  const directoryFeed = feedDirectoryFeeds.find((feed) =>
+    isDirectoryFeedSubscribed(feed, [discoveredFeed.feedUrl])
+  )
+
+  if (directoryFeed) {
+    const existingSubscriptions = await prisma.feedSubscription.findMany({
+      where: { userId },
+      select: {
+        feed: {
+          select: {
+            feedUrl: true,
+            title: true,
+          },
+        },
+      },
+    })
+    const existingSubscription = existingSubscriptions.find((subscription) =>
+      isDirectoryFeedSubscribed(directoryFeed, [subscription.feed.feedUrl])
+    )
+
+    if (existingSubscription) {
+      throw new FeedSubscriptionError(
+        `You are already subscribed to ${existingSubscription.feed.title}.`
+      )
+    }
+  }
+
   const now = new Date()
+  const persistedFeedUrl = directoryFeed?.url ?? discoveredFeed.feedUrl
 
   const feed = await prisma.feed.upsert({
-    where: { feedUrl: discoveredFeed.feedUrl },
+    where: { feedUrl: persistedFeedUrl },
     create: {
       description: discoveredFeed.description,
       faviconUrl: discoveredFeed.faviconUrl,
-      feedUrl: discoveredFeed.feedUrl,
+      feedUrl: persistedFeedUrl,
       language: discoveredFeed.language,
       lastError: null,
       lastFetchedAt: now,

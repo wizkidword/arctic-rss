@@ -5,6 +5,7 @@ import Link from "next/link"
 import { signOut } from "next-auth/react"
 import {
   BotIcon,
+  CompassIcon,
   DownloadIcon,
   FolderIcon,
   HomeIcon,
@@ -216,6 +217,18 @@ function ReaderNav({
           </span>
         </div>
         <AddFeedSheet folders={folders} />
+        <Link
+          href="/app/discover"
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "h-7 justify-start gap-2 px-2"
+          )}
+        >
+          <CompassIcon data-icon="inline-start" />
+          <span className="min-w-0 flex-1 truncate text-left">
+            Discover Feeds
+          </span>
+        </Link>
         <div className="flex max-h-72 flex-col gap-1 overflow-y-auto pr-1">
           {feedSubscriptions.length ? (
             feedSubscriptions.map((subscription) => (
