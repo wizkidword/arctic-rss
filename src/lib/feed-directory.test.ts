@@ -4376,6 +4376,49 @@ const expectedAuEntertainmentFeedRecords = [
   },
 ]
 
+const expectedBdGeneralFeedRecords = [
+  {
+    aliases: ["https://www.thedailystar.net/frontpage/rss.xml"],
+    categoryId: "bd-general",
+    id: "daily-star-bangladesh",
+    label: "The Daily Star",
+    source: "thedailystar.net",
+    url: "https://www.thedailystar.net/taxonomy/term/107/rss.xml",
+  },
+  {
+    aliases: ["https://www.bd24live.com/feed"],
+    categoryId: "bd-general",
+    id: "bd24live",
+    label: "BD24Live.com",
+    source: "bd24live.com",
+    url: "https://www.bd24live.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "bd-general",
+    id: "banglanews24",
+    label: "BanglaNews24",
+    source: "banglanews24.com",
+    url: "https://www.banglanews24.com/rss.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "bd-general",
+    id: "jagonews24",
+    label: "Jago News 24",
+    source: "jagonews24.com",
+    url: "https://www.jagonews24.com/rss/rss.xml",
+  },
+  {
+    aliases: ["https://www.prothomalo.com/feed/"],
+    categoryId: "bd-general",
+    id: "prothom-alo",
+    label: "Prothom Alo",
+    source: "prothomalo.com",
+    url: "https://www.prothomalo.com/stories.rss",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
@@ -4421,6 +4464,7 @@ const expectedFeedRecords = [
   ...expectedAuSportsFeedRecords,
   ...expectedAuTechFeedRecords,
   ...expectedAuEntertainmentFeedRecords,
+  ...expectedBdGeneralFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -4543,6 +4587,9 @@ const expectedAuSportsFeedIds = expectedAuSportsFeedRecords.map(
 )
 const expectedAuTechFeedIds = expectedAuTechFeedRecords.map((feed) => feed.id)
 const expectedAuEntertainmentFeedIds = expectedAuEntertainmentFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedBdGeneralFeedIds = expectedBdGeneralFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -4813,6 +4860,12 @@ describe("feed directory catalog", () => {
         id: "au-entertainment",
         label: "AU Entertainment",
       },
+      {
+        description:
+          "Bangladeshi national and general news from verified Bangladesh outlets.",
+        id: "bd-general",
+        label: "BD General",
+      },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
   })
@@ -4994,6 +5047,9 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("au-entertainment")).toBe(
       feedDirectoryCategories[43]
     )
+    expect(getFeedDirectoryCategory("bd-general")).toBe(
+      feedDirectoryCategories[44]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -5107,6 +5163,15 @@ describe("feed directory catalog", () => {
     )
     expect(getFeedDirectoryFeed("pedestrian-tv")?.url).toBe(
       "https://www.pedestrian.tv/feed/"
+    )
+    expect(getFeedDirectoryFeed("daily-star-bangladesh")?.url).toBe(
+      "https://www.thedailystar.net/taxonomy/term/107/rss.xml"
+    )
+    expect(getFeedDirectoryFeed("banglanews24")?.url).toBe(
+      "https://www.banglanews24.com/rss.xml"
+    )
+    expect(getFeedDirectoryFeed("prothom-alo")?.url).toBe(
+      "https://www.prothomalo.com/stories.rss"
     )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
@@ -5241,10 +5306,13 @@ describe("feed directory catalog", () => {
     expect(
       listFeedDirectoryFeeds("au-entertainment").map((feed) => feed.id)
     ).toEqual(expectedAuEntertainmentFeedIds)
+    expect(listFeedDirectoryFeeds("bd-general").map((feed) => feed.id)).toEqual(
+      expectedBdGeneralFeedIds
+    )
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches U.S., Canada, India, Great Britain, and Australia legacy aliases across directory categories", () => {
+  it("matches U.S., Canada, India, Great Britain, Australia, and Bangladesh legacy aliases across directory categories", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -5346,6 +5414,9 @@ describe("feed directory catalog", () => {
     const foxSportsAustralia = getFeedDirectoryFeed("fox-sports-australia")
     const techrepublicAustralia = getFeedDirectoryFeed("techrepublic-australia")
     const smhCultureAu = getFeedDirectoryFeed("smh-culture-au")
+    const dailyStarBangladesh = getFeedDirectoryFeed("daily-star-bangladesh")
+    const bd24live = getFeedDirectoryFeed("bd24live")
+    const prothomAlo = getFeedDirectoryFeed("prothom-alo")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -5432,6 +5503,9 @@ describe("feed directory catalog", () => {
     expect(foxSportsAustralia).toBeDefined()
     expect(techrepublicAustralia).toBeDefined()
     expect(smhCultureAu).toBeDefined()
+    expect(dailyStarBangladesh).toBeDefined()
+    expect(bd24live).toBeDefined()
+    expect(prothomAlo).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -5849,6 +5923,19 @@ describe("feed directory catalog", () => {
         "http://feeds.smh.com.au/rssheadlines/entertainment.xml",
       ])
     ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(dailyStarBangladesh!, [
+        "https://www.thedailystar.net/frontpage/rss.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(bd24live!, ["https://www.bd24live.com/feed"])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(prothomAlo!, [
+        "https://www.prothomalo.com/feed/",
+      ])
+    ).toBe(true)
   })
 
   it("normalizes stored HTTP URLs before matching", () => {
@@ -6201,5 +6288,15 @@ describe("feed directory catalog", () => {
     expect(directoryUrls).not.toContain(
       "http://www.womenshealthandfitness.com.au/component/obrss/women-s-health-fitnesscombined-feed?format="
     )
+    expect(directoryUrls).not.toContain(
+      "https://bdnews24.com/?widgetName=rssfeed&widgetId=1150&getXmlFeed=true"
+    )
+    expect(directoryUrls).not.toContain(
+      "https://www.banglanews24.com/rss/rss.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "https://www.jugantor.com/feed/rss.xml"
+    )
+    expect(directoryUrls).not.toContain("https://www.kalerkantho.com/rss.xml")
   })
 })

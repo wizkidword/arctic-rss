@@ -154,7 +154,8 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("AU Sports")
     expect(markup).toContain("AU Tech")
     expect(markup).toContain("AU Entertainment")
-    expect(markup).toContain("523 feeds")
+    expect(markup).toContain("BD General")
+    expect(markup).toContain("528 feeds")
     expect(markup).toContain("Campaigns, Congress, policy")
     expect(markup).toContain("Markets, companies, economy")
     expect(markup).toContain("Health news, wellness, medicine")
@@ -193,6 +194,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("Australian sports headlines")
     expect(markup).toContain("Australian technology news")
     expect(markup).toContain("Australian film, television")
+    expect(markup).toContain("Bangladeshi national and general news")
     expect(markup).toContain("27 feeds")
     expect(markup).toContain("33 feeds")
     expect(markup).toContain("11 feeds")
@@ -241,28 +243,35 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("The Mandarin")
     expect(markup).toContain("ScienceAlert")
     expect(markup).toContain("PEDESTRIAN.TV")
+    expect(markup).toContain("The Daily Star")
+    expect(markup).toContain("BanglaNews24")
+    expect(markup).toContain("Prothom Alo")
     expect(markup).toContain('<nav aria-label="Nations"')
-    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(5)
+    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(6)
     expect(markup).toContain('href="/app/discover#directory-country-us"')
     expect(markup).toContain('href="/app/discover#directory-country-ca"')
     expect(markup).toContain('href="/app/discover#directory-country-in"')
     expect(markup).toContain('href="/app/discover#directory-country-gb"')
     expect(markup).toContain('href="/app/discover#directory-country-au"')
+    expect(markup).toContain('href="/app/discover#directory-country-bd"')
     expect(markup).toContain('id="directory-country-us"')
     expect(markup).toContain('id="directory-country-ca"')
     expect(markup).toContain('id="directory-country-in"')
     expect(markup).toContain('id="directory-country-gb"')
     expect(markup).toContain('id="directory-country-au"')
+    expect(markup).toContain('id="directory-country-bd"')
     expect(markup).toContain('aria-label="US feed categories"')
     expect(markup).toContain('aria-label="CA feed categories"')
     expect(markup).toContain('aria-label="IN feed categories"')
     expect(markup).toContain('aria-label="GB feed categories"')
     expect(markup).toContain('aria-label="AU feed categories"')
+    expect(markup).toContain('aria-label="BD feed categories"')
     expect(markup).not.toContain("/app/discover?category=us-politics")
     expect(markup).not.toContain("/app/discover?category=ca-general")
     expect(markup).not.toContain("/app/discover?category=in-general")
     expect(markup).not.toContain("/app/discover?category=gb-general")
     expect(markup).not.toContain("/app/discover?category=au-general")
+    expect(markup).not.toContain("/app/discover?category=bd-general")
     expect(markup.match(/aria-current="page"/g) ?? []).toHaveLength(0)
     expect(markup).toContain(
       "grid scroll-mt-4 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
@@ -270,7 +279,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("min-h-32")
     expect(markup).toContain("bg-sky-50 text-sky-700")
     expect(markup).toContain("bg-lime-50 text-lime-700")
-    expect(detailTags).toHaveLength(44)
+    expect(detailTags).toHaveLength(45)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -305,9 +314,11 @@ describe("DiscoverPage", () => {
     expect(detailTags[36]).not.toContain("open")
     expect(detailTags[43]).toContain('id="directory-category-au-entertainment"')
     expect(detailTags[43]).not.toContain("open")
+    expect(detailTags[44]).toContain('id="directory-category-bd-general"')
+    expect(detailTags[44]).not.toContain("open")
     expect(markup).toContain("<summary")
     expect(markup).toContain("<ul")
-    expect(markup.match(/<li /g)).toHaveLength(523)
+    expect(markup.match(/<li /g)).toHaveLength(528)
     expect(markup).toContain("w-full shrink-0 sm:w-auto sm:pl-4")
     expect(markup).toContain(
       "[&amp;_[data-slot=button]]:w-full [&amp;_[data-slot=button]]:min-h-9"
@@ -315,7 +326,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "sm:[&amp;_[data-slot=button]]:w-auto sm:[&amp;_[data-slot=button]]:min-h-7"
     )
-    expect(markup.match(/Directory control:/g)).toHaveLength(523)
+    expect(markup.match(/Directory control:/g)).toHaveLength(528)
     expect(markup).toContain(
       "Directory control: npr-national | NPR - National | subscribed=true | folders=folder-1:Morning News"
     )
@@ -388,6 +399,15 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "Directory control: pedestrian-tv | PEDESTRIAN.TV | subscribed=false | folders=folder-1:Morning News"
     )
+    expect(markup).toContain(
+      "Directory control: daily-star-bangladesh | The Daily Star | subscribed=false | folders=folder-1:Morning News"
+    )
+    expect(markup).toContain(
+      "Directory control: banglanews24 | BanglaNews24 | subscribed=false | folders=folder-1:Morning News"
+    )
+    expect(markup).toContain(
+      "Directory control: prothom-alo | Prothom Alo | subscribed=false | folders=folder-1:Morning News"
+    )
   })
 
   it("keeps only country shortcuts in the top navigation", async () => {
@@ -398,14 +418,15 @@ describe("DiscoverPage", () => {
     )
     const detailTags = markup.match(/<details[^>]*>/g) ?? []
 
-    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(5)
+    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(6)
     expect(markup).toContain('href="/app/discover#directory-country-us"')
     expect(markup).toContain('href="/app/discover#directory-country-ca"')
     expect(markup).toContain('href="/app/discover#directory-country-in"')
     expect(markup).toContain('href="/app/discover#directory-country-gb"')
     expect(markup).toContain('href="/app/discover#directory-country-au"')
+    expect(markup).toContain('href="/app/discover#directory-country-bd"')
     expect(markup).not.toContain("?category=ca-gaming")
-    expect(detailTags).toHaveLength(44)
+    expect(detailTags).toHaveLength(45)
     expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
     expect(detailTags[8]).not.toContain("open")
     expect(detailTags[12]).toContain('id="directory-category-ca-gaming"')
@@ -415,6 +436,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("IGN India")
     expect(markup).toContain("Eurogamer")
     expect(markup).toContain("ABC News - Australia")
+    expect(markup).toContain("The Daily Star")
   })
 
   it("falls back to US General for an unknown category", async () => {
@@ -430,6 +452,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain('href="/app/discover#directory-country-in"')
     expect(markup).toContain('href="/app/discover#directory-country-gb"')
     expect(markup).toContain('href="/app/discover#directory-country-au"')
+    expect(markup).toContain('href="/app/discover#directory-country-bd"')
     expect(markup.match(/aria-current="page"/g) ?? []).toHaveLength(0)
     expect(markup).toContain("27 feeds")
   })

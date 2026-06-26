@@ -276,6 +276,12 @@ export const feedDirectoryCategories: readonly FeedDirectoryCategory[] = [
     id: "au-entertainment",
     label: "AU Entertainment",
   },
+  {
+    description:
+      "Bangladeshi national and general news from verified Bangladesh outlets.",
+    id: "bd-general",
+    label: "BD General",
+  },
 ]
 
 export const feedDirectoryFeeds: readonly FeedDirectoryFeed[] = [
@@ -4386,6 +4392,44 @@ export const feedDirectoryFeeds: readonly FeedDirectoryFeed[] = [
     label: "Spotlight Report",
     source: "spotlightreport.net",
     url: "https://spotlightreport.net/feed",
+  },
+  {
+    aliases: ["https://www.thedailystar.net/frontpage/rss.xml"],
+    categoryId: "bd-general",
+    id: "daily-star-bangladesh",
+    label: "The Daily Star",
+    source: "thedailystar.net",
+    url: "https://www.thedailystar.net/taxonomy/term/107/rss.xml",
+  },
+  {
+    aliases: ["https://www.bd24live.com/feed"],
+    categoryId: "bd-general",
+    id: "bd24live",
+    label: "BD24Live.com",
+    source: "bd24live.com",
+    url: "https://www.bd24live.com/feed/",
+  },
+  {
+    categoryId: "bd-general",
+    id: "banglanews24",
+    label: "BanglaNews24",
+    source: "banglanews24.com",
+    url: "https://www.banglanews24.com/rss.xml",
+  },
+  {
+    categoryId: "bd-general",
+    id: "jagonews24",
+    label: "Jago News 24",
+    source: "jagonews24.com",
+    url: "https://www.jagonews24.com/rss/rss.xml",
+  },
+  {
+    aliases: ["https://www.prothomalo.com/feed/"],
+    categoryId: "bd-general",
+    id: "prothom-alo",
+    label: "Prothom Alo",
+    source: "prothomalo.com",
+    url: "https://www.prothomalo.com/stories.rss",
   },
 ]
 
