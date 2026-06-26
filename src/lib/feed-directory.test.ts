@@ -3896,6 +3896,486 @@ const expectedGbGamingFeedRecords = [
   },
 ]
 
+const expectedAuGeneralFeedRecords = [
+  {
+    aliases: ["http://www.abc.net.au/news/feed/46182/rss.xml"],
+    categoryId: "au-general",
+    id: "abc-news-australia",
+    label: "ABC News - Australia",
+    source: "abc.net.au",
+    url: "https://www.abc.net.au/news/feed/46182/rss.xml",
+  },
+  {
+    aliases: ["http://www.theguardian.com/au/rss"],
+    categoryId: "au-general",
+    id: "guardian-australia",
+    label: "The Guardian - Australia",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/au/rss",
+  },
+  {
+    aliases: [],
+    categoryId: "au-general",
+    id: "sbs-news-australia",
+    label: "SBS News - Australia",
+    source: "sbs.com.au",
+    url: "https://www.sbs.com.au/news/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "au-general",
+    id: "conversation-australia",
+    label: "The Conversation - Australia",
+    source: "theconversation.com",
+    url: "https://theconversation.com/au/articles.atom",
+  },
+  {
+    aliases: ["http://feeds.smh.com.au/rssheadlines/national.xml"],
+    categoryId: "au-general",
+    id: "smh-national-au",
+    label: "Sydney Morning Herald - National",
+    source: "smh.com.au",
+    url: "https://www.smh.com.au/rss/national.xml",
+  },
+  {
+    aliases: ["http://feeds.theage.com.au/rssheadlines/national.xml"],
+    categoryId: "au-general",
+    id: "the-age-national",
+    label: "The Age - National",
+    source: "theage.com.au",
+    url: "https://www.theage.com.au/rss/national.xml",
+  },
+  {
+    aliases: ["http://feeds.brisbanetimes.com.au/rssheadlines/national.xml"],
+    categoryId: "au-general",
+    id: "brisbane-times-national",
+    label: "Brisbane Times - National",
+    source: "brisbanetimes.com.au",
+    url: "https://www.brisbanetimes.com.au/rss/national.xml",
+  },
+  {
+    aliases: ["http://www.dailymail.co.uk/auhome/index.rss"],
+    categoryId: "au-general",
+    id: "daily-mail-australia",
+    label: "Daily Mail - Australia",
+    source: "dailymail.com",
+    url: "https://www.dailymail.com/auhome/index.rss",
+  },
+]
+
+const expectedAuPoliticsFeedRecords = [
+  {
+    aliases: ["http://www.abc.net.au/news/feed/1534/rss.xml"],
+    categoryId: "au-politics",
+    id: "abc-politics-au",
+    label: "ABC News - Politics",
+    source: "abc.net.au",
+    url: "https://www.abc.net.au/news/feed/1534/rss.xml",
+  },
+  {
+    aliases: ["http://www.rba.gov.au/rss/rss-cb-media-releases.xml"],
+    categoryId: "au-politics",
+    id: "rba-media-releases",
+    label: "Reserve Bank of Australia - Media Releases",
+    source: "rba.gov.au",
+    url: "https://www.rba.gov.au/rss/rss-cb-media-releases.xml",
+  },
+  {
+    aliases: ["http://www.crikey.com.au/politics/feed"],
+    categoryId: "au-politics",
+    id: "crikey-politics",
+    label: "Crikey - Politics",
+    source: "crikey.com.au",
+    url: "https://www.crikey.com.au/politics/feed/",
+  },
+  {
+    aliases: ["http://www.theguardian.com/world/australian-politics/rss"],
+    categoryId: "au-politics",
+    id: "guardian-australian-politics",
+    label: "The Guardian - Australian Politics",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/australia-news/australian-politics/rss",
+  },
+  {
+    aliases: [],
+    categoryId: "au-politics",
+    id: "smh-federal-politics",
+    label: "Sydney Morning Herald - Federal Politics",
+    source: "smh.com.au",
+    url: "https://www.smh.com.au/rss/politics/federal.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "au-politics",
+    id: "the-age-federal-politics",
+    label: "The Age - Federal Politics",
+    source: "theage.com.au",
+    url: "https://www.theage.com.au/rss/politics/federal.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "au-politics",
+    id: "conversation-politics-au",
+    label: "The Conversation - Politics",
+    source: "theconversation.com",
+    url: "https://theconversation.com/au/politics/articles.atom",
+  },
+  {
+    aliases: [],
+    categoryId: "au-politics",
+    id: "the-mandarin",
+    label: "The Mandarin",
+    source: "themandarin.com.au",
+    url: "https://www.themandarin.com.au/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-politics",
+    id: "michael-west-media",
+    label: "Michael West Media",
+    source: "michaelwest.com.au",
+    url: "https://michaelwest.com.au/feed/",
+  },
+]
+
+const expectedAuBusinessFeedRecords = [
+  {
+    aliases: ["http://www.dynamicbusiness.com.au/feed"],
+    categoryId: "au-business",
+    id: "dynamic-business",
+    label: "Dynamic Business",
+    source: "dynamicbusiness.com",
+    url: "https://dynamicbusiness.com/feed.xml",
+  },
+  {
+    aliases: ["http://www.abc.net.au/news/feed/51892/rss.xml"],
+    categoryId: "au-business",
+    id: "abc-business-au",
+    label: "ABC News - Business",
+    source: "abc.net.au",
+    url: "https://www.abc.net.au/news/feed/51892/rss.xml",
+  },
+  {
+    aliases: ["http://www.smh.com.au/rssheadlines/business.xml"],
+    categoryId: "au-business",
+    id: "smh-business-au",
+    label: "Sydney Morning Herald - Business",
+    source: "smh.com.au",
+    url: "https://www.smh.com.au/rss/business.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "au-business",
+    id: "the-age-business",
+    label: "The Age - Business",
+    source: "theage.com.au",
+    url: "https://www.theage.com.au/rss/business.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "au-business",
+    id: "smartcompany",
+    label: "SmartCompany",
+    source: "smartcompany.com.au",
+    url: "https://www.smartcompany.com.au/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-business",
+    id: "startup-daily",
+    label: "Startup Daily",
+    source: "startupdaily.net",
+    url: "https://www.startupdaily.net/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-business",
+    id: "prospa-small-business",
+    label: "Prospa - Small Business Blog",
+    source: "prospa.com",
+    url: "https://www.prospa.com/blog/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "au-business",
+    id: "stockhead",
+    label: "Stockhead",
+    source: "stockhead.com.au",
+    url: "https://stockhead.com.au/feed/",
+  },
+]
+
+const expectedAuHealthFeedRecords = [
+  {
+    aliases: [],
+    categoryId: "au-health",
+    id: "conversation-health-au",
+    label: "The Conversation - Health",
+    source: "theconversation.com",
+    url: "https://theconversation.com/au/health/articles.atom",
+  },
+  {
+    aliases: [],
+    categoryId: "au-health",
+    id: "croakey-health",
+    label: "Croakey Health Media",
+    source: "croakey.org",
+    url: "https://www.croakey.org/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-health",
+    id: "australian-ageing-agenda",
+    label: "Australian Ageing Agenda",
+    source: "australianageingagenda.com.au",
+    url: "https://www.australianageingagenda.com.au/feed/",
+  },
+  {
+    aliases: ["http://www.wellbeing.com.au/blog/feed/"],
+    categoryId: "au-health",
+    id: "wellbeing-magazine",
+    label: "WellBeing Magazine",
+    source: "wellbeing.com.au",
+    url: "https://www.wellbeing.com.au/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "au-health",
+    id: "medical-republic",
+    label: "Medical Republic",
+    source: "medicalrepublic.com.au",
+    url: "https://www.medicalrepublic.com.au/feed",
+  },
+]
+
+const expectedAuScienceFeedRecords = [
+  {
+    aliases: [],
+    categoryId: "au-science",
+    id: "conversation-science-tech-au",
+    label: "The Conversation - Science & Tech",
+    source: "theconversation.com",
+    url: "https://theconversation.com/au/technology/articles.atom",
+  },
+  {
+    aliases: [],
+    categoryId: "au-science",
+    id: "conversation-environment-au",
+    label: "The Conversation - Environment & Energy",
+    source: "theconversation.com",
+    url: "https://theconversation.com/au/environment/articles.atom",
+  },
+  {
+    aliases: [],
+    categoryId: "au-science",
+    id: "sciencealert",
+    label: "ScienceAlert",
+    source: "sciencealert.com",
+    url: "https://www.sciencealert.com/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "au-science",
+    id: "australian-geographic",
+    label: "Australian Geographic",
+    source: "australiangeographic.com.au",
+    url: "https://www.australiangeographic.com.au/feed/",
+  },
+  {
+    aliases: ["http://www.theage.com.au/rssheadlines/technology-news/article/rss.xml"],
+    categoryId: "au-science",
+    id: "the-age-technology-science",
+    label: "The Age - Technology",
+    source: "theage.com.au",
+    url: "https://www.theage.com.au/rss/technology.xml",
+  },
+  {
+    aliases: ["http://www.watoday.com.au/rssheadlines/technology-news/article/rss.xml"],
+    categoryId: "au-science",
+    id: "wa-today-technology-science",
+    label: "WA Today - Technology",
+    source: "watoday.com.au",
+    url: "https://www.watoday.com.au/rss/technology.xml",
+  },
+]
+
+const expectedAuSportsFeedRecords = [
+  {
+    aliases: ["http://feeds.news.com.au/public/rss/2.0/fs_breaking_news_13.xml"],
+    categoryId: "au-sports",
+    id: "fox-sports-australia",
+    label: "Fox Sports Australia",
+    source: "foxsports.com.au",
+    url: "https://www.foxsports.com.au/content-feeds/breaking-news/",
+  },
+  {
+    aliases: ["http://www.abc.net.au/news/feed/45924/rss.xml"],
+    categoryId: "au-sports",
+    id: "abc-sport-au",
+    label: "ABC News - Sport",
+    source: "abc.net.au",
+    url: "https://www.abc.net.au/news/feed/45924/rss.xml",
+  },
+  {
+    aliases: ["http://feeds.smh.com.au/rssheadlines/sport.xml"],
+    categoryId: "au-sports",
+    id: "smh-sport-au",
+    label: "Sydney Morning Herald - Sport",
+    source: "smh.com.au",
+    url: "https://www.smh.com.au/rss/sport.xml",
+  },
+  {
+    aliases: ["http://feeds.theage.com.au/rssheadlines/sport.xml"],
+    categoryId: "au-sports",
+    id: "the-age-sport",
+    label: "The Age - Sport",
+    source: "theage.com.au",
+    url: "https://www.theage.com.au/rss/sport.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "au-sports",
+    id: "espn-australia",
+    label: "ESPN Australia",
+    source: "espn.com.au",
+    url: "https://www.espn.com.au/espn/rss/news",
+  },
+  {
+    aliases: [],
+    categoryId: "au-sports",
+    id: "sporting-news-australia",
+    label: "Sporting News Australia",
+    source: "sportingnews.com",
+    url: "https://www.sportingnews.com/au/rss",
+  },
+]
+
+const expectedAuTechFeedRecords = [
+  {
+    aliases: ["http://www.smh.com.au/rssheadlines/technology-news/article/rss.xml"],
+    categoryId: "au-tech",
+    id: "smh-technology-au",
+    label: "Sydney Morning Herald - Technology",
+    source: "smh.com.au",
+    url: "https://www.smh.com.au/rss/technology.xml",
+  },
+  {
+    aliases: ["http://techau.com.au/feed/"],
+    categoryId: "au-tech",
+    id: "techau",
+    label: "techAU",
+    source: "techau.com.au",
+    url: "https://techau.com.au/feed/",
+  },
+  {
+    aliases: ["http://www.techrepublic.com/rssfeeds/blog/australian-technology/"],
+    categoryId: "au-tech",
+    id: "techrepublic-australia",
+    label: "TechRepublic - Australia",
+    source: "techrepublic.com",
+    url: "https://www.techrepublic.com/rssfeeds/topic/australia/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-tech",
+    id: "kotaku-australia",
+    label: "Kotaku Australia",
+    source: "kotaku.com.au",
+    url: "https://kotaku.com.au/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-tech",
+    id: "tech-guide-au",
+    label: "Tech Guide",
+    source: "techguide.com.au",
+    url: "https://www.techguide.com.au/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-tech",
+    id: "eftm",
+    label: "EFTM",
+    source: "eftm.com",
+    url: "https://eftm.com/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "au-tech",
+    id: "pickr",
+    label: "Pickr",
+    source: "pickr.com.au",
+    url: "https://www.pickr.com.au/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-tech",
+    id: "itnews-australia",
+    label: "iTnews",
+    source: "itnews.com.au",
+    url: "https://www.itnews.com.au/RSS/rss.ashx",
+  },
+]
+
+const expectedAuEntertainmentFeedRecords = [
+  {
+    aliases: ["http://feeds.smh.com.au/rssheadlines/entertainment.xml"],
+    categoryId: "au-entertainment",
+    id: "smh-culture-au",
+    label: "Sydney Morning Herald - Culture",
+    source: "smh.com.au",
+    url: "https://www.smh.com.au/rss/culture.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "au-entertainment",
+    id: "guardian-australia-culture",
+    label: "The Guardian - Australia Culture",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/au/culture/rss",
+  },
+  {
+    aliases: [],
+    categoryId: "au-entertainment",
+    id: "abc-arts-au",
+    label: "ABC News - Arts",
+    source: "abc.net.au",
+    url: "https://www.abc.net.au/news/feed/1044/rss.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "au-entertainment",
+    id: "pedestrian-tv",
+    label: "PEDESTRIAN.TV",
+    source: "pedestrian.tv",
+    url: "https://www.pedestrian.tv/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "au-entertainment",
+    id: "concrete-playground-sydney",
+    label: "Concrete Playground - Sydney",
+    source: "concreteplayground.com",
+    url: "https://concreteplayground.com/sydney/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "au-entertainment",
+    id: "music-feeds-au",
+    label: "Music Feeds",
+    source: "musicfeeds.com.au",
+    url: "https://musicfeeds.com.au/feed/",
+  },
+  {
+    aliases: ["http://www.spotlightreport.net/feed"],
+    categoryId: "au-entertainment",
+    id: "spotlight-report",
+    label: "Spotlight Report",
+    source: "spotlightreport.net",
+    url: "https://spotlightreport.net/feed",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
@@ -3933,6 +4413,14 @@ const expectedFeedRecords = [
   ...expectedGbTechFeedRecords,
   ...expectedGbEntertainmentFeedRecords,
   ...expectedGbGamingFeedRecords,
+  ...expectedAuGeneralFeedRecords,
+  ...expectedAuPoliticsFeedRecords,
+  ...expectedAuBusinessFeedRecords,
+  ...expectedAuHealthFeedRecords,
+  ...expectedAuScienceFeedRecords,
+  ...expectedAuSportsFeedRecords,
+  ...expectedAuTechFeedRecords,
+  ...expectedAuEntertainmentFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -4033,6 +4521,28 @@ const expectedGbEntertainmentFeedIds = expectedGbEntertainmentFeedRecords.map(
   (feed) => feed.id
 )
 const expectedGbGamingFeedIds = expectedGbGamingFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedAuGeneralFeedIds = expectedAuGeneralFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedAuPoliticsFeedIds = expectedAuPoliticsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedAuBusinessFeedIds = expectedAuBusinessFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedAuHealthFeedIds = expectedAuHealthFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedAuScienceFeedIds = expectedAuScienceFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedAuSportsFeedIds = expectedAuSportsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedAuTechFeedIds = expectedAuTechFeedRecords.map((feed) => feed.id)
+const expectedAuEntertainmentFeedIds = expectedAuEntertainmentFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -4255,6 +4765,54 @@ describe("feed directory catalog", () => {
         id: "gb-gaming",
         label: "GB Gaming",
       },
+      {
+        description:
+          "Australian national, regional, and world reporting from Australian outlets.",
+        id: "au-general",
+        label: "AU General",
+      },
+      {
+        description:
+          "Australian federal politics, policy, public affairs, and institutions coverage.",
+        id: "au-politics",
+        label: "AU Politics",
+      },
+      {
+        description:
+          "Australian markets, companies, startups, small business, and finance coverage.",
+        id: "au-business",
+        label: "AU Business",
+      },
+      {
+        description:
+          "Australian health news, public-health reporting, wellness, and healthcare coverage.",
+        id: "au-health",
+        label: "AU Health",
+      },
+      {
+        description:
+          "Australian science, environment, technology, research, and discovery coverage.",
+        id: "au-science",
+        label: "AU Science",
+      },
+      {
+        description:
+          "Australian sports headlines, teams, competitions, and scores.",
+        id: "au-sports",
+        label: "AU Sports",
+      },
+      {
+        description:
+          "Australian technology news, gadgets, startups, enterprise, and digital culture.",
+        id: "au-tech",
+        label: "AU Tech",
+      },
+      {
+        description:
+          "Australian film, television, music, celebrity, arts, and culture coverage.",
+        id: "au-entertainment",
+        label: "AU Entertainment",
+      },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
   })
@@ -4412,6 +4970,30 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("gb-gaming")).toBe(
       feedDirectoryCategories[35]
     )
+    expect(getFeedDirectoryCategory("au-general")).toBe(
+      feedDirectoryCategories[36]
+    )
+    expect(getFeedDirectoryCategory("au-politics")).toBe(
+      feedDirectoryCategories[37]
+    )
+    expect(getFeedDirectoryCategory("au-business")).toBe(
+      feedDirectoryCategories[38]
+    )
+    expect(getFeedDirectoryCategory("au-health")).toBe(
+      feedDirectoryCategories[39]
+    )
+    expect(getFeedDirectoryCategory("au-science")).toBe(
+      feedDirectoryCategories[40]
+    )
+    expect(getFeedDirectoryCategory("au-sports")).toBe(
+      feedDirectoryCategories[41]
+    )
+    expect(getFeedDirectoryCategory("au-tech")).toBe(
+      feedDirectoryCategories[42]
+    )
+    expect(getFeedDirectoryCategory("au-entertainment")).toBe(
+      feedDirectoryCategories[43]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -4501,6 +5083,30 @@ describe("feed directory catalog", () => {
     )
     expect(getFeedDirectoryFeed("eurogamer-gb")?.url).toBe(
       "https://www.eurogamer.net/feed"
+    )
+    expect(getFeedDirectoryFeed("abc-news-australia")?.url).toBe(
+      "https://www.abc.net.au/news/feed/46182/rss.xml"
+    )
+    expect(getFeedDirectoryFeed("guardian-australian-politics")?.url).toBe(
+      "https://www.theguardian.com/australia-news/australian-politics/rss"
+    )
+    expect(getFeedDirectoryFeed("dynamic-business")?.url).toBe(
+      "https://dynamicbusiness.com/feed.xml"
+    )
+    expect(getFeedDirectoryFeed("medical-republic")?.url).toBe(
+      "https://www.medicalrepublic.com.au/feed"
+    )
+    expect(getFeedDirectoryFeed("sciencealert")?.url).toBe(
+      "https://www.sciencealert.com/feed"
+    )
+    expect(getFeedDirectoryFeed("fox-sports-australia")?.url).toBe(
+      "https://www.foxsports.com.au/content-feeds/breaking-news/"
+    )
+    expect(getFeedDirectoryFeed("techau")?.url).toBe(
+      "https://techau.com.au/feed/"
+    )
+    expect(getFeedDirectoryFeed("pedestrian-tv")?.url).toBe(
+      "https://www.pedestrian.tv/feed/"
     )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
@@ -4611,10 +5217,34 @@ describe("feed directory catalog", () => {
     expect(listFeedDirectoryFeeds("gb-gaming").map((feed) => feed.id)).toEqual(
       expectedGbGamingFeedIds
     )
+    expect(listFeedDirectoryFeeds("au-general").map((feed) => feed.id)).toEqual(
+      expectedAuGeneralFeedIds
+    )
+    expect(
+      listFeedDirectoryFeeds("au-politics").map((feed) => feed.id)
+    ).toEqual(expectedAuPoliticsFeedIds)
+    expect(
+      listFeedDirectoryFeeds("au-business").map((feed) => feed.id)
+    ).toEqual(expectedAuBusinessFeedIds)
+    expect(listFeedDirectoryFeeds("au-health").map((feed) => feed.id)).toEqual(
+      expectedAuHealthFeedIds
+    )
+    expect(listFeedDirectoryFeeds("au-science").map((feed) => feed.id)).toEqual(
+      expectedAuScienceFeedIds
+    )
+    expect(listFeedDirectoryFeeds("au-sports").map((feed) => feed.id)).toEqual(
+      expectedAuSportsFeedIds
+    )
+    expect(listFeedDirectoryFeeds("au-tech").map((feed) => feed.id)).toEqual(
+      expectedAuTechFeedIds
+    )
+    expect(
+      listFeedDirectoryFeeds("au-entertainment").map((feed) => feed.id)
+    ).toEqual(expectedAuEntertainmentFeedIds)
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches U.S., Canada, India, and Great Britain legacy aliases across directory categories", () => {
+  it("matches U.S., Canada, India, Great Britain, and Australia legacy aliases across directory categories", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -4704,6 +5334,18 @@ describe("feed directory catalog", () => {
     const bbcTechnologyGb = getFeedDirectoryFeed("bbc-technology-gb")
     const guardianFilmGb = getFeedDirectoryFeed("guardian-film-gb")
     const eurogamerGb = getFeedDirectoryFeed("eurogamer-gb")
+    const abcNewsAustralia = getFeedDirectoryFeed("abc-news-australia")
+    const guardianAustralianPolitics = getFeedDirectoryFeed(
+      "guardian-australian-politics"
+    )
+    const dynamicBusiness = getFeedDirectoryFeed("dynamic-business")
+    const wellbeingMagazine = getFeedDirectoryFeed("wellbeing-magazine")
+    const theAgeTechnologyScience = getFeedDirectoryFeed(
+      "the-age-technology-science"
+    )
+    const foxSportsAustralia = getFeedDirectoryFeed("fox-sports-australia")
+    const techrepublicAustralia = getFeedDirectoryFeed("techrepublic-australia")
+    const smhCultureAu = getFeedDirectoryFeed("smh-culture-au")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -4782,6 +5424,14 @@ describe("feed directory catalog", () => {
     expect(bbcTechnologyGb).toBeDefined()
     expect(guardianFilmGb).toBeDefined()
     expect(eurogamerGb).toBeDefined()
+    expect(abcNewsAustralia).toBeDefined()
+    expect(guardianAustralianPolitics).toBeDefined()
+    expect(dynamicBusiness).toBeDefined()
+    expect(wellbeingMagazine).toBeDefined()
+    expect(theAgeTechnologyScience).toBeDefined()
+    expect(foxSportsAustralia).toBeDefined()
+    expect(techrepublicAustralia).toBeDefined()
+    expect(smhCultureAu).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -5159,6 +5809,46 @@ describe("feed directory catalog", () => {
         "http://www.eurogamer.net/?format=rss",
       ])
     ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(abcNewsAustralia!, [
+        "http://www.abc.net.au/news/feed/46182/rss.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(guardianAustralianPolitics!, [
+        "http://www.theguardian.com/world/australian-politics/rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(dynamicBusiness!, [
+        "http://www.dynamicbusiness.com.au/feed",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(wellbeingMagazine!, [
+        "http://www.wellbeing.com.au/blog/feed/",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(theAgeTechnologyScience!, [
+        "http://www.theage.com.au/rssheadlines/technology-news/article/rss.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(foxSportsAustralia!, [
+        "http://feeds.news.com.au/public/rss/2.0/fs_breaking_news_13.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(techrepublicAustralia!, [
+        "http://www.techrepublic.com/rssfeeds/blog/australian-technology/",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(smhCultureAu!, [
+        "http://feeds.smh.com.au/rssheadlines/entertainment.xml",
+      ])
+    ).toBe(true)
   })
 
   it("normalizes stored HTTP URLs before matching", () => {
@@ -5476,6 +6166,40 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://feeds.feedburner.com/SportcoukNewsRssFeed"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.feedburner.com/TheAustralianTheNationNews"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.feedburner.com/TheAustralianPolitics"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.feedburner.com/TheAustralianBusNews?format=xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.news.com.au/public/rss/2.0/business_top_stories_346.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.news.com.au/public/rss/2.0/news_lifestyle_3171.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.news.com.au/public/rss/2.0/news_tech_506.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.news.com.au/public/rss/2.0/news_sport_3168.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.bbci.co.uk/sport/0/cricket/rss.xml?edition=uk"
+    )
+    expect(directoryUrls).not.toContain("http://www.telegraph.co.uk/health/rss")
+    expect(directoryUrls).not.toContain(
+      "http://www.dailyrecord.co.uk/lifestyle/health-fitness/rss.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.feedburner.com/sunshinecoastdailyentertainmen"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.womenshealthandfitness.com.au/component/obrss/women-s-health-fitnesscombined-feed?format="
     )
   })
 })
