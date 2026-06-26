@@ -137,7 +137,16 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("IN Tech")
     expect(markup).toContain("IN Entertainment")
     expect(markup).toContain("IN Gaming")
-    expect(markup).toContain("365 feeds")
+    expect(markup).toContain("GB General")
+    expect(markup).toContain("GB Politics")
+    expect(markup).toContain("GB Business")
+    expect(markup).toContain("GB Health")
+    expect(markup).toContain("GB Science")
+    expect(markup).toContain("GB Sports")
+    expect(markup).toContain("GB Tech")
+    expect(markup).toContain("GB Entertainment")
+    expect(markup).toContain("GB Gaming")
+    expect(markup).toContain("466 feeds")
     expect(markup).toContain("Campaigns, Congress, policy")
     expect(markup).toContain("Markets, companies, economy")
     expect(markup).toContain("Health news, wellness, medicine")
@@ -159,6 +168,15 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("Indian technology news")
     expect(markup).toContain("Indian film, television")
     expect(markup).toContain("Indian video game news")
+    expect(markup).toContain("British national, regional")
+    expect(markup).toContain("British Parliament, policy")
+    expect(markup).toContain("British markets, companies")
+    expect(markup).toContain("British health news")
+    expect(markup).toContain("British science, environment")
+    expect(markup).toContain("British sports headlines")
+    expect(markup).toContain("British technology news")
+    expect(markup).toContain("British film, television")
+    expect(markup).toContain("British video game news")
     expect(markup).toContain("27 feeds")
     expect(markup).toContain("33 feeds")
     expect(markup).toContain("11 feeds")
@@ -199,20 +217,28 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("NDTV Profit")
     expect(markup).toContain("IndiaBioscience")
     expect(markup).toContain("IGN India")
+    expect(markup).toContain("BBC News - UK")
+    expect(markup).toContain("NHS England")
+    expect(markup).toContain("TechRadar")
+    expect(markup).toContain("Eurogamer")
     expect(markup).toContain('<nav aria-label="Nations"')
-    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(3)
+    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(4)
     expect(markup).toContain('href="/app/discover#directory-country-us"')
     expect(markup).toContain('href="/app/discover#directory-country-ca"')
     expect(markup).toContain('href="/app/discover#directory-country-in"')
+    expect(markup).toContain('href="/app/discover#directory-country-gb"')
     expect(markup).toContain('id="directory-country-us"')
     expect(markup).toContain('id="directory-country-ca"')
     expect(markup).toContain('id="directory-country-in"')
+    expect(markup).toContain('id="directory-country-gb"')
     expect(markup).toContain('aria-label="US feed categories"')
     expect(markup).toContain('aria-label="CA feed categories"')
     expect(markup).toContain('aria-label="IN feed categories"')
+    expect(markup).toContain('aria-label="GB feed categories"')
     expect(markup).not.toContain("/app/discover?category=us-politics")
     expect(markup).not.toContain("/app/discover?category=ca-general")
     expect(markup).not.toContain("/app/discover?category=in-general")
+    expect(markup).not.toContain("/app/discover?category=gb-general")
     expect(markup.match(/aria-current="page"/g) ?? []).toHaveLength(0)
     expect(markup).toContain(
       "grid scroll-mt-4 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
@@ -220,7 +246,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("min-h-32")
     expect(markup).toContain("bg-sky-50 text-sky-700")
     expect(markup).toContain("bg-lime-50 text-lime-700")
-    expect(detailTags).toHaveLength(27)
+    expect(detailTags).toHaveLength(36)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -247,9 +273,13 @@ describe("DiscoverPage", () => {
     expect(detailTags[18]).not.toContain("open")
     expect(detailTags[26]).toContain('id="directory-category-in-gaming"')
     expect(detailTags[26]).not.toContain("open")
+    expect(detailTags[27]).toContain('id="directory-category-gb-general"')
+    expect(detailTags[27]).not.toContain("open")
+    expect(detailTags[35]).toContain('id="directory-category-gb-gaming"')
+    expect(detailTags[35]).not.toContain("open")
     expect(markup).toContain("<summary")
     expect(markup).toContain("<ul")
-    expect(markup.match(/<li /g)).toHaveLength(365)
+    expect(markup.match(/<li /g)).toHaveLength(466)
     expect(markup).toContain("w-full shrink-0 sm:w-auto sm:pl-4")
     expect(markup).toContain(
       "[&amp;_[data-slot=button]]:w-full [&amp;_[data-slot=button]]:min-h-9"
@@ -257,7 +287,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "sm:[&amp;_[data-slot=button]]:w-auto sm:[&amp;_[data-slot=button]]:min-h-7"
     )
-    expect(markup.match(/Directory control:/g)).toHaveLength(365)
+    expect(markup.match(/Directory control:/g)).toHaveLength(466)
     expect(markup).toContain(
       "Directory control: npr-national | NPR - National | subscribed=true | folders=folder-1:Morning News"
     )
@@ -306,6 +336,18 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "Directory control: ign-india | IGN India | subscribed=false | folders=folder-1:Morning News"
     )
+    expect(markup).toContain(
+      "Directory control: bbc-uk | BBC News - UK | subscribed=false | folders=folder-1:Morning News"
+    )
+    expect(markup).toContain(
+      "Directory control: nhs-england | NHS England | subscribed=false | folders=folder-1:Morning News"
+    )
+    expect(markup).toContain(
+      "Directory control: techradar-uk | TechRadar | subscribed=false | folders=folder-1:Morning News"
+    )
+    expect(markup).toContain(
+      "Directory control: eurogamer-gb | Eurogamer | subscribed=false | folders=folder-1:Morning News"
+    )
   })
 
   it("keeps only country shortcuts in the top navigation", async () => {
@@ -316,12 +358,13 @@ describe("DiscoverPage", () => {
     )
     const detailTags = markup.match(/<details[^>]*>/g) ?? []
 
-    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(3)
+    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(4)
     expect(markup).toContain('href="/app/discover#directory-country-us"')
     expect(markup).toContain('href="/app/discover#directory-country-ca"')
     expect(markup).toContain('href="/app/discover#directory-country-in"')
+    expect(markup).toContain('href="/app/discover#directory-country-gb"')
     expect(markup).not.toContain("?category=ca-gaming")
-    expect(detailTags).toHaveLength(27)
+    expect(detailTags).toHaveLength(36)
     expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
     expect(detailTags[8]).not.toContain("open")
     expect(detailTags[12]).toContain('id="directory-category-ca-gaming"')
@@ -329,6 +372,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("COGconnected")
     expect(markup).toContain("CGMagazine")
     expect(markup).toContain("IGN India")
+    expect(markup).toContain("Eurogamer")
   })
 
   it("falls back to US General for an unknown category", async () => {
@@ -342,6 +386,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain('href="/app/discover#directory-country-us"')
     expect(markup).toContain('href="/app/discover#directory-country-ca"')
     expect(markup).toContain('href="/app/discover#directory-country-in"')
+    expect(markup).toContain('href="/app/discover#directory-country-gb"')
     expect(markup.match(/aria-current="page"/g) ?? []).toHaveLength(0)
     expect(markup).toContain("27 feeds")
   })

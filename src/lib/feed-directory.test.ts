@@ -3059,6 +3059,843 @@ const expectedInGamingFeedRecords = [
   },
 ]
 
+const expectedGbGeneralFeedRecords = [
+  {
+    aliases: ["http://www.theguardian.com/world/rss"],
+    categoryId: "gb-general",
+    id: "guardian-world-gb",
+    label: "The Guardian - World",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/world/rss",
+  },
+  {
+    aliases: ["http://www.theweek.co.uk/feeds/all"],
+    categoryId: "gb-general",
+    id: "the-week-gb",
+    label: "The Week",
+    source: "theweek.com",
+    url: "https://theweek.com/feeds.xml",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
+    categoryId: "gb-general",
+    id: "bbc-world-gb",
+    label: "BBC News - World",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/world/rss.xml",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/uk/rss.xml"],
+    categoryId: "gb-general",
+    id: "bbc-uk",
+    label: "BBC News - UK",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/uk/rss.xml",
+  },
+  {
+    aliases: ["http://www.theguardian.com/uk/rss"],
+    categoryId: "gb-general",
+    id: "guardian-uk",
+    label: "The Guardian - UK",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/uk/rss",
+  },
+  {
+    aliases: ["http://news.sky.com/feeds/rss/uk.xml"],
+    categoryId: "gb-general",
+    id: "sky-news-uk",
+    label: "Sky News - UK",
+    source: "skynews.com",
+    url: "https://feeds.skynews.com/feeds/rss/uk.xml",
+  },
+  {
+    aliases: ["http://www.ft.com/rss/world/uk"],
+    categoryId: "gb-general",
+    id: "ft-uk",
+    label: "Financial Times - UK",
+    source: "ft.com",
+    url: "https://www.ft.com/world-uk?format=rss",
+  },
+  {
+    aliases: ["http://www.standard.co.uk/news/rss"],
+    categoryId: "gb-general",
+    id: "standard-news",
+    label: "The Standard - News",
+    source: "standard.co.uk",
+    url: "https://www.standard.co.uk/news/rss",
+  },
+  {
+    aliases: ["http://www.oxfordmail.co.uk/news/rss/"],
+    categoryId: "gb-general",
+    id: "oxford-mail-news",
+    label: "Oxford Mail - News",
+    source: "oxfordmail.co.uk",
+    url: "https://www.oxfordmail.co.uk/news/rss/",
+  },
+  {
+    aliases: ["http://www.dailymail.co.uk/news/index.rss"],
+    categoryId: "gb-general",
+    id: "daily-mail-news-gb",
+    label: "Daily Mail - News",
+    source: "dailymail.com",
+    url: "https://www.dailymail.com/news/index.rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-general",
+    id: "daily-express-uk-news",
+    label: "Daily Express - UK News",
+    source: "express.co.uk",
+    url: "http://feeds.feedburner.com/daily-express-uk-news",
+  },
+  {
+    aliases: ["http://www.manchestereveningnews.co.uk/rss.xml"],
+    categoryId: "gb-general",
+    id: "manchester-evening-news",
+    label: "Manchester Evening News",
+    source: "manchestereveningnews.co.uk",
+    url: "https://www.manchestereveningnews.co.uk/?service=rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-general",
+    id: "herald-scotland-news",
+    label: "The Herald - Scotland News",
+    source: "heraldscotland.com",
+    url: "http://feeds.feedburner.com/ScottishNewsHeraldScotland",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-general",
+    id: "independent-uk",
+    label: "The Independent - UK",
+    source: "the-independent.com",
+    url: "https://www.the-independent.com/news/uk/rss",
+  },
+]
+
+const expectedGbPoliticsFeedRecords = [
+  {
+    aliases: ["http://feeds.skynews.com/feeds/rss/politics.xml"],
+    categoryId: "gb-politics",
+    id: "sky-politics",
+    label: "Sky News - Politics",
+    source: "skynews.com",
+    url: "https://feeds.skynews.com/feeds/rss/politics.xml",
+  },
+  {
+    aliases: ["http://www.ft.com/rss/world/uk/politics"],
+    categoryId: "gb-politics",
+    id: "ft-uk-politics",
+    label: "Financial Times - UK Politics",
+    source: "ft.com",
+    url: "https://www.ft.com/uk-politics?format=rss",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/politics/rss.xml"],
+    categoryId: "gb-politics",
+    id: "bbc-politics-gb",
+    label: "BBC News - Politics",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/politics/rss.xml",
+  },
+  {
+    aliases: ["http://feeds.theguardian.com/theguardian/politics/rss"],
+    categoryId: "gb-politics",
+    id: "guardian-politics-gb",
+    label: "The Guardian - Politics",
+    source: "theguardian.com",
+    url: "https://feeds.theguardian.com/theguardian/politics/rss",
+  },
+  {
+    aliases: ["http://www.standard.co.uk/news/politics/rss"],
+    categoryId: "gb-politics",
+    id: "standard-politics",
+    label: "The Standard - Politics",
+    source: "standard.co.uk",
+    url: "https://www.standard.co.uk/news/politics/rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-politics",
+    id: "independent-politics-gb",
+    label: "The Independent - UK Politics",
+    source: "the-independent.com",
+    url: "https://www.the-independent.com/news/uk/politics/rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-politics",
+    id: "labour-list",
+    label: "LabourList",
+    source: "labourlist.org",
+    url: "https://labourlist.org/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-politics",
+    id: "conservative-home",
+    label: "ConservativeHome",
+    source: "conservativehome.com",
+    url: "https://conservativehome.com/feed/",
+  },
+]
+
+const expectedGbBusinessFeedRecords = [
+  {
+    aliases: [],
+    categoryId: "gb-business",
+    id: "daily-express-finance",
+    label: "Daily Express - Finance",
+    source: "express.co.uk",
+    url: "http://feeds.feedburner.com/daily-express-finance-news",
+  },
+  {
+    aliases: ["http://www.manchestereveningnews.co.uk/business/rss.xml"],
+    categoryId: "gb-business",
+    id: "men-business",
+    label: "Manchester Evening News - Business",
+    source: "manchestereveningnews.co.uk",
+    url: "https://www.manchestereveningnews.co.uk/business/?service=rss",
+  },
+  {
+    aliases: ["http://feeds.theguardian.com/theguardian/uk/business/rss"],
+    categoryId: "gb-business",
+    id: "guardian-business-gb",
+    label: "The Guardian - Business",
+    source: "theguardian.com",
+    url: "https://feeds.theguardian.com/theguardian/uk/business/rss",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/business/rss.xml"],
+    categoryId: "gb-business",
+    id: "bbc-business-gb",
+    label: "BBC News - Business",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/business/rss.xml",
+  },
+  {
+    aliases: ["http://www.ibtimes.co.uk/rss/uk"],
+    categoryId: "gb-business",
+    id: "ibtimes-uk-business",
+    label: "IBTimes UK",
+    source: "ibtimes.co.uk",
+    url: "https://feeds.ibtimes.co.uk/feeds/bhsz8.rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-business",
+    id: "ft-companies-gb",
+    label: "Financial Times - Companies",
+    source: "ft.com",
+    url: "https://www.ft.com/companies?format=rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-business",
+    id: "city-am",
+    label: "City A.M.",
+    source: "cityam.com",
+    url: "https://www.cityam.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-business",
+    id: "this-is-money",
+    label: "This is Money",
+    source: "thisismoney.co.uk",
+    url: "https://www.thisismoney.co.uk/money/index.rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-business",
+    id: "business-matters",
+    label: "Business Matters",
+    source: "bmmagazine.co.uk",
+    url: "https://bmmagazine.co.uk/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-business",
+    id: "retail-gazette",
+    label: "Retail Gazette",
+    source: "retailgazette.co.uk",
+    url: "https://www.retailgazette.co.uk/feed/",
+  },
+]
+
+const expectedGbHealthFeedRecords = [
+  {
+    aliases: ["http://www.theguardian.com/lifeandstyle/health-and-wellbeing/rss"],
+    categoryId: "gb-health",
+    id: "guardian-health-wellbeing-gb",
+    label: "The Guardian - Health & Wellbeing",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/lifeandstyle/health-and-wellbeing/rss",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/health/rss.xml"],
+    categoryId: "gb-health",
+    id: "bbc-health-gb",
+    label: "BBC News - Health",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/health/rss.xml",
+  },
+  {
+    aliases: [
+      "http://www.independent.co.uk/life-style/health-and-families/health-news/rss",
+    ],
+    categoryId: "gb-health",
+    id: "independent-health-gb",
+    label: "The Independent - Health News",
+    source: "the-independent.com",
+    url: "https://www.the-independent.com/life-style/health-and-families/health-news/rss",
+  },
+  {
+    aliases: ["http://www.express.co.uk/posts/rss/11/health"],
+    categoryId: "gb-health",
+    id: "daily-express-health",
+    label: "Daily Express - Health",
+    source: "express.co.uk",
+    url: "https://www.express.co.uk/posts/rss/11/health",
+  },
+  {
+    aliases: ["http://www.dailymail.co.uk/health/index.rss"],
+    categoryId: "gb-health",
+    id: "daily-mail-health-gb",
+    label: "Daily Mail - Health",
+    source: "dailymail.com",
+    url: "https://www.dailymail.com/health/index.rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-health",
+    id: "nhs-england",
+    label: "NHS England",
+    source: "england.nhs.uk",
+    url: "https://www.england.nhs.uk/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-health",
+    id: "uk-health-security-agency",
+    label: "UK Health Security Agency",
+    source: "ukhsa.blog.gov.uk",
+    url: "https://ukhsa.blog.gov.uk/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-health",
+    id: "nursing-times",
+    label: "Nursing Times",
+    source: "nursingtimes.net",
+    url: "https://www.nursingtimes.net/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-health",
+    id: "digital-health",
+    label: "Digital Health",
+    source: "digitalhealth.net",
+    url: "https://www.digitalhealth.net/feed/",
+  },
+]
+
+const expectedGbScienceFeedRecords = [
+  {
+    aliases: ["http://www.theguardian.com/uk/environment/rss"],
+    categoryId: "gb-science",
+    id: "guardian-environment-gb",
+    label: "The Guardian - Environment",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/uk/environment/rss",
+  },
+  {
+    aliases: ["https://www.newscientist.com/feed/home"],
+    categoryId: "gb-science",
+    id: "new-scientist-gb",
+    label: "New Scientist",
+    source: "newscientist.com",
+    url: "https://www.newscientist.com/feed/home/",
+  },
+  {
+    aliases: ["http://feeds.theguardian.com/theguardian/science/rss"],
+    categoryId: "gb-science",
+    id: "guardian-science-gb",
+    label: "The Guardian - Science",
+    source: "theguardian.com",
+    url: "https://feeds.theguardian.com/theguardian/science/rss",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/science_and_environment/rss.xml"],
+    categoryId: "gb-science",
+    id: "bbc-science-environment-gb",
+    label: "BBC News - Science & Environment",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+  },
+  {
+    aliases: ["http://www.independent.co.uk/news/science/rss"],
+    categoryId: "gb-science",
+    id: "independent-science-gb",
+    label: "The Independent - Science",
+    source: "independent.co.uk",
+    url: "http://www.independent.co.uk/news/science/rss",
+  },
+  {
+    aliases: ["http://www.theregister.co.uk/science/headlines.atom"],
+    categoryId: "gb-science",
+    id: "register-science",
+    label: "The Register - Science",
+    source: "theregister.com",
+    url: "https://api.theregister.com/api/v1/article?orderBy=published&site_id=2&remapper=rss",
+  },
+  {
+    aliases: ["http://www.dailymail.co.uk/sciencetech/articles.rss"],
+    categoryId: "gb-science",
+    id: "daily-mail-science-tech",
+    label: "Daily Mail - Science & Tech",
+    source: "dailymail.com",
+    url: "https://www.dailymail.com/sciencetech/articles.rss",
+  },
+  {
+    aliases: ["http://www.mirror.co.uk/news/technology-science/rss.xml"],
+    categoryId: "gb-science",
+    id: "mirror-technology-science",
+    label: "Mirror - Technology & Science",
+    source: "mirror.co.uk",
+    url: "https://www.mirror.co.uk/news/technology-science/?service=rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-science",
+    id: "science-museum-blog",
+    label: "Science Museum Blog",
+    source: "sciencemuseum.org.uk",
+    url: "https://blog.sciencemuseum.org.uk/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-science",
+    id: "ukri-news",
+    label: "UKRI - News",
+    source: "ukri.org",
+    url: "https://www.ukri.org/news/feed/",
+  },
+]
+
+const expectedGbSportsFeedRecords = [
+  {
+    aliases: ["http://www.theguardian.com/football/rss"],
+    categoryId: "gb-sports",
+    id: "guardian-football-gb",
+    label: "The Guardian - Football",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/football/rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-sports",
+    id: "daily-express-sport",
+    label: "Daily Express - Sport",
+    source: "express.co.uk",
+    url: "http://feeds.feedburner.com/daily-express-sport-news",
+  },
+  {
+    aliases: ["http://www.mirror.co.uk/sport/rss.xml"],
+    categoryId: "gb-sports",
+    id: "mirror-sport-gb",
+    label: "Mirror - Sport",
+    source: "mirror.co.uk",
+    url: "https://www.mirror.co.uk/sport/?service=rss",
+  },
+  {
+    aliases: ["http://www.standard.co.uk/sport/football/rss"],
+    categoryId: "gb-sports",
+    id: "standard-football",
+    label: "The Standard - Football",
+    source: "standard.co.uk",
+    url: "https://www.standard.co.uk/sport/football/rss",
+  },
+  {
+    aliases: ["http://www.skysports.com/rss/0,20514,12040,00.xml"],
+    categoryId: "gb-sports",
+    id: "sky-sports-news-gb",
+    label: "Sky Sports - News",
+    source: "skysports.com",
+    url: "https://www.skysports.com/rss/12040",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-sports",
+    id: "sky-sports-football-gb",
+    label: "Sky Sports - Football",
+    source: "skysports.com",
+    url: "https://www.skysports.com/rss/11661",
+  },
+  {
+    aliases: ["http://feeds.theguardian.com/theguardian/uk/sport/rss"],
+    categoryId: "gb-sports",
+    id: "guardian-sport-gb",
+    label: "The Guardian - Sport",
+    source: "theguardian.com",
+    url: "https://feeds.theguardian.com/theguardian/uk/sport/rss",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/sport/0/rss.xml?edition=uk"],
+    categoryId: "gb-sports",
+    id: "bbc-sport-uk",
+    label: "BBC Sport - UK",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/sport/rss.xml",
+  },
+  {
+    aliases: ["http://www.dailymail.co.uk/sport/index.rss"],
+    categoryId: "gb-sports",
+    id: "daily-mail-sport-gb",
+    label: "Daily Mail - Sport",
+    source: "dailymail.com",
+    url: "https://www.dailymail.com/sport/index.rss",
+  },
+  {
+    aliases: ["http://metro.co.uk/sport/feed/"],
+    categoryId: "gb-sports",
+    id: "metro-sport",
+    label: "Metro - Sport",
+    source: "metro.co.uk",
+    url: "https://metro.co.uk/sport/feed/",
+  },
+]
+
+const expectedGbTechFeedRecords = [
+  {
+    aliases: [],
+    categoryId: "gb-tech",
+    id: "gizmodo-uk",
+    label: "Gizmodo UK",
+    source: "gizmodo.com",
+    url: "http://feeds.feedburner.com/uk/gizmodo",
+  },
+  {
+    aliases: ["http://feeds.skynews.com/feeds/rss/technology.xml"],
+    categoryId: "gb-tech",
+    id: "sky-technology",
+    label: "Sky News - Technology",
+    source: "skynews.com",
+    url: "https://feeds.skynews.com/feeds/rss/technology.xml",
+  },
+  {
+    aliases: ["http://www.techrepublic.com/rssfeeds/blog/european-technology/"],
+    categoryId: "gb-tech",
+    id: "techrepublic-eu",
+    label: "TechRepublic - EU",
+    source: "techrepublic.com",
+    url: "https://www.techrepublic.com/rssfeeds/topic/eu/",
+  },
+  {
+    aliases: ["http://feeds.theguardian.com/theguardian/technology/rss"],
+    categoryId: "gb-tech",
+    id: "guardian-technology-gb",
+    label: "The Guardian - Technology",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/us/technology/rss",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/technology/rss.xml#"],
+    categoryId: "gb-tech",
+    id: "bbc-technology-gb",
+    label: "BBC News - Technology",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/technology/rss.xml",
+  },
+  {
+    aliases: ["http://feeds.webservice.techradar.com/rss/new"],
+    categoryId: "gb-tech",
+    id: "techradar-uk",
+    label: "TechRadar",
+    source: "techradar.com",
+    url: "https://www.techradar.com/feeds.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-tech",
+    id: "the-register",
+    label: "The Register",
+    source: "theregister.com",
+    url: "https://api.theregister.com/api/v1/article?orderBy=published&site_id=2&remapper=rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-tech",
+    id: "computerweekly-uk",
+    label: "Computer Weekly",
+    source: "computerweekly.com",
+    url: "https://www.computerweekly.com/rss/All-Computer-Weekly-content.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-tech",
+    id: "uktn",
+    label: "UKTN",
+    source: "uktech.news",
+    url: "https://www.uktech.news/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-tech",
+    id: "silicon-uk",
+    label: "Silicon UK",
+    source: "silicon.co.uk",
+    url: "https://www.silicon.co.uk/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-tech",
+    id: "tech-monitor",
+    label: "Tech Monitor",
+    source: "techmonitor.ai",
+    url: "https://techmonitor.ai/feed",
+  },
+]
+
+const expectedGbEntertainmentFeedRecords = [
+  {
+    aliases: ["http://www.express.co.uk/posts/rss/79/showbiznews"],
+    categoryId: "gb-entertainment",
+    id: "daily-express-showbiz",
+    label: "Daily Express - Showbiz",
+    source: "express.co.uk",
+    url: "https://www.express.co.uk/posts/rss/79/showbiznews",
+  },
+  {
+    aliases: ["http://metro.co.uk/entertainment/showbiz/feed/"],
+    categoryId: "gb-entertainment",
+    id: "metro-showbiz",
+    label: "Metro - Showbiz",
+    source: "metro.co.uk",
+    url: "https://metro.co.uk/entertainment/showbiz/feed/",
+  },
+  {
+    aliases: ["http://feeds.skynews.com/feeds/rss/entertainment.xml"],
+    categoryId: "gb-entertainment",
+    id: "sky-entertainment",
+    label: "Sky News - Entertainment",
+    source: "skynews.com",
+    url: "https://feeds.skynews.com/feeds/rss/entertainment.xml",
+  },
+  {
+    aliases: ["http://www.standard.co.uk/showbiz/rss"],
+    categoryId: "gb-entertainment",
+    id: "standard-showbiz",
+    label: "The Standard - Showbiz",
+    source: "standard.co.uk",
+    url: "https://www.standard.co.uk/showbiz/rss",
+  },
+  {
+    aliases: ["http://www.manchestereveningnews.co.uk/news/showbiz-news/rss.xml"],
+    categoryId: "gb-entertainment",
+    id: "men-showbiz",
+    label: "Manchester Evening News - Showbiz",
+    source: "manchestereveningnews.co.uk",
+    url: "https://www.manchestereveningnews.co.uk/news/showbiz-news/?service=rss",
+  },
+  {
+    aliases: ["http://www.theguardian.com/music/rss"],
+    categoryId: "gb-entertainment",
+    id: "guardian-music",
+    label: "The Guardian - Music",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/music/rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-entertainment",
+    id: "fact-mag",
+    label: "Fact Magazine",
+    source: "factmag.com",
+    url: "http://feeds.feedburner.com/factmag",
+  },
+  {
+    aliases: ["http://www.theguardian.com/us/film/rss"],
+    categoryId: "gb-entertainment",
+    id: "guardian-film-gb",
+    label: "The Guardian - Film",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/uk/film/rss",
+  },
+  {
+    aliases: ["http://www.mirror.co.uk/tv/tv-news/rss.xml"],
+    categoryId: "gb-entertainment",
+    id: "mirror-tv",
+    label: "Mirror - TV News",
+    source: "mirror.co.uk",
+    url: "https://www.mirror.co.uk/tv/tv-news/?service=rss",
+  },
+  {
+    aliases: ["http://www.film-news.co.uk/rss/UK/news"],
+    categoryId: "gb-entertainment",
+    id: "film-news-uk",
+    label: "Film News - UK",
+    source: "film-news.co.uk",
+    url: "https://www.film-news.co.uk/rss/UK/news",
+  },
+  {
+    aliases: ["http://metro.co.uk/entertainment/tv/feed/"],
+    categoryId: "gb-entertainment",
+    id: "metro-tv",
+    label: "Metro - TV",
+    source: "metro.co.uk",
+    url: "https://metro.co.uk/entertainment/tv/feed/",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"],
+    categoryId: "gb-entertainment",
+    id: "bbc-entertainment-arts",
+    label: "BBC News - Entertainment & Arts",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml",
+  },
+  {
+    aliases: ["http://www.independent.co.uk/arts-entertainment/tv/rss"],
+    categoryId: "gb-entertainment",
+    id: "independent-tv",
+    label: "The Independent - TV & Radio",
+    source: "the-independent.com",
+    url: "https://www.the-independent.com/arts-entertainment/tv/rss",
+  },
+  {
+    aliases: ["http://www.dailymail.co.uk/tvshowbiz/articles.rss"],
+    categoryId: "gb-entertainment",
+    id: "daily-mail-tv-showbiz",
+    label: "Daily Mail - TV & Showbiz",
+    source: "dailymail.com",
+    url: "https://www.dailymail.com/tvshowbiz/articles.rss",
+  },
+  {
+    aliases: ["http://www.hellomagazine.com/rss.xml"],
+    categoryId: "gb-entertainment",
+    id: "hello-magazine",
+    label: "HELLO! Magazine",
+    source: "hellomagazine.com",
+    url: "https://www.hellomagazine.com/feeds/rss/any/any/any/12.xml",
+  },
+  {
+    aliases: ["http://www.tntmagazine.com/entertainment/rss"],
+    categoryId: "gb-entertainment",
+    id: "tnt-entertainment",
+    label: "TNT Magazine - Entertainment",
+    source: "tntmagazine.com",
+    url: "https://www.tntmagazine.com/leisure-entertainment/feed/",
+  },
+  {
+    aliases: ["http://www.theguardian.com/tv-and-radio/entertainment/rss"],
+    categoryId: "gb-entertainment",
+    id: "guardian-tv-radio-entertainment",
+    label: "The Guardian - TV & Radio",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/tv-and-radio/entertainment/rss",
+  },
+  {
+    aliases: ["http://feeds2.feedburner.com/nmecom/rss/newsxml"],
+    categoryId: "gb-entertainment",
+    id: "nme-news",
+    label: "NME - News",
+    source: "nme.com",
+    url: "https://www.nme.com/news/feed",
+  },
+  {
+    aliases: ["http://www.clashmusic.com/rss.xml"],
+    categoryId: "gb-entertainment",
+    id: "clash-music",
+    label: "Clash Magazine",
+    source: "clashmusic.com",
+    url: "https://www.clashmusic.com/feed/",
+  },
+  {
+    aliases: ["http://www.uncut.co.uk/feed"],
+    categoryId: "gb-entertainment",
+    id: "uncut",
+    label: "Uncut",
+    source: "uncut.co.uk",
+    url: "https://www.uncut.co.uk/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-entertainment",
+    id: "digital-spy",
+    label: "Digital Spy",
+    source: "digitalspy.com",
+    url: "https://www.digitalspy.com/rss/all.xml/",
+  },
+]
+
+const expectedGbGamingFeedRecords = [
+  {
+    aliases: ["http://www.eurogamer.net/?format=rss"],
+    categoryId: "gb-gaming",
+    id: "eurogamer-gb",
+    label: "Eurogamer",
+    source: "eurogamer.net",
+    url: "https://www.eurogamer.net/feed",
+  },
+  {
+    aliases: ["http://www.theguardian.com/technology/games/rss"],
+    categoryId: "gb-gaming",
+    id: "guardian-games-gb",
+    label: "The Guardian - Games",
+    source: "theguardian.com",
+    url: "https://www.theguardian.com/games/rss",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-gaming",
+    id: "daily-star-gaming",
+    label: "Daily Star - Gaming",
+    source: "dailystar.co.uk",
+    url: "http://feeds.feedburner.com/daily-star-Gaming",
+  },
+  {
+    aliases: ["http://metro.co.uk/entertainment/gaming/feed/"],
+    categoryId: "gb-gaming",
+    id: "metro-gaming",
+    label: "Metro - Gaming",
+    source: "metro.co.uk",
+    url: "https://metro.co.uk/entertainment/gaming/feed/",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/RockPaperShotgun"],
+    categoryId: "gb-gaming",
+    id: "rock-paper-shotgun-gb",
+    label: "Rock Paper Shotgun",
+    source: "rockpapershotgun.com",
+    url: "https://www.rockpapershotgun.com/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-gaming",
+    id: "vg247",
+    label: "VG247",
+    source: "vg247.com",
+    url: "https://www.vg247.com/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "gb-gaming",
+    id: "pcgamesn",
+    label: "PCGamesN",
+    source: "pcgamesn.com",
+    url: "https://www.pcgamesn.com/mainrss.xml",
+  },
+  {
+    aliases: ["http://www.gamesindustry.biz/rss/gamesindustry_news_feed.rss"],
+    categoryId: "gb-gaming",
+    id: "gamesindustry-gb",
+    label: "GamesIndustry.biz",
+    source: "gamesindustry.biz",
+    url: "https://www.gamesindustry.biz/feed",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
@@ -3087,6 +3924,15 @@ const expectedFeedRecords = [
   ...expectedInTechFeedRecords,
   ...expectedInEntertainmentFeedRecords,
   ...expectedInGamingFeedRecords,
+  ...expectedGbGeneralFeedRecords,
+  ...expectedGbPoliticsFeedRecords,
+  ...expectedGbBusinessFeedRecords,
+  ...expectedGbHealthFeedRecords,
+  ...expectedGbScienceFeedRecords,
+  ...expectedGbSportsFeedRecords,
+  ...expectedGbTechFeedRecords,
+  ...expectedGbEntertainmentFeedRecords,
+  ...expectedGbGamingFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -3162,6 +4008,31 @@ const expectedInEntertainmentFeedIds = expectedInEntertainmentFeedRecords.map(
   (feed) => feed.id
 )
 const expectedInGamingFeedIds = expectedInGamingFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedGbGeneralFeedIds = expectedGbGeneralFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedGbPoliticsFeedIds = expectedGbPoliticsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedGbBusinessFeedIds = expectedGbBusinessFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedGbHealthFeedIds = expectedGbHealthFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedGbScienceFeedIds = expectedGbScienceFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedGbSportsFeedIds = expectedGbSportsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedGbTechFeedIds = expectedGbTechFeedRecords.map((feed) => feed.id)
+const expectedGbEntertainmentFeedIds = expectedGbEntertainmentFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedGbGamingFeedIds = expectedGbGamingFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -3330,6 +4201,60 @@ describe("feed directory catalog", () => {
         id: "in-gaming",
         label: "IN Gaming",
       },
+      {
+        description:
+          "British national, regional, and world reporting from UK outlets.",
+        id: "gb-general",
+        label: "GB General",
+      },
+      {
+        description:
+          "British Parliament, policy, elections, and public affairs coverage.",
+        id: "gb-politics",
+        label: "GB Politics",
+      },
+      {
+        description:
+          "British markets, companies, economy, retail, and personal finance.",
+        id: "gb-business",
+        label: "GB Business",
+      },
+      {
+        description:
+          "British health news, public-health guidance, medicine, and NHS coverage.",
+        id: "gb-health",
+        label: "GB Health",
+      },
+      {
+        description:
+          "British science, environment, research, and discovery coverage.",
+        id: "gb-science",
+        label: "GB Science",
+      },
+      {
+        description:
+          "British sports headlines, football, competitions, and scores.",
+        id: "gb-sports",
+        label: "GB Sports",
+      },
+      {
+        description:
+          "British technology news, gadgets, startups, enterprise, and digital culture.",
+        id: "gb-tech",
+        label: "GB Tech",
+      },
+      {
+        description:
+          "British film, television, music, celebrity, and culture coverage.",
+        id: "gb-entertainment",
+        label: "GB Entertainment",
+      },
+      {
+        description:
+          "British video game news, reviews, industry coverage, and gaming culture.",
+        id: "gb-gaming",
+        label: "GB Gaming",
+      },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
   })
@@ -3460,6 +4385,33 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("in-gaming")).toBe(
       feedDirectoryCategories[26]
     )
+    expect(getFeedDirectoryCategory("gb-general")).toBe(
+      feedDirectoryCategories[27]
+    )
+    expect(getFeedDirectoryCategory("gb-politics")).toBe(
+      feedDirectoryCategories[28]
+    )
+    expect(getFeedDirectoryCategory("gb-business")).toBe(
+      feedDirectoryCategories[29]
+    )
+    expect(getFeedDirectoryCategory("gb-health")).toBe(
+      feedDirectoryCategories[30]
+    )
+    expect(getFeedDirectoryCategory("gb-science")).toBe(
+      feedDirectoryCategories[31]
+    )
+    expect(getFeedDirectoryCategory("gb-sports")).toBe(
+      feedDirectoryCategories[32]
+    )
+    expect(getFeedDirectoryCategory("gb-tech")).toBe(
+      feedDirectoryCategories[33]
+    )
+    expect(getFeedDirectoryCategory("gb-entertainment")).toBe(
+      feedDirectoryCategories[34]
+    )
+    expect(getFeedDirectoryCategory("gb-gaming")).toBe(
+      feedDirectoryCategories[35]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -3522,6 +4474,33 @@ describe("feed directory catalog", () => {
     )
     expect(getFeedDirectoryFeed("hindustan-times-entertainment-in")?.url).toBe(
       "https://www.hindustantimes.com/feeds/rss/entertainment/rssfeed.xml"
+    )
+    expect(getFeedDirectoryFeed("sky-news-uk")?.url).toBe(
+      "https://feeds.skynews.com/feeds/rss/uk.xml"
+    )
+    expect(getFeedDirectoryFeed("bbc-politics-gb")?.url).toBe(
+      "https://feeds.bbci.co.uk/news/politics/rss.xml"
+    )
+    expect(getFeedDirectoryFeed("city-am")?.url).toBe(
+      "https://www.cityam.com/feed/"
+    )
+    expect(getFeedDirectoryFeed("nhs-england")?.url).toBe(
+      "https://www.england.nhs.uk/feed/"
+    )
+    expect(getFeedDirectoryFeed("new-scientist-gb")?.url).toBe(
+      "https://www.newscientist.com/feed/home/"
+    )
+    expect(getFeedDirectoryFeed("bbc-sport-uk")?.url).toBe(
+      "https://feeds.bbci.co.uk/sport/rss.xml"
+    )
+    expect(getFeedDirectoryFeed("techradar-uk")?.url).toBe(
+      "https://www.techradar.com/feeds.xml"
+    )
+    expect(getFeedDirectoryFeed("digital-spy")?.url).toBe(
+      "https://www.digitalspy.com/rss/all.xml/"
+    )
+    expect(getFeedDirectoryFeed("eurogamer-gb")?.url).toBe(
+      "https://www.eurogamer.net/feed"
     )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
@@ -3605,10 +4584,37 @@ describe("feed directory catalog", () => {
     expect(listFeedDirectoryFeeds("in-gaming").map((feed) => feed.id)).toEqual(
       expectedInGamingFeedIds
     )
+    expect(listFeedDirectoryFeeds("gb-general").map((feed) => feed.id)).toEqual(
+      expectedGbGeneralFeedIds
+    )
+    expect(
+      listFeedDirectoryFeeds("gb-politics").map((feed) => feed.id)
+    ).toEqual(expectedGbPoliticsFeedIds)
+    expect(
+      listFeedDirectoryFeeds("gb-business").map((feed) => feed.id)
+    ).toEqual(expectedGbBusinessFeedIds)
+    expect(listFeedDirectoryFeeds("gb-health").map((feed) => feed.id)).toEqual(
+      expectedGbHealthFeedIds
+    )
+    expect(listFeedDirectoryFeeds("gb-science").map((feed) => feed.id)).toEqual(
+      expectedGbScienceFeedIds
+    )
+    expect(listFeedDirectoryFeeds("gb-sports").map((feed) => feed.id)).toEqual(
+      expectedGbSportsFeedIds
+    )
+    expect(listFeedDirectoryFeeds("gb-tech").map((feed) => feed.id)).toEqual(
+      expectedGbTechFeedIds
+    )
+    expect(
+      listFeedDirectoryFeeds("gb-entertainment").map((feed) => feed.id)
+    ).toEqual(expectedGbEntertainmentFeedIds)
+    expect(listFeedDirectoryFeeds("gb-gaming").map((feed) => feed.id)).toEqual(
+      expectedGbGamingFeedIds
+    )
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches U.S., Canada, and India legacy aliases across directory categories", () => {
+  it("matches U.S., Canada, India, and Great Britain legacy aliases across directory categories", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -3689,6 +4695,15 @@ describe("feed directory catalog", () => {
     const gadgets360 = getFeedDirectoryFeed("gadgets-360")
     const bollywoodHungama = getFeedDirectoryFeed("bollywood-hungama")
     const indianVideoGamer = getFeedDirectoryFeed("indian-video-gamer")
+    const skyNewsUk = getFeedDirectoryFeed("sky-news-uk")
+    const bbcPoliticsGb = getFeedDirectoryFeed("bbc-politics-gb")
+    const guardianBusinessGb = getFeedDirectoryFeed("guardian-business-gb")
+    const independentHealthGb = getFeedDirectoryFeed("independent-health-gb")
+    const registerScience = getFeedDirectoryFeed("register-science")
+    const skySportsNewsGb = getFeedDirectoryFeed("sky-sports-news-gb")
+    const bbcTechnologyGb = getFeedDirectoryFeed("bbc-technology-gb")
+    const guardianFilmGb = getFeedDirectoryFeed("guardian-film-gb")
+    const eurogamerGb = getFeedDirectoryFeed("eurogamer-gb")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -3758,6 +4773,15 @@ describe("feed directory catalog", () => {
     expect(gadgets360).toBeDefined()
     expect(bollywoodHungama).toBeDefined()
     expect(indianVideoGamer).toBeDefined()
+    expect(skyNewsUk).toBeDefined()
+    expect(bbcPoliticsGb).toBeDefined()
+    expect(guardianBusinessGb).toBeDefined()
+    expect(independentHealthGb).toBeDefined()
+    expect(registerScience).toBeDefined()
+    expect(skySportsNewsGb).toBeDefined()
+    expect(bbcTechnologyGb).toBeDefined()
+    expect(guardianFilmGb).toBeDefined()
+    expect(eurogamerGb).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -4090,6 +5114,51 @@ describe("feed directory catalog", () => {
         "http://www.pcquest.com/rss-2-2/?cat_slug=games",
       ])
     ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(skyNewsUk!, [
+        "http://news.sky.com/feeds/rss/uk.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(bbcPoliticsGb!, [
+        "http://feeds.bbci.co.uk/news/politics/rss.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(guardianBusinessGb!, [
+        "http://feeds.theguardian.com/theguardian/uk/business/rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(independentHealthGb!, [
+        "http://www.independent.co.uk/life-style/health-and-families/health-news/rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(registerScience!, [
+        "http://www.theregister.co.uk/science/headlines.atom",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(skySportsNewsGb!, [
+        "http://www.skysports.com/rss/0,20514,12040,00.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(bbcTechnologyGb!, [
+        "http://feeds.bbci.co.uk/news/technology/rss.xml#",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(guardianFilmGb!, [
+        "http://www.theguardian.com/us/film/rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(eurogamerGb!, [
+        "http://www.eurogamer.net/?format=rss",
+      ])
+    ).toBe(true)
   })
 
   it("normalizes stored HTTP URLs before matching", () => {
@@ -4371,6 +5440,42 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://zeenews.india.com/rss/india-national-news.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.theguardian.com/observer/rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rss.feedsportal.com/c/266/f/3503/index.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rss.feedsportal.com/c/266/f/3496/index.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rss.feedsportal.com/c/266/f/3510/index.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rss.feedsportal.com/c/266/f/3784/index.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.economist.com/sections/business-finance/rss.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.huffingtonpost.co.uk/news/british-national-party/feed/"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.huffingtonpost.co.uk/feeds/verticals/uk-sport/index.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://celebrity.uk.msn.com/RSS-Celebrity-Gossip.aspx"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://tv.uk.msn.com/blog/editor-rss.aspx"
+    )
+    expect(directoryUrls).not.toContain(
+      "https://uk.eurosport.yahoo.com/eurosport/tickerdb/sport/0.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.feedburner.com/SportcoukNewsRssFeed"
     )
   })
 })
