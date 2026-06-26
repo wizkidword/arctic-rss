@@ -119,7 +119,16 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("US Tech")
     expect(markup).toContain("US Entertainment")
     expect(markup).toContain("US Gaming")
-    expect(markup).toContain("234 feeds")
+    expect(markup).toContain("CA General")
+    expect(markup).toContain("CA Politics")
+    expect(markup).toContain("CA Business")
+    expect(markup).toContain("CA Gaming")
+    expect(markup).toContain("CA Health")
+    expect(markup).toContain("CA Science")
+    expect(markup).toContain("CA Sports")
+    expect(markup).toContain("CA Tech")
+    expect(markup).toContain("CA Entertainment")
+    expect(markup).toContain("292 feeds")
     expect(markup).toContain("Campaigns, Congress, policy")
     expect(markup).toContain("Markets, companies, economy")
     expect(markup).toContain("Health news, wellness, medicine")
@@ -128,6 +137,10 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("Technology news, startups, gadgets")
     expect(markup).toContain("Entertainment news, TV, movies")
     expect(markup).toContain("Video game news, reviews, deals")
+    expect(markup).toContain("Canadian national, regional")
+    expect(markup).toContain("Canadian federal politics")
+    expect(markup).toContain("Canadian markets, economy")
+    expect(markup).toContain("Canadian gaming news")
     expect(markup).toContain("27 feeds")
     expect(markup).toContain("33 feeds")
     expect(markup).toContain("11 feeds")
@@ -137,6 +150,8 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("45 feeds")
     expect(markup).toContain("21 feeds")
     expect(markup).toContain("20 feeds")
+    expect(markup).toContain("17 feeds")
+    expect(markup).toContain("9 feeds")
     expect(markup).toContain("ABC News - U.S.")
     expect(markup).toContain("abcnews.com")
     expect(markup).toContain("Fox News - Latest")
@@ -157,6 +172,11 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("Deadline")
     expect(markup).toContain("IGN")
     expect(markup).toContain("Kotaku")
+    expect(markup).toContain("CBC - Canada")
+    expect(markup).toContain("National Post - Politics")
+    expect(markup).toContain("Financial Post")
+    expect(markup).toContain("COGconnected")
+    expect(markup).toContain("LaineyGossip")
     expect(markup).toContain('<nav aria-label="Feed categories"')
     expect(markup.match(/aria-current="page"/g)).toHaveLength(1)
     expect(markup).toContain(
@@ -187,12 +207,21 @@ describe("DiscoverPage", () => {
       'href="/app/discover?category=us-gaming#directory-category-us-gaming"'
     )
     expect(markup).toContain(
+      'href="/app/discover?category=ca-general#directory-category-ca-general"'
+    )
+    expect(markup).toContain(
+      'href="/app/discover?category=ca-gaming#directory-category-ca-gaming"'
+    )
+    expect(markup).toContain(
+      'href="/app/discover?category=ca-entertainment#directory-category-ca-entertainment"'
+    )
+    expect(markup).toContain(
       "grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
     )
     expect(markup).toContain("min-h-32")
     expect(markup).toContain("bg-sky-50 text-sky-700")
     expect(markup).toContain("bg-lime-50 text-lime-700")
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -211,9 +240,13 @@ describe("DiscoverPage", () => {
     expect(detailTags[7]).not.toContain("open")
     expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
     expect(detailTags[8]).not.toContain("open")
+    expect(detailTags[9]).toContain('id="directory-category-ca-general"')
+    expect(detailTags[9]).not.toContain("open")
+    expect(detailTags[17]).toContain('id="directory-category-ca-entertainment"')
+    expect(detailTags[17]).not.toContain("open")
     expect(markup).toContain("<summary")
     expect(markup).toContain("<ul")
-    expect(markup.match(/<li /g)).toHaveLength(234)
+    expect(markup.match(/<li /g)).toHaveLength(292)
     expect(markup).toContain("w-full shrink-0 sm:w-auto sm:pl-4")
     expect(markup).toContain(
       "[&amp;_[data-slot=button]]:w-full [&amp;_[data-slot=button]]:min-h-9"
@@ -221,7 +254,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "sm:[&amp;_[data-slot=button]]:w-auto sm:[&amp;_[data-slot=button]]:min-h-7"
     )
-    expect(markup.match(/Directory control:/g)).toHaveLength(234)
+    expect(markup.match(/Directory control:/g)).toHaveLength(292)
     expect(markup).toContain(
       "Directory control: npr-national | NPR - National | subscribed=true | folders=folder-1:Morning News"
     )
@@ -252,6 +285,12 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       "Directory control: ign | IGN | subscribed=false | folders=folder-1:Morning News"
     )
+    expect(markup).toContain(
+      "Directory control: cbc-canada | CBC - Canada | subscribed=false | folders=folder-1:Morning News"
+    )
+    expect(markup).toContain(
+      "Directory control: cogconnected | COGconnected | subscribed=false | folders=folder-1:Morning News"
+    )
   })
 
   it("marks US Politics in navigation without opening it by default", async () => {
@@ -265,7 +304,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-politics#directory-category-us-politics" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -299,7 +338,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-business#directory-category-us-business" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -333,7 +372,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-health#directory-category-us-health" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -367,7 +406,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-science#directory-category-us-science" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -401,7 +440,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-sports#directory-category-us-sports" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -435,7 +474,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-tech#directory-category-us-tech" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -469,7 +508,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-entertainment#directory-category-us-entertainment" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -503,7 +542,7 @@ describe("DiscoverPage", () => {
     expect(markup).toContain(
       'href="/app/discover?category=us-gaming#directory-category-us-gaming" aria-current="page"'
     )
-    expect(detailTags).toHaveLength(9)
+    expect(detailTags).toHaveLength(18)
     expect(detailTags[0]).toContain('id="directory-category-us-general"')
     expect(detailTags[0]).not.toContain("open")
     expect(detailTags[1]).toContain('id="directory-category-us-politics"')
@@ -524,6 +563,26 @@ describe("DiscoverPage", () => {
     expect(detailTags[8]).not.toContain("open")
     expect(markup).toContain("IGN")
     expect(markup).toContain("Kotaku")
+  })
+
+  it("marks CA Gaming in navigation without opening it by default", async () => {
+    const markup = renderToStaticMarkup(
+      await DiscoverPage({
+        searchParams: Promise.resolve({ category: "ca-gaming" }),
+      })
+    )
+    const detailTags = markup.match(/<details[^>]*>/g) ?? []
+
+    expect(markup).toContain(
+      'href="/app/discover?category=ca-gaming#directory-category-ca-gaming" aria-current="page"'
+    )
+    expect(detailTags).toHaveLength(18)
+    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
+    expect(detailTags[8]).not.toContain("open")
+    expect(detailTags[12]).toContain('id="directory-category-ca-gaming"')
+    expect(detailTags[12]).not.toContain("open")
+    expect(markup).toContain("COGconnected")
+    expect(markup).toContain("CGMagazine")
   })
 
   it("falls back to US General for an unknown category", async () => {

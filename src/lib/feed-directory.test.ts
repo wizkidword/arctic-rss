@@ -1953,6 +1953,499 @@ const expectedUsGamingFeedRecords = [
   },
 ]
 
+const expectedCaGeneralFeedRecords = [
+  {
+    aliases: ["http://www.journaldemontreal.com/rss.xml"],
+    categoryId: "ca-general",
+    id: "journal-de-montreal",
+    label: "Le Journal de Montreal",
+    source: "journaldemontreal.com",
+    url: "https://www.journaldemontreal.com/rss.xml",
+  },
+  {
+    aliases: ["http://rss.radio-canada.ca/fils/nouvelles/national.xml"],
+    categoryId: "ca-general",
+    id: "radio-canada-info",
+    label: "Radio-Canada - Info",
+    source: "radio-canada.ca",
+    url: "https://ici.radio-canada.ca/info/rss/info/a-la-une",
+  },
+  {
+    aliases: ["http://leaderpost.com/feed/"],
+    categoryId: "ca-general",
+    id: "regina-leader-post",
+    label: "Regina Leader-Post",
+    source: "leaderpost.com",
+    url: "https://leaderpost.com/feed",
+  },
+  {
+    aliases: ["http://thestarphoenix.com/feed/"],
+    categoryId: "ca-general",
+    id: "saskatoon-starphoenix",
+    label: "Saskatoon StarPhoenix",
+    source: "thestarphoenix.com",
+    url: "https://thestarphoenix.com/feed",
+  },
+  {
+    aliases: ["http://windsorstar.com/feed/"],
+    categoryId: "ca-general",
+    id: "windsor-star",
+    label: "Windsor Star",
+    source: "windsorstar.com",
+    url: "https://windsorstar.com/feed",
+  },
+  {
+    aliases: ["http://www.cbc.ca/cmlink/rss-canada"],
+    categoryId: "ca-general",
+    id: "cbc-canada",
+    label: "CBC - Canada",
+    source: "cbc.ca",
+    url: "https://www.cbc.ca/webfeed/rss/rss-canada",
+  },
+  {
+    aliases: ["http://globalnews.ca/canada/feed/"],
+    categoryId: "ca-general",
+    id: "global-news-canada",
+    label: "Global News - Canada",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/canada/feed/",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml"],
+    categoryId: "ca-general",
+    id: "bbc-us-canada-ca",
+    label: "BBC News - U.S. & Canada",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml",
+  },
+  {
+    aliases: ["http://www.brandonsun.com/rss/?path=%2Fnational%2Fbreaking-news"],
+    categoryId: "ca-general",
+    id: "brandon-sun-national",
+    label: "Brandon Sun - National",
+    source: "brandonsun.com",
+    url: "https://www.brandonsun.com/feed?path=%2Fnational%2Fbreaking-news",
+  },
+  {
+    aliases: ["http://thewalrus.ca/feed/"],
+    categoryId: "ca-general",
+    id: "the-walrus",
+    label: "The Walrus",
+    source: "thewalrus.ca",
+    url: "https://thewalrus.ca/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-general",
+    id: "national-post-canada",
+    label: "National Post - Canada",
+    source: "nationalpost.com",
+    url: "https://nationalpost.com/category/news/canada/feed.xml",
+  },
+  {
+    aliases: ["http://www.torontosun.com/home/rss.xml"],
+    categoryId: "ca-general",
+    id: "toronto-sun",
+    label: "Toronto Sun",
+    source: "torontosun.com",
+    url: "https://torontosun.com/feed",
+  },
+  {
+    aliases: ["http://www.calgarysun.com/home/rss.xml"],
+    categoryId: "ca-general",
+    id: "calgary-sun",
+    label: "Calgary Sun",
+    source: "calgarysun.com",
+    url: "https://calgarysun.com/feed",
+  },
+  {
+    aliases: ["http://ottawacitizen.com/feed"],
+    categoryId: "ca-general",
+    id: "ottawa-citizen",
+    label: "Ottawa Citizen",
+    source: "ottawacitizen.com",
+    url: "https://ottawacitizen.com/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-general",
+    id: "vancouver-sun",
+    label: "Vancouver Sun",
+    source: "vancouversun.com",
+    url: "https://vancouversun.com/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-general",
+    id: "citynews-calgary",
+    label: "CityNews Calgary",
+    source: "calgary.citynews.ca",
+    url: "https://calgary.citynews.ca/feed/",
+  },
+  {
+    aliases: ["http://feeds.feedblitz.com/thetyee"],
+    categoryId: "ca-general",
+    id: "the-tyee",
+    label: "The Tyee",
+    source: "thetyee.ca",
+    url: "https://thetyee.ca/rss2.xml",
+  },
+]
+
+const expectedCaPoliticsFeedRecords = [
+  {
+    aliases: [],
+    categoryId: "ca-politics",
+    id: "national-post-politics-ca",
+    label: "National Post - Politics",
+    source: "nationalpost.com",
+    url: "https://nationalpost.com/category/news/politics/feed.xml",
+  },
+  {
+    aliases: ["http://rss.cbc.ca/lineup/politics.xml"],
+    categoryId: "ca-politics",
+    id: "cbc-politics-ca",
+    label: "CBC - Politics",
+    source: "cbc.ca",
+    url: "http://rss.cbc.ca/lineup/politics.xml",
+  },
+  {
+    aliases: ["http://globalnews.ca/politics/feed/"],
+    categoryId: "ca-politics",
+    id: "global-politics-ca",
+    label: "Global News - Politics",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/politics/feed/",
+  },
+  {
+    aliases: [
+      "http://topics.nytimes.com/top/news/international/countriesandterritories/canada/index.html?rss=1",
+    ],
+    categoryId: "ca-politics",
+    id: "nyt-canada",
+    label: "New York Times - Canada",
+    source: "nytimes.com",
+    url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/topic/destination/canada/rss.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-politics",
+    id: "the-tyee-politics",
+    label: "The Tyee",
+    source: "thetyee.ca",
+    url: "https://thetyee.ca/rss2.xml",
+  },
+]
+
+const expectedCaBusinessFeedRecords = [
+  {
+    aliases: ["http://rss.cbc.ca/lineup/business.xml"],
+    categoryId: "ca-business",
+    id: "cbc-business-ca",
+    label: "CBC - Business",
+    source: "cbc.ca",
+    url: "http://rss.cbc.ca/lineup/business.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-business",
+    id: "financial-post",
+    label: "Financial Post",
+    source: "financialpost.com",
+    url: "https://financialpost.com/feed",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/FP_TopStories?format=xml"],
+    categoryId: "ca-business",
+    id: "financial-post-top-stories",
+    label: "Financial Post - Top Stories",
+    source: "financialpost.com",
+    url: "http://feeds.feedburner.com/FP_TopStories?format=xml",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-business",
+    id: "global-money",
+    label: "Global News - Money",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/money/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-business",
+    id: "global-economy",
+    label: "Global News - Economy",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/tag/economy/feed/",
+  },
+  {
+    aliases: ["http://betakit.com/feed/"],
+    categoryId: "ca-business",
+    id: "betakit-business",
+    label: "BetaKit",
+    source: "betakit.com",
+    url: "https://betakit.com/feed/",
+  },
+]
+
+const expectedCaGamingFeedRecords = [
+  {
+    aliases: ["http://cogconnected.com/feed/"],
+    categoryId: "ca-gaming",
+    id: "cogconnected",
+    label: "COGconnected",
+    source: "cogconnected.com",
+    url: "http://cogconnected.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-gaming",
+    id: "cgmagazine",
+    label: "CGMagazine",
+    source: "cgmagonline.com",
+    url: "https://www.cgmagonline.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-gaming",
+    id: "can-i-play-that",
+    label: "Can I Play That?",
+    source: "caniplaythat.com",
+    url: "https://caniplaythat.com/feed/",
+  },
+]
+
+const expectedCaHealthFeedRecords = [
+  {
+    aliases: ["http://www.journaldemontreal.com/jm/sante/rss.xml"],
+    categoryId: "ca-health",
+    id: "journal-de-montreal-health",
+    label: "Le Journal de Montreal - Sante",
+    source: "journaldemontreal.com",
+    url: "https://www.journaldemontreal.com/jm/sante/rss.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-health",
+    id: "cbc-health-ca",
+    label: "CBC - Health",
+    source: "cbc.ca",
+    url: "https://www.cbc.ca/webfeed/rss/rss-health",
+  },
+  {
+    aliases: ["http://news.nationalpost.com/category/health/feed/"],
+    categoryId: "ca-health",
+    id: "national-post-health-ca",
+    label: "National Post - Health",
+    source: "nationalpost.com",
+    url: "https://nationalpost.com/category/health/feed.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-health",
+    id: "global-health-ca",
+    label: "Global News - Health",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/health/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-health",
+    id: "healthing",
+    label: "Healthing.ca",
+    source: "healthing.ca",
+    url: "https://www.healthing.ca/feed",
+  },
+]
+
+const expectedCaScienceFeedRecords = [
+  {
+    aliases: ["http://globalnews.ca/science/feed/"],
+    categoryId: "ca-science",
+    id: "global-science-ca",
+    label: "Global News - Science",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/science/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-science",
+    id: "national-post-science",
+    label: "National Post - Science",
+    source: "nationalpost.com",
+    url: "https://nationalpost.com/category/news/science/feed.xml",
+  },
+  {
+    aliases: ["http://www.cbc.ca/cmlink/1.392"],
+    categoryId: "ca-science",
+    id: "cbc-science-technology",
+    label: "CBC - Science & Technology",
+    source: "cbc.ca",
+    url: "https://www.cbc.ca/webfeed/rss/rss-technology",
+  },
+]
+
+const expectedCaSportsFeedRecords = [
+  {
+    aliases: ["http://www.journaldemontreal.com/sports/rss.xml"],
+    categoryId: "ca-sports",
+    id: "journal-de-montreal-sports",
+    label: "Le Journal de Montreal - Sports",
+    source: "journaldemontreal.com",
+    url: "https://www.journaldemontreal.com/sports/rss.xml",
+  },
+  {
+    aliases: ["http://www.cbc.ca/cmlink/rss-sports"],
+    categoryId: "ca-sports",
+    id: "cbc-sports-ca",
+    label: "CBC - Sports",
+    source: "cbc.ca",
+    url: "https://www.cbc.ca/webfeed/rss/rss-sports",
+  },
+  {
+    aliases: ["https://ca.sports.yahoo.com/top/rss.xml"],
+    categoryId: "ca-sports",
+    id: "yahoo-canada-sports",
+    label: "Yahoo Canada Sports",
+    source: "yahoo.com",
+    url: "https://ca.sports.yahoo.com/rss/",
+  },
+  {
+    aliases: ["http://globalnews.ca/sports/feed/"],
+    categoryId: "ca-sports",
+    id: "global-sports-ca",
+    label: "Global News - Sports",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/sports/feed/",
+  },
+  {
+    aliases: ["http://www.winnipegfreepress.com/rss/?path=%2Fsports"],
+    categoryId: "ca-sports",
+    id: "winnipeg-free-press-sports",
+    label: "Winnipeg Free Press - Sports",
+    source: "winnipegfreepress.com",
+    url: "https://www.winnipegfreepress.com/feed?path=%2Fsports",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-sports",
+    id: "team-canada",
+    label: "Team Canada",
+    source: "olympic.ca",
+    url: "https://olympic.ca/feed/",
+  },
+]
+
+const expectedCaTechFeedRecords = [
+  {
+    aliases: ["http://betakit.com/feed/"],
+    categoryId: "ca-tech",
+    id: "betakit",
+    label: "BetaKit",
+    source: "betakit.com",
+    url: "https://betakit.com/feed/",
+  },
+  {
+    aliases: ["http://www.cbc.ca/cmlink/rss-technology"],
+    categoryId: "ca-tech",
+    id: "cbc-technology-ca",
+    label: "CBC - Technology",
+    source: "cbc.ca",
+    url: "https://www.cbc.ca/webfeed/rss/rss-technology",
+  },
+  {
+    aliases: ["http://mobilesyrup.com/feed/"],
+    categoryId: "ca-tech",
+    id: "mobilesyrup",
+    label: "MobileSyrup",
+    source: "mobilesyrup.com",
+    url: "https://mobilesyrup.com/feed/",
+  },
+  {
+    aliases: ["http://globalnews.ca/tech/feed/"],
+    categoryId: "ca-tech",
+    id: "global-tech-ca",
+    label: "Global News - Tech",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/tech/feed/",
+  },
+]
+
+const expectedCaEntertainmentFeedRecords = [
+  {
+    aliases: ["http://www.laineygossip.com/Rss"],
+    categoryId: "ca-entertainment",
+    id: "lainey-gossip",
+    label: "LaineyGossip",
+    source: "laineygossip.com",
+    url: "https://www.laineygossip.com/rss/",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/ExclaimCaAllArticles"],
+    categoryId: "ca-entertainment",
+    id: "exclaim",
+    label: "Exclaim!",
+    source: "exclaim.ca",
+    url: "http://feeds.feedburner.com/ExclaimCaAllArticles",
+  },
+  {
+    aliases: ["http://www.chartattack.com/feed/"],
+    categoryId: "ca-entertainment",
+    id: "chart-attack",
+    label: "Chart Attack",
+    source: "chartsattack.com",
+    url: "https://www.chartsattack.com/feed/",
+  },
+  {
+    aliases: ["http://musiccanada.com/feed/"],
+    categoryId: "ca-entertainment",
+    id: "music-canada",
+    label: "Music Canada",
+    source: "musiccanada.com",
+    url: "https://musiccanada.com/feed/",
+  },
+  {
+    aliases: ["http://www.journaldemontreal.com/spectacles/rss.xml"],
+    categoryId: "ca-entertainment",
+    id: "journal-de-montreal-spectacles",
+    label: "Le Journal de Montreal - Spectacles",
+    source: "journaldemontreal.com",
+    url: "https://www.journaldemontreal.com/spectacles/rss.xml",
+  },
+  {
+    aliases: ["http://rss.cbc.ca/lineup/arts.xml"],
+    categoryId: "ca-entertainment",
+    id: "cbc-arts-ca",
+    label: "CBC - Arts",
+    source: "cbc.ca",
+    url: "https://www.cbc.ca/webfeed/rss/rss-arts",
+  },
+  {
+    aliases: ["http://globalnews.ca/category/entertainment/feed/"],
+    categoryId: "ca-entertainment",
+    id: "global-entertainment-ca",
+    label: "Global News - Entertainment",
+    source: "globalnews.ca",
+    url: "https://globalnews.ca/entertainment/feed/",
+  },
+  {
+    aliases: ["http://www.dose.ca/feed"],
+    categoryId: "ca-entertainment",
+    id: "dose-ca",
+    label: "Dose.ca",
+    source: "dose.ca",
+    url: "https://dose.ca/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "ca-entertainment",
+    id: "national-post-entertainment",
+    label: "National Post - Entertainment",
+    source: "nationalpost.com",
+    url: "https://nationalpost.com/category/entertainment/feed.xml",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
@@ -1963,6 +2456,15 @@ const expectedFeedRecords = [
   ...expectedUsTechFeedRecords,
   ...expectedUsEntertainmentFeedRecords,
   ...expectedUsGamingFeedRecords,
+  ...expectedCaGeneralFeedRecords,
+  ...expectedCaPoliticsFeedRecords,
+  ...expectedCaBusinessFeedRecords,
+  ...expectedCaGamingFeedRecords,
+  ...expectedCaHealthFeedRecords,
+  ...expectedCaScienceFeedRecords,
+  ...expectedCaSportsFeedRecords,
+  ...expectedCaTechFeedRecords,
+  ...expectedCaEntertainmentFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -1988,6 +2490,31 @@ const expectedUsEntertainmentFeedIds = expectedUsEntertainmentFeedRecords.map(
   (feed) => feed.id
 )
 const expectedUsGamingFeedIds = expectedUsGamingFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedCaGeneralFeedIds = expectedCaGeneralFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedCaPoliticsFeedIds = expectedCaPoliticsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedCaBusinessFeedIds = expectedCaBusinessFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedCaGamingFeedIds = expectedCaGamingFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedCaHealthFeedIds = expectedCaHealthFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedCaScienceFeedIds = expectedCaScienceFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedCaSportsFeedIds = expectedCaSportsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedCaTechFeedIds = expectedCaTechFeedRecords.map((feed) => feed.id)
+const expectedCaEntertainmentFeedIds = expectedCaEntertainmentFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -2047,6 +2574,60 @@ describe("feed directory catalog", () => {
           "Video game news, reviews, deals, industry coverage, and gaming culture from major outlets.",
         id: "us-gaming",
         label: "US Gaming",
+      },
+      {
+        description:
+          "Canadian national, regional, and world reporting from Canadian outlets.",
+        id: "ca-general",
+        label: "CA General",
+      },
+      {
+        description:
+          "Canadian federal politics, policy, Parliament, and public affairs coverage.",
+        id: "ca-politics",
+        label: "CA Politics",
+      },
+      {
+        description:
+          "Canadian markets, economy, companies, startups, and personal finance.",
+        id: "ca-business",
+        label: "CA Business",
+      },
+      {
+        description:
+          "Canadian gaming news, reviews, accessibility, and games culture coverage.",
+        id: "ca-gaming",
+        label: "CA Gaming",
+      },
+      {
+        description:
+          "Canadian health news, medicine, wellness, and public-health reporting.",
+        id: "ca-health",
+        label: "CA Health",
+      },
+      {
+        description:
+          "Canadian science, research, environment, and discovery coverage.",
+        id: "ca-science",
+        label: "CA Science",
+      },
+      {
+        description:
+          "Canadian sports headlines, analysis, teams, competitions, and scores.",
+        id: "ca-sports",
+        label: "CA Sports",
+      },
+      {
+        description:
+          "Canadian technology news, startups, telecom, gadgets, and digital culture.",
+        id: "ca-tech",
+        label: "CA Tech",
+      },
+      {
+        description:
+          "Canadian arts, culture, entertainment, music, celebrity, and media coverage.",
+        id: "ca-entertainment",
+        label: "CA Entertainment",
       },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
@@ -2124,6 +2705,33 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("us-gaming")).toBe(
       feedDirectoryCategories[8]
     )
+    expect(getFeedDirectoryCategory("ca-general")).toBe(
+      feedDirectoryCategories[9]
+    )
+    expect(getFeedDirectoryCategory("ca-politics")).toBe(
+      feedDirectoryCategories[10]
+    )
+    expect(getFeedDirectoryCategory("ca-business")).toBe(
+      feedDirectoryCategories[11]
+    )
+    expect(getFeedDirectoryCategory("ca-gaming")).toBe(
+      feedDirectoryCategories[12]
+    )
+    expect(getFeedDirectoryCategory("ca-health")).toBe(
+      feedDirectoryCategories[13]
+    )
+    expect(getFeedDirectoryCategory("ca-science")).toBe(
+      feedDirectoryCategories[14]
+    )
+    expect(getFeedDirectoryCategory("ca-sports")).toBe(
+      feedDirectoryCategories[15]
+    )
+    expect(getFeedDirectoryCategory("ca-tech")).toBe(
+      feedDirectoryCategories[16]
+    )
+    expect(getFeedDirectoryCategory("ca-entertainment")).toBe(
+      feedDirectoryCategories[17]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -2154,6 +2762,21 @@ describe("feed directory catalog", () => {
       "https://deadline.com/feed/"
     )
     expect(getFeedDirectoryFeed("kotaku")?.url).toBe("https://kotaku.com/feed")
+    expect(getFeedDirectoryFeed("cbc-canada")?.url).toBe(
+      "https://www.cbc.ca/webfeed/rss/rss-canada"
+    )
+    expect(getFeedDirectoryFeed("financial-post")?.url).toBe(
+      "https://financialpost.com/feed"
+    )
+    expect(getFeedDirectoryFeed("cogconnected")?.url).toBe(
+      "http://cogconnected.com/feed/"
+    )
+    expect(getFeedDirectoryFeed("global-science-ca")?.url).toBe(
+      "https://globalnews.ca/science/feed/"
+    )
+    expect(getFeedDirectoryFeed("lainey-gossip")?.url).toBe(
+      "https://www.laineygossip.com/rss/"
+    )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
       expectedUsGeneralFeedIds
@@ -2182,10 +2805,37 @@ describe("feed directory catalog", () => {
     expect(listFeedDirectoryFeeds("us-gaming").map((feed) => feed.id)).toEqual(
       expectedUsGamingFeedIds
     )
+    expect(listFeedDirectoryFeeds("ca-general").map((feed) => feed.id)).toEqual(
+      expectedCaGeneralFeedIds
+    )
+    expect(
+      listFeedDirectoryFeeds("ca-politics").map((feed) => feed.id)
+    ).toEqual(expectedCaPoliticsFeedIds)
+    expect(
+      listFeedDirectoryFeeds("ca-business").map((feed) => feed.id)
+    ).toEqual(expectedCaBusinessFeedIds)
+    expect(listFeedDirectoryFeeds("ca-gaming").map((feed) => feed.id)).toEqual(
+      expectedCaGamingFeedIds
+    )
+    expect(listFeedDirectoryFeeds("ca-health").map((feed) => feed.id)).toEqual(
+      expectedCaHealthFeedIds
+    )
+    expect(listFeedDirectoryFeeds("ca-science").map((feed) => feed.id)).toEqual(
+      expectedCaScienceFeedIds
+    )
+    expect(listFeedDirectoryFeeds("ca-sports").map((feed) => feed.id)).toEqual(
+      expectedCaSportsFeedIds
+    )
+    expect(listFeedDirectoryFeeds("ca-tech").map((feed) => feed.id)).toEqual(
+      expectedCaTechFeedIds
+    )
+    expect(
+      listFeedDirectoryFeeds("ca-entertainment").map((feed) => feed.id)
+    ).toEqual(expectedCaEntertainmentFeedIds)
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches New York Times, NBC, politics, business, health, science, sports, tech, entertainment, and gaming legacy aliases", () => {
+  it("matches U.S. and Canada legacy aliases across directory categories", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -2235,6 +2885,24 @@ describe("feed directory catalog", () => {
     const pocketGamer = getFeedDirectoryFeed("pocket-gamer")
     const techcrunchGaming = getFeedDirectoryFeed("techcrunch-gaming-feed")
     const techradarGaming = getFeedDirectoryFeed("techradar-gaming")
+    const radioCanadaInfo = getFeedDirectoryFeed("radio-canada-info")
+    const cbcCanada = getFeedDirectoryFeed("cbc-canada")
+    const torontoSun = getFeedDirectoryFeed("toronto-sun")
+    const theTyee = getFeedDirectoryFeed("the-tyee")
+    const cbcPoliticsCa = getFeedDirectoryFeed("cbc-politics-ca")
+    const nytCanada = getFeedDirectoryFeed("nyt-canada")
+    const financialPostTopStories = getFeedDirectoryFeed(
+      "financial-post-top-stories"
+    )
+    const betakitBusiness = getFeedDirectoryFeed("betakit-business")
+    const cbcHealthCa = getFeedDirectoryFeed("cbc-health-ca")
+    const cbcScienceTechnology = getFeedDirectoryFeed(
+      "cbc-science-technology"
+    )
+    const yahooCanadaSports = getFeedDirectoryFeed("yahoo-canada-sports")
+    const cbcTechnologyCa = getFeedDirectoryFeed("cbc-technology-ca")
+    const exclaim = getFeedDirectoryFeed("exclaim")
+    const cbcArtsCa = getFeedDirectoryFeed("cbc-arts-ca")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -2281,6 +2949,20 @@ describe("feed directory catalog", () => {
     expect(pocketGamer).toBeDefined()
     expect(techcrunchGaming).toBeDefined()
     expect(techradarGaming).toBeDefined()
+    expect(radioCanadaInfo).toBeDefined()
+    expect(cbcCanada).toBeDefined()
+    expect(torontoSun).toBeDefined()
+    expect(theTyee).toBeDefined()
+    expect(cbcPoliticsCa).toBeDefined()
+    expect(nytCanada).toBeDefined()
+    expect(financialPostTopStories).toBeDefined()
+    expect(betakitBusiness).toBeDefined()
+    expect(cbcHealthCa).toBeDefined()
+    expect(cbcScienceTechnology).toBeDefined()
+    expect(yahooCanadaSports).toBeDefined()
+    expect(cbcTechnologyCa).toBeDefined()
+    expect(exclaim).toBeDefined()
+    expect(cbcArtsCa).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -2498,6 +3180,76 @@ describe("feed directory catalog", () => {
         "http://feeds.webservice.techradar.com/us/rss/news/gaming",
       ])
     ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(radioCanadaInfo!, [
+        "http://rss.radio-canada.ca/fils/nouvelles/national.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(cbcCanada!, [
+        "http://www.cbc.ca/cmlink/rss-canada",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(torontoSun!, [
+        "http://www.torontosun.com/home/rss.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(theTyee!, [
+        "http://feeds.feedblitz.com/thetyee",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(cbcPoliticsCa!, [
+        "http://rss.cbc.ca/lineup/politics.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(nytCanada!, [
+        "http://topics.nytimes.com/top/news/international/countriesandterritories/canada/index.html?rss=1",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(financialPostTopStories!, [
+        "http://feeds.feedburner.com/FP_TopStories?format=xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(betakitBusiness!, [
+        "http://betakit.com/feed/",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(cbcHealthCa!, [
+        "https://www.cbc.ca/webfeed/rss/rss-health",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(cbcScienceTechnology!, [
+        "http://www.cbc.ca/cmlink/1.392",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(yahooCanadaSports!, [
+        "https://ca.sports.yahoo.com/top/rss.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(cbcTechnologyCa!, [
+        "http://www.cbc.ca/cmlink/rss-technology",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(exclaim!, [
+        "http://feeds.feedburner.com/ExclaimCaAllArticles",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(cbcArtsCa!, [
+        "http://rss.cbc.ca/lineup/arts.xml",
+      ])
+    ).toBe(true)
   })
 
   it("normalizes stored HTTP URLs before matching", () => {
@@ -2702,5 +3454,70 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain("http://www.cnet.com/rss/gaming/")
     expect(directoryUrls).not.toContain("http://rssfeeds.usatoday.com/topgaming")
+    expect(
+      directoryUrls.some((url) => url.startsWith("http://rss.canada.com/get/"))
+    ).toBe(false)
+    expect(directoryUrls).not.toContain(
+      "http://www.huffingtonpost.ca/feeds/verticals/canada-politics/index.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.huffingtonpost.ca/feeds/verticals/canada-business/index.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.huffingtonpost.ca/feeds/verticals/canada-lifestyle/index.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.huffingtonpost.ca/feeds/verticals/canada-sports/index.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.huffingtonpost.ca/feeds/verticals/canada-music/index.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.ctvnews.ca/rss/ctvnews-ca-canada-public-rss-1.822284"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.ctvnews.ca/rss/ctvnews-ca-politics-public-rss-1.822302"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.ctvnews.ca/rss/business/ctv-news-business-headlines-1.867648"
+    )
+    expect(directoryUrls).not.toContain("http://rss.canoe.com/Money/home.xml")
+    expect(directoryUrls).not.toContain("http://rss.canoe.com/Slam/home.xml")
+    expect(directoryUrls).not.toContain(
+      "http://rss.canoe.com/Jam/Celebrities/home.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://rss.canoe.com/Jam/Music/home.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://feeds.feedburner.com/feedburner/g4tv_ca"
+    )
+    expect(directoryUrls).not.toContain("http://www.cvawards.ca/feed/")
+    expect(directoryUrls).not.toContain("http://www.gamingpost.ca/feed/")
+    expect(directoryUrls).not.toContain(
+      "http://www.ellecanada.com/rss_feed/home.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.thestar.com/feeds.articles.life.health_wellness.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.thestar.com/feeds.articles.life.technology.rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.tsn.ca/datafiles/rss/Stories.xml"
+    )
+    expect(directoryUrls).not.toContain("http://www.sportsnet.ca/feed/")
+    expect(directoryUrls).not.toContain(
+      "http://www.pcauthority.com.au/RSS/rss.ashx?type=Category&ID=12"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.techvibes.com/feed/blog/xml/global/"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://syndication.eonline.com/syndication/feeds/rssfeeds/topstories.xml?edition=ca"
+    )
+    expect(directoryUrls).not.toContain("http://blogs.etcanada.com/feed/")
+    expect(directoryUrls).not.toContain("http://www.hgtv.ca/rss.ashx")
+    expect(directoryUrls).not.toContain("http://feeds.feedburner.com/thescenemag")
   })
 })
