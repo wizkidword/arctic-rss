@@ -2446,6 +2446,619 @@ const expectedCaEntertainmentFeedRecords = [
   },
 ]
 
+const expectedInGeneralFeedRecords = [
+  {
+    aliases: ["http://indianexpress.com/section/india/feed/"],
+    categoryId: "in-general",
+    id: "indian-express-india",
+    label: "The Indian Express - India",
+    source: "indianexpress.com",
+    url: "https://indianexpress.com/section/india/feed/",
+  },
+  {
+    aliases: ["http://feeds.bbci.co.uk/news/world/asia/india/rss.xml"],
+    categoryId: "in-general",
+    id: "bbc-india",
+    label: "BBC News - India",
+    source: "bbc.co.uk",
+    url: "https://feeds.bbci.co.uk/news/world/asia/india/rss.xml",
+  },
+  {
+    aliases: ["http://www.thehindubusinessline.com/news/?service=rss"],
+    categoryId: "in-general",
+    id: "hindu-businessline-news",
+    label: "BusinessLine - News",
+    source: "thehindubusinessline.com",
+    url: "https://www.thehindubusinessline.com/news/?service=rss",
+  },
+  {
+    aliases: ["http://www.thehindu.com/news/national/?service=rss"],
+    categoryId: "in-general",
+    id: "the-hindu-national-in",
+    label: "The Hindu - National",
+    source: "thehindu.com",
+    url: "https://www.thehindu.com/news/national/?service=rss",
+  },
+  {
+    aliases: ["http://zeenews.india.com/rss/world-news.xml"],
+    categoryId: "in-general",
+    id: "zee-world-india",
+    label: "Zee News - World",
+    source: "zeenews.india.com",
+    url: "https://zeenews.india.com/rss/world-news.xml",
+  },
+  {
+    aliases: ["http://economictimes.indiatimes.com/News/rssfeeds/1715249553.cms"],
+    categoryId: "in-general",
+    id: "economic-times-news",
+    label: "Economic Times - News",
+    source: "economictimes.indiatimes.com",
+    url: "https://economictimes.indiatimes.com/News/rssfeeds/1715249553.cms",
+  },
+  {
+    aliases: ["http://www.business-standard.com/rss/home_page_top_stories.rss"],
+    categoryId: "in-general",
+    id: "business-standard-top-stories-in",
+    label: "Business Standard - Top Stories",
+    source: "business-standard.com",
+    url: "https://www.business-standard.com/rss/home_page_top_stories.rss",
+  },
+  {
+    aliases: ["http://www.dnaindia.com/rss.xml"],
+    categoryId: "in-general",
+    id: "dna-india-latest",
+    label: "DNA India - Latest",
+    source: "dnaindia.com",
+    url: "https://www.dnaindia.com/feeds/latest.xml",
+  },
+  {
+    aliases: ["http://feeds.hindustantimes.com/HT-India"],
+    categoryId: "in-general",
+    id: "hindustan-times-india",
+    label: "Hindustan Times - India",
+    source: "hindustantimes.com",
+    url: "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "in-general",
+    id: "ndtv-india-news",
+    label: "NDTV - India News",
+    source: "ndtv.com",
+    url: "https://feeds.feedburner.com/ndtvnews-india-news",
+  },
+  {
+    aliases: ["http://ibnlive.in.com/ibnrss/top.xml"],
+    categoryId: "in-general",
+    id: "news18-india",
+    label: "News18 - India",
+    source: "news18.com",
+    url: "https://www.news18.com/commonfeeds/v1/eng/rss/india.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "in-general",
+    id: "firstpost-india",
+    label: "Firstpost - India",
+    source: "firstpost.com",
+    url: "https://www.firstpost.com/commonfeeds/v1/mfp/rss/india.xml",
+  },
+]
+
+const expectedInPoliticsFeedRecords = [
+  {
+    aliases: ["http://www.thehindu.com/news/national/?service=rss"],
+    categoryId: "in-politics",
+    id: "the-hindu-national-politics",
+    label: "The Hindu - National",
+    source: "thehindu.com",
+    url: "https://www.thehindu.com/news/national/?service=rss",
+  },
+  {
+    aliases: ["http://www.ft.com/rss/world/asiapacific/india"],
+    categoryId: "in-politics",
+    id: "ft-india",
+    label: "Financial Times - India",
+    source: "ft.com",
+    url: "https://www.ft.com/india?format=rss",
+  },
+  {
+    aliases: ["http://indianexpress.com/section/india/politics/feed/"],
+    categoryId: "in-politics",
+    id: "indian-express-political-pulse",
+    label: "The Indian Express - Political Pulse",
+    source: "indianexpress.com",
+    url: "https://indianexpress.com/section/political-pulse/feed/",
+  },
+  {
+    aliases: ["http://ibnlive.in.com/ibnrss/rss/politics/politics.xml"],
+    categoryId: "in-politics",
+    id: "news18-politics-in",
+    label: "News18 - Politics",
+    source: "news18.com",
+    url: "https://www.news18.com/commonfeeds/v1/eng/rss/politics.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "in-politics",
+    id: "india-today-politics",
+    label: "India Today - Politics",
+    source: "indiatoday.in",
+    url: "https://www.indiatoday.in/rss/1206514",
+  },
+  {
+    aliases: ["http://www.firstpost.com/politics/feed"],
+    categoryId: "in-politics",
+    id: "firstpost-politics-in",
+    label: "Firstpost - Politics",
+    source: "firstpost.com",
+    url: "https://www.firstpost.com/commonfeeds/v1/mfp/rss/politics.xml",
+  },
+  {
+    aliases: ["http://www.frontline.in/politics/?service=rss"],
+    categoryId: "in-politics",
+    id: "frontline-politics",
+    label: "Frontline - Politics",
+    source: "frontline.thehindu.com",
+    url: "https://frontline.thehindu.com/politics/?service=rss",
+  },
+]
+
+const expectedInBusinessFeedRecords = [
+  {
+    aliases: ["http://economictimes.indiatimes.com/rssfeedsdefault.cms"],
+    categoryId: "in-business",
+    id: "economic-times-business",
+    label: "Economic Times - Business",
+    source: "economictimes.indiatimes.com",
+    url: "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
+  },
+  {
+    aliases: ["http://www.business-standard.com/rss/todays-paper.rss"],
+    categoryId: "in-business",
+    id: "business-standard-todays-paper",
+    label: "Business Standard - Today's Paper",
+    source: "business-standard.com",
+    url: "https://www.business-standard.com/rss/todays-paper.rss",
+  },
+  {
+    aliases: ["http://www.business-standard.com/rss/home_page_top_stories.rss"],
+    categoryId: "in-business",
+    id: "business-standard-top-stories-business",
+    label: "Business Standard - Top Stories",
+    source: "business-standard.com",
+    url: "https://www.business-standard.com/rss/home_page_top_stories.rss",
+  },
+  {
+    aliases: ["http://www.livemint.com/rss/companies"],
+    categoryId: "in-business",
+    id: "livemint-companies",
+    label: "Mint - Companies",
+    source: "livemint.com",
+    url: "https://www.livemint.com/rss/companies",
+  },
+  {
+    aliases: ["http://www.livemint.com/rss/industry"],
+    categoryId: "in-business",
+    id: "livemint-industry",
+    label: "Mint - Industry",
+    source: "livemint.com",
+    url: "https://www.livemint.com/rss/industry",
+  },
+  {
+    aliases: ["http://www.livemint.com/rss/money"],
+    categoryId: "in-business",
+    id: "livemint-money",
+    label: "Mint - Money",
+    source: "livemint.com",
+    url: "https://www.livemint.com/rss/money",
+  },
+  {
+    aliases: ["http://zeenews.india.com/rss/business.xml"],
+    categoryId: "in-business",
+    id: "zee-business",
+    label: "Zee News - Business",
+    source: "zeenews.india.com",
+    url: "https://zeenews.india.com/rss/business.xml",
+  },
+  {
+    aliases: [
+      "https://news.google.com/news/feeds?cf=all&ned=in&hl=en&topic=b&output=rss",
+    ],
+    categoryId: "in-business",
+    id: "google-news-india-business",
+    label: "Google News - India Business",
+    source: "news.google.com",
+    url: "https://news.google.com/rss?cf=all&hl=en-IN&topic=b&gl=IN&ceid=IN:en",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/NDTV-Business?format=xml"],
+    categoryId: "in-business",
+    id: "ndtv-profit",
+    label: "NDTV Profit",
+    source: "ndtvprofit.com",
+    url: "https://www.ndtvprofit.com/rss",
+  },
+]
+
+const expectedInHealthFeedRecords = [
+  {
+    aliases: ["http://timesofindia.indiatimes.com/rssfeeds/2886714.cms"],
+    categoryId: "in-health",
+    id: "times-of-india-health",
+    label: "Times of India - Health",
+    source: "timesofindia.indiatimes.com",
+    url: "https://timesofindia.indiatimes.com/rssfeeds/2886714.cms",
+  },
+  {
+    aliases: ["http://www.thehindu.com/sci-tech/health/?service=rss"],
+    categoryId: "in-health",
+    id: "the-hindu-health-in",
+    label: "The Hindu - Health",
+    source: "thehindu.com",
+    url: "https://www.thehindu.com/sci-tech/health/?service=rss",
+  },
+  {
+    aliases: [],
+    categoryId: "in-health",
+    id: "the-healthsite",
+    label: "TheHealthSite",
+    source: "thehealthsite.com",
+    url: "https://www.thehealthsite.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-health",
+    id: "hindustan-times-health-in",
+    label: "Hindustan Times - Health",
+    source: "hindustantimes.com",
+    url: "https://www.hindustantimes.com/feeds/rss/lifestyle/health/rssfeed.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "in-health",
+    id: "express-healthcare",
+    label: "Express Healthcare",
+    source: "expresshealthcare.in",
+    url: "https://www.expresshealthcare.in/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-health",
+    id: "et-healthworld",
+    label: "ET HealthWorld",
+    source: "health.economictimes.indiatimes.com",
+    url: "https://health.economictimes.indiatimes.com/rss/topstories",
+  },
+  {
+    aliases: [],
+    categoryId: "in-health",
+    id: "medical-buyer",
+    label: "Medical Buyer",
+    source: "medicalbuyer.co.in",
+    url: "https://medicalbuyer.co.in/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-health",
+    id: "india-today-health",
+    label: "India Today - Health",
+    source: "indiatoday.in",
+    url: "https://www.indiatoday.in/rss/1206515",
+  },
+]
+
+const expectedInScienceFeedRecords = [
+  {
+    aliases: ["http://www.thehindu.com/sci-tech/science/?service=rss"],
+    categoryId: "in-science",
+    id: "the-hindu-science-in",
+    label: "The Hindu - Science",
+    source: "thehindu.com",
+    url: "https://www.thehindu.com/sci-tech/science/?service=rss",
+  },
+  {
+    aliases: ["http://www.dnaindia.com/feeds/scitech.xml"],
+    categoryId: "in-science",
+    id: "dna-scitech",
+    label: "DNA India - Sci-Tech",
+    source: "dnaindia.com",
+    url: "https://www.dnaindia.com/feeds/scitech.xml",
+  },
+  {
+    aliases: ["http://zeenews.india.com/rss/science-technology-news.xml"],
+    categoryId: "in-science",
+    id: "zee-science-environment",
+    label: "Zee News - Science & Environment",
+    source: "zeenews.india.com",
+    url: "https://zeenews.india.com/rss/science-environment-news.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "in-science",
+    id: "india-bioscience",
+    label: "IndiaBioscience",
+    source: "indiabioscience.org",
+    url: "https://indiabioscience.org/feed",
+  },
+  {
+    aliases: [],
+    categoryId: "in-science",
+    id: "mongabay-india",
+    label: "Mongabay India",
+    source: "india.mongabay.com",
+    url: "https://india.mongabay.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-science",
+    id: "india-today-science",
+    label: "India Today - Science",
+    source: "indiatoday.in",
+    url: "https://www.indiatoday.in/rss/1206516",
+  },
+]
+
+const expectedInSportsFeedRecords = [
+  {
+    aliases: ["http://www.espncricinfo.com/rss/content/story/feeds/6.xml"],
+    categoryId: "in-sports",
+    id: "espncricinfo-india",
+    label: "ESPNcricinfo - India",
+    source: "espncricinfo.com",
+    url: "https://www.espncricinfo.com/rss/content/story/feeds/6.xml",
+  },
+  {
+    aliases: ["http://www.thehindu.com/sport/?service=rss"],
+    categoryId: "in-sports",
+    id: "the-hindu-sport-in",
+    label: "The Hindu - Sport",
+    source: "thehindu.com",
+    url: "https://www.thehindu.com/sport/?service=rss",
+  },
+  {
+    aliases: ["http://zeenews.india.com/rss/sports-news.xml"],
+    categoryId: "in-sports",
+    id: "zee-sports-in",
+    label: "Zee News - Sports",
+    source: "zeenews.india.com",
+    url: "https://zeenews.india.com/rss/sports-news.xml",
+  },
+  {
+    aliases: ["http://timesofindia.feedsportal.com/c/33039/f/533921/index.rss"],
+    categoryId: "in-sports",
+    id: "times-of-india-sports",
+    label: "Times of India - Sports",
+    source: "timesofindia.indiatimes.com",
+    url: "https://timesofindia.indiatimes.com/rssfeeds/4719148.cms",
+  },
+  {
+    aliases: ["http://syndication.indianexpress.com/rss/785/latest-news.xml"],
+    categoryId: "in-sports",
+    id: "indian-express-sports",
+    label: "The Indian Express - Sports",
+    source: "indianexpress.com",
+    url: "https://indianexpress.com/section/sports/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-sports",
+    id: "news18-sports-in",
+    label: "News18 - Sports",
+    source: "news18.com",
+    url: "https://www.news18.com/commonfeeds/v1/eng/rss/sports.xml",
+  },
+]
+
+const expectedInTechFeedRecords = [
+  {
+    aliases: ["http://indianexpress.com/section/technology/feed/"],
+    categoryId: "in-tech",
+    id: "indian-express-tech-in",
+    label: "The Indian Express - Technology",
+    source: "indianexpress.com",
+    url: "https://indianexpress.com/section/technology/feed/",
+  },
+  {
+    aliases: ["http://www.thehindu.com/sci-tech/?service=rss"],
+    categoryId: "in-tech",
+    id: "the-hindu-sci-tech",
+    label: "The Hindu - Sci-Tech",
+    source: "thehindu.com",
+    url: "https://www.thehindu.com/sci-tech/?service=rss",
+  },
+  {
+    aliases: ["http://www.thehindu.com/sci-tech/technology/?service=rss"],
+    categoryId: "in-tech",
+    id: "the-hindu-technology-in",
+    label: "The Hindu - Technology",
+    source: "thehindu.com",
+    url: "https://www.thehindu.com/sci-tech/technology/?service=rss",
+  },
+  {
+    aliases: ["http://zeenews.india.com/rss/science-technology-news.xml"],
+    categoryId: "in-tech",
+    id: "zee-science-technology-tech",
+    label: "Zee News - Science & Technology",
+    source: "zeenews.india.com",
+    url: "https://zeenews.india.com/rss/science-environment-news.xml",
+  },
+  {
+    aliases: ["http://www.business-standard.com/rss/technology-108.rss"],
+    categoryId: "in-tech",
+    id: "business-standard-technology",
+    label: "Business Standard - Technology",
+    source: "business-standard.com",
+    url: "https://www.business-standard.com/rss/technology-108.rss",
+  },
+  {
+    aliases: ["http://feeds.feedburner.com/NDTV-Tech"],
+    categoryId: "in-tech",
+    id: "gadgets-360",
+    label: "Gadgets 360",
+    source: "gadgets360.com",
+    url: "https://feeds.feedburner.com/gadgets360-latest",
+  },
+  {
+    aliases: [],
+    categoryId: "in-tech",
+    id: "medianama",
+    label: "Medianama",
+    source: "medianama.com",
+    url: "https://www.medianama.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-tech",
+    id: "inc42",
+    label: "Inc42",
+    source: "inc42.com",
+    url: "https://inc42.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-tech",
+    id: "digit",
+    label: "Digit",
+    source: "digit.in",
+    url: "https://www.digit.in/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-tech",
+    id: "beebom",
+    label: "Beebom",
+    source: "beebom.com",
+    url: "https://beebom.com/feed/",
+  },
+]
+
+const expectedInEntertainmentFeedRecords = [
+  {
+    aliases: ["http://rollingstoneindia.com/feed/"],
+    categoryId: "in-entertainment",
+    id: "rolling-stone-india",
+    label: "Rolling Stone India",
+    source: "rollingstoneindia.com",
+    url: "https://rollingstoneindia.com/feed/",
+  },
+  {
+    aliases: ["http://timesofindia.indiatimes.com/rssfeeds/1081479906.cms"],
+    categoryId: "in-entertainment",
+    id: "times-of-india-entertainment",
+    label: "Times of India - Entertainment",
+    source: "timesofindia.indiatimes.com",
+    url: "https://timesofindia.indiatimes.com/rssfeeds/1081479906.cms",
+  },
+  {
+    aliases: ["http://www.bollywoodhungama.com/rss/news.xml"],
+    categoryId: "in-entertainment",
+    id: "bollywood-hungama",
+    label: "Bollywood Hungama",
+    source: "bollywoodhungama.com",
+    url: "https://www.bollywoodhungama.com/rss/news.xml",
+  },
+  {
+    aliases: ["http://www.bollywoodlife.com/feed/"],
+    categoryId: "in-entertainment",
+    id: "bollywood-life",
+    label: "Bollywood Life",
+    source: "bollywoodlife.com",
+    url: "https://www.bollywoodlife.com/feed/",
+  },
+  {
+    aliases: ["http://www.dnaindia.com/feeds/entertainment.xml"],
+    categoryId: "in-entertainment",
+    id: "dna-entertainment",
+    label: "DNA India - Entertainment",
+    source: "dnaindia.com",
+    url: "https://www.dnaindia.com/feeds/entertainment.xml",
+  },
+  {
+    aliases: ["http://www.tellychakkar.com/rss.xml"],
+    categoryId: "in-entertainment",
+    id: "tellychakkar",
+    label: "Tellychakkar",
+    source: "tellychakkar.com",
+    url: "https://www.tellychakkar.com/rss.xml",
+  },
+  {
+    aliases: ["http://www.thehindu.com/entertainment/?service=rss"],
+    categoryId: "in-entertainment",
+    id: "the-hindu-entertainment-in",
+    label: "The Hindu - Entertainment",
+    source: "thehindu.com",
+    url: "https://www.thehindu.com/entertainment/?service=rss",
+  },
+  {
+    aliases: [],
+    categoryId: "in-entertainment",
+    id: "koimoi",
+    label: "Koimoi",
+    source: "koimoi.com",
+    url: "https://www.koimoi.com/feed/",
+  },
+  {
+    aliases: ["http://indianexpress.com/entertainment/feed/"],
+    categoryId: "in-entertainment",
+    id: "indian-express-entertainment-in",
+    label: "The Indian Express - Entertainment",
+    source: "indianexpress.com",
+    url: "https://indianexpress.com/section/entertainment/feed/",
+  },
+  {
+    aliases: ["http://feeds.hindustantimes.com/HT-Entertainment"],
+    categoryId: "in-entertainment",
+    id: "hindustan-times-entertainment-in",
+    label: "Hindustan Times - Entertainment",
+    source: "hindustantimes.com",
+    url: "https://www.hindustantimes.com/feeds/rss/entertainment/rssfeed.xml",
+  },
+]
+
+const expectedInGamingFeedRecords = [
+  {
+    aliases: [],
+    categoryId: "in-gaming",
+    id: "ign-india",
+    label: "IGN India",
+    source: "in.ign.com",
+    url: "https://in.ign.com/feed.xml",
+  },
+  {
+    aliases: [],
+    categoryId: "in-gaming",
+    id: "gamingonphone",
+    label: "GamingonPhone",
+    source: "gamingonphone.com",
+    url: "https://gamingonphone.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-gaming",
+    id: "talkesport",
+    label: "TalkEsport",
+    source: "talkesport.com",
+    url: "https://www.talkesport.com/feed/",
+  },
+  {
+    aliases: [],
+    categoryId: "in-gaming",
+    id: "gameffine",
+    label: "Gameffine",
+    source: "gameffine.com",
+    url: "https://www.gameffine.com/feed/",
+  },
+  {
+    aliases: ["http://www.pcquest.com/rss-2-2/?cat_slug=games"],
+    categoryId: "in-gaming",
+    id: "indian-video-gamer",
+    label: "IndianVideoGamer",
+    source: "indianvideogamer.com",
+    url: "https://www.indianvideogamer.com/feed/",
+  },
+]
+
 const expectedFeedRecords = [
   ...expectedUsGeneralFeedRecords,
   ...expectedUsPoliticsFeedRecords,
@@ -2465,6 +3078,15 @@ const expectedFeedRecords = [
   ...expectedCaSportsFeedRecords,
   ...expectedCaTechFeedRecords,
   ...expectedCaEntertainmentFeedRecords,
+  ...expectedInGeneralFeedRecords,
+  ...expectedInPoliticsFeedRecords,
+  ...expectedInBusinessFeedRecords,
+  ...expectedInHealthFeedRecords,
+  ...expectedInScienceFeedRecords,
+  ...expectedInSportsFeedRecords,
+  ...expectedInTechFeedRecords,
+  ...expectedInEntertainmentFeedRecords,
+  ...expectedInGamingFeedRecords,
 ]
 
 const expectedUsGeneralFeedIds = expectedUsGeneralFeedRecords.map(
@@ -2515,6 +3137,31 @@ const expectedCaSportsFeedIds = expectedCaSportsFeedRecords.map(
 )
 const expectedCaTechFeedIds = expectedCaTechFeedRecords.map((feed) => feed.id)
 const expectedCaEntertainmentFeedIds = expectedCaEntertainmentFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedInGeneralFeedIds = expectedInGeneralFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedInPoliticsFeedIds = expectedInPoliticsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedInBusinessFeedIds = expectedInBusinessFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedInHealthFeedIds = expectedInHealthFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedInScienceFeedIds = expectedInScienceFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedInSportsFeedIds = expectedInSportsFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedInTechFeedIds = expectedInTechFeedRecords.map((feed) => feed.id)
+const expectedInEntertainmentFeedIds = expectedInEntertainmentFeedRecords.map(
+  (feed) => feed.id
+)
+const expectedInGamingFeedIds = expectedInGamingFeedRecords.map(
   (feed) => feed.id
 )
 
@@ -2629,6 +3276,60 @@ describe("feed directory catalog", () => {
         id: "ca-entertainment",
         label: "CA Entertainment",
       },
+      {
+        description:
+          "Indian national, regional, and world reporting from Indian and international outlets.",
+        id: "in-general",
+        label: "IN General",
+      },
+      {
+        description:
+          "Indian elections, Parliament, policy, and public affairs coverage.",
+        id: "in-politics",
+        label: "IN Politics",
+      },
+      {
+        description:
+          "Indian markets, companies, economy, startups, and personal finance.",
+        id: "in-business",
+        label: "IN Business",
+      },
+      {
+        description:
+          "Indian health news, medicine, wellness, and healthcare industry coverage.",
+        id: "in-health",
+        label: "IN Health",
+      },
+      {
+        description:
+          "Indian science, research, environment, space, and discovery coverage.",
+        id: "in-science",
+        label: "IN Science",
+      },
+      {
+        description:
+          "Indian sports headlines, cricket coverage, teams, competitions, and scores.",
+        id: "in-sports",
+        label: "IN Sports",
+      },
+      {
+        description:
+          "Indian technology news, startups, gadgets, platforms, and digital policy.",
+        id: "in-tech",
+        label: "IN Tech",
+      },
+      {
+        description:
+          "Indian film, television, celebrity, music, and culture coverage.",
+        id: "in-entertainment",
+        label: "IN Entertainment",
+      },
+      {
+        description:
+          "Indian video game news, esports, mobile games, reviews, and gaming culture.",
+        id: "in-gaming",
+        label: "IN Gaming",
+      },
     ])
     expect(validateFeedDirectoryCatalog()).toEqual([])
   })
@@ -2732,6 +3433,33 @@ describe("feed directory catalog", () => {
     expect(getFeedDirectoryCategory("ca-entertainment")).toBe(
       feedDirectoryCategories[17]
     )
+    expect(getFeedDirectoryCategory("in-general")).toBe(
+      feedDirectoryCategories[18]
+    )
+    expect(getFeedDirectoryCategory("in-politics")).toBe(
+      feedDirectoryCategories[19]
+    )
+    expect(getFeedDirectoryCategory("in-business")).toBe(
+      feedDirectoryCategories[20]
+    )
+    expect(getFeedDirectoryCategory("in-health")).toBe(
+      feedDirectoryCategories[21]
+    )
+    expect(getFeedDirectoryCategory("in-science")).toBe(
+      feedDirectoryCategories[22]
+    )
+    expect(getFeedDirectoryCategory("in-sports")).toBe(
+      feedDirectoryCategories[23]
+    )
+    expect(getFeedDirectoryCategory("in-tech")).toBe(
+      feedDirectoryCategories[24]
+    )
+    expect(getFeedDirectoryCategory("in-entertainment")).toBe(
+      feedDirectoryCategories[25]
+    )
+    expect(getFeedDirectoryCategory("in-gaming")).toBe(
+      feedDirectoryCategories[26]
+    )
     expect(getFeedDirectoryCategory("missing")).toBe(
       feedDirectoryCategories[0]
     )
@@ -2776,6 +3504,24 @@ describe("feed directory catalog", () => {
     )
     expect(getFeedDirectoryFeed("lainey-gossip")?.url).toBe(
       "https://www.laineygossip.com/rss/"
+    )
+    expect(getFeedDirectoryFeed("hindustan-times-india")?.url).toBe(
+      "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml"
+    )
+    expect(getFeedDirectoryFeed("ft-india")?.url).toBe(
+      "https://www.ft.com/india?format=rss"
+    )
+    expect(getFeedDirectoryFeed("ndtv-profit")?.url).toBe(
+      "https://www.ndtvprofit.com/rss"
+    )
+    expect(getFeedDirectoryFeed("india-bioscience")?.url).toBe(
+      "https://indiabioscience.org/feed"
+    )
+    expect(getFeedDirectoryFeed("ign-india")?.url).toBe(
+      "https://in.ign.com/feed.xml"
+    )
+    expect(getFeedDirectoryFeed("hindustan-times-entertainment-in")?.url).toBe(
+      "https://www.hindustantimes.com/feeds/rss/entertainment/rssfeed.xml"
     )
     expect(getFeedDirectoryFeed("missing")).toBeUndefined()
     expect(listFeedDirectoryFeeds("us-general").map((feed) => feed.id)).toEqual(
@@ -2832,10 +3578,37 @@ describe("feed directory catalog", () => {
     expect(
       listFeedDirectoryFeeds("ca-entertainment").map((feed) => feed.id)
     ).toEqual(expectedCaEntertainmentFeedIds)
+    expect(listFeedDirectoryFeeds("in-general").map((feed) => feed.id)).toEqual(
+      expectedInGeneralFeedIds
+    )
+    expect(
+      listFeedDirectoryFeeds("in-politics").map((feed) => feed.id)
+    ).toEqual(expectedInPoliticsFeedIds)
+    expect(
+      listFeedDirectoryFeeds("in-business").map((feed) => feed.id)
+    ).toEqual(expectedInBusinessFeedIds)
+    expect(listFeedDirectoryFeeds("in-health").map((feed) => feed.id)).toEqual(
+      expectedInHealthFeedIds
+    )
+    expect(listFeedDirectoryFeeds("in-science").map((feed) => feed.id)).toEqual(
+      expectedInScienceFeedIds
+    )
+    expect(listFeedDirectoryFeeds("in-sports").map((feed) => feed.id)).toEqual(
+      expectedInSportsFeedIds
+    )
+    expect(listFeedDirectoryFeeds("in-tech").map((feed) => feed.id)).toEqual(
+      expectedInTechFeedIds
+    )
+    expect(
+      listFeedDirectoryFeeds("in-entertainment").map((feed) => feed.id)
+    ).toEqual(expectedInEntertainmentFeedIds)
+    expect(listFeedDirectoryFeeds("in-gaming").map((feed) => feed.id)).toEqual(
+      expectedInGamingFeedIds
+    )
     expect(listFeedDirectoryFeeds("missing")).toEqual([])
   })
 
-  it("matches U.S. and Canada legacy aliases across directory categories", () => {
+  it("matches U.S., Canada, and India legacy aliases across directory categories", () => {
     const nyt = getFeedDirectoryFeed("nyt-us")
     const nbc = getFeedDirectoryFeed("nbc-top-stories")
     const politics = getFeedDirectoryFeed("npr-politics")
@@ -2903,6 +3676,19 @@ describe("feed directory catalog", () => {
     const cbcTechnologyCa = getFeedDirectoryFeed("cbc-technology-ca")
     const exclaim = getFeedDirectoryFeed("exclaim")
     const cbcArtsCa = getFeedDirectoryFeed("cbc-arts-ca")
+    const hindustanTimesIndia = getFeedDirectoryFeed("hindustan-times-india")
+    const hinduNationalPolitics = getFeedDirectoryFeed(
+      "the-hindu-national-politics"
+    )
+    const economicTimesBusiness = getFeedDirectoryFeed(
+      "economic-times-business"
+    )
+    const timesOfIndiaHealth = getFeedDirectoryFeed("times-of-india-health")
+    const zeeScience = getFeedDirectoryFeed("zee-science-environment")
+    const espncricinfoIndia = getFeedDirectoryFeed("espncricinfo-india")
+    const gadgets360 = getFeedDirectoryFeed("gadgets-360")
+    const bollywoodHungama = getFeedDirectoryFeed("bollywood-hungama")
+    const indianVideoGamer = getFeedDirectoryFeed("indian-video-gamer")
 
     expect(nyt).toBeDefined()
     expect(nbc).toBeDefined()
@@ -2963,6 +3749,15 @@ describe("feed directory catalog", () => {
     expect(cbcTechnologyCa).toBeDefined()
     expect(exclaim).toBeDefined()
     expect(cbcArtsCa).toBeDefined()
+    expect(hindustanTimesIndia).toBeDefined()
+    expect(hinduNationalPolitics).toBeDefined()
+    expect(economicTimesBusiness).toBeDefined()
+    expect(timesOfIndiaHealth).toBeDefined()
+    expect(zeeScience).toBeDefined()
+    expect(espncricinfoIndia).toBeDefined()
+    expect(gadgets360).toBeDefined()
+    expect(bollywoodHungama).toBeDefined()
+    expect(indianVideoGamer).toBeDefined()
     expect(
       isDirectoryFeedSubscribed(nyt!, [
         "http://www.nytimes.com/services/xml/rss/nyt/National.xml",
@@ -3250,6 +4045,51 @@ describe("feed directory catalog", () => {
         "http://rss.cbc.ca/lineup/arts.xml",
       ])
     ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(hindustanTimesIndia!, [
+        "http://feeds.hindustantimes.com/HT-India",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(hinduNationalPolitics!, [
+        "http://www.thehindu.com/news/national/?service=rss",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(economicTimesBusiness!, [
+        "http://economictimes.indiatimes.com/rssfeedsdefault.cms",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(timesOfIndiaHealth!, [
+        "http://timesofindia.indiatimes.com/rssfeeds/2886714.cms",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(zeeScience!, [
+        "http://zeenews.india.com/rss/science-technology-news.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(espncricinfoIndia!, [
+        "http://www.espncricinfo.com/rss/content/story/feeds/6.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(gadgets360!, [
+        "http://feeds.feedburner.com/NDTV-Tech",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(bollywoodHungama!, [
+        "http://www.bollywoodhungama.com/rss/news.xml",
+      ])
+    ).toBe(true)
+    expect(
+      isDirectoryFeedSubscribed(indianVideoGamer!, [
+        "http://www.pcquest.com/rss-2-2/?cat_slug=games",
+      ])
+    ).toBe(true)
   })
 
   it("normalizes stored HTTP URLs before matching", () => {
@@ -3310,9 +4150,6 @@ describe("feed directory catalog", () => {
     )
     expect(directoryUrls).not.toContain(
       "http://www.business-standard.com/rss/latest.rss"
-    )
-    expect(directoryUrls).not.toContain(
-      "http://www.business-standard.com/rss/home_page_top_stories.rss"
     )
     expect(directoryUrls).not.toContain("http://www.health.harvard.edu/rss.php")
     expect(directoryUrls).not.toContain(
@@ -3519,5 +4356,21 @@ describe("feed directory catalog", () => {
     expect(directoryUrls).not.toContain("http://blogs.etcanada.com/feed/")
     expect(directoryUrls).not.toContain("http://www.hgtv.ca/rss.ashx")
     expect(directoryUrls).not.toContain("http://feeds.feedburner.com/thescenemag")
+    expect(directoryUrls.some((url) => url.includes("telegraphindia.com/feeds/rss.jsp"))).toBe(false)
+    expect(directoryUrls.some((url) => url.includes("sify.com/rss2/"))).toBe(false)
+    expect(directoryUrls.some((url) => url.includes("indiatoday.feedsportal.com"))).toBe(false)
+    expect(directoryUrls).not.toContain("http://www.livemint.com/rss/consumer")
+    expect(directoryUrls).not.toContain(
+      "http://www.femina.in/feeds/feeds-fitness.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.femina.in/feeds/feeds-lifestyle.xml"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://www.thehindu.com/news/international/south-asia/?service=rss"
+    )
+    expect(directoryUrls).not.toContain(
+      "http://zeenews.india.com/rss/india-national-news.xml"
+    )
   })
 })

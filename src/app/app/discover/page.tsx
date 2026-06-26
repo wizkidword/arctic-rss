@@ -61,10 +61,14 @@ const countryShortcuts = [
     id: "ca",
     label: "CA",
   },
+  {
+    id: "in",
+    label: "IN",
+  },
 ] as const
 
 function getCategoryKind(categoryId: string) {
-  return categoryId.replace(/^(?:ca|us)-/, "") as keyof typeof categoryIcons
+  return categoryId.replace(/^(?:ca|in|us)-/, "") as keyof typeof categoryIcons
 }
 
 export default async function DiscoverPage({
