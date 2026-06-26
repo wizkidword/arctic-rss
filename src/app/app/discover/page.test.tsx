@@ -177,46 +177,19 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("Financial Post")
     expect(markup).toContain("COGconnected")
     expect(markup).toContain("LaineyGossip")
-    expect(markup).toContain('<nav aria-label="Feed categories"')
-    expect(markup.match(/aria-current="page"/g)).toHaveLength(1)
+    expect(markup).toContain('<nav aria-label="Nations"')
+    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(2)
+    expect(markup).toContain('href="/app/discover#directory-country-us"')
+    expect(markup).toContain('href="/app/discover#directory-country-ca"')
+    expect(markup).toContain('id="directory-country-us"')
+    expect(markup).toContain('id="directory-country-ca"')
+    expect(markup).toContain('aria-label="US feed categories"')
+    expect(markup).toContain('aria-label="CA feed categories"')
+    expect(markup).not.toContain("/app/discover?category=us-politics")
+    expect(markup).not.toContain("/app/discover?category=ca-general")
+    expect(markup.match(/aria-current="page"/g) ?? []).toHaveLength(0)
     expect(markup).toContain(
-      'href="/app/discover?category=us-general#directory-category-us-general" aria-current="page"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=us-politics#directory-category-us-politics"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=us-business#directory-category-us-business"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=us-health#directory-category-us-health"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=us-science#directory-category-us-science"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=us-sports#directory-category-us-sports"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=us-tech#directory-category-us-tech"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=us-entertainment#directory-category-us-entertainment"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=us-gaming#directory-category-us-gaming"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=ca-general#directory-category-ca-general"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=ca-gaming#directory-category-ca-gaming"'
-    )
-    expect(markup).toContain(
-      'href="/app/discover?category=ca-entertainment#directory-category-ca-entertainment"'
-    )
-    expect(markup).toContain(
-      "grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+      "grid scroll-mt-4 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
     )
     expect(markup).toContain("min-h-32")
     expect(markup).toContain("bg-sky-50 text-sky-700")
@@ -293,279 +266,7 @@ describe("DiscoverPage", () => {
     )
   })
 
-  it("marks US Politics in navigation without opening it by default", async () => {
-    const markup = renderToStaticMarkup(
-      await DiscoverPage({
-        searchParams: Promise.resolve({ category: "us-politics" }),
-      })
-    )
-    const detailTags = markup.match(/<details[^>]*>/g) ?? []
-
-    expect(markup).toContain(
-      'href="/app/discover?category=us-politics#directory-category-us-politics" aria-current="page"'
-    )
-    expect(detailTags).toHaveLength(18)
-    expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).not.toContain("open")
-    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).not.toContain("open")
-    expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).not.toContain("open")
-    expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).not.toContain("open")
-    expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).not.toContain("open")
-    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).not.toContain("open")
-    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
-    expect(detailTags[6]).not.toContain("open")
-    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
-    expect(detailTags[7]).not.toContain("open")
-    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
-    expect(detailTags[8]).not.toContain("open")
-    expect(markup).toContain("Politico Magazine")
-    expect(markup).toContain("NPR - Politics")
-  })
-
-  it("marks US Business in navigation without opening it by default", async () => {
-    const markup = renderToStaticMarkup(
-      await DiscoverPage({
-        searchParams: Promise.resolve({ category: "us-business" }),
-      })
-    )
-    const detailTags = markup.match(/<details[^>]*>/g) ?? []
-
-    expect(markup).toContain(
-      'href="/app/discover?category=us-business#directory-category-us-business" aria-current="page"'
-    )
-    expect(detailTags).toHaveLength(18)
-    expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).not.toContain("open")
-    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).not.toContain("open")
-    expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).not.toContain("open")
-    expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).not.toContain("open")
-    expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).not.toContain("open")
-    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).not.toContain("open")
-    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
-    expect(detailTags[6]).not.toContain("open")
-    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
-    expect(detailTags[7]).not.toContain("open")
-    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
-    expect(detailTags[8]).not.toContain("open")
-    expect(markup).toContain("Wall Street Journal - U.S. Business")
-    expect(markup).toContain("Bloomberg Law")
-  })
-
-  it("marks US Health in navigation without opening it by default", async () => {
-    const markup = renderToStaticMarkup(
-      await DiscoverPage({
-        searchParams: Promise.resolve({ category: "us-health" }),
-      })
-    )
-    const detailTags = markup.match(/<details[^>]*>/g) ?? []
-
-    expect(markup).toContain(
-      'href="/app/discover?category=us-health#directory-category-us-health" aria-current="page"'
-    )
-    expect(detailTags).toHaveLength(18)
-    expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).not.toContain("open")
-    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).not.toContain("open")
-    expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).not.toContain("open")
-    expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).not.toContain("open")
-    expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).not.toContain("open")
-    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).not.toContain("open")
-    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
-    expect(detailTags[6]).not.toContain("open")
-    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
-    expect(detailTags[7]).not.toContain("open")
-    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
-    expect(detailTags[8]).not.toContain("open")
-    expect(markup).toContain("CNN Health")
-    expect(markup).toContain("NPR - Health")
-  })
-
-  it("marks US Science in navigation without opening it by default", async () => {
-    const markup = renderToStaticMarkup(
-      await DiscoverPage({
-        searchParams: Promise.resolve({ category: "us-science" }),
-      })
-    )
-    const detailTags = markup.match(/<details[^>]*>/g) ?? []
-
-    expect(markup).toContain(
-      'href="/app/discover?category=us-science#directory-category-us-science" aria-current="page"'
-    )
-    expect(detailTags).toHaveLength(18)
-    expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).not.toContain("open")
-    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).not.toContain("open")
-    expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).not.toContain("open")
-    expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).not.toContain("open")
-    expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).not.toContain("open")
-    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).not.toContain("open")
-    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
-    expect(detailTags[6]).not.toContain("open")
-    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
-    expect(detailTags[7]).not.toContain("open")
-    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
-    expect(detailTags[8]).not.toContain("open")
-    expect(markup).toContain("WIRED - Science")
-    expect(markup).toContain("NPR - Science")
-  })
-
-  it("marks US Sports in navigation without opening it by default", async () => {
-    const markup = renderToStaticMarkup(
-      await DiscoverPage({
-        searchParams: Promise.resolve({ category: "us-sports" }),
-      })
-    )
-    const detailTags = markup.match(/<details[^>]*>/g) ?? []
-
-    expect(markup).toContain(
-      'href="/app/discover?category=us-sports#directory-category-us-sports" aria-current="page"'
-    )
-    expect(detailTags).toHaveLength(18)
-    expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).not.toContain("open")
-    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).not.toContain("open")
-    expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).not.toContain("open")
-    expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).not.toContain("open")
-    expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).not.toContain("open")
-    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).not.toContain("open")
-    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
-    expect(detailTags[6]).not.toContain("open")
-    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
-    expect(detailTags[7]).not.toContain("open")
-    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
-    expect(detailTags[8]).not.toContain("open")
-    expect(markup).toContain("ESPN - Top News")
-    expect(markup).toContain("Sports Illustrated")
-  })
-
-  it("marks US Tech in navigation without opening it by default", async () => {
-    const markup = renderToStaticMarkup(
-      await DiscoverPage({
-        searchParams: Promise.resolve({ category: "us-tech" }),
-      })
-    )
-    const detailTags = markup.match(/<details[^>]*>/g) ?? []
-
-    expect(markup).toContain(
-      'href="/app/discover?category=us-tech#directory-category-us-tech" aria-current="page"'
-    )
-    expect(detailTags).toHaveLength(18)
-    expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).not.toContain("open")
-    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).not.toContain("open")
-    expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).not.toContain("open")
-    expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).not.toContain("open")
-    expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).not.toContain("open")
-    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).not.toContain("open")
-    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
-    expect(detailTags[6]).not.toContain("open")
-    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
-    expect(detailTags[7]).not.toContain("open")
-    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
-    expect(detailTags[8]).not.toContain("open")
-    expect(markup).toContain("TechCrunch")
-    expect(markup).toContain("The Verge - Tech")
-  })
-
-  it("marks US Entertainment in navigation without opening it by default", async () => {
-    const markup = renderToStaticMarkup(
-      await DiscoverPage({
-        searchParams: Promise.resolve({ category: "us-entertainment" }),
-      })
-    )
-    const detailTags = markup.match(/<details[^>]*>/g) ?? []
-
-    expect(markup).toContain(
-      'href="/app/discover?category=us-entertainment#directory-category-us-entertainment" aria-current="page"'
-    )
-    expect(detailTags).toHaveLength(18)
-    expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).not.toContain("open")
-    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).not.toContain("open")
-    expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).not.toContain("open")
-    expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).not.toContain("open")
-    expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).not.toContain("open")
-    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).not.toContain("open")
-    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
-    expect(detailTags[6]).not.toContain("open")
-    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
-    expect(detailTags[7]).not.toContain("open")
-    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
-    expect(detailTags[8]).not.toContain("open")
-    expect(markup).toContain("Variety")
-    expect(markup).toContain("Deadline")
-  })
-
-  it("marks US Gaming in navigation without opening it by default", async () => {
-    const markup = renderToStaticMarkup(
-      await DiscoverPage({
-        searchParams: Promise.resolve({ category: "us-gaming" }),
-      })
-    )
-    const detailTags = markup.match(/<details[^>]*>/g) ?? []
-
-    expect(markup).toContain(
-      'href="/app/discover?category=us-gaming#directory-category-us-gaming" aria-current="page"'
-    )
-    expect(detailTags).toHaveLength(18)
-    expect(detailTags[0]).toContain('id="directory-category-us-general"')
-    expect(detailTags[0]).not.toContain("open")
-    expect(detailTags[1]).toContain('id="directory-category-us-politics"')
-    expect(detailTags[1]).not.toContain("open")
-    expect(detailTags[2]).toContain('id="directory-category-us-business"')
-    expect(detailTags[2]).not.toContain("open")
-    expect(detailTags[3]).toContain('id="directory-category-us-health"')
-    expect(detailTags[3]).not.toContain("open")
-    expect(detailTags[4]).toContain('id="directory-category-us-science"')
-    expect(detailTags[4]).not.toContain("open")
-    expect(detailTags[5]).toContain('id="directory-category-us-sports"')
-    expect(detailTags[5]).not.toContain("open")
-    expect(detailTags[6]).toContain('id="directory-category-us-tech"')
-    expect(detailTags[6]).not.toContain("open")
-    expect(detailTags[7]).toContain('id="directory-category-us-entertainment"')
-    expect(detailTags[7]).not.toContain("open")
-    expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
-    expect(detailTags[8]).not.toContain("open")
-    expect(markup).toContain("IGN")
-    expect(markup).toContain("Kotaku")
-  })
-
-  it("marks CA Gaming in navigation without opening it by default", async () => {
+  it("keeps only country shortcuts in the top navigation", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
         searchParams: Promise.resolve({ category: "ca-gaming" }),
@@ -573,9 +274,10 @@ describe("DiscoverPage", () => {
     )
     const detailTags = markup.match(/<details[^>]*>/g) ?? []
 
-    expect(markup).toContain(
-      'href="/app/discover?category=ca-gaming#directory-category-ca-gaming" aria-current="page"'
-    )
+    expect(markup.match(/href="\/app\/discover#directory-country-/g)).toHaveLength(2)
+    expect(markup).toContain('href="/app/discover#directory-country-us"')
+    expect(markup).toContain('href="/app/discover#directory-country-ca"')
+    expect(markup).not.toContain("?category=ca-gaming")
     expect(detailTags).toHaveLength(18)
     expect(detailTags[8]).toContain('id="directory-category-us-gaming"')
     expect(detailTags[8]).not.toContain("open")
@@ -593,9 +295,9 @@ describe("DiscoverPage", () => {
     )
 
     expect(markup).toContain("US General")
-    expect(markup).toContain(
-      'href="/app/discover?category=us-general#directory-category-us-general" aria-current="page"'
-    )
+    expect(markup).toContain('href="/app/discover#directory-country-us"')
+    expect(markup).toContain('href="/app/discover#directory-country-ca"')
+    expect(markup.match(/aria-current="page"/g) ?? []).toHaveLength(0)
     expect(markup).toContain("27 feeds")
   })
 

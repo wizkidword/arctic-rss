@@ -21,7 +21,6 @@ import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import {
   feedDirectoryCategories,
-  getFeedDirectoryCategory,
   isDirectoryFeedSubscribed,
   listFeedDirectoryFeeds,
 } from "@/lib/feed-directory"
@@ -53,6 +52,17 @@ const categoryIconStyles = {
   tech: "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300",
 }
 
+const countryShortcuts = [
+  {
+    id: "us",
+    label: "US",
+  },
+  {
+    id: "ca",
+    label: "CA",
+  },
+] as const
+
 function getCategoryKind(categoryId: string) {
   return categoryId.replace(/^(?:ca|us)-/, "") as keyof typeof categoryIcons
 }
@@ -62,19 +72,12 @@ export default async function DiscoverPage({
 }: {
   searchParams: Promise<{ category?: string | string[] }>
 }) {
+  void searchParams
+
   const session = await auth()
 
   if (!session?.user?.id) {
     redirect("/login")
-  }
-
-  const query = await searchParams
-  const selectedCategory = getFeedDirectoryCategory(
-    firstSearchParam(query.category)
-  )
-
-  if (!selectedCategory) {
-    throw new Error("Feed directory has no categories.")
   }
 
   const [folders, subscriptions] = await Promise.all([
@@ -89,6 +92,12 @@ export default async function DiscoverPage({
     (count, group) => count + group.feeds.length,
     0
   )
+  const countryGroups = countryShortcuts.map((country) => ({
+    ...country,
+    categoryGroups: categoryGroups.filter(({ category }) =>
+      category.id.startsWith(`${country.id}-`)
+    ),
+  }))
   const subscriptionUrls = subscriptions.map(
     (subscription) => subscription.feedUrl
   )
@@ -111,119 +120,119 @@ export default async function DiscoverPage({
         </div>
 
         <nav
-          aria-label="Feed categories"
+          aria-label="Nations"
           className="flex flex-wrap items-center gap-2"
         >
-          {feedDirectoryCategories.map((category) => (
+          {countryGroups.map((country) => (
             <Link
-              aria-current={
-                category.id === selectedCategory.id ? "page" : undefined
-              }
               className={cn(
                 buttonVariants({
                   size: "sm",
-                  variant:
-                    category.id === selectedCategory.id
-                      ? "secondary"
-                      : "outline",
+                  variant: "outline",
                 })
               )}
-              href={`/app/discover?category=${encodeURIComponent(category.id)}#directory-category-${category.id}`}
-              key={category.id}
+              href={`/app/discover#directory-country-${country.id}`}
+              key={country.id}
             >
-              {category.label}
+              {country.label}
             </Link>
           ))}
         </nav>
       </section>
 
-      <section
+      <div
         aria-label="Feed directory categories"
-        className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+        className="flex flex-col gap-4"
       >
-        {categoryGroups.map(({ category, feeds }) => {
-          const categoryKind = getCategoryKind(category.id)
-          const CategoryIcon =
-            categoryIcons[categoryKind] ?? CompassIcon
-          const iconStyle =
-            categoryIconStyles[categoryKind] ?? "bg-muted text-muted-foreground"
+        {countryGroups.map((country) => (
+          <section
+            aria-label={`${country.label} feed categories`}
+            className="grid scroll-mt-4 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+            id={`directory-country-${country.id}`}
+            key={country.id}
+          >
+            {country.categoryGroups.map(({ category, feeds }) => {
+              const categoryKind = getCategoryKind(category.id)
+              const CategoryIcon =
+                categoryIcons[categoryKind] ?? CompassIcon
+              const iconStyle =
+                categoryIconStyles[categoryKind] ??
+                "bg-muted text-muted-foreground"
 
-          return (
-            <details
-              className="group overflow-hidden rounded-lg border bg-card shadow-xs transition-colors hover:border-foreground/15"
-              id={`directory-category-${category.id}`}
-              key={category.id}
-            >
-              <summary className="flex min-h-32 cursor-pointer list-none flex-col justify-between gap-4 p-4 outline-none transition-colors hover:bg-muted/35 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                <div className="flex min-w-0 items-start gap-3">
-                  <span
-                    className={cn(
-                      "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md",
-                      iconStyle
-                    )}
-                  >
-                    <CategoryIcon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <h2 className="font-heading text-base font-medium leading-6">
-                      {category.label}
-                    </h2>
-                    <p className="text-sm leading-5 text-muted-foreground">
-                      {category.description}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <Badge variant="secondary">
-                    {feeds.length} {feeds.length === 1 ? "feed" : "feeds"}
-                  </Badge>
-                  <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-                </div>
-              </summary>
-
-              <ul className="divide-y border-t">
-                {feeds.map((feed) => (
-                  <li
-                    className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4"
-                    key={feed.id}
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                        <RssIcon className="size-4" />
+              return (
+                <details
+                  className="group overflow-hidden rounded-lg border bg-card shadow-xs transition-colors hover:border-foreground/15"
+                  id={`directory-category-${category.id}`}
+                  key={category.id}
+                >
+                  <summary className="flex min-h-32 cursor-pointer list-none flex-col justify-between gap-4 p-4 outline-none transition-colors hover:bg-muted/35 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span
+                        className={cn(
+                          "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md",
+                          iconStyle
+                        )}
+                      >
+                        <CategoryIcon className="size-4" />
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {feed.label}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {feed.source}
+                        <h2 className="font-heading text-base font-medium leading-6">
+                          {category.label}
+                        </h2>
+                        <p className="text-sm leading-5 text-muted-foreground">
+                          {category.description}
                         </p>
                       </div>
                     </div>
 
-                    <div className="w-full shrink-0 sm:w-auto sm:pl-4 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:min-h-9 sm:[&_[data-slot=button]]:w-auto sm:[&_[data-slot=button]]:min-h-7">
-                      <FeedDirectorySubscribeButton
-                        feedId={feed.id}
-                        feedLabel={feed.label}
-                        folders={pickerFolders}
-                        subscribed={isDirectoryFeedSubscribed(
-                          feed,
-                          subscriptionUrls
-                        )}
-                      />
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant="secondary">
+                        {feeds.length} {feeds.length === 1 ? "feed" : "feeds"}
+                      </Badge>
+                      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )
-        })}
-      </section>
+                  </summary>
+
+                  <ul className="divide-y border-t">
+                    {feeds.map((feed) => (
+                      <li
+                        className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4"
+                        key={feed.id}
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                            <RssIcon className="size-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {feed.label}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {feed.source}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="w-full shrink-0 sm:w-auto sm:pl-4 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:min-h-9 sm:[&_[data-slot=button]]:w-auto sm:[&_[data-slot=button]]:min-h-7">
+                          <FeedDirectorySubscribeButton
+                            feedId={feed.id}
+                            feedLabel={feed.label}
+                            folders={pickerFolders}
+                            subscribed={isDirectoryFeedSubscribed(
+                              feed,
+                              subscriptionUrls
+                            )}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )
+            })}
+          </section>
+        ))}
+      </div>
     </div>
   )
-}
-
-function firstSearchParam(value?: string | string[]) {
-  return Array.isArray(value) ? value[0] : value
 }
