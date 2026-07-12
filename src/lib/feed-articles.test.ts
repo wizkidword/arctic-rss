@@ -1,0 +1,151 @@
+import { describe, expect, it } from "vitest"
+
+import { parseFeedArticles } from "./feed-articles"
+
+describe("feed article parsing", () => {
+  it("normalizes RSS items into article records", () => {
+    const articles = parseFeedArticles(
+      `<?xml version="1.0"?>
+      <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss/">
+        <channel>
+          <title>Example Feed</title>
+          <item>
+            <guid isPermaLink="false">item-1</guid>
+            <title>Hello RSS</title>
+            <link>https://example.com/posts/hello</link>
+            <dc:creator>Reporter</dc:creator>
+            <description><![CDATA[<p>Short <strong>summary</strong>.</p>]]></description>
+            <content:encoded><![CDATA[<p>Full <em>article</em> text.</p><img src="https://example.com/image.jpg" />]]></content:encoded>
+            <media:content url="https://example.com/media.jpg" medium="image" />
+            <pubDate>Mon, 22 Jun 2026 10:30:00 GMT</pubDate>
+          </item>
+        </channel>
+      </rss>`,
+      "https://example.com/rss.xml"
+    )
+
+    expect(articles).toEqual([
+      expect.objectContaining({
+        author: "Reporter",
+        contentText: "Full article text.",
+        externalId: "item-1",
+        imageUrl: "https://example.com/media.jpg",
+        publishedAt: new Date("2026-06-22T10:30:00.000Z"),
+        summary: "Short summary.",
+        title: "Hello RSS",
+        url: "https://example.com/posts/hello",
+      }),
+    ])
+  })
+
+  it("uses RSS media thumbnails as article images", () => {
+    const articles = parseFeedArticles(
+      `<?xml version="1.0"?>
+      <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+        <channel>
+          <item>
+            <guid isPermaLink="false">wired-1</guid>
+            <title>WIRED Science</title>
+            <link>https://www.wired.com/story/example/</link>
+            <description>A science story.</description>
+            <media:content/>
+            <media:thumbnail url="https://media.wired.com/photos/example/master/pass/science.jpg" width="2400" height="1600"/>
+          </item>
+        </channel>
+      </rss>`,
+      "https://www.wired.com/feed/category/science/latest/rss"
+    )
+
+    expect(articles[0]).toEqual(
+      expect.objectContaining({
+        imageUrl: "https://media.wired.com/photos/example/master/pass/science.jpg",
+      })
+    )
+  })
+
+  it("normalizes Atom entries into article records", () => {
+    const articles = parseFeedArticles(
+      `<?xml version="1.0"?>
+      <feed xmlns="http://www.w3.org/2005/Atom">
+        <title>Example Atom</title>
+        <entry>
+          <id>tag:example.com,2026:atom-1</id>
+          <title>Atom Entry</title>
+          <link rel="alternate" href="/posts/atom-entry" />
+          <author><name>Atom Author</name></author>
+          <summary>Atom summary</summary>
+          <content type="html"><![CDATA[<p>Atom full text.</p>]]></content>
+          <updated>2026-06-22T11:00:00Z</updated>
+        </entry>
+      </feed>`,
+      "https://example.com/atom.xml"
+    )
+
+    expect(articles).toEqual([
+      expect.objectContaining({
+        author: "Atom Author",
+        contentText: "Atom full text.",
+        externalId: "tag:example.com,2026:atom-1",
+        publishedAt: new Date("2026-06-22T11:00:00.000Z"),
+        summary: "Atom summary",
+        title: "Atom Entry",
+        url: "https://example.com/posts/atom-entry",
+      }),
+    ])
+  })
+
+  it("normalizes YouTube Atom entries with thumbnails and descriptions", () => {
+    const articles = parseFeedArticles(
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+        xmlns:media="http://search.yahoo.com/mrss/"
+        xmlns="http://www.w3.org/2005/Atom">
+        <title>YouTube Channel</title>
+        <entry>
+          <id>yt:video:dQw4w9WgXcQ</id>
+          <yt:videoId>dQw4w9WgXcQ</yt:videoId>
+          <yt:channelId>UC_x5XG1OV2P6uZZ5FSM9Ttw</yt:channelId>
+          <title>Video Entry</title>
+          <link rel="alternate" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"/>
+          <author><name>Example Channel</name></author>
+          <published>2026-07-01T12:00:00+00:00</published>
+          <media:group>
+            <media:title>Video Entry</media:title>
+            <media:description>A useful video from the channel.</media:description>
+            <media:thumbnail url="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg" width="480" height="360"/>
+          </media:group>
+        </entry>
+      </feed>`,
+      "https://www.youtube.com/feeds/videos.xml?channel_id=UC_x5XG1OV2P6uZZ5FSM9Ttw"
+    )
+
+    expect(articles).toEqual([
+      expect.objectContaining({
+        author: "Example Channel",
+        externalId: "yt:video:dQw4w9WgXcQ",
+        imageUrl: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+        publishedAt: new Date("2026-07-01T12:00:00.000Z"),
+        summary: "A useful video from the channel.",
+        title: "Video Entry",
+        url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      }),
+    ])
+  })
+
+  it("falls back to a stable external id when feed items omit ids", () => {
+    const [article] = parseFeedArticles(
+      `<?xml version="1.0"?>
+      <rss version="2.0">
+        <channel>
+          <item>
+            <title>Untitled ID</title>
+            <link>https://example.com/no-guid</link>
+          </item>
+        </channel>
+      </rss>`,
+      "https://example.com/rss.xml"
+    )
+
+    expect(article.externalId).toBe("https://example.com/no-guid")
+  })
+})

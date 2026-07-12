@@ -1,0 +1,4 @@
+Contact: mailto:arcticrss@gmail.com
+Expires: 2027-06-26T23:59:59Z
+Preferred-Languages: en
+Canonical: https://arcticrss.com/.well-known/security.txt
