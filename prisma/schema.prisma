@@ -281,7 +281,7 @@ model Folder {
   updatedAt DateTime @updatedAt
 
   user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscriptions    FeedSubscription[]
+  subscriptions    FeedSubscription[]      @relation("FeedSubscriptionFolder")
   smartDigestRules SmartDigestRuleFolder[]
 
   @@unique([userId, id])
@@ -329,7 +329,7 @@ model FeedSubscription {
 
   user             User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
   feed             Feed                          @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  folder           Folder?                       @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  folder           Folder?                       @relation("FeedSubscriptionFolder", fields: [userId, folderId], references: [userId, id], onDelete: Restrict)
   smartDigestRules SmartDigestRuleSubscription[]
 
   @@unique([userId, feedId])

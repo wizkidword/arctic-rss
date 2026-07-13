@@ -23,6 +23,9 @@ those details in the private operator inventory.
 - The production database has committed Prisma migrations applied. The release
   procedure validates a custom-format backup with `pg_restore -l` before each
   swap and retains the prior release directory for rollback.
+- Database-level integrity guards prevent cross-user folder links, malformed
+  collection items, and case-only duplicate account emails; the matching folder
+  deletion operation is transactional.
 
 ## Delivery and verification controls
 

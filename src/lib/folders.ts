@@ -7,7 +7,7 @@ type FolderLookup = {
   id: string
 }
 
-type FolderStore = {
+type FolderMutationStore = {
   feedSubscription: {
     findFirst(args: {
       select: { id: true }
@@ -60,6 +60,12 @@ type FolderStore = {
       }
     }): Promise<unknown>
   }
+}
+
+type FolderStore = FolderMutationStore & {
+  $transaction<T>(
+    callback: (transaction: FolderMutationStore) => Promise<T>
+  ): Promise<T>
 }
 
 export type FolderNavItem = {
@@ -266,29 +272,31 @@ export async function deleteFolderWithClient({
   store: FolderStore
   userId: string
 }) {
-  await assertFolderBelongsToUser({
-    folderId,
-    store,
-    userId,
-  })
-
-  const result = await store.feedSubscription.updateMany({
-    data: {
-      folderId: null,
-    },
-    where: {
+  return store.$transaction(async (transaction) => {
+    await assertFolderBelongsToUser({
       folderId,
+      store: transaction,
       userId,
-    },
-  })
+    })
 
-  await store.folder.delete({
-    where: { id: folderId },
-  })
+    const result = await transaction.feedSubscription.updateMany({
+      data: {
+        folderId: null,
+      },
+      where: {
+        folderId,
+        userId,
+      },
+    })
 
-  return {
-    movedSubscriptions: result.count,
-  }
+    await transaction.folder.delete({
+      where: { id: folderId },
+    })
+
+    return {
+      movedSubscriptions: result.count,
+    }
+  })
 }
 
 export async function moveSubscriptionToFolder({
@@ -315,7 +323,7 @@ export async function moveSubscriptionToFolderWithClient({
   userId,
 }: {
   folderId: string | null
-  store: FolderStore
+  store: FolderMutationStore
   subscriptionId: string
   userId: string
 }) {
@@ -361,7 +369,7 @@ async function assertFolderBelongsToUser({
   userId,
 }: {
   folderId: string
-  store: FolderStore
+  store: FolderMutationStore
   userId: string
 }) {
   const folder = await store.folder.findFirst({
@@ -382,7 +390,7 @@ async function assertSubscriptionBelongsToUser({
   subscriptionId,
   userId,
 }: {
-  store: FolderStore
+  store: FolderMutationStore
   subscriptionId: string
   userId: string
 }) {

@@ -16,7 +16,7 @@ import {
 } from "./folders"
 
 function createFolderStore() {
-  return {
+  const transaction = {
     feedSubscription: {
       findFirst: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
@@ -28,6 +28,11 @@ function createFolderStore() {
       findFirst: vi.fn(),
       update: vi.fn().mockResolvedValue({ id: "folder-1", name: "Science" }),
     },
+  }
+
+  return {
+    ...transaction,
+    $transaction: vi.fn(async (callback) => callback(transaction)),
   }
 }
 
@@ -109,6 +114,7 @@ describe("folders", () => {
     })
 
     expect(result).toEqual({ movedSubscriptions: 2 })
+    expect(store.$transaction).toHaveBeenCalledTimes(1)
     expect(store.feedSubscription.updateMany).toHaveBeenCalledWith({
       data: {
         folderId: null,
@@ -121,6 +127,22 @@ describe("folders", () => {
     expect(store.folder.delete).toHaveBeenCalledWith({
       where: { id: "folder-1" },
     })
+  })
+
+  it("does not alter subscriptions when the folder is not owned by the user", async () => {
+    const store = createFolderStore()
+    store.folder.findFirst.mockResolvedValue(null)
+
+    await expect(
+      deleteFolderWithClient({
+        folderId: "folder-1",
+        store,
+        userId: "user-1",
+      })
+    ).rejects.toThrow("Folder not found.")
+
+    expect(store.feedSubscription.updateMany).not.toHaveBeenCalled()
+    expect(store.folder.delete).not.toHaveBeenCalled()
   })
 
   it("moves a subscription into a folder owned by the current user", async () => {
