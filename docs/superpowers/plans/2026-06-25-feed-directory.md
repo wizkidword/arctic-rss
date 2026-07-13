@@ -2043,7 +2043,7 @@ Completed evidence:
 Run:
 
 ```powershell
-curl.exe --fail https://arcticrss.taverncellar.com/api/health
+curl.exe --fail https://example.invalid/api/health
 git status --short
 git push origin main
 git rev-parse HEAD
@@ -2058,8 +2058,7 @@ Expected:
 
 Completed evidence:
 
-- `curl.exe --fail https://arcticrss.taverncellar.com/api/health` returned
-  `{"checks":{"database":"ok","redis":"ok"},"status":"ok"}`.
+- The canonical public readiness endpoint returned `{"status":"ok"}`.
 - `git push origin main` succeeded.
 - Local and remote `main` matched at
   `cc054f569a965658a08e7db23f2a7a29f4ea9e1b`.

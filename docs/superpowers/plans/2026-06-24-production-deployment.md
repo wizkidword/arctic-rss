@@ -2,7 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
-**Goal:** Harden, document, and publicly validate Arctic RSS as a Docker-based self-hosted application at `https://arcticrss.taverncellar.com`.
+**Goal:** Harden, document, and publicly validate Arctic RSS as a Docker-based
+self-hosted application at its reviewed canonical public origin.
+
+> Archived planning record: retired hostnames, tunnel names, account paths, and
+> ports have been replaced with placeholders.
 
 **Architecture:** The existing Compose stack remains the application runtime, with a dependency-aware health route and loopback-only host ports. The current Windows host continues using its shared locally-managed named Cloudflare Tunnel, while the optional Compose profile supports portable token-based tunnel deployments.
 
@@ -168,15 +172,15 @@ Mark the original MVP milestones complete and link to `DEPLOYMENT.md`.
 ### Task 4: Active Named Tunnel Routing
 
 **Files outside repository:**
-- Modify: `C:\Users\Elwynn\.cloudflared\config.yml`
+- Modify: `<private-cloudflared-config-path>`
 
 - [x] **Step 1: Preserve and extend ingress configuration**
 
 Insert:
 
 ```yaml
-  - hostname: arcticrss.taverncellar.com
-    service: http://localhost:3003
+  - hostname: CANONICAL_HOSTNAME
+    service: http://localhost:APP_PORT
 ```
 
 after the existing `erp.taverncellar.com` rule and before the catch-all.
@@ -186,8 +190,8 @@ after the existing `erp.taverncellar.com` rule and before the catch-all.
 Run:
 
 ```powershell
-cloudflared tunnel --config C:\Users\Elwynn\.cloudflared\config.yml ingress validate
-cloudflared tunnel --config C:\Users\Elwynn\.cloudflared\config.yml ingress rule https://arcticrss.taverncellar.com
+cloudflared tunnel --config <private-cloudflared-config-path> ingress validate
+cloudflared tunnel --config <private-cloudflared-config-path> ingress rule https://CANONICAL_HOSTNAME
 ```
 
 Expected: configuration is valid and the new hostname maps to
@@ -198,7 +202,7 @@ Expected: configuration is valid and the new hostname maps to
 Run:
 
 ```powershell
-cloudflared tunnel route dns arctic-tavern-prod arcticrss.taverncellar.com
+cloudflared tunnel route dns TUNNEL_NAME CANONICAL_HOSTNAME
 ```
 
 Do not use `--overwrite-dns` unless an existing conflicting record is first
@@ -209,7 +213,7 @@ identified and reviewed.
 Stop the process using the exact current config and tunnel, then relaunch:
 
 ```powershell
-cloudflared tunnel --config C:\Users\Elwynn\.cloudflared\config.yml run arctic-tavern-prod
+cloudflared tunnel --config <private-cloudflared-config-path> run TUNNEL_NAME
 ```
 
 Keep it hidden and verify all three public hostnames still match their ingress
@@ -225,9 +229,9 @@ rules.
 Set:
 
 ```dotenv
-AUTH_URL="https://arcticrss.taverncellar.com"
-NEXTAUTH_URL="https://arcticrss.taverncellar.com"
-NEXT_PUBLIC_APP_URL="https://arcticrss.taverncellar.com"
+AUTH_URL="https://CANONICAL_HOSTNAME"
+NEXTAUTH_URL="https://CANONICAL_HOSTNAME"
+NEXT_PUBLIC_APP_URL="https://CANONICAL_HOSTNAME"
 AUTH_TRUST_HOST=true
 ```
 
@@ -260,9 +264,9 @@ Expected: both return HTTP `200` with database and Redis `ok`.
 Run:
 
 ```powershell
-Resolve-DnsName arcticrss.taverncellar.com
-curl.exe --fail https://arcticrss.taverncellar.com/api/health
-curl.exe --head --fail https://arcticrss.taverncellar.com/login
+Resolve-DnsName CANONICAL_HOSTNAME
+curl.exe --fail https://CANONICAL_HOSTNAME/api/health
+curl.exe --head --fail https://CANONICAL_HOSTNAME/login
 ```
 
 Expected: DNS resolves through Cloudflare, health returns `ok`, and login

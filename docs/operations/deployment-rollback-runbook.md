@@ -35,20 +35,23 @@ imports. Upload it to a staging directory beside the active release.
 1. Unpack to a new release directory.
 2. Copy the existing production `.env` into that directory without displaying
    its contents.
-3. Retain the old app directory as the rollback candidate.
-4. Switch the release directory into the active app path.
-5. Run the Compose rebuild as a separate plain SSH command to avoid
-   PowerShell/CRLF argument corruption:
+3. Validate the staged Compose file, build `web`, `worker`, and `migrate`, and
+   run the one-shot migration service. `migrate deploy` is safe when no
+   migration is pending.
+4. Retain the old app directory as the rollback candidate, then switch the
+   staged directory into the active app path.
+5. Recreate web and worker without rebuilding unrelated data services:
 
    ```bash
    cd "$APP_DIR"
-   docker compose up --build -d
+   docker compose up -d --no-deps --force-recreate web worker
    ```
 
-6. Verify:
+6. Verify liveness before readiness:
 
    ```bash
    docker compose ps
+   curl -fsS http://127.0.0.1:3000/api/live
    curl -fsS http://127.0.0.1:3000/api/health
    ```
 
@@ -69,7 +72,8 @@ the migration SQL. Do not use `prisma db push` in production.
    docker compose run --rm --no-deps worker npx prisma migrate status
    ```
 
-3. Recreate web, then worker, and run the normal health and smoke tests.
+3. Recreate web and worker, then run the normal liveness, readiness, and smoke
+   tests.
 4. For a risky change, use expand/contract: add nullable fields first,
    deploy dual-read/write code, backfill in bounded batches, then remove old
    fields in a later release.
@@ -154,10 +158,12 @@ Keep the existing `AUTH_URL` because Auth.js uses it to pin authentication
 request URLs. Legacy `NEXTAUTH_URL` and `NEXT_PUBLIC_APP_URL`, if still
 present, must match `APP_ORIGIN`; otherwise startup intentionally fails.
 
-After the normal source swap and rebuild, verify the local Docker health probe,
-public health, login, and these local header probes from the VPS:
+After the normal source swap and rebuild, verify the local Docker liveness
+probe, local readiness, public health, login, and these local header probes
+from the VPS:
 
 ```bash
+curl -fsS http://127.0.0.1:3000/api/live
 curl -fsS http://127.0.0.1:3000/api/health
 curl -sS -o /dev/null -D - \
   -H 'Host: invalid.example' \
@@ -192,12 +198,13 @@ reset with a real challenge.
 
 1. Keep the currently running failed release and its logs for diagnosis.
 2. Restore the prior app directory or prior known-good image.
-3. Rebuild only the restored release:
+3. Recreate only the restored application services:
 
    ```bash
    cd "$APP_DIR"
-   docker compose up --build -d
+   docker compose up -d --no-deps --force-recreate web worker
    docker compose ps
+   curl -fsS http://127.0.0.1:3000/api/live
    curl -fsS http://127.0.0.1:3000/api/health
    ```
 

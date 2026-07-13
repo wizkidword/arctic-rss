@@ -1122,7 +1122,7 @@ Expected JSON:
 Run:
 
 ```powershell
-curl.exe --fail https://arcticrss.taverncellar.com/api/health
+curl.exe --fail https://example.invalid/api/health
 git status --short
 git log --oneline -6
 ```

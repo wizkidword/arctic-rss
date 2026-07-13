@@ -150,4 +150,4 @@ checks, and cleanup of temporary QA data.
 Milestone 10 ends when the operational admin console satisfies the source-plan
 acceptance criteria. Milestone 11 remains production deployment documentation,
 validation, and reuse of the active Cloudflare Tunnel for
-`https://arcticrss.taverncellar.com`.
+the reviewed canonical public origin.

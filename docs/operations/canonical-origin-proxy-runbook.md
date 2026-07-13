@@ -33,17 +33,17 @@ reviewed in the Cloudflare dashboard.
 deployment retains either value, it must match `APP_ORIGIN` exactly; otherwise
 the application refuses to start.
 
-## Current Hetzner traffic path
+## Production traffic path
 
 The production web origin is loopback-bound. A separately managed
-`arctic-rss-cloudflared` connector uses the host network and is the public
-ingress. Nginx, Caddy, and Traefik are not active on this VPS. The application
-cannot safely infer whether a forwarded header was supplied by Cloudflare, so
-it does not use forwarding headers for security-sensitive URLs.
+Cloudflare connector uses the host network and is the public ingress. The
+application cannot safely infer whether a forwarded header was supplied by
+Cloudflare, so it does not use forwarding headers for security-sensitive URLs.
 
-Keep Docker's `/api/health` check on the loopback service. The application
-permits that one loopback-only health request without canonical-host redirect;
-all other request hosts must match the canonical host or an explicit alias.
+Docker uses loopback-only `/api/live` for liveness. The minimal readiness
+endpoint at `/api/health` is permitted on loopback and is safe to expose on the
+canonical public origin. All other request hosts must match the canonical host
+or an explicit alias.
 
 ## Deployment and validation
 

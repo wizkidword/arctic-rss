@@ -2,10 +2,10 @@
 
 Arctic RSS is a self-hosted RSS reader inspired by Google Reader. The current foundation includes Next.js App Router, TypeScript, Tailwind, shadcn/ui, Auth.js credentials auth, Prisma/PostgreSQL, a protected reader shell, per-user view settings, an operational admin dashboard, feed subscription discovery, RSS/Atom article ingestion, folder management, OPML import/export, on-demand article AI summaries, stored unread AI digests, Redis-backed workers, and Docker Compose.
 
-The active deployment is the private Hetzner-hosted site at
+The active deployment is the self-hosted site at
 [arcticrss.com](https://arcticrss.com). See [PROJECT.md](PROJECT.md) for the
-current operating model and [DEPLOYMENT.md](DEPLOYMENT.md) for deployment and
-recovery procedures.
+operating model and [DEPLOYMENT.md](DEPLOYMENT.md) for deployment and recovery
+procedures.
 
 ## Stack
 
@@ -83,7 +83,8 @@ Production is served through Cloudflare at
 [DEPLOYMENT.md](DEPLOYMENT.md) and [PROJECT.md](PROJECT.md) for the Hetzner
 runbook, backups, restores, upgrades, rollbacks, and health validation.
 
-The readiness endpoint is available at `/api/health`.
+The public-safe readiness endpoint is available at `/api/health`. Docker uses
+the loopback-only liveness endpoint at `/api/live`.
 
 ## Auth
 
@@ -181,7 +182,7 @@ Done:
 - Dependency-aware readiness checks for PostgreSQL and Redis
 - Loopback-only production Docker port bindings
 - Production deployment, backup, restore, upgrade, and rollback documentation
-- Private Hetzner production deployment at `arcticrss.com`
+- Self-hosted production deployment at `arcticrss.com`
 
 Status:
 

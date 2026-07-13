@@ -1806,7 +1806,7 @@ tar --exclude=.env --exclude=node_modules --exclude=.next --exclude=tmp --exclud
 Run:
 
 ```powershell
-scp -i "C:\Users\jrock\Documents\Codex\2026-06-26\we-are-continuing-work-on-arctic\work\ssh\arctic_rss_vps_ed25519" "C:\Users\jrock\Documents\Codex\2026-06-26\we-are-continuing-work-on-arctic\work\deploy\arctic-rss-source.tar.gz" root@167.233.134.252:/opt/arctic-rss/arctic-rss-source.tar.gz
+scp -i "<private-ssh-key-path>" "<release-archive-path>" deploy@VPS_HOST:$APP_DIR/arctic-rss-source.tar.gz
 ```
 
 - [ ] **Step 4: Deploy preserving `.env`**
@@ -1814,7 +1814,7 @@ scp -i "C:\Users\jrock\Documents\Codex\2026-06-26\we-are-continuing-work-on-arct
 Run:
 
 ```powershell
-ssh -i "C:\Users\jrock\Documents\Codex\2026-06-26\we-are-continuing-work-on-arctic\work\ssh\arctic_rss_vps_ed25519" root@167.233.134.252 "set -euo pipefail; cd /opt/arctic-rss; rm -rf app.next app.previous; mkdir app.next; tar -xzf arctic-rss-source.tar.gz -C app.next; cp app/.env app.next/.env; mv app app.previous; mv app.next app; cd app; docker compose up --build -d; sleep 8; docker compose ps; curl -fsS http://127.0.0.1:3000/api/health"
+ssh -i "<private-ssh-key-path>" deploy@VPS_HOST "Use the reviewed archive deployment runbook; do not delete previous releases inline."
 ```
 
 Expected: Docker Compose services show healthy/running, health endpoint returns status `ok`.

@@ -246,6 +246,6 @@ After Milestone 9:
    usage, and failed-job views.
 2. Milestone 11 completes production deployment documentation and validation.
 3. The final deployment reuses the existing active Cloudflare Tunnel and maps
-   Arctic RSS to `https://arcticrss.taverncellar.com`.
+   Arctic RSS to the reviewed canonical public origin.
 4. Scheduled morning/evening digest generation and email delivery follow after
    the original MVP milestones unless deliberately promoted into Milestone 11.

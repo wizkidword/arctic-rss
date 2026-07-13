@@ -24,15 +24,9 @@ foundation rather than replacing it.
 
 ### Current Tavern Cellar Host
 
-The current Windows host uses the existing locally-managed named tunnel:
-
-- Tunnel: `arctic-tavern-prod`
-- Tunnel ID: `bf50505d-96e9-4027-a121-d53fa66988d7`
-- Config: `C:\Users\Elwynn\.cloudflared\config.yml`
-- Arctic RSS origin: `http://localhost:3003`
-- Public hostname: `https://arcticrss.taverncellar.com`
-
-The existing `watch.taverncellar.com` and `erp.taverncellar.com` ingress rules
+The retired Windows host used a locally managed named tunnel. Its tunnel name,
+identifier, configuration path, origin port, and hostname are intentionally
+redacted from this archived design. The existing non-Arctic ingress rules
 must remain unchanged. Arctic RSS is inserted before the final
 `http_status:404` catch-all rule. DNS is routed to the same named tunnel.
 
@@ -99,8 +93,8 @@ service URLs:
 - `AUTH_SECRET`, `CRON_SECRET`, database password, API keys, and tunnel token
   are generated secrets and never committed.
 
-For the current Tavern Cellar deployment, the active `.env` public URL values
-are updated to `https://arcticrss.taverncellar.com`.
+For the retired deployment, the active `.env` public URL values were updated to
+the reviewed canonical public origin.
 
 ## Documentation
 
@@ -127,7 +121,7 @@ Milestone 11 is complete only after:
 - Docker Compose starts with PostgreSQL, Redis, and web healthy.
 - `/api/health` succeeds locally and inside the container.
 - The active Cloudflare config validates and retains all existing rules.
-- DNS resolves `arcticrss.taverncellar.com` to the named tunnel.
+- DNS resolves the canonical public origin to the named tunnel.
 - Public HTTPS serves Arctic RSS and its health endpoint.
 - Auth.js login/signup pages load through the public hostname.
 - No credentials or tunnel tokens are added to tracked files.
