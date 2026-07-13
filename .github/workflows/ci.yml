@@ -96,7 +96,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Review introduced dependency vulnerabilities
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
 
