@@ -45,7 +45,11 @@ docker compose -p "$COMPOSE_PROJECT" exec -T postgres pg_restore -l \
 
 test -s "$staging/database.dump"
 test -s "$staging/database.catalog"
-sha256sum "$staging/database.dump" > "$staging/database.dump.sha256"
+(
+  cd "$staging"
+  sha256sum database.dump > database.dump.sha256
+  sha256sum -c database.dump.sha256 >/dev/null
+)
 printf 'created_at=%s\n' "$timestamp" > "$staging/metadata"
 
 mv "$staging" "$final"

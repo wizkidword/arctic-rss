@@ -24,7 +24,7 @@ verify the timer and one manual run:
 ```bash
 systemctl list-timers arctic-rss-backup.timer
 systemctl start arctic-rss-backup.service
-systemctl status arctic-rss-backup.service --no-pager
+systemctl show arctic-rss-backup.service -p Result -p ExecMainStatus
 ```
 
 The separate build-cache timer removes only unused Docker build cache older
