@@ -101,6 +101,7 @@ describe("getPodcastHomeForUser", () => {
           title: "Episode 1",
         }),
       ],
+      nextEpisodeCursor: null,
       subscriptions: [
         expect.objectContaining({
           artworkUrl: "https://example.com/art.jpg",
@@ -136,7 +137,7 @@ describe("getPodcastHomeForUser", () => {
             where: { userId: "user-1" },
           },
         },
-        take: 100,
+        take: 51,
       })
     )
     expect(mocks.podcastEpisodeGroupBy).toHaveBeenCalledWith(
@@ -267,7 +268,13 @@ describe("getPodcastShowForUser", () => {
               where: { userId: "user-1" },
             },
           },
-          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+          orderBy: [
+            { publishedAt: { nulls: "last", sort: "desc" } },
+            { createdAt: "desc" },
+            { id: "desc" },
+          ],
+          take: 51,
+          where: undefined,
         },
       },
       where: {

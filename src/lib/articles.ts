@@ -5,6 +5,12 @@ import { getPrisma } from "./db"
 import { getDiscoverDirectory } from "./discover-directory"
 import { imageProxyUrl } from "./image-proxy-url"
 import { writeArticleReadStateBatches } from "./article-read-batch"
+import {
+  afterTimeCursorWhere,
+  decodeTimeCursor,
+  encodeTimeCursor,
+  pageSize,
+} from "./time-cursor"
 
 const PUBLIC_GUEST_PREVIEW_USER_ID = "__public_guest_preview__"
 
@@ -146,6 +152,7 @@ type ReaderArticleRecord = {
 }
 
 export type ArticleListFilters = {
+  after?: string
   collectionId?: string
   feedId?: string
   folderId?: string
@@ -267,6 +274,7 @@ function parseImageDimension(value: string | undefined) {
 }
 
 export async function listReaderArticles({
+  after,
   collectionId,
   feedId,
   folderId,
@@ -275,21 +283,63 @@ export async function listReaderArticles({
   unreadOnly = false,
   userId,
 }: ArticleListFilters): Promise<ReaderArticle[]> {
-  const articles = await getPrisma().article.findMany({
-    include: readerArticleInclude(userId),
-    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-    take: limit,
-    where: articleListWhere({
-      collectionId,
-      feedId,
-      folderId,
-      starredOnly,
-      unreadOnly,
-      userId,
-    }),
+  const page = await listReaderArticlePage({
+    after,
+    collectionId,
+    feedId,
+    folderId,
+    limit,
+    starredOnly,
+    unreadOnly,
+    userId,
   })
 
-  return articles.map((article) => mapReaderArticle(article))
+  return page.articles
+}
+
+export async function listReaderArticlePage({
+  after,
+  collectionId,
+  feedId,
+  folderId,
+  limit = 50,
+  starredOnly = false,
+  unreadOnly = false,
+  userId,
+}: ArticleListFilters): Promise<ReaderArticlePage> {
+  const boundedLimit = pageSize(limit)
+  const cursor = decodeTimeCursor(after)
+  const baseWhere = articleListWhere({
+    collectionId,
+    feedId,
+    folderId,
+    starredOnly,
+    unreadOnly,
+    userId,
+  })
+  const articles = await getPrisma().article.findMany({
+    include: readerArticleInclude(userId),
+    orderBy: [
+      { publishedAt: { nulls: "last", sort: "desc" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ],
+    take: boundedLimit + 1,
+    where: cursor
+      ? {
+          AND: [baseWhere, afterTimeCursorWhere(cursor, "publishedAt")],
+        }
+      : baseWhere,
+  })
+  const visibleArticles = articles.slice(0, boundedLimit)
+
+  return {
+    articles: visibleArticles.map((article) => mapReaderArticle(article)),
+    nextCursor:
+      articles.length > boundedLimit && visibleArticles.length
+        ? encodeTimeCursor(visibleArticles.at(-1)!)
+        : null,
+  }
 }
 
 export async function listPublicReaderArticles({
@@ -424,6 +474,11 @@ export async function countUnreadArticlesForFeed(userId: string, feedId: string)
       ],
     },
   })
+}
+
+export type ReaderArticlePage = {
+  articles: ReaderArticle[]
+  nextCursor: string | null
 }
 
 /**

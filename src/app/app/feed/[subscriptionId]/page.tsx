@@ -6,7 +6,7 @@ import { FeedUnsubscribeButton } from "@/components/feed-unsubscribe-button"
 import { ReaderSurface } from "@/components/reader-surface"
 import { Badge } from "@/components/ui/badge"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticles } from "@/lib/articles"
+import { listReaderArticlePage } from "@/lib/articles"
 import { getUserFeedSubscription } from "@/lib/feed-subscriptions"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
@@ -17,7 +17,7 @@ export default async function FeedPage({
   searchParams,
 }: {
   params: Promise<{ subscriptionId: string }>
-  searchParams: Promise<{ articleId?: string | string[] }>
+  searchParams: Promise<{ after?: string | string[]; articleId?: string | string[] }>
 }) {
   const session = await auth()
 
@@ -26,11 +26,11 @@ export default async function FeedPage({
   }
 
   const { subscriptionId } = await params
-  const [subscription, settings, articleCollections, query] = await Promise.all([
+  const query = await searchParams
+  const [subscription, settings, articleCollections] = await Promise.all([
     getUserFeedSubscription(session.user.id, subscriptionId),
     getOrCreateUserSettings(session.user.id),
     listArticleCollectionsForUser(session.user.id),
-    searchParams,
   ])
 
   if (!subscription || subscription.id !== subscriptionId) {
@@ -40,7 +40,8 @@ export default async function FeedPage({
   const title = subscription.customTitle || subscription.feed.title
   const defaultView = normalizeDefaultView(settings.defaultView)
   const dateTimePreferences = normalizeDateTimePreferences(settings)
-  const articles = await listReaderArticles({
+  const articlePage = await listReaderArticlePage({
+    after: firstSearchParam(query.after),
     feedId: subscription.feedId,
     userId: session.user.id,
   })
@@ -48,7 +49,7 @@ export default async function FeedPage({
 
   return (
     <ReaderSurface
-      articles={articles}
+      articles={articlePage.articles}
       articleCollections={articleCollections}
       basePath={`/app/feed/${subscription.id}`}
       dateTimePreferences={dateTimePreferences}
@@ -61,6 +62,10 @@ export default async function FeedPage({
       }
       emptyMessage={`Refresh this feed to fetch the latest articles from ${subscription.feed.feedUrl}.`}
       markAllReadScope={{ feedId: subscription.feedId, type: "feed" }}
+      nextPageHref={nextPageHref(
+        `/app/feed/${subscription.id}`,
+        articlePage.nextCursor
+      )}
       selectedArticleId={articleId}
       title={title}
       toolbar={
@@ -81,4 +86,8 @@ export default async function FeedPage({
 
 function firstSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
+}
+
+function nextPageHref(path: string, cursor: string | null) {
+  return cursor ? `${path}?after=${encodeURIComponent(cursor)}` : undefined
 }

@@ -6,7 +6,7 @@ import { ReaderSurface } from "@/components/reader-surface"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticles } from "@/lib/articles"
+import { listReaderArticlePage } from "@/lib/articles"
 import {
   listUserFeedSubscriptions,
   type FeedSubscriptionNavItem,
@@ -21,7 +21,7 @@ export default async function FolderPage({
   searchParams,
 }: {
   params: Promise<{ folderId: string }>
-  searchParams: Promise<{ articleId?: string | string[] }>
+  searchParams: Promise<{ after?: string | string[]; articleId?: string | string[] }>
 }) {
   const session = await auth()
 
@@ -30,23 +30,23 @@ export default async function FolderPage({
   }
 
   const { folderId } = await params
+  const query = await searchParams
   const [
     folder,
     settings,
-    articles,
+    articlePage,
     articleCollections,
     subscriptions,
-    query,
   ] = await Promise.all([
     getUserFolder(session.user.id, folderId),
     getOrCreateUserSettings(session.user.id),
-    listReaderArticles({
+    listReaderArticlePage({
+      after: firstSearchParam(query.after),
       folderId,
       userId: session.user.id,
     }),
     listArticleCollectionsForUser(session.user.id),
     listUserFeedSubscriptions(session.user.id),
-    searchParams,
   ])
 
   if (!folder) {
@@ -59,7 +59,7 @@ export default async function FolderPage({
 
   return (
     <ReaderSurface
-      articles={articles}
+      articles={articlePage.articles}
       articleCollections={articleCollections}
       basePath={`/app/folder/${folder.id}`}
       dateTimePreferences={normalizeDateTimePreferences(settings)}
@@ -70,6 +70,10 @@ export default async function FolderPage({
       } in this folder.`}
       emptyMessage="This folder has no stored articles yet. Move feeds into it or refresh its feeds."
       markAllReadScope={{ folderId: folder.id, type: "folder" }}
+      nextPageHref={nextPageHref(
+        `/app/folder/${folder.id}`,
+        articlePage.nextCursor
+      )}
       selectedArticleId={firstSearchParam(query.articleId)}
       title={folder.name}
       toolbar={
@@ -140,4 +144,8 @@ function FolderFeedBrowser({
 
 function firstSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
+}
+
+function nextPageHref(path: string, cursor: string | null) {
+  return cursor ? `${path}?after=${encodeURIComponent(cursor)}` : undefined
 }

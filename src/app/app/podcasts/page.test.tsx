@@ -107,7 +107,9 @@ describe("PodcastsPage", () => {
     expect(markup).toContain("Episode 1")
     expect(markup).toContain("Aired 6/29/2026, 12:00 PM")
     expect(markup).toContain("1 unplayed")
-    expect(mocks.getPodcastHomeForUser).toHaveBeenCalledWith("user-1")
+    expect(mocks.getPodcastHomeForUser).toHaveBeenCalledWith("user-1", {
+      after: undefined,
+    })
     expect(mocks.getOrCreateUserSettings).toHaveBeenCalledWith("user-1")
   })
 

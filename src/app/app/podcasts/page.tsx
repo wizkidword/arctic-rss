@@ -11,15 +11,22 @@ import { getOrCreateUserSettings } from "@/lib/user-settings"
 
 import { subscribeToPodcastAction } from "./actions"
 
-export default async function PodcastsPage() {
+export default async function PodcastsPage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: Promise<{ after?: string | string[] }>
+} = {}) {
   const session = await auth()
 
   if (!session?.user?.id) {
     redirect("/login")
   }
 
+  const query = await searchParams
   const [home, settings] = await Promise.all([
-    getPodcastHomeForUser(session.user.id),
+    getPodcastHomeForUser(session.user.id, {
+      after: firstSearchParam(query.after),
+    }),
     getOrCreateUserSettings(session.user.id),
   ])
   const dateTimePreferences = normalizeDateTimePreferences(settings)
@@ -125,10 +132,19 @@ export default async function PodcastsPage() {
         <PodcastEpisodeList
           dateTimePreferences={dateTimePreferences}
           episodes={home.episodes}
+          nextPageHref={nextPageHref(home.nextEpisodeCursor)}
         />
       </section>
     </main>
   )
+}
+
+function nextPageHref(cursor: string | null) {
+  return cursor ? `/app/podcasts?after=${encodeURIComponent(cursor)}` : undefined
+}
+
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
 }
 
 async function subscribeFromPodcastHome(formData: FormData) {

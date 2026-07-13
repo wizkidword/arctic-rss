@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   getOrCreateUserSettings: vi.fn(),
   getUserFeedSubscription: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
-  listReaderArticles: vi.fn(),
+  listReaderArticlePage: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NOT_FOUND")
   }),
@@ -29,7 +29,7 @@ vi.mock("@/lib/article-collections", () => ({
 }))
 
 vi.mock("@/lib/articles", () => ({
-  listReaderArticles: mocks.listReaderArticles,
+  listReaderArticlePage: mocks.listReaderArticlePage,
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
@@ -102,7 +102,7 @@ describe("FeedPage", () => {
       defaultView: "EXPANDED",
     })
     mocks.listArticleCollectionsForUser.mockResolvedValue([])
-    mocks.listReaderArticles.mockResolvedValue([])
+    mocks.listReaderArticlePage.mockResolvedValue({ articles: [], nextCursor: null })
   })
 
   it("places unsubscribe beside the feed toolbar actions", async () => {

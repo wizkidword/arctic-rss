@@ -12,8 +12,10 @@ import { getOrCreateUserSettings } from "@/lib/user-settings"
 
 export default async function PodcastShowPage({
   params,
+  searchParams = Promise.resolve({}),
 }: {
   params: Promise<{ podcastId: string }>
+  searchParams?: Promise<{ after?: string | string[] }>
 }) {
   const session = await auth()
 
@@ -22,8 +24,10 @@ export default async function PodcastShowPage({
   }
 
   const { podcastId } = await params
+  const query = await searchParams
   const [show, settings] = await Promise.all([
     getPodcastShowForUser({
+      after: firstSearchParam(query.after),
       podcastId,
       userId: session.user.id,
     }),
@@ -96,7 +100,18 @@ export default async function PodcastShowPage({
       <PodcastEpisodeList
         dateTimePreferences={dateTimePreferences}
         episodes={show.episodes}
+        nextPageHref={nextPageHref(podcastId, show.nextEpisodeCursor)}
       />
     </main>
   )
+}
+
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function nextPageHref(podcastId: string, cursor: string | null) {
+  return cursor
+    ? `/app/podcasts/${podcastId}?after=${encodeURIComponent(cursor)}`
+    : undefined
 }

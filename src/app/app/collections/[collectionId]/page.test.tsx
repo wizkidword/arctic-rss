@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   getOrCreateUserSettings: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
   listCollectionPodcastEpisodesForUser: vi.fn(),
-  listReaderArticles: vi.fn(),
+  listReaderArticlePage: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NOT_FOUND")
   }),
@@ -70,7 +70,7 @@ vi.mock("@/lib/article-collections", () => ({
 }))
 
 vi.mock("@/lib/articles", () => ({
-  listReaderArticles: mocks.listReaderArticles,
+  listReaderArticlePage: mocks.listReaderArticlePage,
 }))
 
 vi.mock("@/lib/podcasts", () => ({
@@ -112,7 +112,10 @@ describe("CollectionPage", () => {
     mocks.listArticleCollectionsForUser.mockResolvedValue([
       { articleCount: 3, id: "collection-read-later", name: "Read Later" },
     ])
-    mocks.listReaderArticles.mockResolvedValue([{ id: "article-1" }])
+    mocks.listReaderArticlePage.mockResolvedValue({
+      articles: [{ id: "article-1" }],
+      nextCursor: null,
+    })
     mocks.listCollectionPodcastEpisodesForUser.mockResolvedValue([])
   })
 
@@ -126,7 +129,8 @@ describe("CollectionPage", () => {
       })
     )
 
-    expect(mocks.listReaderArticles).toHaveBeenCalledWith({
+    expect(mocks.listReaderArticlePage).toHaveBeenCalledWith({
+      after: undefined,
       collectionId: "collection-read-later",
       userId: "user-1",
     })
@@ -165,7 +169,10 @@ describe("CollectionPage", () => {
   })
 
   it("renders a podcast-only collection without an empty article reader", async () => {
-    mocks.listReaderArticles.mockResolvedValue([])
+    mocks.listReaderArticlePage.mockResolvedValue({
+      articles: [],
+      nextCursor: null,
+    })
     mocks.listCollectionPodcastEpisodesForUser.mockResolvedValue([
       {
         title: "Episode 1",

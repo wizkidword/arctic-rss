@@ -1,8 +1,10 @@
 import { ExternalLink } from "lucide-react"
+import Link from "next/link"
 
 import { PodcastEpisodeActions } from "@/components/podcast-episode-actions"
 import { type ArticleCollectionPickerItem } from "@/lib/article-collections"
 import type { PodcastHomeEpisode } from "@/lib/podcasts"
+import { buttonVariants } from "@/components/ui/button"
 import {
   formatArticleDateTime,
   normalizeDateTimePreferences,
@@ -16,11 +18,13 @@ export function PodcastEpisodeList({
   currentCollection,
   dateTimePreferences,
   episodes,
+  nextPageHref,
 }: {
   collections?: ArticleCollectionPickerItem[]
   currentCollection?: { id: string; name: string }
   dateTimePreferences?: Partial<DateTimePreferences>
   episodes: PodcastEpisodeListItem[]
+  nextPageHref?: string
 }) {
   if (episodes.length === 0) {
     return (
@@ -95,6 +99,16 @@ export function PodcastEpisodeList({
           />
         </article>
       ))}
+      {nextPageHref ? (
+        <nav aria-label="Podcast episode pagination" className="flex justify-center pt-2">
+          <Link
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            href={nextPageHref}
+          >
+            Older episodes
+          </Link>
+        </nav>
+      ) : null}
     </section>
   )
 }

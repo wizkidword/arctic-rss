@@ -1,6 +1,12 @@
 import { Prisma } from "../generated/prisma/client"
 
 import { getPrisma } from "./db"
+import {
+  afterTimeCursorWhere,
+  decodeTimeCursor,
+  encodeTimeCursor,
+  pageSize,
+} from "./time-cursor"
 
 export type PodcastHomeEpisode = ReturnType<typeof mapEpisode>
 
@@ -16,6 +22,7 @@ export type PodcastHomeSubscription = {
 
 export type PodcastHome = {
   episodes: PodcastHomeEpisode[]
+  nextEpisodeCursor: string | null
   subscriptions: PodcastHomeSubscription[]
 }
 
@@ -54,9 +61,28 @@ export async function listCollectionPodcastEpisodesForUser({
 }
 
 export async function getPodcastHomeForUser(
-  userId: string
+  userId: string,
+  {
+    after,
+    limit = 50,
+  }: {
+    after?: string
+    limit?: number
+  } = {}
 ): Promise<PodcastHome> {
   const prisma = getPrisma()
+  const boundedLimit = pageSize(limit)
+  const cursor = decodeTimeCursor(after)
+  const episodeWhere: Prisma.PodcastEpisodeWhereInput = {
+    podcast: {
+      subscriptions: {
+        some: {
+          isPaused: false,
+          userId,
+        },
+      },
+    },
+  }
   const [subscriptions, episodes, unplayedCounts] = await Promise.all([
     prisma.podcastSubscription.findMany({
       where: { userId },
@@ -73,16 +99,9 @@ export async function getPodcastHomeForUser(
       orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
     }),
     prisma.podcastEpisode.findMany({
-      where: {
-        podcast: {
-          subscriptions: {
-            some: {
-              isPaused: false,
-              userId,
-            },
-          },
-        },
-      },
+      where: cursor
+        ? { AND: [episodeWhere, afterTimeCursorWhere(cursor, "publishedAt")] }
+        : episodeWhere,
       include: {
         podcast: true,
         states: {
@@ -90,8 +109,12 @@ export async function getPodcastHomeForUser(
           take: 1,
         },
       },
-      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-      take: 100,
+      orderBy: [
+        { publishedAt: { nulls: "last", sort: "desc" } },
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
+      take: boundedLimit + 1,
     }),
     prisma.podcastEpisode.groupBy({
       by: ["podcastId"],
@@ -117,8 +140,14 @@ export async function getPodcastHomeForUser(
     unplayedCounts.map((row) => [row.podcastId, row._count._all])
   )
 
+  const visibleEpisodes = episodes.slice(0, boundedLimit)
+
   return {
-    episodes: episodes.map(mapEpisode),
+    episodes: visibleEpisodes.map(mapEpisode),
+    nextEpisodeCursor:
+      episodes.length > boundedLimit && visibleEpisodes.length
+        ? encodeTimeCursor(visibleEpisodes.at(-1)!)
+        : null,
     subscriptions: subscriptions.map((subscription) => ({
       artworkUrl: subscription.podcast.artworkUrl,
       id: subscription.podcast.id,
@@ -132,12 +161,18 @@ export async function getPodcastHomeForUser(
 }
 
 export async function getPodcastShowForUser({
+  after,
+  limit = 50,
   podcastId,
   userId,
 }: {
+  after?: string
+  limit?: number
   podcastId: string
   userId: string
 }) {
+  const boundedLimit = pageSize(limit)
+  const cursor = decodeTimeCursor(after)
   const podcast = await getPrisma().podcast.findFirst({
     where: {
       id: podcastId,
@@ -155,7 +190,13 @@ export async function getPodcastShowForUser({
             take: 1,
           },
         },
-        orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+        orderBy: [
+          { publishedAt: { nulls: "last", sort: "desc" } },
+          { createdAt: "desc" },
+          { id: "desc" },
+        ],
+        take: boundedLimit + 1,
+        where: cursor ? afterTimeCursorWhere(cursor, "publishedAt") : undefined,
       },
     },
   })
@@ -164,14 +205,20 @@ export async function getPodcastShowForUser({
     return null
   }
 
+  const visibleEpisodes = podcast.episodes.slice(0, boundedLimit)
+
   return {
-    episodes: podcast.episodes.map((episode) =>
+    episodes: visibleEpisodes.map((episode) =>
       mapEpisode({
         ...episode,
         podcast,
         states: episode.states,
       })
     ),
+    nextEpisodeCursor:
+      podcast.episodes.length > boundedLimit && visibleEpisodes.length
+        ? encodeTimeCursor(visibleEpisodes.at(-1)!)
+        : null,
     podcast: {
       artworkUrl: podcast.artworkUrl,
       description: podcast.description,

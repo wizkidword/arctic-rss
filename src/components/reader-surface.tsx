@@ -54,6 +54,7 @@ export function ReaderSurface({
   description,
   emptyMessage,
   markAllReadScope,
+  nextPageHref,
   readOnlyActionReason,
   selectedArticleId,
   title,
@@ -69,6 +70,7 @@ export function ReaderSurface({
   description: string
   emptyMessage: string
   markAllReadScope?: ArticleReadScope
+  nextPageHref?: string
   readOnlyActionReason?: string
   selectedArticleId?: string
   title: string
@@ -145,6 +147,16 @@ export function ReaderSurface({
         trackSelectedArticleRead:
           Boolean(explicitlySelectedArticle) && !readOnlyActionReason,
       })}
+      {nextPageHref ? (
+        <nav aria-label="Article pagination" className="flex justify-center pb-4">
+          <Link
+            className="rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
+            href={nextPageHref}
+          >
+            Older articles
+          </Link>
+        </nav>
+      ) : null}
     </div>
   )
 }

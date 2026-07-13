@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   getOrCreateUserSettings: vi.fn(),
   hasUserFeedSubscriptions: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
-  listReaderArticles: vi.fn(),
+  listReaderArticlePage: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
   }),
@@ -40,7 +40,7 @@ vi.mock("@/lib/article-collections", () => ({
 }))
 
 vi.mock("@/lib/articles", () => ({
-  listReaderArticles: mocks.listReaderArticles,
+  listReaderArticlePage: mocks.listReaderArticlePage,
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
@@ -70,7 +70,7 @@ describe("AppHomePage", () => {
     })
     mocks.hasUserFeedSubscriptions.mockResolvedValue(true)
     mocks.listArticleCollectionsForUser.mockResolvedValue([])
-    mocks.listReaderArticles.mockResolvedValue([])
+    mocks.listReaderArticlePage.mockResolvedValue({ articles: [], nextCursor: null })
   })
 
   it("sends first-run readers to Discover until they subscribe to a feed", async () => {
@@ -81,7 +81,7 @@ describe("AppHomePage", () => {
     ).rejects.toThrow("REDIRECT:/app/discover")
 
     expect(mocks.hasUserFeedSubscriptions).toHaveBeenCalledWith("user-1")
-    expect(mocks.listReaderArticles).not.toHaveBeenCalled()
+    expect(mocks.listReaderArticlePage).not.toHaveBeenCalled()
   })
 
   it("keeps subscribed readers on the All Articles view", async () => {
@@ -91,7 +91,8 @@ describe("AppHomePage", () => {
 
     expect(markup).toContain("All Articles")
     expect(mocks.hasUserFeedSubscriptions).toHaveBeenCalledWith("user-1")
-    expect(mocks.listReaderArticles).toHaveBeenCalledWith({
+    expect(mocks.listReaderArticlePage).toHaveBeenCalledWith({
+      after: undefined,
       userId: "user-1",
     })
   })

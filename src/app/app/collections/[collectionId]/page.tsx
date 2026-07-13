@@ -5,7 +5,7 @@ import { PodcastEpisodeList } from "@/components/podcast-episode-list"
 import { ReaderSurface } from "@/components/reader-surface"
 import { Badge } from "@/components/ui/badge"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticles } from "@/lib/articles"
+import { listReaderArticlePage } from "@/lib/articles"
 import { listCollectionPodcastEpisodesForUser } from "@/lib/podcasts"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
@@ -16,7 +16,7 @@ export default async function CollectionPage({
   searchParams,
 }: {
   params: Promise<{ collectionId: string }>
-  searchParams: Promise<{ articleId?: string | string[] }>
+  searchParams: Promise<{ after?: string | string[]; articleId?: string | string[] }>
 }) {
   const session = await auth()
 
@@ -25,11 +25,13 @@ export default async function CollectionPage({
   }
 
   const { collectionId } = await params
-  const [collections, settings, articles, podcastEpisodes, query] =
+  const query = await searchParams
+  const [collections, settings, articlePage, podcastEpisodes] =
     await Promise.all([
     listArticleCollectionsForUser(session.user.id),
     getOrCreateUserSettings(session.user.id),
-    listReaderArticles({
+    listReaderArticlePage({
+      after: firstSearchParam(query.after),
       collectionId,
       userId: session.user.id,
     }),
@@ -37,7 +39,6 @@ export default async function CollectionPage({
       collectionId,
       userId: session.user.id,
     }),
-    searchParams,
   ])
   const collection = collections.find((item) => item.id === collectionId)
 
@@ -51,7 +52,7 @@ export default async function CollectionPage({
   }
   const dateTimePreferences = normalizeDateTimePreferences(settings)
 
-  if (!articles.length && podcastEpisodes.length) {
+  if (!articlePage.articles.length && podcastEpisodes.length) {
     return (
       <div className="flex min-h-screen flex-col gap-4 p-3 sm:p-4 lg:p-6">
         <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -82,7 +83,7 @@ export default async function CollectionPage({
   return (
     <>
       <ReaderSurface
-        articles={articles}
+        articles={articlePage.articles}
         articleCollections={collections}
         basePath={`/app/collections/${collection.id}`}
         currentCollection={currentCollection}
@@ -91,6 +92,10 @@ export default async function CollectionPage({
         displayMode={normalizeDisplayMode(settings.displayMode)}
         description="Saved articles and podcast episodes in this collection."
         emptyMessage="Save articles or podcast episodes to this collection from their menus."
+        nextPageHref={nextPageHref(
+          `/app/collections/${collection.id}`,
+          articlePage.nextCursor
+        )}
         selectedArticleId={firstSearchParam(query.articleId)}
         title={collection.name}
         toolbar={
@@ -129,4 +134,8 @@ export default async function CollectionPage({
 
 function firstSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
+}
+
+function nextPageHref(path: string, cursor: string | null) {
+  return cursor ? `${path}?after=${encodeURIComponent(cursor)}` : undefined
 }

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { ReaderSurface } from "@/components/reader-surface"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticles } from "@/lib/articles"
+import { listReaderArticlePage } from "@/lib/articles"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
@@ -11,7 +11,7 @@ import { getOrCreateUserSettings } from "@/lib/user-settings"
 export default async function StarredPage({
   searchParams,
 }: {
-  searchParams: Promise<{ articleId?: string | string[] }>
+  searchParams: Promise<{ after?: string | string[]; articleId?: string | string[] }>
 }) {
   const session = await auth()
 
@@ -19,19 +19,20 @@ export default async function StarredPage({
     redirect("/login")
   }
 
-  const [settings, articles, articleCollections, params] = await Promise.all([
+  const params = await searchParams
+  const [settings, articlePage, articleCollections] = await Promise.all([
     getOrCreateUserSettings(session.user.id),
-    listReaderArticles({
+    listReaderArticlePage({
+      after: firstSearchParam(params.after),
       starredOnly: true,
       userId: session.user.id,
     }),
     listArticleCollectionsForUser(session.user.id),
-    searchParams,
   ])
 
   return (
     <ReaderSurface
-      articles={articles}
+      articles={articlePage.articles}
       articleCollections={articleCollections}
       basePath="/app/starred"
       dateTimePreferences={normalizeDateTimePreferences(settings)}
@@ -39,6 +40,7 @@ export default async function StarredPage({
       displayMode={normalizeDisplayMode(settings.displayMode)}
       description="Articles you have starred."
       emptyMessage="No starred articles."
+      nextPageHref={nextPageHref("/app/starred", articlePage.nextCursor)}
       selectedArticleId={firstSearchParam(params.articleId)}
       title="Starred"
     />
@@ -47,4 +49,8 @@ export default async function StarredPage({
 
 function firstSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
+}
+
+function nextPageHref(path: string, cursor: string | null) {
+  return cursor ? `${path}?after=${encodeURIComponent(cursor)}` : undefined
 }
