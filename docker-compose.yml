@@ -91,6 +91,19 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    stop_grace_period: 60s
     command: ["npm", "run", "worker"]
 
   cloudflared:

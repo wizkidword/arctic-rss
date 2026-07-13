@@ -40,6 +40,10 @@ import {
   type SmartDigestJobData,
 } from "../src/lib/smart-digest-queue"
 import { processSmartDigestRule } from "../src/lib/smart-digest-processing"
+import {
+  clearWorkerHeartbeat,
+  writeWorkerHeartbeat,
+} from "../src/lib/worker-health"
 
 assertSecureProductionConfiguration()
 
@@ -55,6 +59,7 @@ const {
   smartDigestEmailConcurrency,
 } = schedulerSettings()
 const prisma = getPrisma()
+const WORKER_HEARTBEAT_INTERVAL_MS = 30_000
 
 console.log("Arctic RSS worker online")
 console.log(
@@ -377,16 +382,43 @@ const scheduler = setInterval(() => {
 
 schedulerTick().catch(() => undefined)
 
+function recordWorkerHeartbeat() {
+  writeWorkerHeartbeat().catch((error) => {
+    console.error(
+      `[worker] could not update health heartbeat: ${schedulerErrorMessage(error)}`
+    )
+  })
+}
+
+const heartbeat = setInterval(recordWorkerHeartbeat, WORKER_HEARTBEAT_INTERVAL_MS)
+recordWorkerHeartbeat()
+
+let shuttingDown = false
+
 async function shutdown() {
+  if (shuttingDown) {
+    return
+  }
+
+  shuttingDown = true
   clearInterval(scheduler)
-  await Promise.all([
-    worker.close(),
-    podcastWorker.close(),
-    aiDigestWorker.close(),
-    smartDigestWorker.close(),
-    smartDigestEmailWorker.close(),
-  ])
-  await prisma.$disconnect()
+  try {
+    await Promise.all([
+      worker.close(),
+      podcastWorker.close(),
+      aiDigestWorker.close(),
+      smartDigestWorker.close(),
+      smartDigestEmailWorker.close(),
+    ])
+  } finally {
+    clearInterval(heartbeat)
+    await clearWorkerHeartbeat().catch((error) => {
+      console.error(
+        `[worker] could not clear health heartbeat: ${schedulerErrorMessage(error)}`
+      )
+    })
+    await prisma.$disconnect()
+  }
   process.exit(0)
 }
 
