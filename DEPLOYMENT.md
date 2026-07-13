@@ -383,6 +383,15 @@ docker compose run --rm --no-deps worker npx prisma migrate status
 Back up the database first, review the migration SQL, and use expand/contract
 steps for risky changes. Never use `db push` in production.
 
+### Session-revocation migration
+
+The SEC-002 migration adds `User.authVersion` with a default value of `0`.
+Apply it before the new web and worker images. The new release rejects any
+cookie without an authorization version, so all sessions created before this
+release must sign in again. Do not rotate `AUTH_SECRET` unless intentionally
+invalidating every session for a separate reason. The full operator procedure
+is in [the session-revocation runbook](docs/operations/session-revocation-runbook.md).
+
 ## Upgrade
 
 ```bash

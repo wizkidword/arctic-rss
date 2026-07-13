@@ -2,23 +2,26 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
-  auth,
   getAdminDashboard,
   inspectAdminQueues,
   listDiscoverCategoryEditorOptions,
   redirect,
+  requireAuthenticatedUser,
+  requireFreshAdmin,
 } = vi.hoisted(() => ({
-    auth: vi.fn(),
     getAdminDashboard: vi.fn(),
     listDiscoverCategoryEditorOptions: vi.fn(),
     inspectAdminQueues: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
     }),
+    requireAuthenticatedUser: vi.fn(),
+    requireFreshAdmin: vi.fn(),
   }))
 
-vi.mock("@/auth", () => ({
-  auth,
+vi.mock("@/lib/authorization", () => ({
+  requireAuthenticatedUser,
+  requireFreshAdmin,
 }))
 
 vi.mock("@/lib/admin-dashboard", () => ({
@@ -73,31 +76,33 @@ describe("admin page", () => {
   })
 
   it("redirects anonymous visitors to login", async () => {
-    auth.mockResolvedValue(null)
+    requireAuthenticatedUser.mockResolvedValue(null)
 
     await expect(AdminPage()).rejects.toThrow("REDIRECT:/login")
     expect(getAdminDashboard).not.toHaveBeenCalled()
   })
 
   it("redirects non-admin users to the reader", async () => {
-    auth.mockResolvedValue({
+    requireAuthenticatedUser.mockResolvedValue({
       user: {
         id: "user-1",
         role: "USER",
       },
     })
+    requireFreshAdmin.mockResolvedValue(null)
 
     await expect(AdminPage()).rejects.toThrow("REDIRECT:/app")
     expect(getAdminDashboard).not.toHaveBeenCalled()
   })
 
   it("loads database and queue operations for administrators", async () => {
-    auth.mockResolvedValue({
+    requireAuthenticatedUser.mockResolvedValue({
       user: {
         id: "admin-1",
         role: "ADMIN",
       },
     })
+    requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
     getAdminDashboard.mockResolvedValue({
       generatedAt: new Date("2026-06-24T08:15:00.000Z"),
     })

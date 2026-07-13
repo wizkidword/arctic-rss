@@ -116,6 +116,27 @@ sign in, the known administrator can reach `/admin`, and the promotion command
 is idempotent. If the application fails to start because the safe environment
 values were not applied, correct those values rather than weakening the check.
 
+## SEC-002 session-revocation deployment
+
+This release has the additive `authVersion` migration. It deliberately
+invalidates every old cookie that lacks this field. After the backup gate,
+apply the migration, rebuild web and worker, and verify the migration is
+current before checking the login and administrator flows:
+
+```bash
+cd "$APP_DIR"
+docker compose run --rm --no-deps migrate
+docker compose build web worker
+docker compose up -d --no-deps --force-recreate web worker
+docker compose run --rm --no-deps worker npx prisma migrate status
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+Do not rotate `AUTH_SECRET` as an incidental deployment step. See
+[session-revocation-runbook.md](session-revocation-runbook.md) for the
+administrator control, verification steps, and the security implication of a
+code rollback.
+
 ## Rollback
 
 1. Keep the currently running failed release and its logs for diagnosis.

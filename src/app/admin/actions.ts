@@ -2,7 +2,8 @@
 
 import { refresh, revalidatePath } from "next/cache"
 
-import { auth } from "@/auth"
+import { getPrisma } from "@/lib/db"
+import { requireFreshAdmin } from "@/lib/authorization"
 import {
   DiscoverOpmlImportError,
   importDiscoverOpml,
@@ -42,13 +43,18 @@ export type AddDiscoverSubredditActionState = {
   status: "idle" | "success" | "error"
 }
 
+export type RevokeUserSessionsActionState = {
+  message: string
+  status: "idle" | "success" | "error"
+}
+
 export async function importDiscoverOpmlAction(
   _previousState: ImportDiscoverOpmlActionState,
   formData: FormData
 ): Promise<ImportDiscoverOpmlActionState> {
-  const session = await auth()
+  const admin = await requireFreshAdmin().catch(() => null)
 
-  if (!session?.user?.id || session.user.role !== "ADMIN") {
+  if (!admin) {
     return {
       message: "Only administrators can import Discover OPML files.",
       status: "error",
@@ -73,7 +79,7 @@ export async function importDiscoverOpmlAction(
 
   try {
     const summary = await importDiscoverOpml({
-      adminUserId: session.user.id,
+      adminUserId: admin.id,
       categoryName: fieldValue(formData, "categoryName"),
       countryCode: fieldValue(formData, "countryCode"),
       description: fieldValue(formData, "description"),
@@ -122,9 +128,9 @@ export async function updateDiscoverCategoryMetadataAction(
   _previousState: UpdateDiscoverCategoryMetadataActionState,
   formData: FormData
 ): Promise<UpdateDiscoverCategoryMetadataActionState> {
-  const session = await auth()
+  const admin = await requireFreshAdmin().catch(() => null)
 
-  if (!session?.user?.id || session.user.role !== "ADMIN") {
+  if (!admin) {
     return {
       message: "Only administrators can edit Discover cards.",
       status: "error",
@@ -133,7 +139,7 @@ export async function updateDiscoverCategoryMetadataAction(
 
   try {
     const result = await updateDiscoverCategoryMetadata({
-      adminUserId: session.user.id,
+      adminUserId: admin.id,
       categoryId: fieldValue(formData, "categoryId"),
       description: fieldValue(formData, "description"),
       iconKey: fieldValue(formData, "iconKey"),
@@ -166,9 +172,9 @@ export async function addDiscoverSubredditAction(
   _previousState: AddDiscoverSubredditActionState,
   formData: FormData
 ): Promise<AddDiscoverSubredditActionState> {
-  const session = await auth()
+  const admin = await requireFreshAdmin().catch(() => null)
 
-  if (!session?.user?.id || session.user.role !== "ADMIN") {
+  if (!admin) {
     return {
       message: "Only administrators can add subreddits to Discover.",
       status: "error",
@@ -177,7 +183,7 @@ export async function addDiscoverSubredditAction(
 
   try {
     const result = await addDiscoverSubredditToRedditTopic({
-      adminUserId: session.user.id,
+      adminUserId: admin.id,
       subredditName: fieldValue(formData, "subredditName"),
     })
 
@@ -199,6 +205,73 @@ export async function addDiscoverSubredditAction(
 
     return {
       message: "Arctic RSS could not add that subreddit.",
+      status: "error",
+    }
+  }
+}
+
+export async function revokeUserSessionsAction(
+  _previousState: RevokeUserSessionsActionState,
+  formData: FormData
+): Promise<RevokeUserSessionsActionState> {
+  const admin = await requireFreshAdmin().catch(() => null)
+
+  if (!admin) {
+    return {
+      message: "Only administrators can revoke user sessions.",
+      status: "error",
+    }
+  }
+
+  const targetUserId = String(formData.get("targetUserId") ?? "").trim()
+
+  if (!targetUserId) {
+    return {
+      message: "Choose a user whose sessions should be revoked.",
+      status: "error",
+    }
+  }
+
+  try {
+    const target = await getPrisma().$transaction(async (transaction) => {
+      const user = await transaction.user.update({
+        where: { id: targetUserId },
+        data: {
+          authVersion: { increment: 1 },
+        },
+        select: {
+          email: true,
+          id: true,
+        },
+      })
+
+      await transaction.adminAuditLog.create({
+        data: {
+          action: "USER_SESSIONS_REVOKED",
+          adminUserId: admin.id,
+          metadata: {
+            source: "admin-dashboard",
+          },
+          targetId: user.id,
+          targetType: "User",
+        },
+      })
+
+      return user
+    })
+
+    revalidatePath("/admin")
+    refresh()
+
+    return {
+      message: `Revoked all active sessions for ${target.email}.`,
+      status: "success",
+    }
+  } catch (error) {
+    console.error("Failed to revoke user sessions.", error)
+
+    return {
+      message: "Arctic RSS could not revoke those sessions.",
       status: "error",
     }
   }

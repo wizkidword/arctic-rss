@@ -68,7 +68,11 @@ describe("local administrator bootstrap", () => {
       },
     })
     expect(store.transaction.user.updateMany).toHaveBeenCalledWith({
-      data: { plan: "ADMIN", role: "ADMIN" },
+      data: {
+        authVersion: { increment: 1 },
+        plan: "ADMIN",
+        role: "ADMIN",
+      },
       where: {
         disabledAt: null,
         emailVerified: { not: null },

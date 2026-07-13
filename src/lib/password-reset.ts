@@ -160,7 +160,10 @@ export async function resetPasswordWithToken({
   await prisma.$transaction([
     prisma.user.update({
       where: { id: resetToken.userId },
-      data: { passwordHash },
+      data: {
+        authVersion: { increment: 1 },
+        passwordHash,
+      },
     }),
     prisma.passwordResetToken.update({
       where: { id: resetToken.id },

@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   addDiscoverSubredditToRedditTopic: vi.fn(),
-  auth: vi.fn(),
+  getPrisma: vi.fn(),
   importDiscoverOpml: vi.fn(),
   refresh: vi.fn(),
   revalidatePath: vi.fn(),
+  requireFreshAdmin: vi.fn(),
   updateDiscoverCategoryMetadata: vi.fn(),
 }))
 
@@ -14,8 +15,12 @@ vi.mock("next/cache", () => ({
   revalidatePath: mocks.revalidatePath,
 }))
 
-vi.mock("@/auth", () => ({
-  auth: mocks.auth,
+vi.mock("@/lib/authorization", () => ({
+  requireFreshAdmin: mocks.requireFreshAdmin,
+}))
+
+vi.mock("@/lib/db", () => ({
+  getPrisma: mocks.getPrisma,
 }))
 
 vi.mock("@/lib/discover-directory-import", () => ({
@@ -35,6 +40,7 @@ vi.mock("@/lib/discover-subreddits", () => ({
 import {
   addDiscoverSubredditAction,
   importDiscoverOpmlAction,
+  revokeUserSessionsAction,
   updateDiscoverCategoryMetadataAction,
 } from "./actions"
 
@@ -44,12 +50,7 @@ describe("importDiscoverOpmlAction", () => {
   })
 
   it("requires an administrator session", async () => {
-    mocks.auth.mockResolvedValue({
-      user: {
-        id: "user-1",
-        role: "USER",
-      },
-    })
+    mocks.requireFreshAdmin.mockResolvedValue(null)
     const formData = new FormData()
     formData.set(
       "opmlFile",
@@ -72,12 +73,7 @@ describe("importDiscoverOpmlAction", () => {
   })
 
   it("requires an OPML file", async () => {
-    mocks.auth.mockResolvedValue({
-      user: {
-        id: "admin-1",
-        role: "ADMIN",
-      },
-    })
+    mocks.requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
 
     const result = await importDiscoverOpmlAction(
       {
@@ -95,12 +91,7 @@ describe("importDiscoverOpmlAction", () => {
   })
 
   it("imports the uploaded OPML with optional category metadata", async () => {
-    mocks.auth.mockResolvedValue({
-      user: {
-        id: "admin-1",
-        role: "ADMIN",
-      },
-    })
+    mocks.requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
     mocks.importDiscoverOpml.mockResolvedValue({
       categoriesCreated: 1,
       categoriesUpdated: 0,
@@ -158,12 +149,7 @@ describe("updateDiscoverCategoryMetadataAction", () => {
   })
 
   it("requires an administrator session", async () => {
-    mocks.auth.mockResolvedValue({
-      user: {
-        id: "user-1",
-        role: "USER",
-      },
-    })
+    mocks.requireFreshAdmin.mockResolvedValue(null)
     const formData = new FormData()
     formData.set("categoryId", "us-general")
     formData.set("description", "Edited description.")
@@ -185,12 +171,7 @@ describe("updateDiscoverCategoryMetadataAction", () => {
   })
 
   it("updates Discover card metadata and refreshes Discover", async () => {
-    mocks.auth.mockResolvedValue({
-      user: {
-        id: "admin-1",
-        role: "ADMIN",
-      },
-    })
+    mocks.requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
     mocks.updateDiscoverCategoryMetadata.mockResolvedValue({
       categoryId: "us-general",
       description: "Edited national news description.",
@@ -232,12 +213,7 @@ describe("addDiscoverSubredditAction", () => {
   })
 
   it("requires an administrator session", async () => {
-    mocks.auth.mockResolvedValue({
-      user: {
-        id: "user-1",
-        role: "USER",
-      },
-    })
+    mocks.requireFreshAdmin.mockResolvedValue(null)
     const formData = new FormData()
     formData.set("subredditName", "localhistory")
 
@@ -257,12 +233,7 @@ describe("addDiscoverSubredditAction", () => {
   })
 
   it("adds a subreddit to Discover and refreshes the admin and reader pages", async () => {
-    mocks.auth.mockResolvedValue({
-      user: {
-        id: "admin-1",
-        role: "ADMIN",
-      },
-    })
+    mocks.requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
     mocks.addDiscoverSubredditToRedditTopic.mockResolvedValue({
       feedId: "reddit-localhistory",
       label: "r/localhistory",
@@ -293,3 +264,73 @@ describe("addDiscoverSubredditAction", () => {
     })
   })
 })
+
+describe("revokeUserSessionsAction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("requires a fresh administrator session", async () => {
+    mocks.requireFreshAdmin.mockResolvedValue(null)
+
+    const result = await revokeUserSessionsAction(initialState(), formData("user-1"))
+
+    expect(result).toEqual({
+      message: "Only administrators can revoke user sessions.",
+      status: "error",
+    })
+    expect(mocks.getPrisma).not.toHaveBeenCalled()
+  })
+
+  it("increments the user's authorization version and writes an audit event", async () => {
+    const transaction = {
+      adminAuditLog: {
+        create: vi.fn().mockResolvedValue({}),
+      },
+      user: {
+        update: vi.fn().mockResolvedValue({
+          email: "reader@example.com",
+          id: "user-1",
+        }),
+      },
+    }
+    const prisma = {
+      $transaction: vi.fn(async (callback) => callback(transaction)),
+    }
+    mocks.getPrisma.mockReturnValue(prisma)
+    mocks.requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
+
+    const result = await revokeUserSessionsAction(initialState(), formData("user-1"))
+
+    expect(transaction.user.update).toHaveBeenCalledWith({
+      data: { authVersion: { increment: 1 } },
+      select: { email: true, id: true },
+      where: { id: "user-1" },
+    })
+    expect(transaction.adminAuditLog.create).toHaveBeenCalledWith({
+      data: {
+        action: "USER_SESSIONS_REVOKED",
+        adminUserId: "admin-1",
+        metadata: { source: "admin-dashboard" },
+        targetId: "user-1",
+        targetType: "User",
+      },
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin")
+    expect(mocks.refresh).toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "Revoked all active sessions for reader@example.com.",
+      status: "success",
+    })
+  })
+})
+
+function initialState() {
+  return { message: "", status: "idle" as const }
+}
+
+function formData(targetUserId: string) {
+  const data = new FormData()
+  data.set("targetUserId", targetUserId)
+  return data
+}

@@ -16,6 +16,12 @@ import { verifyTurnstileToken } from "@/lib/turnstile"
 type AppRole = "USER" | "ADMIN"
 type AppPlan = "FREE" | "PRO" | "ADMIN"
 
+type AppUser = {
+  authVersion?: number
+  plan?: AppPlan
+  role?: AppRole
+}
+
 class EmailUnverifiedSigninError extends CredentialsSignin {
   code = "email_unverified"
 }
@@ -117,6 +123,7 @@ function credentialsProvider() {
         email: user.email,
         name: user.name,
         image: user.image,
+        authVersion: user.authVersion,
         role: user.role,
         plan: user.plan,
       }
@@ -168,26 +175,33 @@ function createAuthConfig(): NextAuthConfig {
       },
       async jwt({ token, user }) {
         if (user) {
-          const appUser = user as typeof user & {
-            role?: AppRole
-            plan?: AppPlan
-          }
+          const appUser = user as typeof user & AppUser
 
           token.id = user.id
+          token.authVersion = appUser.authVersion
           token.role = appUser.role
           token.plan = appUser.plan
         }
 
-        if (token.id && (!token.role || !token.plan)) {
+        if (token.id) {
           const dbUser = await getPrisma().user.findUnique({
             where: { id: String(token.id) },
             select: {
+              authVersion: true,
+              disabledAt: true,
               role: true,
               plan: true,
             },
           })
 
-          if (dbUser) {
+          if (
+            !dbUser ||
+            dbUser.disabledAt ||
+            token.authVersion !== dbUser.authVersion
+          ) {
+            token.revoked = true
+          } else {
+            token.authVersion = dbUser.authVersion
             token.role = dbUser.role
             token.plan = dbUser.plan
           }
@@ -196,7 +210,17 @@ function createAuthConfig(): NextAuthConfig {
         return token
       },
       session({ session, token }) {
+        if (
+          token.revoked ||
+          !token.id ||
+          typeof token.authVersion !== "number"
+        ) {
+          delete (session as { user?: unknown }).user
+          return session
+        }
+
         if (session.user) {
+          session.user.authVersion = token.authVersion
           session.user.id = String(token.id)
           session.user.role = token.role as AppRole
           session.user.plan = token.plan as AppPlan

@@ -127,6 +127,7 @@ model User {
   name           String?
   image          String?
   passwordHash   String?
+  authVersion    Int       @default(0)
   role           Role      @default(USER)
   plan           Plan      @default(FREE)
   aiMonthlyLimit Int       @default(100)
@@ -293,9 +294,9 @@ model FeedSubscription {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  feed             Feed                    @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  folder           Folder?                 @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  user             User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feed             Feed                          @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  folder           Folder?                       @relation(fields: [folderId], references: [id], onDelete: SetNull)
   smartDigestRules SmartDigestRuleSubscription[]
 
   @@unique([userId, feedId])
@@ -363,8 +364,8 @@ model PodcastEpisode {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  podcast        Podcast                    @relation(fields: [podcastId], references: [id], onDelete: Cascade)
-  states         PodcastEpisodeState[]
+  podcast         Podcast                 @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+  states          PodcastEpisodeState[]
   collectionItems ArticleCollectionItem[]
 
   @@unique([podcastId, externalId])
@@ -409,7 +410,7 @@ model Article {
 
   feed             Feed                    @relation(fields: [feedId], references: [id], onDelete: Cascade)
   states           ArticleState[]
-  collectionItems ArticleCollectionItem[]
+  collectionItems  ArticleCollectionItem[]
   aiSummaries      ArticleAiSummary[]
   aiDigestItems    AiDigestItem[]
   smartDigestItems SmartDigestItem[]
@@ -554,29 +555,29 @@ model AiDigestItem {
 }
 
 model SmartDigestRule {
-  id             String                  @id @default(cuid())
-  userId         String
-  name           String
-  topicPrompt    String
-  matchingMode   SmartDigestMatchingMode @default(RULES)
-  includeTerms   String[]                @default([])
-  excludeTerms   String[]                @default([])
-  sourceScope    SmartDigestSourceScope  @default(ALL_FEEDS)
-  emailEnabled   Boolean                 @default(false)
-  cadence        SmartDigestCadence      @default(DAILY)
-  scheduledHour  Int                     @default(8)
-  timeZone       String                  @default("UTC")
-  lastRunAt      DateTime?
-  nextRunAt      DateTime?
-  lastMatchedAt  DateTime?
-  isEnabled      Boolean                 @default(true)
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  id            String                  @id @default(cuid())
+  userId        String
+  name          String
+  topicPrompt   String
+  matchingMode  SmartDigestMatchingMode @default(RULES)
+  includeTerms  String[]                @default([])
+  excludeTerms  String[]                @default([])
+  sourceScope   SmartDigestSourceScope  @default(ALL_FEEDS)
+  emailEnabled  Boolean                 @default(false)
+  cadence       SmartDigestCadence      @default(DAILY)
+  scheduledHour Int                     @default(8)
+  timeZone      String                  @default("UTC")
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+  lastMatchedAt DateTime?
+  isEnabled     Boolean                 @default(true)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
 
-  user    User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  folders SmartDigestRuleFolder[]
+  user          User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folders       SmartDigestRuleFolder[]
   subscriptions SmartDigestRuleSubscription[]
-  digests SmartDigest[]
+  digests       SmartDigest[]
 
   @@unique([userId, id])
   @@index([userId, isEnabled])
@@ -639,22 +640,22 @@ model SmartDigest {
 }
 
 model SmartDigestItem {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   digestId      String
   articleId     String?
   articleTitle  String
   articleUrl    String
   feedTitle     String
   summary       String
-  matchedTerms  String[] @default([])
-  matchedFields String[] @default([])
+  matchedTerms  String[]  @default([])
+  matchedFields String[]  @default([])
   reason        String
   position      Int
   publishedAt   DateTime?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   digest  SmartDigest @relation(fields: [digestId], references: [id], onDelete: Cascade)
-  article Article?     @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  article Article?    @relation(fields: [articleId], references: [id], onDelete: SetNull)
 
   @@unique([digestId, articleId])
   @@unique([digestId, position])

@@ -6,6 +6,7 @@ type Plan = "FREE" | "PRO" | "ADMIN"
 declare module "next-auth" {
   interface Session {
     user: {
+      authVersion?: number
       id: string
       role: Role
       plan: Plan
@@ -13,6 +14,7 @@ declare module "next-auth" {
   }
 
   interface User {
+    authVersion?: number
     role: Role
     plan: Plan
   }
@@ -20,8 +22,10 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
+    authVersion?: number
     id: string
     role: Role
     plan: Plan
+    revoked?: boolean
   }
 }

@@ -43,6 +43,10 @@ vi.mock("@/components/admin-discover-subreddit-form", () => ({
 
 import { AdminDashboard } from "./admin-dashboard"
 
+vi.mock("@/components/admin-revoke-sessions-button", () => ({
+  AdminRevokeSessionsButton: () => <button type="button">Revoke sessions</button>,
+}))
+
 const generatedAt = new Date("2026-06-24T08:15:00.000Z")
 
 function dashboardData() {

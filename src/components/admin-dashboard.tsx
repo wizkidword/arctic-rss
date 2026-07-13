@@ -23,6 +23,7 @@ import { AdminDiscoverImportForm } from "@/components/admin-discover-import-form
 import { AdminDiscoverSubredditForm } from "@/components/admin-discover-subreddit-form"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
+import { AdminRevokeSessionsButton } from "@/components/admin-revoke-sessions-button"
 import type { AdminDashboardData } from "@/lib/admin-dashboard"
 import type { AdminQueueSnapshot } from "@/lib/admin-queues"
 import type { DiscoverCategoryEditorOption } from "@/lib/discover-category-customizations"
@@ -196,6 +197,7 @@ export function AdminDashboard({
                     <TableHeading>AI usage</TableHeading>
                     <TableHeading>Joined</TableHeading>
                     <TableHeading>Status</TableHeading>
+                    <TableHeading>Sessions</TableHeading>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -232,6 +234,9 @@ export function AdminDashboard({
                         >
                           {user.disabledAt ? "Disabled" : "Active"}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <AdminRevokeSessionsButton userId={user.id} />
                       </TableCell>
                     </tr>
                   ))}

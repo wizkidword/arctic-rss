@@ -81,6 +81,7 @@ export async function promoteVerifiedUserToAdmin({
 
     const updated = await transaction.user.updateMany({
       data: {
+        authVersion: { increment: 1 },
         plan: "ADMIN",
         role: "ADMIN",
       },
