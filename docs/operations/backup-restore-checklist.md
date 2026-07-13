@@ -113,14 +113,31 @@ the backup directory world-readable.
 Test restores in a disposable, non-production PostgreSQL target. Never restore
 over production to validate a backup. On a clean test cluster, restore the
 role definitions first; this recreates the application accounts and their
-credential hashes.
+credential hashes. On the VPS, the installed `arctic-rss-restore-drill` tool
+uses an isolated, temporary PostgreSQL 17 container with no published ports or
+network access, checks both backup hashes, restores the globals and database,
+validates the recovered application tables and representative data, then
+removes the temporary container.
+
+Run it as root, optionally passing one completed backup directory inside the
+configured `BACKUP_DIR`:
+
+```bash
+sudo /usr/local/sbin/arctic-rss-restore-drill
+```
+
+The result is safe to record as passed or failed, but do not copy its role dump,
+database dump, passwords, or detailed database contents into an issue or task
+log. A root-only status record is written outside the repository after a
+successful drill. Run a drill after backup-format changes and at least
+quarterly.
 
 ```bash
 psql --set=ON_ERROR_STOP=on --dbname=postgres \
-  -f "$BACKUP_DIR/postgres.globals.sql"
+  -f "$BACKUP_DIR/database.globals.sql"
 pg_restore --clean --if-exists --no-owner \
   --dbname="$RESTORE_DATABASE_URL" \
-  "$BACKUP_DIR/postgres.dump"
+  "$BACKUP_DIR/database.dump"
 ```
 
 The restore is successful only after the command finishes without errors and a

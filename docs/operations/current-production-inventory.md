@@ -38,7 +38,8 @@ those details in the private operator inventory.
 
 ## Remaining operator follow-ups
 
-- Maintain encrypted, off-host backup retention and schedule restore drills.
+- Maintain encrypted, off-host backup retention and run the documented
+  restore drill at least quarterly and after backup-format changes.
 - Keep provider snapshots and SSH/firewall recovery procedures in the private
   operator inventory.
 - Monitor queue backlog and failed email delivery in the application admin
