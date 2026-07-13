@@ -41,7 +41,11 @@ vi.mock("@/components/admin-discover-subreddit-form", () => ({
   ),
 }))
 
-import { AdminDashboardSnapshot as AdminDashboard } from "./admin-dashboard"
+import {
+  AdminDashboardSnapshot as AdminDashboard,
+  adminPageHref,
+  DateRangeFilter,
+} from "./admin-dashboard"
 
 vi.mock("@/components/admin-revoke-sessions-button", () => ({
   AdminRevokeSessionsButton: () => <button type="button">Revoke sessions</button>,
@@ -167,6 +171,34 @@ function dashboardData() {
 }
 
 describe("AdminDashboard", () => {
+  it("renders a feedback search control and preserves its value in pagination links", () => {
+    const filters = {
+      activityEnd: new Date("2026-06-25T00:00:00.000Z"),
+      activityStart: new Date("2026-06-01T00:00:00.000Z"),
+      bugReportsPage: 1,
+      feedbackSearch: "podcast player",
+      featureSuggestionsPage: 1,
+      feedsPage: 1,
+      from: "2026-06-01",
+      to: "2026-06-24",
+      usersPage: 1,
+    }
+
+    expect(
+      adminPageHref(filters, "bugReportsPage", 2),
+    ).toBe(
+      "/admin?from=2026-06-01&to=2026-06-24&feedbackSearch=podcast+player&bugReportsPage=2",
+    )
+
+    const markup = renderToStaticMarkup(
+      <DateRangeFilter filters={filters} />,
+    )
+
+    expect(markup).toContain("Search reader feedback")
+    expect(markup).toContain('name="feedbackSearch"')
+    expect(markup).toContain('value="podcast player"')
+  })
+
   it("renders operational statistics, users, feed health, AI usage, and failures", () => {
     const markup = renderToStaticMarkup(
       <AdminDashboard

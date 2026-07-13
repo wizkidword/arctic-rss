@@ -202,6 +202,7 @@ describe("admin dashboard aggregation", () => {
     const filters = parseAdminDashboardFilters(
       {
         bugReportsPage: "2",
+        feedbackSearch: "  Podcast player  ",
         featureSuggestionsPage: "3",
         feedsPage: "4",
         from: "2026-05-01",
@@ -213,6 +214,7 @@ describe("admin dashboard aggregation", () => {
 
     expect(filters).toMatchObject({
       bugReportsPage: 2,
+      feedbackSearch: "Podcast player",
       featureSuggestionsPage: 3,
       feedsPage: 4,
       from: "2026-05-01",
@@ -221,6 +223,13 @@ describe("admin dashboard aggregation", () => {
     })
     expect(filters.activityStart).toEqual(new Date("2026-05-01T00:00:00.000Z"))
     expect(filters.activityEnd).toEqual(new Date("2026-06-25T00:00:00.000Z"))
+
+    expect(
+      parseAdminDashboardFilters(
+        { feedbackSearch: "x".repeat(121) },
+        new Date("2026-06-24T08:15:00.000Z"),
+      ).feedbackSearch,
+    ).toHaveLength(120)
 
     const fallback = parseAdminDashboardFilters(
       {
@@ -275,10 +284,14 @@ describe("admin dashboard aggregation", () => {
     })
   })
 
-  it("applies the selected activity range to each feedback table", async () => {
+  it("applies the selected activity range and search to each feedback table", async () => {
     const store = createAdminStore()
     const filters = parseAdminDashboardFilters(
-      { from: "2026-06-01", to: "2026-06-24" },
+      {
+        feedbackSearch: "podcast",
+        from: "2026-06-01",
+        to: "2026-06-24",
+      },
       new Date("2026-06-24T08:15:00.000Z"),
     )
 
@@ -292,11 +305,28 @@ describe("admin dashboard aggregation", () => {
       gte: new Date("2026-06-01T00:00:00.000Z"),
       lt: new Date("2026-06-25T00:00:00.000Z"),
     }
+    const where = {
+      OR: [
+        { title: { contains: "podcast", mode: "insensitive" } },
+        { description: { contains: "podcast", mode: "insensitive" } },
+        { contactEmail: { contains: "podcast", mode: "insensitive" } },
+        { pageUrl: { contains: "podcast", mode: "insensitive" } },
+        { userAgent: { contains: "podcast", mode: "insensitive" } },
+        {
+          user: {
+            is: {
+              email: { contains: "podcast", mode: "insensitive" },
+            },
+          },
+        },
+      ],
+      createdAt: dateRange,
+    }
     expect(store.bugReport.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { createdAt: dateRange } }),
+      expect.objectContaining({ where }),
     )
     expect(store.featureSuggestion.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { createdAt: dateRange } }),
+      expect.objectContaining({ where }),
     )
   })
 

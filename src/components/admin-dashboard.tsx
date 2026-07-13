@@ -251,7 +251,7 @@ function DashboardFrame({
   )
 }
 
-function DateRangeFilter({ filters }: { filters: AdminDashboardFilters }) {
+export function DateRangeFilter({ filters }: { filters: AdminDashboardFilters }) {
   return (
     <section className="rounded-lg border bg-card p-4" aria-label="Activity date range">
       <form action="/admin" className="flex flex-wrap items-end gap-3" method="get">
@@ -281,11 +281,25 @@ function DateRangeFilter({ filters }: { filters: AdminDashboardFilters }) {
             type="date"
           />
         </div>
+        <div className="min-w-56 flex-1">
+          <label className="block text-xs font-medium text-muted-foreground" htmlFor="admin-feedback-search">
+            Search reader feedback
+          </label>
+          <input
+            className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+            defaultValue={filters.feedbackSearch}
+            id="admin-feedback-search"
+            maxLength={120}
+            name="feedbackSearch"
+            placeholder="Report, reader, page, or browser"
+            type="search"
+          />
+        </div>
         <button className={buttonVariants({ variant: "outline" })} type="submit">
-          Apply range
+          Apply filters
         </button>
         <p className="max-w-xl text-xs text-muted-foreground">
-          The range applies to AI activity, reader feedback, and recorded failures. It is capped at one year to keep operational reports quick.
+          The range applies to AI activity, reader feedback, and recorded failures. Feedback search matches report text and captured reader details. The range is capped at one year to keep operational reports quick.
         </p>
       </form>
     </section>
@@ -562,8 +576,13 @@ function PaginationNav({
   )
 }
 
-function adminPageHref(filters: AdminDashboardFilters, pageKey: string, page: number) {
+export function adminPageHref(filters: AdminDashboardFilters, pageKey: string, page: number) {
   const params = new URLSearchParams({ from: filters.from, to: filters.to })
+
+  if (filters.feedbackSearch) {
+    params.set("feedbackSearch", filters.feedbackSearch)
+  }
+
   params.set(pageKey, String(page))
 
   return `/admin?${params.toString()}`

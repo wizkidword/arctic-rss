@@ -7,6 +7,7 @@ export const ADMIN_DASHBOARD_AI_USAGE_CACHE_TAG = "admin-dashboard-ai-usage"
 export const ADMIN_DASHBOARD_PAGE_SIZE = 25
 const ADMIN_DASHBOARD_MAX_PAGE = 10_000
 const ADMIN_DASHBOARD_MAX_RANGE_DAYS = 366
+const ADMIN_DASHBOARD_MAX_FEEDBACK_SEARCH_LENGTH = 120
 
 type DecimalLike =
   | number
@@ -177,6 +178,7 @@ export type AdminDashboardFilters = {
   activityEnd: Date
   activityStart: Date
   bugReportsPage: number
+  feedbackSearch: string
   from: string
   to: string
   featureSuggestionsPage: number
@@ -237,6 +239,7 @@ export function parseAdminDashboardFilters(
     activityEnd: new Date(inclusiveEnd.getTime() + 24 * 60 * 60 * 1_000),
     activityStart,
     bugReportsPage: parsePage(params.bugReportsPage),
+    feedbackSearch: parseFeedbackSearch(params.feedbackSearch),
     featureSuggestionsPage: parsePage(params.featureSuggestionsPage),
     feedsPage: parsePage(params.feedsPage),
     from: dateInputValue(activityStart),
@@ -286,7 +289,11 @@ export async function getAdminDashboardFeedback({
 }: {
   filters: Pick<
     AdminDashboardFilters,
-    "activityEnd" | "activityStart" | "bugReportsPage" | "featureSuggestionsPage"
+    | "activityEnd"
+    | "activityStart"
+    | "bugReportsPage"
+    | "feedbackSearch"
+    | "featureSuggestionsPage"
   >
 }) {
   return getAdminDashboardFeedbackWithClient({
@@ -1047,7 +1054,11 @@ export async function getAdminDashboardFeedbackWithClient({
 }: {
   filters: Pick<
     AdminDashboardFilters,
-    "activityEnd" | "activityStart" | "bugReportsPage" | "featureSuggestionsPage"
+    | "activityEnd"
+    | "activityStart"
+    | "bugReportsPage"
+    | "feedbackSearch"
+    | "featureSuggestionsPage"
   >
   isAdmin: boolean
   store: AdminDashboardStore
@@ -1056,7 +1067,7 @@ export async function getAdminDashboardFeedbackWithClient({
 
   const bugReportsPage = boundedPage(filters.bugReportsPage)
   const featureSuggestionsPage = boundedPage(filters.featureSuggestionsPage)
-  const createdAt = dateRangeWhere(filters)
+  const where = feedbackWhere(filters)
   const [bugReports, featureSuggestions] = await Promise.all([
     store.bugReport.findMany({
       orderBy: {
@@ -1065,7 +1076,7 @@ export async function getAdminDashboardFeedbackWithClient({
       select: feedbackSelection(),
       skip: (bugReportsPage - 1) * ADMIN_DASHBOARD_PAGE_SIZE,
       take: ADMIN_DASHBOARD_PAGE_SIZE + 1,
-      where: { createdAt },
+      where,
     }),
     store.featureSuggestion.findMany({
       orderBy: {
@@ -1074,7 +1085,7 @@ export async function getAdminDashboardFeedbackWithClient({
       select: feedbackSelection(),
       skip: (featureSuggestionsPage - 1) * ADMIN_DASHBOARD_PAGE_SIZE,
       take: ADMIN_DASHBOARD_PAGE_SIZE + 1,
-      where: { createdAt },
+      where,
     }),
   ])
 
@@ -1283,6 +1294,42 @@ function dateRangeWhere({
   }
 }
 
+function feedbackWhere(
+  filters: Pick<
+    AdminDashboardFilters,
+    "activityEnd" | "activityStart" | "feedbackSearch"
+  >,
+) {
+  const createdAt = dateRangeWhere(filters)
+
+  if (!filters.feedbackSearch) {
+    return { createdAt }
+  }
+
+  const contains = {
+    contains: filters.feedbackSearch,
+    mode: "insensitive" as const,
+  }
+
+  return {
+    OR: [
+      { title: contains },
+      { description: contains },
+      { contactEmail: contains },
+      { pageUrl: contains },
+      { userAgent: contains },
+      {
+        user: {
+          is: {
+            email: contains,
+          },
+        },
+      },
+    ],
+    createdAt,
+  }
+}
+
 function feedbackSelection() {
   return {
     contactEmail: true,
@@ -1338,6 +1385,12 @@ function parsePage(value: string | string[] | undefined) {
   const parsed = Number(firstValue(value))
 
   return boundedPage(parsed)
+}
+
+function parseFeedbackSearch(value: string | string[] | undefined) {
+  return (firstValue(value) ?? "")
+    .trim()
+    .slice(0, ADMIN_DASHBOARD_MAX_FEEDBACK_SEARCH_LENGTH)
 }
 
 function firstValue(value: string | string[] | undefined) {
