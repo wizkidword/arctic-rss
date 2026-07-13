@@ -10,6 +10,7 @@ import {
 } from "./youtube-feeds"
 
 const commonFeedPaths = ["/feed", "/rss", "/rss.xml", "/atom.xml", "/index.xml"]
+const MAX_DISCOVERY_FETCHES = 12
 
 const xmlParser = new XMLParser({
   allowBooleanAttributes: true,
@@ -53,12 +54,21 @@ export async function discoverFeedFromUrl(
   input: string,
   { fetchText = safeFetchText }: FeedDiscoveryOptions = {}
 ): Promise<DiscoveredFeed> {
+  let fetchesUsed = 0
+  const fetchWithinBudget = async (url: URL) => {
+    if (fetchesUsed >= MAX_DISCOVERY_FETCHES) {
+      throw new FeedValidationError("The feed discovery request budget was exhausted.")
+    }
+
+    fetchesUsed += 1
+    return fetchText(url)
+  }
   const startUrl = normalizeHttpUrl(input)
   const directYouTubeFeedUrl = youtubeFeedUrlForInput(startUrl)
 
   if (directYouTubeFeedUrl && directYouTubeFeedUrl !== startUrl.href) {
     try {
-      const response = await fetchText(normalizeHttpUrl(directYouTubeFeedUrl))
+      const response = await fetchWithinBudget(normalizeHttpUrl(directYouTubeFeedUrl))
       const feed = tryParseFeedXml(response.text, response.url.href)
 
       if (feed) {
@@ -77,7 +87,7 @@ export async function discoverFeedFromUrl(
   let firstResponse: Awaited<ReturnType<typeof safeFetchText>> | null = null
 
   try {
-    firstResponse = await fetchText(startUrl)
+    firstResponse = await fetchWithinBudget(startUrl)
   } catch (error) {
     firstFetchError = error
   }
@@ -110,9 +120,13 @@ export async function discoverFeedFromUrl(
     ...(youtubeChannelFeedUrl ? [youtubeChannelFeedUrl] : []),
     ...candidates,
   ])) {
+    if (fetchesUsed >= MAX_DISCOVERY_FETCHES) {
+      break
+    }
+
     try {
       const candidateUrl = normalizeHttpUrl(candidate)
-      const response = await fetchText(candidateUrl)
+      const response = await fetchWithinBudget(candidateUrl)
       const feed = tryParseFeedXml(response.text, response.url.href)
 
       if (feed) {

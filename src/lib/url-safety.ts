@@ -1,9 +1,16 @@
 import dns from "node:dns/promises"
 import net from "node:net"
+import type { LookupFunction } from "node:net"
+import { Agent, fetch as undiciFetch } from "undici"
 
 const DEFAULT_TIMEOUT_MS = 10_000
+const DEFAULT_TOTAL_TIMEOUT_MS = 15_000
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024
 const MAX_REDIRECTS = 5
+const MAX_CONCURRENT_REQUESTS_PER_HOST = 4
+const USER_AGENT = "ArcticRSS/0.1 (+https://arcticrss.com)"
+const ACCEPT_HEADER =
+  "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.5"
 
 export class UnsafeUrlError extends Error {
   constructor(message: string) {
@@ -26,11 +33,47 @@ export type SafeFetchTextResult = {
 }
 
 export type SafeFetchTextOptions = {
+  // This is an internal test seam. Production calls use the pinned Undici transport.
   fetchImpl?: typeof fetch
   lookup?: typeof dns.lookup
   maxBytes?: number
   timeoutMs?: number
+  totalTimeoutMs?: number
+  hostRequestLimiter?: HostRequestLimiter
+  now?: () => number
 }
+
+export type PublicAddress = {
+  address: string
+  family: 4 | 6
+}
+
+export type HostRequestLimiter = {
+  acquire: (hostname: string, signal?: AbortSignal) => Promise<() => void>
+}
+
+type HostRequestState = {
+  active: number
+  waiters: Array<() => void>
+}
+
+type PinnedFetchResponse = {
+  response: FetchResponse
+  dispose: () => Promise<void>
+}
+
+type FetchResponse = {
+  body: ReadableStream<Uint8Array> | null
+  bodyUsed: boolean
+  headers: {
+    get: (name: string) => string | null
+  }
+  ok: boolean
+  status: number
+  text: () => Promise<string>
+}
+
+const sharedHostRequestLimiter = createHostRequestLimiter()
 
 export function normalizeHttpUrl(input: string) {
   const trimmed = input.trim()
@@ -76,7 +119,7 @@ export function normalizeHttpUrl(input: string) {
 }
 
 function assertPublicHostname(hostname: string) {
-  const normalized = hostname.toLowerCase().replace(/\.$/, "")
+  const normalized = normalizeHostname(hostname)
   const ipVersion = net.isIP(normalized)
 
   if (ipVersion && isPrivateIpAddress(normalized)) {
@@ -98,24 +141,31 @@ function assertPublicHostname(hostname: string) {
 }
 
 export function isPrivateIpAddress(address: string) {
-  const ipVersion = net.isIP(address)
+  const normalized = normalizeHostname(address)
+  const ipVersion = net.isIP(normalized)
 
   if (ipVersion === 4) {
-    return isPrivateIpv4Address(address)
+    return isPrivateIpv4Address(normalized)
   }
 
   if (ipVersion === 6) {
-    return isPrivateIpv6Address(address)
+    return isPrivateIpv6Address(normalized)
   }
 
-  return false
+  // DNS results must be literal IP addresses. Treat malformed values as unsafe.
+  return true
 }
 
 function isPrivateIpv4Address(address: string) {
   const parts = address.split(".").map((part) => Number.parseInt(part, 10))
-  const [first, second] = parts
+  const [first, second, third] = parts
 
-  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) {
+  if (
+    parts.length !== 4 ||
+    parts.some(
+      (part) => !Number.isInteger(part) || part < 0 || part > 255
+    )
+  ) {
     return true
   }
 
@@ -127,56 +177,80 @@ function isPrivateIpv4Address(address: string) {
     (first === 100 && second >= 64 && second <= 127) ||
     (first === 169 && second === 254) ||
     (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 0 && third === 0) ||
+    (first === 192 && second === 0 && third === 2) ||
+    (first === 192 && second === 88 && third === 99) ||
     (first === 192 && second === 168) ||
-    (first === 198 && (second === 18 || second === 19))
+    (first === 198 && (second === 18 || second === 19)) ||
+    (first === 198 && second === 51 && third === 100) ||
+    (first === 203 && second === 0 && third === 113)
   )
 }
 
 function isPrivateIpv6Address(address: string) {
-  const normalized = address.toLowerCase()
-  const embeddedIpv4 = normalized.match(/(?:^|:)(\d{1,3}(?:\.\d{1,3}){3})$/)
+  const groups = parseIpv6Hextets(address)
 
-  if (embeddedIpv4?.[1] && isPrivateIpv4Address(embeddedIpv4[1])) {
+  if (!groups) {
     return true
   }
 
+  const [first, second, third, fourth, fifth, sixth, seventh, eighth] = groups
+  const firstSixGroupsAreZero = groups.slice(0, 6).every((group) => group === 0)
+
   if (
-    normalized === "::" ||
-    normalized === "::1" ||
-    normalized === "0:0:0:0:0:0:0:0" ||
-    normalized === "0:0:0:0:0:0:0:1"
+    groups.every((group) => group === 0) ||
+    (groups.slice(0, 7).every((group) => group === 0) && eighth === 1) ||
+    firstSixGroupsAreZero
   ) {
     return true
   }
 
-  const firstHextet = Number.parseInt(normalized.split(":")[0] || "0", 16)
+  // IPv4-mapped IPv6 can otherwise turn an internal IPv4 address into a
+  // hexadecimal IPv6 literal (for example, ::ffff:a9fe:a9fe).
+  if (groups.slice(0, 5).every((group) => group === 0) && sixth === 0xffff) {
+    return isPrivateIpv4Address(
+      [seventh >> 8, seventh & 0xff, eighth >> 8, eighth & 0xff].join(".")
+    )
+  }
 
   return (
-    (firstHextet & 0xfe00) === 0xfc00 ||
-    (firstHextet & 0xffc0) === 0xfe80 ||
-    (firstHextet & 0xff00) === 0xff00
+    (first & 0xfe00) === 0xfc00 ||
+    (first & 0xffc0) === 0xfe80 ||
+    (first & 0xff00) === 0xff00 ||
+    (first === 0x2001 && second === 0x0db8) ||
+    (first === 0x2001 && (second & 0xfff0) === 0x0010) ||
+    (first === 0x2001 && (second & 0xfff0) === 0x0020) ||
+    first === 0x2002 ||
+    (first === 0x64 && second === 0xff9b && third === 0 && fourth === 0 && fifth === 0 && sixth === 0) ||
+    (first === 0x64 && second === 0xff9b && third === 1) ||
+    (first === 0x100 && second === 0 && third === 0 && fourth === 0)
   )
 }
 
 export async function assertUrlResolvesPublicly(
   url: URL,
   lookup: typeof dns.lookup = dns.lookup
-) {
-  const hostname = url.hostname
+): Promise<PublicAddress> {
+  const hostname = normalizeHostname(url.hostname)
 
   assertPublicHostname(hostname)
 
-  if (net.isIP(hostname)) {
-    return
+  const directIpFamily = net.isIP(hostname)
+
+  if (directIpFamily === 4 || directIpFamily === 6) {
+    return {
+      address: hostname,
+      family: directIpFamily,
+    }
   }
 
-  let addresses: Array<{ address: string }>
+  let addresses: Array<{ address: string; family?: number }>
 
   try {
     addresses = (await lookup(hostname, {
       all: true,
       verbatim: true,
-    })) as Array<{ address: string }>
+    })) as Array<{ address: string; family?: number }>
   } catch {
     throw new UnsafeUrlError("The URL hostname could not be resolved.")
   }
@@ -185,40 +259,92 @@ export async function assertUrlResolvesPublicly(
     throw new UnsafeUrlError("The URL hostname could not be resolved.")
   }
 
-  for (const address of addresses) {
-    if (isPrivateIpAddress(address.address)) {
+  const publicAddresses: PublicAddress[] = []
+
+  for (const result of addresses) {
+    const family = net.isIP(result.address)
+
+    if ((family !== 4 && family !== 6) || isPrivateIpAddress(result.address)) {
       throw new UnsafeUrlError("Local and internal hostnames are not allowed.")
     }
+
+    publicAddresses.push({
+      address: result.address,
+      family,
+    })
   }
+
+  // Every returned address must be public, then the selected address is passed
+  // directly to the connection. This closes the DNS rebinding window.
+  return publicAddresses[0]
 }
 
 export async function safeFetchText(
   inputUrl: URL,
   options: SafeFetchTextOptions = {}
 ): Promise<SafeFetchTextResult> {
-  const fetchImpl = options.fetchImpl ?? fetch
   const lookup = options.lookup ?? dns.lookup
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const totalTimeoutMs = options.totalTimeoutMs ?? DEFAULT_TOTAL_TIMEOUT_MS
+  const hostRequestLimiter = options.hostRequestLimiter ?? sharedHostRequestLimiter
+  const now = options.now ?? Date.now
+  const deadline = now() + totalTimeoutMs
   let url = inputUrl
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-    await assertUrlResolvesPublicly(url, lookup)
+    const remainingMs = Math.min(timeoutMs, deadline - now())
 
-    const signal = AbortSignal.timeout(timeoutMs)
-    let response: Response
+    if (remainingMs <= 0) {
+      throw new FeedFetchError("The URL request timed out.")
+    }
+
+    const signal = AbortSignal.timeout(Math.max(1, Math.floor(remainingMs)))
+    let releaseSlot: (() => void) | undefined
+    let dispose: () => Promise<void> = async () => undefined
 
     try {
-      response = await fetchImpl(url, {
-        headers: {
-          accept:
-            "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.5",
-          "user-agent": "ArcticRSS/0.1 (+https://arcticrss.com)",
-        },
-        redirect: "manual",
-        signal,
-      })
+      const address = await awaitWithSignal(
+        assertUrlResolvesPublicly(url, lookup),
+        signal
+      )
+      releaseSlot = await hostRequestLimiter.acquire(normalizeHostname(url.hostname), signal)
+
+      const request = options.fetchImpl
+        ? {
+            response: await options.fetchImpl(url, createFetchOptions(signal)),
+            dispose,
+          }
+        : await fetchWithPinnedAddress(url, address, signal, remainingMs, maxBytes)
+
+      dispose = request.dispose
+      const { response } = request
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location")
+
+        if (!location) {
+          throw new FeedFetchError("The URL redirected without a Location header.")
+        }
+
+        url = normalizeHttpUrl(new URL(location, url).href)
+        continue
+      }
+
+      if (!response.ok) {
+        throw new FeedFetchError(`The URL returned HTTP ${response.status}.`)
+      }
+
+      return {
+        contentType: response.headers.get("content-type") ?? "",
+        text: await readResponseText(response, maxBytes),
+        url,
+      }
     } catch (error) {
+      if (isResponseTooLargeError(error)) {
+        throw new FeedFetchError("The response is too large to inspect safely.")
+      }
+
       if (
         signal.aborted ||
         (error instanceof DOMException && error.name === "TimeoutError")
@@ -227,34 +353,251 @@ export async function safeFetchText(
       }
 
       throw error
-    }
-
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location")
-
-      if (!location) {
-        throw new FeedFetchError("The URL redirected without a Location header.")
-      }
-
-      url = normalizeHttpUrl(new URL(location, url).href)
-      continue
-    }
-
-    if (!response.ok) {
-      throw new FeedFetchError(`The URL returned HTTP ${response.status}.`)
-    }
-
-    return {
-      contentType: response.headers.get("content-type") ?? "",
-      text: await readResponseText(response, maxBytes),
-      url,
+    } finally {
+      await dispose()
+      releaseSlot?.()
     }
   }
 
   throw new FeedFetchError("The URL redirected too many times.")
 }
 
-async function readResponseText(response: Response, maxBytes: number) {
+export function createHostRequestLimiter(
+  maxConcurrentRequests = MAX_CONCURRENT_REQUESTS_PER_HOST
+): HostRequestLimiter {
+  if (!Number.isInteger(maxConcurrentRequests) || maxConcurrentRequests < 1) {
+    throw new RangeError("maxConcurrentRequests must be a positive integer.")
+  }
+
+  const hosts = new Map<string, HostRequestState>()
+
+  return {
+    acquire(hostname, signal) {
+      const host = normalizeHostname(hostname)
+      const state = hosts.get(host) ?? { active: 0, waiters: [] }
+      hosts.set(host, state)
+
+      if (signal?.aborted) {
+        return Promise.reject(new DOMException("The operation timed out.", "TimeoutError"))
+      }
+
+      if (state.active < maxConcurrentRequests) {
+        state.active += 1
+        return Promise.resolve(createRelease(state, host, hosts))
+      }
+
+      return new Promise((resolve, reject) => {
+        const onAbort = () => {
+          const waiterIndex = state.waiters.indexOf(grantSlot)
+
+          if (waiterIndex >= 0) {
+            state.waiters.splice(waiterIndex, 1)
+          }
+
+          if (state.active === 0 && state.waiters.length === 0) {
+            hosts.delete(host)
+          }
+
+          reject(new DOMException("The operation timed out.", "TimeoutError"))
+        }
+
+        const grantSlot = () => {
+          signal?.removeEventListener("abort", onAbort)
+          state.active += 1
+          resolve(createRelease(state, host, hosts))
+        }
+
+        state.waiters.push(grantSlot)
+        signal?.addEventListener("abort", onAbort, { once: true })
+      })
+    },
+  }
+}
+
+function createRelease(
+  state: HostRequestState,
+  host: string,
+  hosts: Map<string, HostRequestState>
+) {
+  let released = false
+
+  return () => {
+    if (released) {
+      return
+    }
+
+    released = true
+    state.active -= 1
+    const next = state.waiters.shift()
+
+    if (next) {
+      next()
+    } else if (state.active === 0) {
+      hosts.delete(host)
+    }
+  }
+}
+
+function createFetchOptions(signal: AbortSignal): RequestInit {
+  return {
+    headers: {
+      accept: ACCEPT_HEADER,
+      "user-agent": USER_AGENT,
+    },
+    redirect: "manual",
+    signal,
+  }
+}
+
+function awaitWithSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(new DOMException("The operation timed out.", "TimeoutError"))
+  }
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      reject(new DOMException("The operation timed out.", "TimeoutError"))
+    }
+
+    signal.addEventListener("abort", onAbort, { once: true })
+    operation.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort)
+        resolve(value)
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort)
+        reject(error)
+      }
+    )
+  })
+}
+
+async function fetchWithPinnedAddress(
+  url: URL,
+  address: PublicAddress,
+  signal: AbortSignal,
+  timeoutMs: number,
+  maxBytes: number
+): Promise<PinnedFetchResponse> {
+  const dispatcher = new Agent({
+    bodyTimeout: timeoutMs,
+    connectTimeout: timeoutMs,
+    connections: 1,
+    headersTimeout: timeoutMs,
+    maxResponseSize: maxBytes,
+    pipelining: 0,
+    connect: {
+      lookup: createPinnedLookup(address),
+      ...(net.isIP(normalizeHostname(url.hostname))
+        ? {}
+        : { servername: normalizeHostname(url.hostname) }),
+    },
+  })
+
+  let response: FetchResponse | undefined
+
+  try {
+    const fetchedResponse = (await undiciFetch(url, {
+      dispatcher,
+      headers: {
+        accept: ACCEPT_HEADER,
+        "user-agent": USER_AGENT,
+      },
+      redirect: "manual",
+      signal,
+    })) as unknown as FetchResponse
+    response = fetchedResponse
+
+    return {
+      response: fetchedResponse,
+      dispose: async () => {
+        if (response?.body && !response.bodyUsed) {
+          await response.body.cancel().catch(() => undefined)
+        }
+
+        await dispatcher.destroy().catch(() => undefined)
+      },
+    }
+  } catch (error) {
+    await dispatcher.destroy().catch(() => undefined)
+    throw error
+  }
+}
+
+export function createPinnedLookup(address: PublicAddress): LookupFunction {
+  return (_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, [address])
+      return
+    }
+
+    callback(null, address.address, address.family)
+  }
+}
+
+function isResponseTooLargeError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.name === "ResponseExceededMaxSizeError" ||
+      ("code" in error && error.code === "UND_ERR_RES_EXCEEDED_MAX_SIZE"))
+  )
+}
+
+function normalizeHostname(hostname: string) {
+  return hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.$/, "")
+}
+
+function parseIpv6Hextets(address: string) {
+  const normalized = normalizeHostname(address)
+  const sections = normalized.split("::")
+
+  if (sections.length > 2) {
+    return null
+  }
+
+  const left = sections[0] ? sections[0].split(":") : []
+  const right = sections.length === 2 && sections[1] ? sections[1].split(":") : []
+  const parts = [...left, ...right]
+  const dottedIpv4 = parts.findIndex((part) => part.includes("."))
+
+  if (dottedIpv4 >= 0) {
+    if (dottedIpv4 !== parts.length - 1 || !net.isIP(parts[dottedIpv4])) {
+      return null
+    }
+
+    const ipv4Parts = parts.pop()!.split(".").map(Number)
+    parts.push(
+      ((ipv4Parts[0] << 8) | ipv4Parts[1]).toString(16),
+      ((ipv4Parts[2] << 8) | ipv4Parts[3]).toString(16)
+    )
+  }
+
+  if (sections.length === 1) {
+    if (parts.length !== 8) {
+      return null
+    }
+  } else {
+    const missing = 8 - parts.length
+
+    if (missing < 1) {
+      return null
+    }
+
+    parts.splice(left.length, 0, ...Array.from({ length: missing }, () => "0"))
+  }
+
+  if (parts.length !== 8 || parts.some((part) => !/^[0-9a-f]{1,4}$/i.test(part))) {
+    return null
+  }
+
+  return parts.map((part) => Number.parseInt(part, 16))
+}
+
+async function readResponseText(response: FetchResponse, maxBytes: number) {
   const contentLength = response.headers.get("content-length")
 
   if (contentLength && Number(contentLength) > maxBytes) {

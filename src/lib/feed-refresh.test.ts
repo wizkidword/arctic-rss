@@ -152,6 +152,40 @@ describe("feed refresh", () => {
     )
   })
 
+  it("limits linked article hydration work for a Hacker News refresh", async () => {
+    const store = createStore("https://news.ycombinator.com/rss")
+    const items = Array.from(
+      { length: 13 },
+      (_, index) => `
+        <item>
+          <guid>item-${index}</guid>
+          <title>Story ${index}</title>
+          <link>https://example.com/story-${index}</link>
+          <description>Comments</description>
+        </item>`
+    ).join("\n")
+    const fetchText = vi.fn().mockResolvedValue({
+      contentType: "application/rss+xml",
+      text: `<?xml version="1.0"?><rss version="2.0"><channel>${items}</channel></rss>`,
+      url: new URL("https://news.ycombinator.com/rss"),
+    })
+    const fetchArticleContent = vi.fn().mockResolvedValue({
+      contentType: "text/html",
+      text: "<html><body><article>Story body</article></body></html>",
+      url: new URL("https://example.com/story"),
+    })
+
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchArticleContent,
+      fetchText,
+      store,
+    })
+
+    expect(fetchArticleContent).toHaveBeenCalledTimes(12)
+    expect(store.article.upsert).toHaveBeenCalledTimes(13)
+  })
+
   it("does not fetch original pages for ordinary RSS summaries", async () => {
     const store = createStore()
     const fetchText = vi.fn().mockResolvedValue({

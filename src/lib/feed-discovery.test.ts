@@ -110,6 +110,24 @@ describe("feed discovery helpers", () => {
     expect(fetchText).toHaveBeenCalledWith(new URL("https://example.com/feed"))
   })
 
+  it("limits the number of fetches used to discover a feed", async () => {
+    const alternateLinks = Array.from(
+      { length: 20 },
+      (_, index) =>
+        `<link rel="alternate" type="application/rss+xml" href="/feed-${index}.xml" />`
+    ).join("\n")
+    const fetchText = vi.fn(async (url: URL): Promise<SafeFetchTextResult> => ({
+      contentType: "text/html",
+      text: `<html><head>${alternateLinks}</head></html>`,
+      url,
+    }))
+
+    await expect(
+      discoverFeedFromUrl("https://example.com", { fetchText })
+    ).rejects.toThrow("No readable RSS or Atom feed was found")
+    expect(fetchText).toHaveBeenCalledTimes(12)
+  })
+
   it("rejects non-feed XML", () => {
     expect(() =>
       parseFeedXml("<html><title>Nope</title></html>", "https://example.com")

@@ -7,6 +7,8 @@ import {
   type SafeFetchTextResult,
 } from "./url-safety"
 
+const MAX_LINKED_ARTICLE_FETCHES = 12
+
 type RefreshableFeed = {
   feedUrl: string
   id: string
@@ -149,12 +151,20 @@ async function hydrateLinkedArticleContent({
   }
 
   const hydratedArticles: ParsedFeedArticle[] = []
+  let linkedArticleFetches = 0
 
   for (const article of articles) {
     if (!needsLinkedArticleHydration(article)) {
       hydratedArticles.push(article)
       continue
     }
+
+    if (linkedArticleFetches >= MAX_LINKED_ARTICLE_FETCHES) {
+      hydratedArticles.push(article)
+      continue
+    }
+
+    linkedArticleFetches += 1
 
     try {
       const response = await fetchArticleContent(normalizeHttpUrl(article.url))
