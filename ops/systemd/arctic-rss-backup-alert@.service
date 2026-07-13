@@ -1,0 +1,8 @@
+[Unit]
+Description=Arctic RSS backup failure alert for %i
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/arctic-rss-notify backup-failure %i

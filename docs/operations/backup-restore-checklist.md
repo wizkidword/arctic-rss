@@ -37,6 +37,19 @@ database backups.
 Local backups are not a disaster-recovery solution by themselves. Copy them
 to encrypted off-host storage and perform regular restore drills.
 
+For a Windows-operated off-VPS copy, use
+`scripts/windows/sync-vps-backups.ps1` with a private JSON configuration file
+outside the repository. It copies only a completed backup directory, verifies
+both SHA-256 checksums locally, and can request a VPS email alert if the copy
+fails. Schedule it after the VPS backup timer and keep its SSH host, account,
+and key path out of Git.
+
+`scripts/production-notify.sh` and
+`ops/systemd/arctic-rss-backup-alert@.service` provide a failure-only SMTP
+alert for the automated backup job. Put `APP_DIR` and `OPS_ALERT_EMAIL` in a
+root-readable `0600` server environment file; do not add them to `.env` or
+the repository. Test delivery after installation before relying on the alert.
+
 ## Pre-change backup gate
 
 1. Confirm provider-console access and create a VPS snapshot. Record its ID and
