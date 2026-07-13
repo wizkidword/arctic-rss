@@ -2,7 +2,6 @@
 
 import { redirect } from "next/navigation"
 
-import { isAdminEmail, parseAdminEmails } from "@/lib/admin"
 import { getPrisma } from "@/lib/db"
 import { requestEmailVerification } from "@/lib/email-verification"
 import {
@@ -70,17 +69,13 @@ export async function signupAction(
     }
   }
 
-  const role = isAdminEmail(email, parseAdminEmails(process.env.ADMIN_EMAILS))
-    ? "ADMIN"
-    : "USER"
-
   const user = await prisma.user.create({
     data: {
       email,
       name: name || null,
       passwordHash: await hashPassword(password),
-      role,
-      plan: role === "ADMIN" ? "ADMIN" : "FREE",
+      role: "USER",
+      plan: "FREE",
       settings: {
         create: defaultUserSettings(),
       },

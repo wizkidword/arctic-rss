@@ -47,7 +47,7 @@ NEXT_PUBLIC_APP_URL="https://rss.example.com"
 AUTH_GOOGLE_ID=""
 AUTH_GOOGLE_SECRET=""
 
-ADMIN_EMAILS="owner@example.com"
+REQUIRE_EMAIL_VERIFICATION=true
 CRON_SECRET="REPLACE_CRON_SECRET"
 ```
 
@@ -66,6 +66,25 @@ openssl rand -base64 32
 The database password in `DATABASE_URL` must match `POSTGRES_PASSWORD`.
 Percent-encode URL-reserved characters in the password used by
 `DATABASE_URL`.
+
+## Administrator access
+
+Public signup and Google login never grant the `ADMIN` role. Production starts
+only when `REQUIRE_EMAIL_VERIFICATION` is enabled (or omitted, which defaults
+to enabled) and the retired `ADMIN_EMAILS` variable has been removed.
+
+After a deployment, promote only an existing active, verified account from the
+server. The command is local-only, idempotent, and records the promotion in
+`AdminAuditLog` without storing the target email in the audit metadata:
+
+```bash
+docker compose run --rm --no-deps worker \
+  npm run admin:bootstrap -- --email admin@example.com
+```
+
+Do not run this command merely to preserve an existing administrator: SEC-001
+does not change existing roles. Run it only to make a deliberate, reviewed
+role change after verifying the target account.
 
 Optional transactional email values:
 

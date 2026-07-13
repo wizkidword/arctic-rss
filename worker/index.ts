@@ -22,12 +22,15 @@ import {
   type PodcastRefreshJobData,
 } from "../src/lib/podcast-refresh-queue"
 import { sendSmartDigestEmail } from "../src/lib/mail"
+import { assertSecureProductionConfiguration } from "../src/lib/production-security"
 import {
   enqueueSmartDigestRule,
   SMART_DIGEST_QUEUE_NAME,
   type SmartDigestJobData,
 } from "../src/lib/smart-digest-queue"
 import { processSmartDigestRule } from "../src/lib/smart-digest-processing"
+
+assertSecureProductionConfiguration()
 
 const schedulerIntervalMs = Number(
   process.env.FEED_SCHEDULER_INTERVAL_MS ?? 60_000

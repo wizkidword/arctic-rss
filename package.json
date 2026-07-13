@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

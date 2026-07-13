@@ -87,7 +87,20 @@ The readiness endpoint is available at `/api/health`.
 
 ## Auth
 
-This project uses Auth.js with local email/password credentials as the open-source default. The first user whose email appears in `ADMIN_EMAILS` receives the `ADMIN` role on signup.
+This project uses Auth.js with local email/password credentials as the
+open-source default. Credentials and Google signups always begin as `USER` /
+`FREE`; a signup can never grant the `ADMIN` role. Production requires verified
+email addresses.
+
+Promote an existing, active, verified account only from a trusted server shell:
+
+```bash
+npm run admin:bootstrap -- --email admin@example.com
+```
+
+The command is idempotent and writes an `ADMIN_BOOTSTRAP_PROMOTE` audit event.
+It has no HTTP endpoint, refuses missing, disabled, ambiguous, or unverified
+targets, and does not display the target address.
 
 ## AI Summaries
 
@@ -97,6 +110,7 @@ Article summaries and unread digests use deterministic local providers by defaul
 
 ```bash
 npm run dev
+npm run admin:bootstrap -- --email admin@example.com
 npm run build
 npm run start
 npm run lint

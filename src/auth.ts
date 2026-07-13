@@ -4,14 +4,13 @@ import Credentials from "next-auth/providers/credentials"
 import Google, { type GoogleProfile } from "next-auth/providers/google"
 import { z } from "zod"
 
-import { isAdminEmail, parseAdminEmails } from "@/lib/admin"
 import { getPrisma } from "@/lib/db"
 import { shouldBlockLoginForUnverifiedEmail } from "@/lib/email-verification-policy"
 import { isGoogleAuthConfigured } from "@/lib/google-auth"
 import { sendWelcomeEmail } from "@/lib/mail"
+import { applyVerifiedOAuthDefaults } from "@/lib/oauth-user-provisioning"
 import { verifyPassword } from "@/lib/password"
 import { notifyAdminsOfNewRegistration } from "@/lib/registration-notifications"
-import { defaultUserSettings } from "@/lib/settings"
 import { verifyTurnstileToken } from "@/lib/turnstile"
 
 type AppRole = "USER" | "ADMIN"
@@ -26,12 +25,6 @@ const credentialsSchema = z.object({
   password: z.string().min(1),
   turnstileToken: z.string().optional(),
 })
-
-function getRoleForEmail(email: string): AppRole {
-  return isAdminEmail(email, parseAdminEmails(process.env.ADMIN_EMAILS))
-    ? "ADMIN"
-    : "USER"
-}
 
 function isVerifiedGoogleProfile(
   profile: unknown
@@ -70,46 +63,6 @@ async function notifyAdminsOfNewRegistrationSafely({
     })
   } catch (error) {
     console.error("Failed to send admin signup notification.", error)
-  }
-}
-
-async function applyVerifiedOAuthDefaults({
-  userId,
-  email,
-  sendWelcome,
-}: {
-  userId: string
-  email: string
-  sendWelcome: boolean
-}) {
-  const prisma = getPrisma()
-  const normalizedEmail = email.trim().toLowerCase()
-  const role = getRoleForEmail(normalizedEmail)
-  const previous = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      emailVerified: true,
-    },
-  })
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      email: normalizedEmail,
-      emailVerified: previous?.emailVerified ?? new Date(),
-      role,
-      plan: role === "ADMIN" ? "ADMIN" : "FREE",
-      settings: {
-        upsert: {
-          create: defaultUserSettings(),
-          update: {},
-        },
-      },
-    },
-  })
-
-  if (sendWelcome && !previous?.emailVerified) {
-    await sendWelcomeEmailSafely(normalizedEmail)
   }
 }
 
@@ -259,9 +212,10 @@ function createAuthConfig(): NextAuthConfig {
         }
 
         await applyVerifiedOAuthDefaults({
+          onFirstVerification: sendWelcomeEmailSafely,
+          store: getPrisma(),
           userId: user.id,
           email: user.email,
-          sendWelcome: true,
         })
         await notifyAdminsOfNewRegistrationSafely({
           userId: user.id,
@@ -280,9 +234,10 @@ function createAuthConfig(): NextAuthConfig {
         }
 
         await applyVerifiedOAuthDefaults({
+          onFirstVerification: sendWelcomeEmailSafely,
+          store: getPrisma(),
           userId: user.id,
           email: user.email,
-          sendWelcome: true,
         })
       },
     },

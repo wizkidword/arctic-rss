@@ -51,7 +51,6 @@ function createSignupFormData() {
 describe("signupAction", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubEnv("ADMIN_EMAILS", "")
     mocks.hashPassword.mockResolvedValue("hashed-password")
     mocks.verifyTurnstileToken.mockResolvedValue({ success: true })
     mocks.requestEmailVerification.mockResolvedValue({ status: "sent" })
@@ -114,6 +113,36 @@ describe("signupAction", () => {
       userId: "user-1",
     })
     expect(mocks.redirect).toHaveBeenCalledWith("/login?verify=1")
+  })
+
+  it("always creates a standard user even when a deprecated admin allowlist matches", async () => {
+    vi.stubEnv("ADMIN_EMAILS", "reader@example.com")
+    const prisma = {
+      user: {
+        create: vi.fn(async () => ({
+          createdAt: new Date("2026-06-28T18:30:00.000Z"),
+          email: "reader@example.com",
+          id: "user-1",
+          name: "Example Reader",
+        })),
+        delete: vi.fn(),
+        findUnique: vi.fn(async () => null),
+      },
+    }
+    mocks.getPrisma.mockReturnValue(prisma)
+
+    await expect(
+      signupAction({}, createSignupFormData())
+    ).rejects.toThrow("REDIRECT:/login?verify=1")
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          plan: "FREE",
+          role: "USER",
+        }),
+      })
+    )
   })
 
   it("still completes signup when the admin notification fails", async () => {

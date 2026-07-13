@@ -55,6 +55,44 @@ imports. Upload it to a staging directory beside the active release.
 
 7. Verify the public health endpoint, login page, and the changed user flow.
 
+## SEC-001 administrator-role remediation
+
+This release has no schema change. Do not invoke `prisma db push` as part of
+this deployment. The current Compose stack normally runs a one-shot migration
+service, so rebuild and recreate only the application services after the
+backup gate is complete:
+
+```bash
+cd "$APP_DIR"
+docker compose build web worker
+docker compose up -d --no-deps --force-recreate web worker
+docker compose ps
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+Before starting the new containers, make these secret-safe edits in the
+production `.env` without printing it:
+
+1. Set `REQUIRE_EMAIL_VERIFICATION=true` (or remove it to use the safe
+   default).
+2. Remove `ADMIN_EMAILS` entirely; the release refuses to start while it is
+   present in production.
+3. Confirm the known recovery administrator is active and email-verified.
+
+Existing administrator roles are intentionally preserved. Only if a deliberate
+role change is required, promote a known active, verified account from the
+server after the web and worker health checks pass:
+
+```bash
+docker compose run --rm --no-deps worker \
+  npm run admin:bootstrap -- --email admin@example.com
+```
+
+Verify that public signup creates a standard user, an unverified account cannot
+sign in, the known administrator can reach `/admin`, and the promotion command
+is idempotent. If the application fails to start because the safe environment
+values were not applied, correct those values rather than weakening the check.
+
 ## Rollback
 
 1. Keep the currently running failed release and its logs for diagnosis.
