@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+const mocks = vi.hoisted(() => ({
+  Redis: vi.fn(),
+}))
+
+vi.mock("ioredis", () => ({
+  default: mocks.Redis,
+}))
+
 import {
   enforceRateLimit,
   getTrustedClientIp,
@@ -144,5 +152,31 @@ describe("rate limiter", () => {
     expect(
       getTrustedClientIp(new Headers({ "cf-connecting-ip": "not-an-ip" }))
     ).toBeNull()
+  })
+
+  it("allows the first protected request to wait for Redis to connect", async () => {
+    const store = {
+      eval: vi.fn(async () => [1, 300_000]),
+      on: vi.fn(),
+      status: "connecting",
+    }
+    mocks.Redis.mockImplementation(function RedisConstructor() {
+      return store
+    })
+
+    await expect(
+      enforceRateLimit({ action: "image_proxy", ip: "198.51.100.10" })
+    ).resolves.toEqual({ allowed: true })
+
+    expect(store.eval).toHaveBeenCalledOnce()
+    const options = mocks.Redis.mock.calls[0]?.[1]
+
+    expect(options).toMatchObject({
+      connectTimeout: 1_000,
+      maxRetriesPerRequest: 0,
+      retryStrategy: expect.any(Function),
+    })
+    expect(options).not.toHaveProperty("enableOfflineQueue")
+    expect(options).not.toHaveProperty("lazyConnect")
   })
 })

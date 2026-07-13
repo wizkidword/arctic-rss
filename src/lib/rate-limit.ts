@@ -163,8 +163,6 @@ function getRateLimitStore() {
   if (!redis || redis.status === "end") {
     redis = new Redis(redisConnectionOptions().url, {
       connectTimeout: 1_000,
-      enableOfflineQueue: false,
-      lazyConnect: true,
       maxRetriesPerRequest: 0,
       retryStrategy: () => null,
     })
