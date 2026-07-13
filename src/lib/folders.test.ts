@@ -208,10 +208,13 @@ describe("folders", () => {
 
   it("moves a subscription into a folder owned by the current user", async () => {
     const store = createFolderStore()
-    store.feedSubscription.findFirst.mockResolvedValue({ id: "subscription-1" })
+    store.feedSubscription.findFirst.mockResolvedValue({
+      folderId: "folder-previous",
+      id: "subscription-1",
+    })
     store.folder.findFirst.mockResolvedValue({ id: "folder-1" })
 
-    await moveSubscriptionToFolderWithClient({
+    const result = await moveSubscriptionToFolderWithClient({
       folderId: "folder-1",
       store,
       subscriptionId: "subscription-1",
@@ -219,7 +222,7 @@ describe("folders", () => {
     })
 
     expect(store.feedSubscription.findFirst).toHaveBeenCalledWith({
-      select: { id: true },
+      select: { folderId: true, id: true },
       where: {
         id: "subscription-1",
         userId: "user-1",
@@ -238,13 +241,17 @@ describe("folders", () => {
       },
       where: { id: "subscription-1" },
     })
+    expect(result).toEqual({ previousFolderId: "folder-previous" })
   })
 
   it("moves a subscription back to uncategorized without requiring a folder", async () => {
     const store = createFolderStore()
-    store.feedSubscription.findFirst.mockResolvedValue({ id: "subscription-1" })
+    store.feedSubscription.findFirst.mockResolvedValue({
+      folderId: null,
+      id: "subscription-1",
+    })
 
-    await moveSubscriptionToFolderWithClient({
+    const result = await moveSubscriptionToFolderWithClient({
       folderId: null,
       store,
       subscriptionId: "subscription-1",
@@ -258,6 +265,7 @@ describe("folders", () => {
       },
       where: { id: "subscription-1" },
     })
+    expect(result).toEqual({ previousFolderId: null })
   })
 
   it("does not move subscriptions the current user does not own", async () => {

@@ -256,8 +256,6 @@ export async function togglePodcastEpisodeStarAction(
 
 function revalidatePodcastPaths() {
   const paths: Array<Parameters<typeof revalidatePath>> = [
-    ["/app"],
-    ["/app", "layout"],
     ["/app/podcasts"],
     ["/app/podcasts/discover"],
   ]

@@ -118,12 +118,11 @@ describe("podcast actions", () => {
       url: "https://example.com/podcast.xml",
       userId: "user-1",
     })
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/podcasts")
     expect(mocks.revalidatePath).toHaveBeenCalledWith(
       "/app/podcasts/discover"
     )
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(2)
   })
 
   it("returns analytics metadata when a podcast is the reader's first source", async () => {
@@ -222,7 +221,7 @@ describe("podcast actions", () => {
       },
     })
     mocks.revalidatePath.mockImplementation((path: string) => {
-      if (path === "/app") {
+      if (path === "/app/podcasts") {
         throw new Error("Cache unavailable")
       }
     })
@@ -233,12 +232,11 @@ describe("podcast actions", () => {
       message: "Subscribed to Example Podcast. Imported 2 episodes.",
       status: "success",
     })
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/podcasts")
     expect(mocks.revalidatePath).toHaveBeenCalledWith(
       "/app/podcasts/discover"
     )
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(2)
   })
 
   it("unsubscribes the selected podcast and redirects to podcasts", async () => {
@@ -261,12 +259,11 @@ describe("podcast actions", () => {
       subscriptionId: "subscription-1",
       userId: "user-1",
     })
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/podcasts")
     expect(mocks.revalidatePath).toHaveBeenCalledWith(
       "/app/podcasts/discover"
     )
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(2)
     expect(mocks.redirect).toHaveBeenCalledWith("/app/podcasts")
   })
 

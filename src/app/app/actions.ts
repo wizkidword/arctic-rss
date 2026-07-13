@@ -267,7 +267,7 @@ export async function updateDateTimePreferences({
     },
   })
 
-  revalidateReaderPaths()
+  revalidatePath("/app", "layout")
   revalidatePath("/app/settings")
   refresh()
 }
@@ -433,7 +433,7 @@ export async function subscribeDirectoryFeedAction(
   }
 
   try {
-    revalidatePath("/app", "layout")
+    revalidatePath("/app")
   } catch {
     // The subscription is committed; cache invalidation is best effort.
   }
@@ -591,11 +591,14 @@ export async function unsubscribeFeedAction(
     }
   }
 
+  let folderId: string | null | undefined
+
   try {
-    await unsubscribeFromFeed({
+    const subscription = await unsubscribeFromFeed({
       subscriptionId,
       userId: session.user.id,
     })
+    folderId = subscription.folderId
   } catch (error) {
     if (error instanceof FeedSubscriptionError) {
       return {
@@ -611,8 +614,7 @@ export async function unsubscribeFeedAction(
   }
 
   try {
-    revalidateReaderPaths()
-    revalidateSettingsPaths()
+    revalidateFeedSubscriptionPaths(folderId)
   } catch {
     // The unsubscribe is committed; cache invalidation is best effort.
   }
@@ -917,7 +919,7 @@ export async function setArticleReadAction(formData: FormData) {
     userId: session.user.id,
   })
 
-  revalidateReaderPaths()
+  revalidateArticleListPaths()
   refresh()
 }
 
@@ -941,7 +943,7 @@ export async function setArticleStarredAction(formData: FormData) {
     userId: session.user.id,
   })
 
-  revalidateReaderPaths()
+  revalidateArticleListPaths()
   refresh()
 }
 
@@ -963,7 +965,7 @@ export async function deleteArticleAction(formData: FormData) {
     userId: session.user.id,
   })
 
-  revalidateReaderPaths()
+  revalidateArticleListPaths()
   revalidatePath(`/app/article/${articleId}`)
   refresh()
 }
@@ -1013,7 +1015,7 @@ export async function markAllReadAction(formData: FormData) {
     userId: session.user.id,
   })
 
-  revalidateReaderPaths()
+  revalidateArticleListPaths()
   refresh()
 }
 
@@ -1028,7 +1030,7 @@ export async function cancelBulkReadAction(jobId: string) {
     jobId,
     userId: session.user.id,
   })
-  revalidateReaderPaths()
+  revalidateArticleListPaths()
   refresh()
 }
 
@@ -1074,7 +1076,7 @@ export async function addArticleToCollectionAction(
     }
   }
 
-  revalidateReaderPaths()
+  revalidateArticleListPaths()
   refresh()
 
   return {
@@ -1100,7 +1102,7 @@ export async function removeArticleFromCollectionAction(formData: FormData) {
   })
 
   revalidateCollectionPaths(collectionId)
-  revalidateReaderPaths()
+  revalidateArticleListPaths()
   refresh()
 }
 
@@ -1237,7 +1239,7 @@ export async function generateArticleSummaryAction(
       userId: session.user.id,
     })
 
-    revalidateReaderPaths()
+    revalidateArticleListPaths()
     refresh()
 
     return {
@@ -1455,12 +1457,15 @@ export async function moveSubscriptionToFolderAction(formData: FormData) {
     return
   }
 
+  let previousFolderId: string | null | undefined
+
   try {
-    await moveSubscriptionToFolder({
+    const result = await moveSubscriptionToFolder({
       folderId,
       subscriptionId,
       userId: session.user.id,
     })
+    previousFolderId = result.previousFolderId
   } catch (error) {
     if (error instanceof FolderError) {
       return
@@ -1469,19 +1474,16 @@ export async function moveSubscriptionToFolderAction(formData: FormData) {
     throw error
   }
 
-  revalidateFolderPaths(folderId ?? undefined)
+  revalidateFolderPaths(previousFolderId, folderId)
   refresh()
 }
 
-function revalidateReaderPaths() {
+function revalidateArticleListPaths() {
+  // Article state only changes the three reader lists. refresh() updates the
+  // authenticated route that initiated the Server Action.
   revalidatePath("/app")
-  revalidatePath("/app", "layout")
-  revalidatePath("/app/ai")
-  revalidatePath("/app/collections")
   revalidatePath("/app/unread")
   revalidatePath("/app/starred")
-  revalidatePath("/app/folders")
-  revalidatePath("/app/settings/import-export")
 }
 
 function revalidatePodcastPaths() {
@@ -1497,12 +1499,21 @@ function revalidateCollectionPaths(collectionId?: string) {
   }
 }
 
-function revalidateFolderPaths(folderId?: string) {
-  revalidateReaderPaths()
-  revalidateSettingsPaths()
+function revalidateFeedSubscriptionPaths(folderId?: string | null) {
+  revalidateArticleListPaths()
+  revalidateFolderPaths(folderId)
+}
 
-  if (folderId) {
-    revalidatePath(`/app/folder/${folderId}`)
+function revalidateFolderPaths(
+  ...folderIds: Array<string | null | undefined>
+) {
+  revalidatePath("/app/folders")
+  revalidatePath("/app/settings/import-export")
+
+  for (const folderId of new Set(folderIds)) {
+    if (folderId) {
+      revalidatePath(`/app/folder/${folderId}`)
+    }
   }
 }
 

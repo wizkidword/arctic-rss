@@ -62,6 +62,7 @@ const mocks = vi.hoisted(() => {
     MockFeedSubscriptionError,
     MockFeedValidationError,
     MockOpmlImportJobError,
+    moveSubscriptionToFolder: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
     }),
@@ -169,7 +170,7 @@ vi.mock("@/lib/folders", () => ({
   createFolder: vi.fn(),
   deleteFolder: vi.fn(),
   FolderError: class FolderError extends Error {},
-  moveSubscriptionToFolder: vi.fn(),
+  moveSubscriptionToFolder: mocks.moveSubscriptionToFolder,
   renameFolder: vi.fn(),
 }))
 
@@ -207,6 +208,7 @@ import {
   generateArticleSummaryAction,
   importOpmlAction,
   markArticleReadOnOpen,
+  moveSubscriptionToFolderAction,
   removeArticleFromCollectionAction,
   removePodcastEpisodeFromCollectionAction,
   refreshFeedAction,
@@ -1021,7 +1023,7 @@ describe("subscribeDirectoryFeedAction", () => {
       userId: "user-1",
     })
     expect(mocks.refreshFeed).toHaveBeenCalledWith("feed-1")
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Subscribed to NPR - National. Imported 12 articles.",
@@ -1338,7 +1340,7 @@ describe("subscribeDirectoryFeedAction", () => {
 
     expect(mocks.subscribeToFeed).toHaveBeenCalledTimes(1)
     expect(mocks.refreshFeed).toHaveBeenCalledWith("feed-1")
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Subscribed to NPR - National. Article refresh will retry.",
@@ -1372,7 +1374,7 @@ describe("subscribeDirectoryFeedAction", () => {
       formData
     )
 
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Subscribed to NPR - National. Imported 12 articles.",
@@ -1406,7 +1408,7 @@ describe("subscribeDirectoryFeedAction", () => {
       formData
     )
 
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Subscribed to NPR - National. Imported 12 articles.",
@@ -1449,7 +1451,10 @@ describe("generateArticleSummaryAction", () => {
       userId: "user-1",
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/ai")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/unread")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/starred")
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(3)
+    expect(mocks.revalidatePath).not.toHaveBeenCalledWith("/app/ai")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Summary generated.",
@@ -1772,8 +1777,9 @@ describe("updateDateTimePreferences", () => {
         userId: "user-1",
       },
     })
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/settings")
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(2)
     expect(mocks.refresh).toHaveBeenCalled()
   })
 
@@ -1792,6 +1798,50 @@ describe("updateDateTimePreferences", () => {
       })
     ).rejects.toThrow("Unsupported date and time preference")
     expect(mocks.getPrisma).not.toHaveBeenCalled()
+  })
+})
+
+describe("moveSubscriptionToFolderAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.moveSubscriptionToFolder.mockReset()
+    mocks.refresh.mockReset()
+    mocks.revalidatePath.mockReset()
+  })
+
+  it("invalidates only the folder manager, OPML export, and affected folder streams", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.moveSubscriptionToFolder.mockResolvedValue({
+      previousFolderId: "folder-previous",
+    })
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+    formData.set("folderId", "folder-next")
+
+    await moveSubscriptionToFolderAction(formData)
+
+    expect(mocks.moveSubscriptionToFolder).toHaveBeenCalledWith({
+      folderId: "folder-next",
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(4)
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/folders")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/app/settings/import-export"
+    )
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/app/folder/folder-previous"
+    )
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/app/folder/folder-next"
+    )
+    expect(mocks.revalidatePath).not.toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.refresh).toHaveBeenCalled()
   })
 })
 
@@ -1853,6 +1903,7 @@ describe("unsubscribeFeedAction", () => {
       },
     })
     mocks.unsubscribeFromFeed.mockResolvedValue({
+      folderId: "folder-1",
       id: "service-returned-id",
       title: "Example Feed",
     })
@@ -1874,11 +1925,15 @@ describe("unsubscribeFeedAction", () => {
       userId: "user-1",
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/unread")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/starred")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/folders")
-    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/settings")
     expect(mocks.revalidatePath).toHaveBeenCalledWith(
       "/app/settings/import-export"
     )
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/folder/folder-1")
+    expect(mocks.revalidatePath).toHaveBeenCalledTimes(6)
+    expect(mocks.revalidatePath).not.toHaveBeenCalledWith("/app", "layout")
     expect(mocks.revalidatePath).not.toHaveBeenCalledWith(
       "/app/feed/subscription-1"
     )

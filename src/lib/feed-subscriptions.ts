@@ -125,6 +125,7 @@ export async function unsubscribeFromFeed({
     select: {
       id: true,
       customTitle: true,
+      folderId: true,
       feed: {
         select: {
           title: true,
@@ -153,6 +154,7 @@ export async function unsubscribeFromFeed({
   }
 
   return {
+    folderId: subscription.folderId,
     id: subscription.id,
     title: subscription.customTitle || subscription.feed.title,
   }

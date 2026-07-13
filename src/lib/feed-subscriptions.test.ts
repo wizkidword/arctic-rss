@@ -255,6 +255,7 @@ describe("feed subscriptions", () => {
       feed: {
         title: "Example Feed",
       },
+      folderId: "folder-1",
       id: "subscription-1",
     })
     deleteMany.mockResolvedValue({ count: 1 })
@@ -272,6 +273,7 @@ describe("feed subscriptions", () => {
             title: true,
           },
         },
+        folderId: true,
         id: true,
       },
       where: {
@@ -286,6 +288,7 @@ describe("feed subscriptions", () => {
       },
     })
     expect(result).toEqual({
+      folderId: "folder-1",
       id: "subscription-1",
       title: "My Example Feed",
     })
@@ -300,6 +303,7 @@ describe("feed subscriptions", () => {
       feed: {
         title: "Example Feed",
       },
+      folderId: null,
       id: "subscription-1",
     })
     deleteMany.mockResolvedValue({ count: 1 })
@@ -310,6 +314,7 @@ describe("feed subscriptions", () => {
         userId: "user-1",
       })
     ).resolves.toEqual({
+      folderId: null,
       id: "subscription-1",
       title: "Example Feed",
     })
@@ -336,6 +341,7 @@ describe("feed subscriptions", () => {
       feed: {
         title: "Example Feed",
       },
+      folderId: null,
       id: "subscription-1",
     })
     deleteMany.mockResolvedValue({ count: 0 })

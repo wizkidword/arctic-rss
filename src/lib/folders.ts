@@ -8,12 +8,16 @@ type FolderLookup = {
   id: string
 }
 
+type FeedSubscriptionLookup = FolderLookup & {
+  folderId: string | null
+}
+
 type FolderMutationStore = {
   feedSubscription: {
     findFirst(args: {
-      select: { id: true }
+      select: { folderId: true; id: true }
       where: Prisma.FeedSubscriptionWhereInput
-    }): Promise<FolderLookup | null>
+    }): Promise<FeedSubscriptionLookup | null>
     update(args: {
       data: {
         folderId: string | null
@@ -336,7 +340,7 @@ export async function moveSubscriptionToFolderWithClient({
   subscriptionId: string
   userId: string
 }) {
-  await assertSubscriptionBelongsToUser({
+  const subscription = await assertSubscriptionBelongsToUser({
     store,
     subscriptionId,
     userId,
@@ -356,6 +360,10 @@ export async function moveSubscriptionToFolderWithClient({
     },
     where: { id: subscriptionId },
   })
+
+  return {
+    previousFolderId: subscription.folderId,
+  }
 }
 
 function normalizeFolderName(name: string) {
@@ -404,7 +412,7 @@ async function assertSubscriptionBelongsToUser({
   userId: string
 }) {
   const subscription = await store.feedSubscription.findFirst({
-    select: { id: true },
+    select: { folderId: true, id: true },
     where: {
       id: subscriptionId,
       userId,
@@ -414,6 +422,8 @@ async function assertSubscriptionBelongsToUser({
   if (!subscription) {
     throw new FolderError("Feed subscription not found.")
   }
+
+  return subscription
 }
 
 function getFolderStore() {
