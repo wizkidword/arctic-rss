@@ -158,4 +158,46 @@ describe("mail configuration", () => {
       })
     )
   })
+
+  it("sets bounded SMTP timeouts and keeps a supplied delivery message ID", async () => {
+    vi.stubEnv("SMTP_HOST", "smtp.example.test")
+    vi.stubEnv("SMTP_USER", "reader@example.test")
+    vi.stubEnv("SMTP_PASSWORD", "app-password")
+    vi.stubEnv("SMTP_CONNECTION_TIMEOUT_MS", "1500")
+    vi.stubEnv("SMTP_GREETING_TIMEOUT_MS", "2500")
+    vi.stubEnv("SMTP_SOCKET_TIMEOUT_MS", "3500")
+    mailerMocks.sendMail.mockResolvedValue({
+      messageId: "<provider@example.test>",
+    })
+
+    await expect(
+      sendSmartDigestEmail({
+        digest: {
+          articleCount: 0,
+          id: "digest-1",
+          items: [],
+          title: "Climate Digest",
+          topicPrompt: "Climate news",
+        },
+        messageId: "<stable@example.test>",
+        to: "reader@example.test",
+      })
+    ).resolves.toEqual({
+      providerMessageId: "<provider@example.test>",
+      status: "sent",
+    })
+
+    expect(mailerMocks.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectionTimeout: 1500,
+        greetingTimeout: 2500,
+        socketTimeout: 3500,
+      })
+    )
+    expect(mailerMocks.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: "<stable@example.test>",
+      })
+    )
+  })
 })

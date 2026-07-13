@@ -1,6 +1,7 @@
 import type { Prisma } from "../generated/prisma/client"
 
 import { getPrisma } from "./db"
+import { enqueueSmartDigestEmail } from "./smart-digest-email-queue"
 import {
   scheduleNextSmartDigestRun,
   SmartDigestError,
@@ -8,12 +9,13 @@ import {
 } from "./smart-digests"
 import { matchSmartDigestArticle } from "./smart-digest-rules"
 
+const FIRST_RUN_LOOKBACK_MS = 24 * 60 * 60 * 1000
+export const SMART_DIGEST_LATE_ARRIVAL_LOOKBACK_MS = 2 * 60 * 60 * 1000
+export const SMART_DIGEST_PROCESSING_LEASE_MS = 10 * 60 * 1000
+
 type SmartDigestStatusForProcessing = "COMPLETED" | "COMPLETED_NO_MATCHES"
-type SmartDigestEmailStatusForProcessing =
-  | "FAILED"
-  | "NOT_REQUESTED"
-  | "PENDING"
-  | "SENT"
+type SmartDigestEmailStatusForProcessing = "NOT_REQUESTED" | "PENDING"
+export type DigestRunStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
 
 type SmartDigestRuleFindUniqueArgs = {
   include: {
@@ -56,6 +58,7 @@ type SmartDigestCreateArgs = {
 
 type SmartDigestRuleUpdateArgs = {
   data: {
+    contentWatermarkAt: Date
     lastMatchedAt?: Date
     lastRunAt: Date
     nextRunAt: Date
@@ -63,20 +66,19 @@ type SmartDigestRuleUpdateArgs = {
   where: { id: string }
 }
 
-type SmartDigestUpdateArgs = {
-  data:
-    | {
-        emailedAt: Date
-        emailStatus: "SENT"
-      }
-    | {
-        emailErrorMessage: string
-        emailStatus: "FAILED"
-      }
-  where: { id: string }
+export type DigestRunRecord = {
+  completedAt: Date | null
+  digestId: string | null
+  emailStatus: string | null
+  id: string
+  processingStartedAt: Date | null
+  ruleId: string
+  scheduledFor: Date
+  status: DigestRunStatus
 }
 
 export type SmartDigestRuleForProcessing = {
+  contentWatermarkAt: Date | null
   emailEnabled: boolean
   excludeTerms: string[]
   folders: Array<{
@@ -86,6 +88,7 @@ export type SmartDigestRuleForProcessing = {
   includeTerms: string[]
   isEnabled: boolean
   lastMatchedAt: Date | null
+  lastRunAt: Date | null
   name: string
   scheduledHour: number
   sourceScope: SmartDigestSourceScope
@@ -148,21 +151,43 @@ export type SmartDigestForEmail = {
   topicPrompt: string
 }
 
-export type SendSmartDigestEmail = ({
-  digest,
-  to,
-}: {
-  digest: SmartDigestForEmail
-  to: string
-}) => Promise<unknown>
+export type EnqueueSmartDigestEmail = (runId: string) => Promise<unknown>
 
 export type SmartDigestProcessingStore = {
+  $transaction<T>(
+    callback: (transaction: SmartDigestProcessingStore) => Promise<T>
+  ): Promise<T>
   article: {
     findMany(args: SmartDigestArticleFindManyArgs): Promise<SmartDigestCandidateArticle[]>
   }
+  digestRun: {
+    findUnique(args: { where: { id: string } }): Promise<DigestRunRecord | null>
+    update(args: {
+      data: Record<string, unknown>
+      where: { id: string }
+    }): Promise<DigestRunRecord>
+    updateMany(args: {
+      data: Record<string, unknown>
+      where: Record<string, unknown>
+    }): Promise<{ count: number }>
+    upsert(args: {
+      create: {
+        emailStatus: string
+        ruleId: string
+        scheduledFor: Date
+        status: DigestRunStatus
+      }
+      update: Record<string, never>
+      where: {
+        ruleId_scheduledFor: {
+          ruleId: string
+          scheduledFor: Date
+        }
+      }
+    }): Promise<DigestRunRecord>
+  }
   smartDigest: {
     create(args: SmartDigestCreateArgs): Promise<SmartDigestForEmail>
-    update(args: SmartDigestUpdateArgs): Promise<SmartDigestForEmail>
   }
   smartDigestRule: {
     findUnique(
@@ -174,36 +199,112 @@ export type SmartDigestProcessingStore = {
 
 export type SmartDigestProcessingResult = {
   articleCount: number
-  digestId: string
-  status: SmartDigestStatusForProcessing
+  digestId: string | null
+  status: "COMPLETED" | "COMPLETED_NO_MATCHES" | "SKIPPED"
 }
 
+/**
+ * Generates exactly one durable digest per rule and scheduled instant. Email
+ * delivery is deliberately queued after the database transaction commits.
+ */
 export async function processSmartDigestRule({
   ruleId,
-  sendDigestEmail = noopSmartDigestEmailSender,
+  scheduledFor,
 }: {
   ruleId: string
-  sendDigestEmail?: SendSmartDigestEmail
+  scheduledFor: string
 }): Promise<SmartDigestProcessingResult> {
   return processSmartDigestRuleWithClient({
+    enqueueEmail: enqueueSmartDigestEmail,
     now: new Date(),
     ruleId,
-    sendDigestEmail,
+    scheduledFor: new Date(scheduledFor),
     store: getPrisma() as unknown as SmartDigestProcessingStore,
   })
 }
 
 export async function processSmartDigestRuleWithClient({
+  enqueueEmail,
   now,
   ruleId,
-  sendDigestEmail,
+  scheduledFor,
   store,
 }: {
+  enqueueEmail: EnqueueSmartDigestEmail
   now: Date
   ruleId: string
-  sendDigestEmail: SendSmartDigestEmail
+  scheduledFor: Date
   store: SmartDigestProcessingStore
 }): Promise<SmartDigestProcessingResult> {
+  if (Number.isNaN(scheduledFor.getTime())) {
+    throw new SmartDigestError("Smart Digest run has an invalid scheduled time.")
+  }
+
+  const run = await store.digestRun.upsert({
+    create: {
+      emailStatus: "NOT_REQUESTED",
+      ruleId,
+      scheduledFor,
+      status: "PENDING",
+    },
+    update: {},
+    where: {
+      ruleId_scheduledFor: {
+        ruleId,
+        scheduledFor,
+      },
+    },
+  })
+  const claimed = await store.digestRun.updateMany({
+    data: {
+      errorMessage: null,
+      processingStartedAt: now,
+      status: "PROCESSING",
+    },
+    where: {
+      id: run.id,
+      OR: [
+        { status: "PENDING" },
+        { status: "FAILED" },
+        {
+          processingStartedAt: {
+            lt: new Date(now.getTime() - SMART_DIGEST_PROCESSING_LEASE_MS),
+          },
+          status: "PROCESSING",
+        },
+      ],
+    },
+  })
+
+  if (claimed.count === 0) {
+    await enqueuePendingEmail(run, enqueueEmail)
+    return skippedRunResult(run)
+  }
+
+  const claimedRun = await store.digestRun.findUnique({
+    where: { id: run.id },
+  })
+
+  if (!claimedRun) {
+    throw new SmartDigestError("Smart Digest run not found after it was claimed.")
+  }
+
+  // A worker may have died immediately after committing its digest. The run is
+  // recovered by marking that existing digest complete rather than creating a
+  // second one.
+  if (claimedRun.digestId) {
+    await store.digestRun.update({
+      data: {
+        completedAt: now,
+        processingStartedAt: null,
+        status: "COMPLETED",
+      },
+      where: { id: claimedRun.id },
+    })
+    await enqueuePendingEmail(claimedRun, enqueueEmail)
+    return skippedRunResult(claimedRun)
+  }
+
   const rule = await store.smartDigestRule.findUnique({
     include: {
       folders: true,
@@ -219,85 +320,107 @@ export async function processSmartDigestRuleWithClient({
   })
 
   if (!rule?.user || !rule.isEnabled) {
+    await failDigestRun({
+      message: "Smart Digest rule not found or disabled.",
+      runId: claimedRun.id,
+      store,
+    })
     throw new SmartDigestError("Smart Digest rule not found.")
   }
 
+  const watermarkFrom = digestWatermarkFrom(rule, now)
   const nextRunAt = scheduleNextSmartDigestRun({
     from: now,
     scheduledHour: rule.scheduledHour,
     timeZone: rule.timeZone,
   })
-  const candidates = await store.article.findMany({
-    include: { feed: true },
-    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-    take: 100,
-    where: smartDigestCandidateWhere(rule),
-  })
-  const items = matchingDigestItems({
-    articles: candidates,
-    rule,
-  }).slice(0, 50)
-  const status: SmartDigestStatusForProcessing = items.length
-    ? "COMPLETED"
-    : "COMPLETED_NO_MATCHES"
-  const emailStatus: SmartDigestEmailStatusForProcessing =
-    rule.emailEnabled && items.length ? "PENDING" : "NOT_REQUESTED"
-  // Not fully idempotent across post-create failures yet; worker retry policy
-  // should account for duplicate digest risk before production hardening.
-  const digest = await store.smartDigest.create({
-    data: {
-      articleCount: items.length,
-      completedAt: now,
-      emailStatus,
-      items: {
-        create: items,
+
+  try {
+    const candidates = await store.article.findMany({
+      include: { feed: true },
+      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+      take: 100,
+      where: {
+        AND: [
+          smartDigestCandidateWhere(rule),
+          smartDigestWindowWhere({
+            ruleId: rule.id,
+            watermarkFrom,
+            watermarkTo: now,
+          }),
+        ],
       },
-      ruleId: rule.id,
-      startedAt: now,
-      status,
-      title: rule.name,
-      topicPrompt: rule.topicPrompt,
-      userId: rule.userId,
-    },
-    include: { items: true },
-  })
+    })
+    const items = matchingDigestItems({
+      articles: candidates,
+      rule,
+    }).slice(0, 50)
+    const status: SmartDigestStatusForProcessing = items.length
+      ? "COMPLETED"
+      : "COMPLETED_NO_MATCHES"
+    const emailStatus: SmartDigestEmailStatusForProcessing =
+      rule.emailEnabled && items.length ? "PENDING" : "NOT_REQUESTED"
 
-  await store.smartDigestRule.update({
-    data: {
-      ...(items.length ? { lastMatchedAt: now } : {}),
-      lastRunAt: now,
-      nextRunAt,
-    },
-    where: { id: rule.id },
-  })
+    const digest = await store.$transaction(async (transaction) => {
+      const createdDigest = await transaction.smartDigest.create({
+        data: {
+          articleCount: items.length,
+          completedAt: now,
+          emailStatus,
+          items: {
+            create: items,
+          },
+          ruleId: rule.id,
+          startedAt: now,
+          status,
+          title: rule.name,
+          topicPrompt: rule.topicPrompt,
+          userId: rule.userId,
+        },
+        include: { items: true },
+      })
 
-  if (rule.emailEnabled && items.length) {
-    try {
-      await sendDigestEmail({ digest: orderedDigestForEmail(digest), to: rule.user.email })
-      await store.smartDigest.update({
+      await transaction.smartDigestRule.update({
         data: {
-          emailedAt: now,
-          emailStatus: "SENT",
+          contentWatermarkAt: now,
+          ...(items.length ? { lastMatchedAt: now } : {}),
+          lastRunAt: now,
+          nextRunAt,
         },
-        where: { id: digest.id },
+        where: { id: rule.id },
       })
-    } catch {
-      // Email delivery failures are recorded on the digest and do not retry the
-      // generation job; a later resend flow can retry email delivery.
-      await store.smartDigest.update({
+      await transaction.digestRun.update({
         data: {
-          emailErrorMessage: "Smart Digest email delivery failed.",
-          emailStatus: "FAILED",
+          completedAt: now,
+          digestId: createdDigest.id,
+          emailStatus,
+          processingStartedAt: null,
+          status: "COMPLETED",
+          watermarkFrom,
+          watermarkTo: now,
         },
-        where: { id: digest.id },
+        where: { id: claimedRun.id },
       })
+
+      return createdDigest
+    })
+
+    if (emailStatus === "PENDING") {
+      await enqueueEmail(claimedRun.id)
     }
-  }
 
-  return {
-    articleCount: items.length,
-    digestId: digest.id,
-    status,
+    return {
+      articleCount: digest.articleCount,
+      digestId: digest.id,
+      status,
+    }
+  } catch (error) {
+    await failDigestRun({
+      message: safeErrorMessage(error),
+      runId: claimedRun.id,
+      store,
+    })
+    throw error
   }
 }
 
@@ -353,6 +476,59 @@ export function smartDigestCandidateWhere(
   }
 }
 
+/** Keeps a small late-arrival window without repeating an article for a rule. */
+export function smartDigestWindowWhere({
+  ruleId,
+  watermarkFrom,
+  watermarkTo,
+}: {
+  ruleId: string
+  watermarkFrom: Date
+  watermarkTo: Date
+}): Prisma.ArticleWhereInput {
+  return {
+    AND: [
+      {
+        OR: [
+          {
+            publishedAt: {
+              gte: watermarkFrom,
+              lte: watermarkTo,
+            },
+          },
+          {
+            createdAt: {
+              gte: watermarkFrom,
+              lte: watermarkTo,
+            },
+          },
+        ],
+      },
+      {
+        smartDigestItems: {
+          none: {
+            digest: {
+              ruleId,
+            },
+          },
+        },
+      },
+    ],
+  }
+}
+
+export function digestWatermarkFrom(
+  rule: Pick<SmartDigestRuleForProcessing, "contentWatermarkAt" | "lastRunAt">,
+  now: Date
+) {
+  const watermark =
+    rule.contentWatermarkAt ??
+    rule.lastRunAt ??
+    new Date(now.getTime() - FIRST_RUN_LOOKBACK_MS)
+
+  return new Date(watermark.getTime() - SMART_DIGEST_LATE_ARRIVAL_LOOKBACK_MS)
+}
+
 function matchingDigestItems({
   articles,
   rule,
@@ -395,6 +571,42 @@ function matchingDigestItems({
   return items
 }
 
+async function enqueuePendingEmail(
+  run: DigestRunRecord,
+  enqueueEmail: EnqueueSmartDigestEmail
+) {
+  if (run.digestId && run.emailStatus === "PENDING") {
+    await enqueueEmail(run.id)
+  }
+}
+
+function skippedRunResult(run: DigestRunRecord): SmartDigestProcessingResult {
+  return {
+    articleCount: 0,
+    digestId: run.digestId,
+    status: "SKIPPED",
+  }
+}
+
+async function failDigestRun({
+  message,
+  runId,
+  store,
+}: {
+  message: string
+  runId: string
+  store: SmartDigestProcessingStore
+}) {
+  await store.digestRun.update({
+    data: {
+      errorMessage: message,
+      processingStartedAt: null,
+      status: "FAILED",
+    },
+    where: { id: runId },
+  })
+}
+
 function compactArticleSummary(article: SmartDigestCandidateArticle) {
   const source = compactWhitespace(
     article.summary || article.contentText || article.title
@@ -409,16 +621,10 @@ function compactArticleSummary(article: SmartDigestCandidateArticle) {
   return `${summary.slice(0, 237).trimEnd()}...`
 }
 
-function orderedDigestForEmail(digest: SmartDigestForEmail): SmartDigestForEmail {
-  return {
-    ...digest,
-    items: [...digest.items].sort((first, second) => first.position - second.position),
-  }
-}
-
 function compactWhitespace(value: string) {
   return value.trim().replace(/\s+/g, " ")
 }
 
-// TODO(Task 5): replace with the real Smart Digest mail integration.
-async function noopSmartDigestEmailSender() {}
+function safeErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Smart Digest processing failed."
+}

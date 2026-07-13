@@ -27,8 +27,13 @@ import {
   enqueueDuePodcastRefreshes,
   schedulerSettings,
 } from "../src/lib/refresh-scheduler"
-import { sendSmartDigestEmail } from "../src/lib/mail"
 import { assertSecureProductionConfiguration } from "../src/lib/production-security"
+import { processSmartDigestEmailDelivery } from "../src/lib/smart-digest-delivery"
+import {
+  enqueueSmartDigestEmail,
+  SMART_DIGEST_EMAIL_QUEUE_NAME,
+  type SmartDigestEmailJobData,
+} from "../src/lib/smart-digest-email-queue"
 import {
   enqueueSmartDigestRule,
   SMART_DIGEST_QUEUE_NAME,
@@ -92,10 +97,10 @@ const smartDigestWorker = new Worker<SmartDigestJobData>(
   async (job) => {
     const result = await processSmartDigestRule({
       ruleId: job.data.ruleId,
-      sendDigestEmail: sendSmartDigestEmail,
+      scheduledFor: job.data.scheduledFor,
     })
     console.log(
-      `[worker] generated smart digest ${result.digestId} with ${result.articleCount} articles`
+      `[worker] processed smart digest ${result.digestId ?? "pending"} with ${result.articleCount} articles`
     )
 
     return result
@@ -103,6 +108,24 @@ const smartDigestWorker = new Worker<SmartDigestJobData>(
   {
     connection: redisConnectionOptions(),
     concurrency: Number(process.env.SMART_DIGEST_CONCURRENCY ?? 2),
+  }
+)
+
+const smartDigestEmailWorker = new Worker<SmartDigestEmailJobData>(
+  SMART_DIGEST_EMAIL_QUEUE_NAME,
+  async (job) => {
+    const result = await processSmartDigestEmailDelivery({
+      runId: job.data.runId,
+    })
+    console.log(
+      `[worker] smart digest email ${job.data.runId} ${result.status.toLowerCase()}`
+    )
+
+    return result
+  },
+  {
+    connection: redisConnectionOptions(),
+    concurrency: Number(process.env.SMART_DIGEST_EMAIL_CONCURRENCY ?? 2),
   }
 )
 
@@ -137,6 +160,12 @@ aiDigestWorker.on("failed", (job, error) => {
 smartDigestWorker.on("failed", (job, error) => {
   console.error(
     `[worker] smart digest failed for ${job?.data.ruleId ?? "unknown rule"}: ${error.message}`
+  )
+})
+
+smartDigestEmailWorker.on("failed", (job, error) => {
+  console.error(
+    `[worker] smart digest email failed for ${job?.data.runId ?? "unknown run"}: ${error.message}`
   )
 })
 
@@ -180,7 +209,14 @@ async function enqueueDueSmartDigests() {
   })
 
   for (const rule of rules) {
-    await enqueueSmartDigestRule(rule.id)
+    if (!rule.nextRunAt) {
+      continue
+    }
+
+    await enqueueSmartDigestRule({
+      ruleId: rule.id,
+      scheduledFor: rule.nextRunAt.toISOString(),
+    })
   }
 
   if (rules.length) {
@@ -203,13 +239,19 @@ async function schedulerTick() {
   schedulerRunning = true
 
   try {
-    const [feedResult, podcastResult, smartDigestResult, maintenanceResult] =
-      await Promise.allSettled([
-        enqueueDueFeeds(),
-        enqueueDuePodcasts(),
-        enqueueDueSmartDigests(),
-        runAuthTokenMaintenance(),
-      ])
+    const [
+      feedResult,
+      podcastResult,
+      smartDigestResult,
+      smartDigestEmailResult,
+      maintenanceResult,
+    ] = await Promise.allSettled([
+      enqueueDueFeeds(),
+      enqueueDuePodcasts(),
+      enqueueDueSmartDigests(),
+      enqueuePendingSmartDigestEmails(),
+      runAuthTokenMaintenance(),
+    ])
 
     if (feedResult.status === "fulfilled") {
       console.log(
@@ -227,6 +269,15 @@ async function schedulerTick() {
           event: "refresh_scheduler",
           kind: "podcast",
           ...podcastResult.value,
+        })
+      )
+    }
+
+    if (smartDigestEmailResult.status === "fulfilled") {
+      console.log(
+        JSON.stringify({
+          event: "smart_digest_email_scheduler",
+          ...smartDigestEmailResult.value,
         })
       )
     }
@@ -251,6 +302,14 @@ async function schedulerTick() {
       )
     }
 
+    if (smartDigestEmailResult.status === "rejected") {
+      console.error(
+        `[worker] smart digest email scheduler failed: ${schedulerErrorMessage(
+          smartDigestEmailResult.reason
+        )}`
+      )
+    }
+
     if (maintenanceResult.status === "rejected") {
       console.error(
         `[worker] auth token maintenance failed: ${schedulerErrorMessage(
@@ -261,6 +320,25 @@ async function schedulerTick() {
   } finally {
     schedulerRunning = false
   }
+}
+
+async function enqueuePendingSmartDigestEmails() {
+  const runs = await prisma.digestRun.findMany({
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+    },
+    take: schedulerBatchSize,
+    where: {
+      emailStatus: "PENDING",
+    },
+  })
+
+  for (const run of runs) {
+    await enqueueSmartDigestEmail(run.id)
+  }
+
+  return { enqueued: runs.length }
 }
 
 async function runAuthTokenMaintenance() {
@@ -303,6 +381,7 @@ async function shutdown() {
     podcastWorker.close(),
     aiDigestWorker.close(),
     smartDigestWorker.close(),
+    smartDigestEmailWorker.close(),
   ])
   await prisma.$disconnect()
   process.exit(0)

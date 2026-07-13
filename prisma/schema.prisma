@@ -127,6 +127,13 @@ enum SmartDigestEmailStatus {
   FAILED
 }
 
+enum DigestRunStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model User {
   id             String    @id @default(cuid())
   email          String    @unique
@@ -641,6 +648,7 @@ model SmartDigestRule {
   lastRunAt     DateTime?
   nextRunAt     DateTime?
   lastMatchedAt DateTime?
+  contentWatermarkAt DateTime?
   isEnabled     Boolean                 @default(true)
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
@@ -649,10 +657,39 @@ model SmartDigestRule {
   folders       SmartDigestRuleFolder[]
   subscriptions SmartDigestRuleSubscription[]
   digests       SmartDigest[]
+  digestRuns    DigestRun[]
 
   @@unique([userId, id])
   @@index([userId, isEnabled])
   @@index([isEnabled, nextRunAt])
+}
+
+model DigestRun {
+  id                  String          @id @default(cuid())
+  ruleId              String
+  scheduledFor        DateTime
+  status              DigestRunStatus @default(PENDING)
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  watermarkFrom       DateTime?
+  watermarkTo         DateTime?
+  digestId            String?         @unique
+  emailStatus         String?         @default("NOT_REQUESTED")
+  providerMessageId   String?
+  emailAttemptedAt    DateTime?
+  emailDeliveredAt    DateTime?
+  emailAttempts       Int             @default(0)
+  emailErrorMessage   String?
+  errorMessage        String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  rule   SmartDigestRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  digest SmartDigest?    @relation("DigestRunDigest", fields: [digestId], references: [id], onDelete: SetNull)
+
+  @@unique([ruleId, scheduledFor])
+  @@index([status, processingStartedAt])
+  @@index([emailStatus, createdAt])
 }
 
 model SmartDigestRuleFolder {
@@ -703,6 +740,7 @@ model SmartDigest {
   user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   rule  SmartDigestRule   @relation(fields: [userId, ruleId], references: [userId, id], onDelete: Cascade)
   items SmartDigestItem[]
+  digestRun DigestRun?    @relation("DigestRunDigest")
 
   @@index([userId, createdAt])
   @@index([ruleId, createdAt])

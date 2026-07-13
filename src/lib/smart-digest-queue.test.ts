@@ -11,6 +11,8 @@ vi.mock("bullmq", () => ({
   Queue: queueConstructor,
 }))
 
+const scheduledFor = "2026-07-13T08:00:00.000Z"
+
 describe("smart digest queue", () => {
   beforeEach(() => {
     vi.resetModules()
@@ -30,57 +32,35 @@ describe("smart digest queue", () => {
     expect(queueConstructor).not.toHaveBeenCalled()
   })
 
-  it("uses BullMQ-compatible job ids", async () => {
+  it("uses one job ID per rule and scheduled run", async () => {
     const { smartDigestJobId } = await import("./smart-digest-queue")
 
-    expect(smartDigestJobId("rule/1")).toBe("smart-digest-rule-1")
-    expect(smartDigestJobId("rule:2")).toBe("smart-digest-rule-2")
+    expect(smartDigestJobId("rule/1", scheduledFor)).toBe(
+      "smart-digest-rule-1-2026-07-13T08-00-00-000Z"
+    )
+    expect(smartDigestJobId("rule/1", scheduledFor)).not.toBe(
+      smartDigestJobId("rule/1", "2026-07-14T08:00:00.000Z")
+    )
   })
 
-  it("enqueues smart digest rules with stable defaults", async () => {
+  it("enqueues scheduled digest runs with bounded retries", async () => {
     const { enqueueSmartDigestRule, smartDigestJobId } = await import(
       "./smart-digest-queue"
     )
+    const data = { ruleId: "rule-1", scheduledFor }
 
-    await enqueueSmartDigestRule("rule-1")
+    await enqueueSmartDigestRule(data)
 
     expect(queueAdd).toHaveBeenCalledWith(
       "generate-smart-digest",
-      { ruleId: "rule-1" },
+      data,
       {
         attempts: 3,
         backoff: {
           delay: 10_000,
           type: "exponential",
         },
-        jobId: smartDigestJobId("rule-1"),
-        removeOnComplete: true,
-        removeOnFail: {
-          age: 24 * 60 * 60,
-          count: 1000,
-        },
-      }
-    )
-  })
-
-  it("applies options overrides after defaults", async () => {
-    const { enqueueSmartDigestRule } = await import("./smart-digest-queue")
-
-    await enqueueSmartDigestRule("rule-1", {
-      attempts: 1,
-      jobId: "manual-job",
-    })
-
-    expect(queueAdd).toHaveBeenCalledWith(
-      "generate-smart-digest",
-      { ruleId: "rule-1" },
-      {
-        attempts: 1,
-        backoff: {
-          delay: 10_000,
-          type: "exponential",
-        },
-        jobId: "manual-job",
+        jobId: smartDigestJobId(data.ruleId, data.scheduledFor),
         removeOnComplete: true,
         removeOnFail: {
           age: 24 * 60 * 60,

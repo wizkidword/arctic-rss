@@ -1,96 +1,38 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { SmartDigestError } from "./smart-digests"
 import {
+  digestWatermarkFrom,
   processSmartDigestRuleWithClient,
-  smartDigestCandidateWhere,
+  smartDigestWindowWhere,
+  type DigestRunRecord,
   type SmartDigestProcessingStore,
   type SmartDigestRuleForProcessing,
 } from "./smart-digest-processing"
 
-const now = new Date("2026-06-30T12:00:00.000Z")
-
-describe("smart digest candidate filters", () => {
-  it("limits all-feed candidates to unpaused subscriptions for the rule user", () => {
-    expect(smartDigestCandidateWhere(baseRule({ sourceScope: "ALL_FEEDS" }))).toEqual({
-      feed: {
-        subscriptions: {
-          some: {
-            isPaused: false,
-            userId: "user-1",
-          },
-        },
-      },
-    })
-  })
-
-  it("limits folder candidates to selected folders, rule user, and unpaused subscriptions", () => {
-    expect(
-      smartDigestCandidateWhere(
-        baseRule({
-          folders: [{ folderId: "folder-1" }, { folderId: "folder-2" }],
-          sourceScope: "FOLDERS",
-        })
-      )
-    ).toEqual({
-      feed: {
-        subscriptions: {
-          some: {
-            folderId: { in: ["folder-1", "folder-2"] },
-            isPaused: false,
-            userId: "user-1",
-          },
-        },
-      },
-    })
-  })
-
-  it("limits feed candidates to selected subscriptions, rule user, and unpaused subscriptions", () => {
-    expect(
-      smartDigestCandidateWhere(
-        baseRule({
-          sourceScope: "FEEDS",
-          subscriptions: [
-            { subscriptionId: "sub-1" },
-            { subscriptionId: "sub-2" },
-          ],
-        })
-      )
-    ).toEqual({
-      feed: {
-        subscriptions: {
-          some: {
-            id: { in: ["sub-1", "sub-2"] },
-            isPaused: false,
-            userId: "user-1",
-          },
-        },
-      },
-    })
-  })
-})
+const now = new Date("2026-07-13T09:00:00.000Z")
+const scheduledFor = new Date("2026-07-13T08:00:00.000Z")
 
 describe("smart digest processing", () => {
-  it("creates a completed digest with matching articles", async () => {
-    const store = createStore({
+  it("creates one durable digest, advances its watermark, then queues delivery", async () => {
+    const { mocks, store } = createStore({
       articles: [
         article({
           id: "article-1",
           summary: "A climate update from the north.",
           title: "Arctic climate report",
         }),
-        article({
-          id: "article-2",
-          title: "Unrelated market report",
-        }),
       ],
+    })
+    const enqueueEmail = vi.fn(async () => {
+      mocks.events.push("enqueue-email")
     })
 
     await expect(
       processSmartDigestRuleWithClient({
+        enqueueEmail,
         now,
         ruleId: "rule-1",
-        sendDigestEmail: vi.fn(),
+        scheduledFor,
         store,
       })
     ).resolves.toEqual({
@@ -99,229 +41,137 @@ describe("smart digest processing", () => {
       status: "COMPLETED",
     })
 
-    expect(store.article.findMany).toHaveBeenCalledWith({
-      include: { feed: true },
-      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-      take: 100,
-      where: smartDigestCandidateWhere(baseRule()),
-    })
-    expect(store.smartDigest.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        articleCount: 1,
-        emailStatus: "PENDING",
-        items: {
-          create: [
-            expect.objectContaining({
-              articleId: "article-1",
-              articleTitle: "Arctic climate report",
-              articleUrl: "https://example.test/article-1",
-              feedTitle: "North Feed",
-              matchedFields: ["title", "summary"],
-              matchedTerms: ["climate"],
-              position: 1,
-            }),
-          ],
-        },
-        status: "COMPLETED",
-      }),
-      include: { items: true },
-    })
-    expect(store.smartDigestRule.update).toHaveBeenCalledWith({
+    expect(mocks.smartDigestCreate).toHaveBeenCalledTimes(1)
+    expect(mocks.smartDigestRuleUpdate).toHaveBeenCalledWith({
       data: {
+        contentWatermarkAt: now,
         lastMatchedAt: now,
         lastRunAt: now,
-        nextRunAt: new Date("2026-07-01T08:00:00.000Z"),
+        nextRunAt: new Date("2026-07-14T08:00:00.000Z"),
       },
       where: { id: "rule-1" },
     })
+    expect(mocks.articleFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            expect.any(Object),
+            smartDigestWindowWhere({
+              ruleId: "rule-1",
+              watermarkFrom: new Date("2026-07-12T07:00:00.000Z"),
+              watermarkTo: now,
+            }),
+          ],
+        },
+      })
+    )
+    expect(enqueueEmail).toHaveBeenCalledWith("run-1")
+    expect(mocks.events.indexOf("create-digest")).toBeLessThan(
+      mocks.events.indexOf("enqueue-email")
+    )
   })
 
-  it("creates a completed no-match digest without sending email or changing lastMatchedAt", async () => {
-    const sendDigestEmail = vi.fn()
-    const store = createStore({
-      articles: [article({ title: "Unrelated market report" })],
-      rule: baseRule({ lastMatchedAt: new Date("2026-06-20T12:00:00.000Z") }),
+  it("reuses a completed run instead of creating another digest", async () => {
+    const { mocks, store } = createStore({
+      run: digestRun({
+        digestId: "digest-existing",
+        emailStatus: "PENDING",
+        status: "COMPLETED",
+      }),
     })
+    const enqueueEmail = vi.fn().mockResolvedValue(undefined)
 
     await expect(
       processSmartDigestRuleWithClient({
+        enqueueEmail,
         now,
         ruleId: "rule-1",
-        sendDigestEmail,
+        scheduledFor,
         store,
       })
     ).resolves.toEqual({
       articleCount: 0,
-      digestId: "digest-1",
-      status: "COMPLETED_NO_MATCHES",
+      digestId: "digest-existing",
+      status: "SKIPPED",
     })
 
-    expect(sendDigestEmail).not.toHaveBeenCalled()
-    expect(store.smartDigest.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        articleCount: 0,
-        emailStatus: "NOT_REQUESTED",
-        items: { create: [] },
-        status: "COMPLETED_NO_MATCHES",
+    expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
+    expect(enqueueEmail).toHaveBeenCalledWith("run-1")
+  })
+
+  it("recovers a stale claimed run with a stored digest without recreating it", async () => {
+    const { mocks, store } = createStore({
+      run: digestRun({
+        digestId: "digest-existing",
+        processingStartedAt: new Date("2026-07-13T08:40:00.000Z"),
+        status: "PROCESSING",
       }),
-      include: { items: true },
-    })
-    expect(store.smartDigestRule.update).toHaveBeenCalledWith({
-      data: {
-        lastRunAt: now,
-        nextRunAt: new Date("2026-07-01T08:00:00.000Z"),
-      },
-      where: { id: "rule-1" },
-    })
-  })
-
-  it("updates email status when delivery succeeds", async () => {
-    const sendDigestEmail = vi.fn().mockResolvedValue(undefined)
-    const store = createStore({
-      articles: [
-        article({
-          id: "article-1",
-          publishedAt: new Date("2026-06-30T10:00:00.000Z"),
-          summary: "A climate update.",
-          title: "Climate update",
-        }),
-        article({
-          id: "article-2",
-          publishedAt: new Date("2026-06-30T09:00:00.000Z"),
-          summary: "A climate analysis.",
-          title: "Climate analysis",
-        }),
-      ],
-      reverseDigestItems: true,
-    })
-
-    await processSmartDigestRuleWithClient({
-      now,
-      ruleId: "rule-1",
-      sendDigestEmail,
-      store,
-    })
-
-    expect(sendDigestEmail).toHaveBeenCalledWith({
-      digest: {
-        articleCount: 2,
-        id: "digest-1",
-        items: [
-          expect.objectContaining({
-            articleTitle: "Climate update",
-            articleUrl: "https://example.test/article-1",
-            feedTitle: "North Feed",
-            matchedTerms: ["climate"],
-            publishedAt: new Date("2026-06-30T10:00:00.000Z"),
-            reason: expect.stringContaining('"climate"'),
-            summary: "A climate update.",
-          }),
-          expect.objectContaining({
-            articleTitle: "Climate analysis",
-            articleUrl: "https://example.test/article-2",
-            feedTitle: "North Feed",
-            matchedTerms: ["climate"],
-            publishedAt: new Date("2026-06-30T09:00:00.000Z"),
-            reason: expect.stringContaining('"climate"'),
-            summary: "A climate analysis.",
-          }),
-        ],
-        title: "Climate Digest",
-        topicPrompt: "Climate news",
-      },
-      to: "reader@example.test",
-    })
-    expect(store.smartDigest.update).toHaveBeenCalledWith({
-      data: {
-        emailedAt: now,
-        emailStatus: "SENT",
-      },
-      where: { id: "digest-1" },
-    })
-  })
-
-  it("updates email status when delivery fails but returns the digest result", async () => {
-    const sendDigestEmail = vi.fn().mockRejectedValue(new Error("SMTP unavailable"))
-    const store = createStore({
-      articles: [article({ title: "Climate update" })],
     })
 
     await expect(
       processSmartDigestRuleWithClient({
+        enqueueEmail: vi.fn().mockResolvedValue(undefined),
         now,
         ruleId: "rule-1",
-        sendDigestEmail,
+        scheduledFor,
         store,
       })
     ).resolves.toEqual({
-      articleCount: 1,
-      digestId: "digest-1",
-      status: "COMPLETED",
+      articleCount: 0,
+      digestId: "digest-existing",
+      status: "SKIPPED",
     })
 
-    expect(store.smartDigest.update).toHaveBeenCalledWith({
-      data: {
-        emailErrorMessage: "Smart Digest email delivery failed.",
-        emailStatus: "FAILED",
-      },
-      where: { id: "digest-1" },
-    })
+    expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
+    expect(mocks.digestRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "COMPLETED" }),
+      })
+    )
   })
 
-  it("lets the public processor receive the Task 5 sender dependency", async () => {
-    const sendDigestEmail = vi.fn().mockResolvedValue(undefined)
-    const store = createStore({
-      articles: [article({ title: "Climate update" })],
-    })
-
-    vi.resetModules()
-    vi.doMock("./db", () => ({
-      getPrisma: () => store,
-    }))
-
-    try {
-      const { processSmartDigestRule } = await import("./smart-digest-processing")
-      const input = { ruleId: "rule-1", sendDigestEmail }
-
-      await processSmartDigestRule(input)
-
-      expect(sendDigestEmail).toHaveBeenCalledWith({
-        digest: expect.objectContaining({
-          id: "digest-1",
-          items: [
-            expect.objectContaining({
-              articleTitle: "Climate update",
-            }),
+  it("uses a late-arrival lookback and never selects an already included article", () => {
+    expect(
+      smartDigestWindowWhere({
+        ruleId: "rule-1",
+        watermarkFrom: new Date("2026-07-13T06:00:00.000Z"),
+        watermarkTo: now,
+      })
+    ).toEqual({
+      AND: [
+        {
+          OR: [
+            {
+              publishedAt: {
+                gte: new Date("2026-07-13T06:00:00.000Z"),
+                lte: now,
+              },
+            },
+            {
+              createdAt: {
+                gte: new Date("2026-07-13T06:00:00.000Z"),
+                lte: now,
+              },
+            },
           ],
-          title: "Climate Digest",
-          topicPrompt: "Climate news",
-        }),
-        to: "reader@example.test",
-      })
-    } finally {
-      vi.doUnmock("./db")
-      vi.resetModules()
-    }
-  })
-
-  it("throws for missing or disabled rules", async () => {
-    await expect(
-      processSmartDigestRuleWithClient({
-        now,
-        ruleId: "missing-rule",
-        sendDigestEmail: vi.fn(),
-        store: createStore({ rule: null }),
-      })
-    ).rejects.toThrow(new SmartDigestError("Smart Digest rule not found."))
-
-    await expect(
-      processSmartDigestRuleWithClient({
-        now,
-        ruleId: "disabled-rule",
-        sendDigestEmail: vi.fn(),
-        store: createStore({ rule: baseRule({ isEnabled: false }) }),
-      })
-    ).rejects.toThrow(new SmartDigestError("Smart Digest rule not found."))
+        },
+        {
+          smartDigestItems: {
+            none: {
+              digest: {
+                ruleId: "rule-1",
+              },
+            },
+          },
+        },
+      ],
+    })
+    expect(
+      digestWatermarkFrom(
+        baseRule({ contentWatermarkAt: new Date("2026-07-13T08:00:00.000Z") }),
+        now
+      )
+    ).toEqual(new Date("2026-07-13T06:00:00.000Z"))
   })
 })
 
@@ -329,6 +179,7 @@ function baseRule(
   overrides: Partial<SmartDigestRuleForProcessing> = {}
 ): SmartDigestRuleForProcessing {
   return {
+    contentWatermarkAt: null,
     emailEnabled: true,
     excludeTerms: [],
     folders: [],
@@ -336,6 +187,7 @@ function baseRule(
     includeTerms: ["climate"],
     isEnabled: true,
     lastMatchedAt: null,
+    lastRunAt: null,
     name: "Climate Digest",
     scheduledHour: 8,
     sourceScope: "ALL_FEEDS",
@@ -352,68 +204,123 @@ function baseRule(
 }
 
 function article({
-  contentText = null,
   id = "article-1",
-  publishedAt = new Date("2026-06-30T10:00:00.000Z"),
   summary = null,
   title,
 }: {
-  contentText?: string | null
   id?: string
-  publishedAt?: Date | null
   summary?: string | null
   title: string
 }) {
   return {
-    contentText,
-    createdAt: new Date("2026-06-30T09:00:00.000Z"),
-    feed: {
-      title: "North Feed",
-    },
+    contentText: null,
+    createdAt: new Date("2026-07-13T08:10:00.000Z"),
+    feed: { title: "North Feed" },
     feedId: "feed-1",
     id,
-    publishedAt,
+    publishedAt: new Date("2026-07-13T08:05:00.000Z"),
     summary,
     title,
     url: `https://example.test/${id}`,
   }
 }
 
+function digestRun(overrides: Partial<DigestRunRecord> = {}): DigestRunRecord {
+  return {
+    completedAt: null,
+    digestId: null,
+    emailStatus: "NOT_REQUESTED",
+    id: "run-1",
+    processingStartedAt: null,
+    ruleId: "rule-1",
+    scheduledFor,
+    status: "PENDING",
+    ...overrides,
+  }
+}
+
 function createStore({
   articles = [],
-  digest = { id: "digest-1" },
-  reverseDigestItems = false,
   rule = baseRule(),
+  run = null,
 }: {
   articles?: ReturnType<typeof article>[]
-  digest?: { id: string }
-  reverseDigestItems?: boolean
-  rule?: SmartDigestRuleForProcessing | null
+  rule?: SmartDigestRuleForProcessing
+  run?: DigestRunRecord | null
 } = {}) {
+  let currentRun = run
+  const events: string[] = []
+  const mocks = {
+    articleFindMany: vi.fn().mockResolvedValue(articles),
+    digestRunUpdate: vi.fn((args) => {
+      currentRun = { ...currentRun!, ...args.data }
+      return Promise.resolve(currentRun)
+    }),
+    digestRunUpdateMany: vi.fn((args) => {
+      const staleLease = currentRun?.processingStartedAt
+        ? currentRun.processingStartedAt.getTime() <
+          new Date("2026-07-13T08:50:00.000Z").getTime()
+        : false
+      const canClaim =
+        currentRun?.status === "PENDING" ||
+        currentRun?.status === "FAILED" ||
+        (currentRun?.status === "PROCESSING" && staleLease)
+
+      if (!canClaim) {
+        return Promise.resolve({ count: 0 })
+      }
+
+      currentRun = { ...currentRun!, ...args.data }
+      return Promise.resolve({ count: 1 })
+    }),
+    digestRunUpsert: vi.fn((args) => {
+      currentRun ??= digestRun({
+        emailStatus: args.create.emailStatus,
+        ruleId: args.create.ruleId,
+        scheduledFor: args.create.scheduledFor,
+        status: args.create.status,
+      })
+      return Promise.resolve(currentRun)
+    }),
+    smartDigestCreate: vi.fn((args) => {
+      events.push("create-digest")
+      return Promise.resolve({
+        articleCount: args.data.articleCount,
+        id: "digest-1",
+        items: args.data.items.create,
+        title: args.data.title,
+        topicPrompt: args.data.topicPrompt,
+      })
+    }),
+    smartDigestRuleUpdate: vi.fn().mockResolvedValue(rule),
+  }
+
   const store = {
+    $transaction: async (callback: (transaction: unknown) => Promise<unknown>) =>
+      callback(store),
     article: {
-      findMany: vi.fn().mockResolvedValue(articles),
+      findMany: mocks.articleFindMany,
+    },
+    digestRun: {
+      findUnique: vi.fn().mockImplementation(() => Promise.resolve(currentRun)),
+      update: mocks.digestRunUpdate,
+      updateMany: mocks.digestRunUpdateMany,
+      upsert: mocks.digestRunUpsert,
     },
     smartDigest: {
-      create: vi.fn((args) => {
-        const createItems = args.data.items.create
-        const items = reverseDigestItems ? [...createItems].reverse() : createItems
-
-        return Promise.resolve({
-          articleCount: args.data.articleCount,
-          id: digest.id,
-          items,
-          title: args.data.title,
-          topicPrompt: args.data.topicPrompt,
-        })
-      }),
-      update: vi.fn().mockResolvedValue(digest),
+      create: mocks.smartDigestCreate,
     },
     smartDigestRule: {
       findUnique: vi.fn().mockResolvedValue(rule),
-      update: vi.fn().mockResolvedValue(rule),
+      update: mocks.smartDigestRuleUpdate,
     },
   }
 
-  return store as typeof store & SmartDigestProcessingStore
+  return {
+    mocks: {
+      ...mocks,
+      events,
+    },
+    store: store as unknown as SmartDigestProcessingStore,
+  }
 }

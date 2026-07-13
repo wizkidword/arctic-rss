@@ -38,12 +38,15 @@ type SmartDigestEmailInput = {
     title: string
     topicPrompt: string
   }
+  messageId?: string
   to: string
 }
 
 type MailResult =
-  | { status: "sent" }
+  | { providerMessageId?: string; status: "sent" }
   | { status: "not-configured"; url?: string }
+
+export type SmartDigestMailResult = MailResult
 
 function parseSmtpPort() {
   const rawPort = process.env.SMTP_PORT
@@ -54,6 +57,16 @@ function parseSmtpPort() {
 
   const port = Number(rawPort)
   return Number.isFinite(port) ? port : 587
+}
+
+function parseSmtpTimeout(variable: string, fallback: number) {
+  const parsed = Number(process.env[variable])
+
+  if (!Number.isFinite(parsed)) {
+    return fallback
+  }
+
+  return Math.min(120_000, Math.max(1_000, Math.round(parsed)))
 }
 
 function getSmtpTransport() {
@@ -70,6 +83,9 @@ function getSmtpTransport() {
     port: parseSmtpPort(),
     secure: process.env.SMTP_SECURE === "true",
     auth: { user, pass },
+    connectionTimeout: parseSmtpTimeout("SMTP_CONNECTION_TIMEOUT_MS", 10_000),
+    greetingTimeout: parseSmtpTimeout("SMTP_GREETING_TIMEOUT_MS", 10_000),
+    socketTimeout: parseSmtpTimeout("SMTP_SOCKET_TIMEOUT_MS", 30_000),
   })
 }
 
@@ -299,6 +315,7 @@ export async function sendAdminSignupNotificationEmail({
 
 export async function sendSmartDigestEmail({
   digest,
+  messageId,
   to,
 }: SmartDigestEmailInput): Promise<MailResult> {
   const transport = getSmtpTransport()
@@ -354,13 +371,17 @@ export async function sendSmartDigestEmail({
     ),
   ].join("")
 
-  await transport.sendMail({
+  const result = await transport.sendMail({
     from: getMailFrom(),
     html,
+    ...(messageId ? { messageId } : {}),
     subject: digest.title,
     text,
     to,
   })
 
-  return { status: "sent" }
+  return {
+    providerMessageId: result?.messageId || messageId,
+    status: "sent",
+  }
 }
