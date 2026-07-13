@@ -5,18 +5,23 @@ import {
   normalizeHttpUrl,
   type SafeFetchTextResult,
 } from "./url-safety"
+import { nextFetchAt } from "./refresh-schedule"
 
 type RefreshablePodcast = {
+  consecutiveFailures: number
   feedUrl: string
   id: string
+  refreshIntervalMinutes: number
 }
 
 type PodcastRefreshStore = {
   podcast: {
     findUnique(args: {
       select: {
+        consecutiveFailures: true
         feedUrl: true
         id: true
+        refreshIntervalMinutes: true
       }
       where: {
         id: string
@@ -47,6 +52,7 @@ type RefreshPodcastOptions = {
   fetchText?: (url: URL) => Promise<SafeFetchTextResult>
   now?: () => Date
   podcastId: string
+  random?: () => number
   store?: PodcastRefreshStore
 }
 
@@ -73,12 +79,15 @@ export async function refreshPodcastWithClient({
   fetchText = fetchPodcastFeedText,
   now = () => new Date(),
   podcastId,
+  random = Math.random,
   store = getPodcastRefreshStore(),
 }: RefreshPodcastOptions): Promise<PodcastRefreshResult> {
   const podcast = await store.podcast.findUnique({
     select: {
+      consecutiveFailures: true,
       feedUrl: true,
       id: true,
+      refreshIntervalMinutes: true,
     },
     where: { id: podcastId },
   })
@@ -107,6 +116,13 @@ export async function refreshPodcastWithClient({
         lastFailedAt: null,
         lastFetchedAt: fetchedAt,
         lastSuccessfulFetchAt: fetchedAt,
+        consecutiveFailures: 0,
+        nextFetchAt: nextFetchAt({
+          consecutiveFailures: 0,
+          now: fetchedAt,
+          random,
+          refreshIntervalMinutes: podcast.refreshIntervalMinutes,
+        }),
         siteUrl: parsedPodcast.siteUrl,
         title: parsedPodcast.title,
       }),
@@ -118,11 +134,20 @@ export async function refreshPodcastWithClient({
       podcastId: podcast.id,
     }
   } catch (error) {
+    const consecutiveFailures = podcast.consecutiveFailures + 1
+
     await store.podcast.update({
       data: {
+        consecutiveFailures,
         lastError: errorMessage(error),
         lastFailedAt: fetchedAt,
         lastFetchedAt: fetchedAt,
+        nextFetchAt: nextFetchAt({
+          consecutiveFailures,
+          now: fetchedAt,
+          random,
+          refreshIntervalMinutes: podcast.refreshIntervalMinutes,
+        }),
       },
       where: { id: podcast.id },
     })

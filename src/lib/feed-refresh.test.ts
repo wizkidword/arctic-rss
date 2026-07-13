@@ -23,8 +23,10 @@ function createStore(feedUrl = "https://example.com/rss.xml") {
     },
     feed: {
       findUnique: vi.fn().mockResolvedValue({
+        consecutiveFailures: 0,
         feedUrl,
         id: "feed-1",
+        refreshIntervalMinutes: 60,
       }),
       update: vi.fn().mockResolvedValue({}),
     },
@@ -45,6 +47,7 @@ describe("feed refresh", () => {
       feedId: "feed-1",
       fetchText,
       now: () => now,
+      random: () => 0.5,
       store,
     })
 
@@ -79,6 +82,8 @@ describe("feed refresh", () => {
         lastFailedAt: null,
         lastFetchedAt: now,
         lastSuccessfulFetchAt: now,
+        consecutiveFailures: 0,
+        nextFetchAt: new Date("2026-06-22T13:00:00.000Z"),
       },
       where: { id: "feed-1" },
     })
@@ -215,6 +220,7 @@ describe("feed refresh", () => {
         feedId: "feed-1",
         fetchText,
         now: () => now,
+        random: () => 0.5,
         store,
       })
     ).rejects.toThrow("network down")
@@ -225,6 +231,8 @@ describe("feed refresh", () => {
         lastError: "network down",
         lastFailedAt: now,
         lastFetchedAt: now,
+        consecutiveFailures: 1,
+        nextFetchAt: new Date("2026-06-22T14:00:00.000Z"),
       },
       where: { id: "feed-1" },
     })

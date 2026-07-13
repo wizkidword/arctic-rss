@@ -6,8 +6,10 @@ function createStore(feedUrl = "https://example.com/podcast.xml") {
   return {
     podcast: {
       findUnique: vi.fn().mockResolvedValue({
+        consecutiveFailures: 0,
         feedUrl,
         id: "podcast-1",
+        refreshIntervalMinutes: 60,
       }),
       update: vi.fn().mockResolvedValue({}),
     },
@@ -54,6 +56,7 @@ describe("refreshPodcastWithClient", () => {
         url: new URL("https://redirected.example.com/podcast.xml"),
       }),
       now: () => now,
+      random: () => 0.5,
       store,
     })
 
@@ -104,6 +107,8 @@ describe("refreshPodcastWithClient", () => {
         lastFailedAt: null,
         lastFetchedAt: now,
         lastSuccessfulFetchAt: now,
+        consecutiveFailures: 0,
+        nextFetchAt: new Date("2026-06-29T13:00:00.000Z"),
         siteUrl: "https://example.com/show",
         title: "Show",
       },
@@ -124,6 +129,7 @@ describe("refreshPodcastWithClient", () => {
         podcastId: "podcast-1",
         fetchText,
         now: () => now,
+        random: () => 0.5,
         store,
       })
     ).rejects.toThrow("network down")
@@ -134,6 +140,8 @@ describe("refreshPodcastWithClient", () => {
         lastError: "network down",
         lastFailedAt: now,
         lastFetchedAt: now,
+        consecutiveFailures: 1,
+        nextFetchAt: new Date("2026-06-29T14:00:00.000Z"),
       },
       where: { id: "podcast-1" },
     })
@@ -152,6 +160,7 @@ describe("refreshPodcastWithClient", () => {
           url: new URL("https://example.com/podcast.xml"),
         }),
         now: () => now,
+        random: () => 0.5,
         store,
       })
     ).rejects.toThrow("No audio episodes were found in that podcast feed.")
@@ -162,6 +171,8 @@ describe("refreshPodcastWithClient", () => {
         lastError: "No audio episodes were found in that podcast feed.",
         lastFailedAt: now,
         lastFetchedAt: now,
+        consecutiveFailures: 1,
+        nextFetchAt: new Date("2026-06-29T14:00:00.000Z"),
       },
       where: { id: "podcast-1" },
     })
@@ -177,6 +188,7 @@ describe("refreshPodcastWithClient", () => {
         podcastId: "podcast-1",
         fetchText: vi.fn().mockRejectedValue(new Error(longMessage)),
         now: () => now,
+        random: () => 0.5,
         store,
       })
     ).rejects.toThrow(longMessage)
@@ -186,6 +198,8 @@ describe("refreshPodcastWithClient", () => {
         lastError: "x".repeat(500),
         lastFailedAt: now,
         lastFetchedAt: now,
+        consecutiveFailures: 1,
+        nextFetchAt: new Date("2026-06-29T14:00:00.000Z"),
       },
       where: { id: "podcast-1" },
     })

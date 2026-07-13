@@ -6,12 +6,15 @@ import {
   safeFetchText,
   type SafeFetchTextResult,
 } from "./url-safety"
+import { nextFetchAt } from "./refresh-schedule"
 
 const MAX_LINKED_ARTICLE_FETCHES = 12
 
 type RefreshableFeed = {
+  consecutiveFailures: number
   feedUrl: string
   id: string
+  refreshIntervalMinutes: number
 }
 
 type FeedRefreshStore = {
@@ -30,8 +33,10 @@ type FeedRefreshStore = {
   feed: {
     findUnique(args: {
       select: {
+        consecutiveFailures: true
         feedUrl: true
         id: true
+        refreshIntervalMinutes: true
       }
       where: {
         id: string
@@ -51,6 +56,7 @@ type RefreshFeedOptions = {
   fetchArticleContent?: (url: URL) => Promise<SafeFetchTextResult>
   fetchText?: (url: URL) => Promise<SafeFetchTextResult>
   now?: () => Date
+  random?: () => number
   store?: FeedRefreshStore
 }
 
@@ -78,12 +84,15 @@ export async function refreshFeedWithClient({
   fetchArticleContent = safeFetchText,
   fetchText = safeFetchText,
   now = () => new Date(),
+  random = Math.random,
   store = getFeedRefreshStore(),
 }: RefreshFeedOptions): Promise<RefreshFeedResult> {
   const feed = await store.feed.findUnique({
     select: {
+      consecutiveFailures: true,
       feedUrl: true,
       id: true,
+      refreshIntervalMinutes: true,
     },
     where: { id: feedId },
   })
@@ -113,6 +122,13 @@ export async function refreshFeedWithClient({
         lastFailedAt: null,
         lastFetchedAt: fetchedAt,
         lastSuccessfulFetchAt: fetchedAt,
+        consecutiveFailures: 0,
+        nextFetchAt: nextFetchAt({
+          consecutiveFailures: 0,
+          now: fetchedAt,
+          random,
+          refreshIntervalMinutes: feed.refreshIntervalMinutes,
+        }),
       },
       where: { id: feed.id },
     })
@@ -122,11 +138,20 @@ export async function refreshFeedWithClient({
       feedId: feed.id,
     }
   } catch (error) {
+    const consecutiveFailures = feed.consecutiveFailures + 1
+
     await store.feed.update({
       data: {
+        consecutiveFailures,
         lastError: errorMessage(error),
         lastFailedAt: fetchedAt,
         lastFetchedAt: fetchedAt,
+        nextFetchAt: nextFetchAt({
+          consecutiveFailures,
+          now: fetchedAt,
+          random,
+          refreshIntervalMinutes: feed.refreshIntervalMinutes,
+        }),
       },
       where: { id: feed.id },
     })

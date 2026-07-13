@@ -22,6 +22,11 @@ import {
   PODCAST_REFRESH_QUEUE_NAME,
   type PodcastRefreshJobData,
 } from "../src/lib/podcast-refresh-queue"
+import {
+  enqueueDueFeedRefreshes,
+  enqueueDuePodcastRefreshes,
+  schedulerSettings,
+} from "../src/lib/refresh-scheduler"
 import { sendSmartDigestEmail } from "../src/lib/mail"
 import { assertSecureProductionConfiguration } from "../src/lib/production-security"
 import {
@@ -33,16 +38,14 @@ import { processSmartDigestRule } from "../src/lib/smart-digest-processing"
 
 assertSecureProductionConfiguration()
 
-const schedulerIntervalMs = Number(
-  process.env.FEED_SCHEDULER_INTERVAL_MS ?? 60_000
-)
-const schedulerBatchSize = Number(process.env.FEED_SCHEDULER_BATCH_SIZE ?? 100)
-const authTokenMaintenanceBatchSize = Number(
-  process.env.AUTH_TOKEN_MAINTENANCE_BATCH_SIZE ?? 100
-)
-const authTokenMaintenanceIntervalMs = Number(
-  process.env.AUTH_TOKEN_MAINTENANCE_INTERVAL_MS ?? 15 * 60_000
-)
+const {
+  authTokenMaintenanceBatchSize,
+  authTokenMaintenanceIntervalMs,
+  feedRefreshConcurrency,
+  podcastRefreshConcurrency,
+  schedulerBatchSize,
+  schedulerIntervalMs,
+} = schedulerSettings()
 const prisma = getPrisma()
 
 console.log("Arctic RSS worker online")
@@ -62,7 +65,7 @@ const worker = new Worker<FeedRefreshJobData>(
   },
   {
     connection: redisConnectionOptions(),
-    concurrency: Number(process.env.FEED_REFRESH_CONCURRENCY ?? 3),
+    concurrency: feedRefreshConcurrency,
   }
 )
 
@@ -115,7 +118,7 @@ const podcastWorker = new Worker<PodcastRefreshJobData>(
   },
   {
     connection: redisConnectionOptions(),
-    concurrency: Number(process.env.PODCAST_REFRESH_CONCURRENCY ?? 2),
+    concurrency: podcastRefreshConcurrency,
   }
 )
 
@@ -144,79 +147,19 @@ podcastWorker.on("failed", (job, error) => {
 })
 
 async function enqueueDueFeeds() {
-  const now = new Date()
-  const feeds = await prisma.feed.findMany({
-    orderBy: [{ lastFetchedAt: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      lastFetchedAt: true,
-      refreshIntervalMinutes: true,
-    },
-    take: schedulerBatchSize,
-    where: {
-      subscriptions: {
-        some: {
-          isPaused: false,
-        },
-      },
-    },
+  return enqueueDueFeedRefreshes({
+    batchSize: schedulerBatchSize,
+    enqueue: enqueueFeedRefresh,
+    store: prisma as unknown as Parameters<typeof enqueueDueFeedRefreshes>[0]["store"],
   })
-
-  const dueFeeds = feeds.filter((feed) => {
-    if (!feed.lastFetchedAt) {
-      return true
-    }
-
-    const refreshAfterMs = feed.refreshIntervalMinutes * 60_000
-
-    return now.getTime() - feed.lastFetchedAt.getTime() >= refreshAfterMs
-  })
-
-  for (const feed of dueFeeds) {
-    await enqueueFeedRefresh(feed.id)
-  }
-
-  if (dueFeeds.length) {
-    console.log(`[worker] enqueued ${dueFeeds.length} due feed refreshes`)
-  }
 }
 
 async function enqueueDuePodcasts() {
-  const now = new Date()
-  const podcasts = await prisma.podcast.findMany({
-    orderBy: [{ lastFetchedAt: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      lastFetchedAt: true,
-      refreshIntervalMinutes: true,
-    },
-    take: schedulerBatchSize,
-    where: {
-      subscriptions: {
-        some: {
-          isPaused: false,
-        },
-      },
-    },
+  return enqueueDuePodcastRefreshes({
+    batchSize: schedulerBatchSize,
+    enqueue: enqueuePodcastRefresh,
+    store: prisma as unknown as Parameters<typeof enqueueDuePodcastRefreshes>[0]["store"],
   })
-
-  const duePodcasts = podcasts.filter((podcast) => {
-    if (!podcast.lastFetchedAt) {
-      return true
-    }
-
-    const refreshAfterMs = podcast.refreshIntervalMinutes * 60_000
-
-    return now.getTime() - podcast.lastFetchedAt.getTime() >= refreshAfterMs
-  })
-
-  for (const podcast of duePodcasts) {
-    await enqueuePodcastRefresh(podcast.id)
-  }
-
-  if (duePodcasts.length) {
-    console.log(`[worker] enqueued ${duePodcasts.length} due podcast refreshes`)
-  }
 }
 
 async function enqueueDueSmartDigests() {
@@ -267,6 +210,26 @@ async function schedulerTick() {
         enqueueDueSmartDigests(),
         runAuthTokenMaintenance(),
       ])
+
+    if (feedResult.status === "fulfilled") {
+      console.log(
+        JSON.stringify({
+          event: "refresh_scheduler",
+          kind: "feed",
+          ...feedResult.value,
+        })
+      )
+    }
+
+    if (podcastResult.status === "fulfilled") {
+      console.log(
+        JSON.stringify({
+          event: "refresh_scheduler",
+          kind: "podcast",
+          ...podcastResult.value,
+        })
+      )
+    }
 
     if (feedResult.status === "rejected") {
       console.error(

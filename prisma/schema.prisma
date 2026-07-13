@@ -293,6 +293,8 @@ model Feed {
   lastSuccessfulFetchAt  DateTime?
   lastFailedAt           DateTime?
   lastError              String?
+  nextFetchAt            DateTime  @default(now())
+  consecutiveFailures    Int       @default(0)
   etag                   String?
   lastModified           String?
   refreshIntervalMinutes Int       @default(60)
@@ -301,6 +303,8 @@ model Feed {
 
   subscriptions FeedSubscription[]
   articles      Article[]
+
+  @@index([nextFetchAt, id])
 }
 
 model FeedSubscription {
@@ -339,6 +343,8 @@ model Podcast {
   lastSuccessfulFetchAt  DateTime?
   lastFailedAt           DateTime?
   lastError              String?
+  nextFetchAt            DateTime  @default(now())
+  consecutiveFailures    Int       @default(0)
   etag                   String?
   lastModified           String?
   refreshIntervalMinutes Int       @default(60)
@@ -347,6 +353,8 @@ model Podcast {
 
   subscriptions PodcastSubscription[]
   episodes      PodcastEpisode[]
+
+  @@index([nextFetchAt, id])
 }
 
 model PodcastSubscription {
