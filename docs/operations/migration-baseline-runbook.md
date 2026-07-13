@@ -10,14 +10,15 @@ Complete the backup/restore gate first. Then, from the reviewed release
 directory and without printing `.env` values:
 
 ```bash
-docker compose run --rm --no-deps worker \
-  npx prisma migrate diff --from-config-datasource \
+docker compose run --rm --no-deps migrate \
+  ./node_modules/.bin/prisma migrate diff --from-config-datasource \
   --to-schema=prisma/schema.prisma --exit-code
 
-docker compose run --rm --no-deps worker \
-  npx prisma migrate resolve --applied 20260713023000_baseline
+docker compose run --rm --no-deps migrate \
+  ./node_modules/.bin/prisma migrate resolve --applied 20260713023000_baseline
 
-docker compose run --rm --no-deps worker npx prisma migrate status
+docker compose run --rm --no-deps migrate \
+  ./node_modules/.bin/prisma migrate status
 ```
 
 The first command must report no schema drift. If it does not, stop: do not

@@ -48,7 +48,8 @@ unless this job is first moved to a distributed scheduler or lock.
 
    ```bash
    docker compose run --rm --no-deps migrate
-   docker compose run --rm --no-deps worker npx prisma migrate status
+   docker compose run --rm --no-deps migrate \
+     ./node_modules/.bin/prisma migrate status
    ```
 
 5. Rebuild and recreate the application services, then check health locally

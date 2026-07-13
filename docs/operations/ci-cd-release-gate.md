@@ -19,8 +19,8 @@ Every pull request and update to `main` runs the following checks:
   route;
 - dependency review on pull requests and a production dependency audit;
 - full-history secret detection and JavaScript/TypeScript static analysis;
-- production web and worker Docker builds, high/critical vulnerability scans,
-  and SBOM artifacts retained for 30 days.
+- production web, worker, and migration Docker builds, high/critical
+  vulnerability scans, and SBOM artifacts retained for 30 days.
 
 The security checks also run weekly. Third-party actions are pinned to reviewed
 commit SHAs where available; Dependabot opens controlled update pull requests

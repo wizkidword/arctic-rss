@@ -77,7 +77,8 @@ the migration SQL. Do not use `prisma db push` in production.
    cd "$APP_DIR"
    docker compose build migrate
    docker compose run --rm --no-deps migrate
-   docker compose run --rm --no-deps migrate npx prisma migrate status
+   docker compose run --rm --no-deps migrate \
+     ./node_modules/.bin/prisma migrate status
    ```
 
    The deploy output must list the reviewed new migration when one is expected.
@@ -145,7 +146,8 @@ cd "$APP_DIR"
 docker compose run --rm --no-deps migrate
 docker compose build web worker
 docker compose up -d --no-deps --force-recreate web worker
-docker compose run --rm --no-deps worker npx prisma migrate status
+docker compose run --rm --no-deps migrate \
+  ./node_modules/.bin/prisma migrate status
 curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/health
 ```
 

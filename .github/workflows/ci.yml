@@ -166,6 +166,8 @@ jobs:
         run: docker build --target runner --tag arctic-rss-web:ci .
       - name: Build production worker image
         run: docker build --target worker --tag arctic-rss-worker:ci .
+      - name: Build production migration image
+        run: docker build --target migrate --tag arctic-rss-migrate:ci .
       - name: Scan web image for high and critical vulnerabilities
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
@@ -185,6 +187,16 @@ jobs:
           severity: CRITICAL,HIGH
           vuln-type: os,library
           skip-setup-trivy: true
+      - name: Scan migration image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: arctic-rss-migrate:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          vuln-type: os,library
+          skip-setup-trivy: true
       - name: Generate web image SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
@@ -196,4 +208,10 @@ jobs:
         with:
           artifact-name: arctic-rss-worker-sbom
           image: arctic-rss-worker:ci
+          upload-artifact-retention: 30
+      - name: Generate migration image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          artifact-name: arctic-rss-migrate-sbom
+          image: arctic-rss-migrate:ci
           upload-artifact-retention: 30
