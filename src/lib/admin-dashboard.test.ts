@@ -175,7 +175,12 @@ function createAdminStore(): AdminDashboardStore {
             subscriptions: 4,
           },
           aiMonthlyLimit: 100,
-          aiMonthlyUsed: 17,
+          aiUsagePeriods: [
+            {
+              consumedUnits: 17,
+              reservedUnits: 0,
+            },
+          ],
           createdAt: new Date("2026-06-20T12:00:00.000Z"),
           disabledAt: null,
           email: "reader@example.com",
@@ -197,9 +202,9 @@ describe("admin dashboard aggregation", () => {
       getAdminDashboardWithClient({
         isAdmin: false,
         store,
-      })
+      }),
     ).rejects.toEqual(
-      new AdminDashboardError("Administrator access is required.")
+      new AdminDashboardError("Administrator access is required."),
     )
 
     expect(store.user.count).not.toHaveBeenCalled()
@@ -241,7 +246,7 @@ describe("admin dashboard aggregation", () => {
             gte: new Date("2026-06-01T00:00:00.000Z"),
           },
         },
-      })
+      }),
     )
     expect(store.bugReport.findMany).toHaveBeenCalledWith({
       orderBy: {
@@ -446,7 +451,7 @@ describe("admin dashboard aggregation", () => {
         inputTokens: 0,
         outputTokens: 0,
         requestCount: 0,
-      })
+      }),
     )
   })
 })

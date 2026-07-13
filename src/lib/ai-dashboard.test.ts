@@ -65,6 +65,13 @@ function createDashboardStore(): AiDashboardStore {
         },
       ]),
     },
+    aiUsagePeriod: {
+      findUnique: vi.fn().mockResolvedValue({
+        consumedUnits: 37,
+        limitUnits: 100,
+        reservedUnits: 0,
+      }),
+    },
     articleAiSummary: {
       count: vi.fn().mockResolvedValue(12),
       findMany: vi.fn().mockResolvedValue([
@@ -115,7 +122,6 @@ describe("AI dashboard", () => {
     expect(store.user.findUnique).toHaveBeenCalledWith({
       select: {
         aiMonthlyLimit: true,
-        aiMonthlyUsed: true,
         settings: {
           select: {
             aiAutoSummariesEnabled: true,
@@ -125,6 +131,19 @@ describe("AI dashboard", () => {
       },
       where: {
         id: "user-1",
+      },
+    })
+    expect(store.aiUsagePeriod.findUnique).toHaveBeenCalledWith({
+      select: {
+        consumedUnits: true,
+        limitUnits: true,
+        reservedUnits: true,
+      },
+      where: {
+        userId_periodStart: {
+          periodStart: new Date("2026-06-01T00:00:00.000Z"),
+          userId: "user-1",
+        },
       },
     })
     expect(store.article.findMany).toHaveBeenCalledWith(
@@ -156,7 +175,7 @@ describe("AI dashboard", () => {
             },
           ],
         },
-      })
+      }),
     )
     expect(dashboard).toEqual({
       activeDigest: {

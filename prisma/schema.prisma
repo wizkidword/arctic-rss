@@ -90,6 +90,13 @@ enum AiDigestSection {
   SKIM_LATER
 }
 
+enum AiOperationStatus {
+  RESERVED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum SmartDigestMatchingMode {
   RULES
   HYBRID_AI
@@ -146,6 +153,8 @@ model User {
   podcastEpisodeStates    PodcastEpisodeState[]
   articleCollections      ArticleCollection[]
   aiUsageLogs             AiUsageLog[]
+  aiUsagePeriods          AiUsagePeriod[]
+  aiOperations            AiOperation[]
   aiDigests               AiDigest[]
   smartDigestRules        SmartDigestRule[]
   smartDigests            SmartDigest[]
@@ -519,6 +528,47 @@ model AiUsageLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+model AiUsagePeriod {
+  id            String   @id @default(cuid())
+  userId        String
+  periodStart   DateTime
+  limitUnits    Int
+  reservedUnits Int      @default(0)
+  consumedUnits Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operations AiOperation[]
+
+  @@unique([userId, periodStart])
+  @@index([periodStart])
+}
+
+model AiOperation {
+  id                String            @id @default(cuid())
+  idempotencyKey    String            @unique
+  userId            String
+  periodId          String?
+  action            AiAction
+  status            AiOperationStatus @default(RESERVED)
+  reservedUnits     Int               @default(0)
+  consumedUnits     Int               @default(0)
+  provider          String?
+  model             String?
+  providerRequestId String?
+  errorCode         String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  completedAt       DateTime?
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period AiUsagePeriod? @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([periodId, status])
 }
 
 model AiDigest {

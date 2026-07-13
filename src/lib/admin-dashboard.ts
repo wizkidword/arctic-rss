@@ -13,7 +13,10 @@ type AdminUserRecord = {
     subscriptions: number
   }
   aiMonthlyLimit: number
-  aiMonthlyUsed: number
+  aiUsagePeriods: Array<{
+    consumedUnits: number
+    reservedUnits: number
+  }>
   createdAt: Date
   disabledAt: Date | null
   email: string
@@ -123,7 +126,7 @@ export type AdminDashboardStore = {
     aggregate(args: Record<string, unknown>): Promise<AiUsageAggregate>
     findMany(args: Record<string, unknown>): Promise<AiUsageRecord[]>
     groupBy(
-      args: Record<string, unknown>
+      args: Record<string, unknown>,
     ): Promise<AiActionGroup[] | AiProviderGroup[]>
   }
   article: {
@@ -162,11 +165,7 @@ export type AdminDashboardData = Awaited<
   ReturnType<typeof getAdminDashboardWithClient>
 >
 
-export async function getAdminDashboard({
-  isAdmin,
-}: {
-  isAdmin: boolean
-}) {
+export async function getAdminDashboard({ isAdmin }: { isAdmin: boolean }) {
   return getAdminDashboardWithClient({
     isAdmin,
     store: getPrisma() as unknown as AdminDashboardStore,
@@ -188,7 +187,7 @@ export async function getAdminDashboardWithClient({
 
   const generatedAt = now()
   const monthStart = new Date(
-    Date.UTC(generatedAt.getUTCFullYear(), generatedAt.getUTCMonth(), 1)
+    Date.UTC(generatedAt.getUTCFullYear(), generatedAt.getUTCMonth(), 1),
   )
   const staleBefore = new Date(generatedAt.getTime() - 24 * 60 * 60 * 1000)
   const aiAggregate = {
@@ -252,7 +251,15 @@ export async function getAdminDashboardWithClient({
           },
         },
         aiMonthlyLimit: true,
-        aiMonthlyUsed: true,
+        aiUsagePeriods: {
+          select: {
+            consumedUnits: true,
+            reservedUnits: true,
+          },
+          where: {
+            periodStart: monthStart,
+          },
+        },
         createdAt: true,
         disabledAt: true,
         email: true,
@@ -449,7 +456,7 @@ export async function getAdminDashboardWithClient({
       id: digest.id,
       message: boundedMessage(
         digest.errorMessage,
-        "AI digest processing failed."
+        "AI digest processing failed.",
       ),
       occurredAt: digest.updatedAt,
       type: "AI digest" as const,
@@ -463,7 +470,9 @@ export async function getAdminDashboardWithClient({
       userEmail: job.user.email,
     })),
   ]
-    .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+    .sort(
+      (left, right) => right.occurredAt.getTime() - left.occurredAt.getTime(),
+    )
     .slice(0, 25)
 
   return {
@@ -483,7 +492,7 @@ export async function getAdminDashboardWithClient({
           outputTokens: group._sum.outputTokens ?? 0,
           provider: group.provider,
           requestCount: group._count._all,
-        })
+        }),
       ),
       costEstimate: finiteNumber(aiUsage._sum.costEstimate),
       inputTokens: aiUsage._sum.inputTokens ?? 0,
@@ -532,7 +541,7 @@ export async function getAdminDashboardWithClient({
       createdAt: suggestion.createdAt,
       description: boundedMessage(
         suggestion.description,
-        "No details provided."
+        "No details provided.",
       ),
       id: suggestion.id,
       pageUrl: suggestion.pageUrl,
@@ -553,7 +562,9 @@ export async function getAdminDashboardWithClient({
     persistedFailures,
     users: users.map((user) => ({
       aiMonthlyLimit: user.aiMonthlyLimit,
-      aiMonthlyUsed: user.aiMonthlyUsed,
+      aiMonthlyUsed:
+        (user.aiUsagePeriods[0]?.consumedUnits ?? 0) +
+        (user.aiUsagePeriods[0]?.reservedUnits ?? 0),
       createdAt: user.createdAt,
       disabledAt: user.disabledAt,
       email: user.email,

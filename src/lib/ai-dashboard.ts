@@ -1,14 +1,20 @@
 import { defaultUserSettings } from "./settings"
 import { getPrisma } from "./db"
 import { eligibleAiDigestArticleWhere } from "./ai-digests"
+import { getAiUsagePeriodStart } from "./ai-usage"
 
 type DashboardUser = {
   aiMonthlyLimit: number
-  aiMonthlyUsed: number
   settings: {
     aiAutoSummariesEnabled: boolean
     dailyDigestEnabled: boolean
   } | null
+}
+
+type DashboardUsagePeriod = {
+  consumedUnits: number
+  limitUnits: number
+  reservedUnits: number
 }
 
 type DashboardSummary = {
@@ -61,6 +67,11 @@ export type AiDashboardStore = {
   aiDigest: {
     findMany(args: Record<string, unknown>): Promise<DashboardDigest[]>
   }
+  aiUsagePeriod: {
+    findUnique(
+      args: Record<string, unknown>,
+    ): Promise<DashboardUsagePeriod | null>
+  }
   articleAiSummary: {
     count(args: Record<string, unknown>): Promise<number>
     findMany(args: Record<string, unknown>): Promise<DashboardSummary[]>
@@ -73,11 +84,7 @@ export type AiDashboardStore = {
   }
 }
 
-export async function getAiDashboardForUser({
-  userId,
-}: {
-  userId: string
-}) {
+export async function getAiDashboardForUser({ userId }: { userId: string }) {
   return getAiDashboardWithClient({
     store: getPrisma() as unknown as AiDashboardStore,
     userId,
@@ -103,137 +110,148 @@ export async function getAiDashboardWithClient({
       },
     },
   }
-  const digestStart = new Date(now().getTime() - 24 * 60 * 60 * 1000)
+  const currentTime = now()
+  const digestStart = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000)
+  const usagePeriodStart = getAiUsagePeriodStart(currentTime)
   const [
     user,
+    usagePeriod,
     summaryCount,
     recentSummaries,
     digestArticles,
     eligibleDigestArticleCount,
     digestHistory,
-  ] =
-    await Promise.all([
-      store.user.findUnique({
-        select: {
-          aiMonthlyLimit: true,
-          aiMonthlyUsed: true,
-          settings: {
-            select: {
-              aiAutoSummariesEnabled: true,
-              dailyDigestEnabled: true,
-            },
+  ] = await Promise.all([
+    store.user.findUnique({
+      select: {
+        aiMonthlyLimit: true,
+        settings: {
+          select: {
+            aiAutoSummariesEnabled: true,
+            dailyDigestEnabled: true,
           },
         },
-        where: {
-          id: userId,
-        },
-      }),
-      store.articleAiSummary.count({
-        where: {
-          article: activeSubscription,
-        },
-      }),
-      store.articleAiSummary.findMany({
-        include: {
-          article: {
-            select: {
-              feed: {
-                select: {
-                  title: true,
-                },
-              },
-              id: true,
-              title: true,
-              url: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 5,
-        where: {
-          article: activeSubscription,
-        },
-      }),
-      store.article.findMany({
-        include: {
-          aiSummaries: {
-            orderBy: {
-              createdAt: "desc",
-            },
-            select: {
-              shortSummary: true,
-            },
-            take: 1,
-          },
-          feed: {
-            select: {
-              title: true,
-            },
-          },
-        },
-        orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-        take: 8,
-        where: {
-          AND: [
-            activeSubscription,
-            {
-              publishedAt: {
-                gte: digestStart,
-              },
-            },
-            {
-              states: {
-                none: {
-                  isRead: true,
-                  userId,
-                },
-              },
-            },
-          ],
-        },
-      }),
-      store.article.count({
-        where: eligibleAiDigestArticleWhere(userId),
-      }),
-      store.aiDigest.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
-        select: {
-          articleCount: true,
-          completedAt: true,
-          createdAt: true,
-          errorMessage: true,
-          id: true,
-          overview: true,
-          status: true,
-          title: true,
-        },
-        take: 10,
-        where: {
+      },
+      where: {
+        id: userId,
+      },
+    }),
+    store.aiUsagePeriod.findUnique({
+      select: {
+        consumedUnits: true,
+        limitUnits: true,
+        reservedUnits: true,
+      },
+      where: {
+        userId_periodStart: {
+          periodStart: usagePeriodStart,
           userId,
         },
-      }),
-    ])
+      },
+    }),
+    store.articleAiSummary.count({
+      where: {
+        article: activeSubscription,
+      },
+    }),
+    store.articleAiSummary.findMany({
+      include: {
+        article: {
+          select: {
+            feed: {
+              select: {
+                title: true,
+              },
+            },
+            id: true,
+            title: true,
+            url: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 5,
+      where: {
+        article: activeSubscription,
+      },
+    }),
+    store.article.findMany({
+      include: {
+        aiSummaries: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          select: {
+            shortSummary: true,
+          },
+          take: 1,
+        },
+        feed: {
+          select: {
+            title: true,
+          },
+        },
+      },
+      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+      take: 8,
+      where: {
+        AND: [
+          activeSubscription,
+          {
+            publishedAt: {
+              gte: digestStart,
+            },
+          },
+          {
+            states: {
+              none: {
+                isRead: true,
+                userId,
+              },
+            },
+          },
+        ],
+      },
+    }),
+    store.article.count({
+      where: eligibleAiDigestArticleWhere(userId),
+    }),
+    store.aiDigest.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        articleCount: true,
+        completedAt: true,
+        createdAt: true,
+        errorMessage: true,
+        id: true,
+        overview: true,
+        status: true,
+        title: true,
+      },
+      take: 10,
+      where: {
+        userId,
+      },
+    }),
+  ])
 
   if (!user) {
     throw new Error("User not found.")
   }
 
-  const monthlyRemaining = Math.max(
-    0,
-    user.aiMonthlyLimit - user.aiMonthlyUsed
-  )
+  const monthlyLimit = usagePeriod?.limitUnits ?? user.aiMonthlyLimit
+  const monthlyUsed =
+    (usagePeriod?.consumedUnits ?? 0) + (usagePeriod?.reservedUnits ?? 0)
+  const monthlyRemaining = Math.max(0, monthlyLimit - monthlyUsed)
   const percentUsed =
-    user.aiMonthlyLimit > 0
+    monthlyLimit > 0
       ? Math.min(
           100,
-          Math.max(
-            0,
-            Math.round((user.aiMonthlyUsed / user.aiMonthlyLimit) * 100)
-          )
+          Math.max(0, Math.round((monthlyUsed / monthlyLimit) * 100)),
         )
       : 0
 
@@ -241,7 +259,7 @@ export async function getAiDashboardWithClient({
     activeDigest:
       digestHistory.find(
         (digest) =>
-          digest.status === "PENDING" || digest.status === "PROCESSING"
+          digest.status === "PENDING" || digest.status === "PROCESSING",
       ) ?? null,
     digestArticles: digestArticles.map((article) => ({
       feedTitle: article.feed.title,
@@ -257,8 +275,7 @@ export async function getAiDashboardWithClient({
     digestHistory,
     eligibleDigestArticleCount,
     preferences: {
-      aiAutoSummariesEnabled:
-        user.settings?.aiAutoSummariesEnabled ?? false,
+      aiAutoSummariesEnabled: user.settings?.aiAutoSummariesEnabled ?? false,
       dailyDigestEnabled: user.settings?.dailyDigestEnabled ?? false,
     },
     recentSummaries: recentSummaries.map((summary) => ({
@@ -274,9 +291,9 @@ export async function getAiDashboardWithClient({
     })),
     summaryCount,
     usage: {
-      monthlyLimit: user.aiMonthlyLimit,
+      monthlyLimit,
       monthlyRemaining,
-      monthlyUsed: user.aiMonthlyUsed,
+      monthlyUsed,
       percentUsed,
     },
   }

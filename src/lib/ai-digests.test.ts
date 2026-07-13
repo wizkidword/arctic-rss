@@ -12,7 +12,89 @@ import {
 } from "./ai-digests"
 
 function createStore(): AiDigestStore {
+  const operations = new Map<string, Record<string, unknown>>()
+  let period: {
+    consumedUnits: number
+    id: string
+    limitUnits: number
+    reservedUnits: number
+  } | null = null
   const store = {
+    $queryRaw: vi.fn(
+      async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        const query = strings.join("?")
+
+        if (query.includes('INSERT INTO "AiUsagePeriod"')) {
+          const periodId = values[0] as string
+          const limit = values[3] as number
+
+          if (!period) {
+            if (limit < 1) {
+              return []
+            }
+
+            period = {
+              consumedUnits: 0,
+              id: periodId,
+              limitUnits: limit,
+              reservedUnits: 1,
+            }
+            return [{ id: period.id }]
+          }
+
+          if (
+            period.reservedUnits + period.consumedUnits >=
+            period.limitUnits
+          ) {
+            return []
+          }
+
+          period.reservedUnits += 1
+          return [{ id: period.id }]
+        }
+
+        if (query.includes("operation_to_release")) {
+          const operation = operations.get(values[0] as string)
+
+          if (
+            !operation ||
+            (operation.status !== "RESERVED" &&
+              operation.status !== "PROCESSING")
+          ) {
+            return []
+          }
+
+          const released = {
+            periodId: operation.periodId as string | null,
+            reservedUnits: operation.reservedUnits as number,
+          }
+          operation.errorCode = values[1]
+          operation.reservedUnits = 0
+          operation.status = "FAILED"
+          return [released]
+        }
+
+        if (query.includes('UPDATE "AiUsagePeriod"')) {
+          if (!period) {
+            return []
+          }
+
+          if (query.includes('"consumedUnits"')) {
+            period.reservedUnits -= values[1] as number
+            period.consumedUnits += 1
+          } else {
+            period.reservedUnits = Math.max(
+              0,
+              period.reservedUnits - (values[1] as number),
+            )
+          }
+
+          return [{ id: period.id }]
+        }
+
+        return []
+      },
+    ),
     $transaction: vi.fn(),
     aiDigest: {
       create: vi.fn().mockResolvedValue({
@@ -35,6 +117,46 @@ function createStore(): AiDigestStore {
     aiDigestItem: {
       createMany: vi.fn().mockResolvedValue({ count: 2 }),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    aiOperation: {
+      create: vi.fn(async ({ data }) => {
+        if (operations.has(data.idempotencyKey)) {
+          throw { code: "P2002" }
+        }
+
+        const operation = {
+          ...data,
+          completedAt: null,
+          consumedUnits: 0,
+          errorCode: null,
+          id: `operation-${operations.size + 1}`,
+          periodId: null,
+          providerRequestId: null,
+        }
+        operations.set(data.idempotencyKey, operation)
+        return operation
+      }),
+      findUnique: vi.fn(async ({ where }) => {
+        return (
+          Array.from(operations.values()).find(
+            (operation) =>
+              operation.id === where.id ||
+              operation.idempotencyKey === where.idempotencyKey,
+          ) ?? null
+        )
+      }),
+      update: vi.fn(async ({ data, where }) => {
+        const operation = Array.from(operations.values()).find(
+          (candidate) => candidate.id === where.id,
+        )
+
+        if (!operation) {
+          throw new Error("Operation not found")
+        }
+
+        Object.assign(operation, data)
+        return operation
+      }),
     },
     aiUsageLog: {
       create: vi.fn().mockResolvedValue({}),
@@ -92,16 +214,14 @@ function createStore(): AiDigestStore {
       }),
       update: vi.fn().mockResolvedValue({}),
     },
-  } satisfies Omit<AiDigestStore, "$transaction"> & {
-    $transaction: ReturnType<typeof vi.fn>
   }
 
   store.$transaction.mockImplementation(
     async (callback: (transaction: AiDigestStore) => Promise<unknown>) =>
-      callback(store as AiDigestStore)
+      callback(store as unknown as AiDigestStore),
   )
 
-  return store as AiDigestStore
+  return store as unknown as AiDigestStore
 }
 
 describe("AI digest provider", () => {
@@ -115,7 +235,7 @@ describe("AI digest provider", () => {
         feedTitle: "Example Feed",
         folderName: index === 0 ? "Engineering" : null,
         publishedAt: new Date(
-          `2026-06-23T${String(12 - index).padStart(2, "0")}:00:00.000Z`
+          `2026-06-23T${String(12 - index).padStart(2, "0")}:00:00.000Z`,
         ),
         summary: `Summary ${index + 1}`,
         title: `Story ${index + 1}`,
@@ -126,12 +246,12 @@ describe("AI digest provider", () => {
 
     expect(result.title).toBe("Arctic digest - 2026-06-23")
     expect(result.items).toHaveLength(7)
-    expect(result.items.slice(0, 5).every((item) => item.section === "MUST_READ")).toBe(
-      true
-    )
-    expect(result.items.slice(5).every((item) => item.section === "SKIM_LATER")).toBe(
-      true
-    )
+    expect(
+      result.items.slice(0, 5).every((item) => item.section === "MUST_READ"),
+    ).toBe(true)
+    expect(
+      result.items.slice(5).every((item) => item.section === "SKIM_LATER"),
+    ).toBe(true)
     expect(result.items[0]).toMatchObject({
       articleId: "article-6",
       summary: "Cached summary",
@@ -166,8 +286,8 @@ describe("AI digest provider", () => {
             "Content-Type": "application/json",
           },
           status: 200,
-        }
-      )
+        },
+      ),
     )
     const provider = createOpenAiDigestProvider({
       apiKey: "test-key",
@@ -194,10 +314,13 @@ describe("AI digest provider", () => {
 
     expect(fetcher).toHaveBeenCalledWith(
       "https://api.openai.com/v1/responses",
-      expect.objectContaining({
-        method: "POST",
-      })
+      expect.objectContaining({ method: "POST" }),
     )
+    const request = fetcher.mock.calls[0]?.[1]
+    const body = JSON.parse(String(request?.body))
+    expect(request?.signal).toBeInstanceOf(AbortSignal)
+    expect(body.max_output_tokens).toBe(4000)
+    expect(body.input[0].content).toContain("untrusted publisher data")
     expect(result).toEqual({
       inputTokens: 120,
       items: [
@@ -211,6 +334,7 @@ describe("AI digest provider", () => {
       ],
       outputTokens: 40,
       overview: "One important story.",
+      providerRequestId: null,
       title: "Morning digest",
     })
   })
@@ -270,24 +394,47 @@ describe("AI digest requests", () => {
     })
   })
 
-  it("rejects a request after the monthly limit is reached", async () => {
+  it("does not consume allowance until the worker is ready to call a provider", async () => {
     const store = createStore()
     vi.mocked(store.user.findUnique).mockResolvedValue({
-      aiMonthlyLimit: 4,
-      aiMonthlyUsed: 4,
+      aiMonthlyLimit: 0,
+      aiMonthlyUsed: 0,
     })
 
     await expect(
-      requestAiDigestWithClient({
-        store,
-        userId: "user-1",
-      })
-    ).rejects.toThrow("AI monthly limit reached.")
-    expect(store.aiDigest.create).not.toHaveBeenCalled()
+      requestAiDigestWithClient({ store, userId: "user-1" }),
+    ).resolves.toEqual({
+      digestId: "digest-1",
+      existing: false,
+      status: "PENDING",
+    })
   })
 })
 
 describe("AI digest processing", () => {
+  it("rejects a provider call when no monthly allowance can be reserved", async () => {
+    const store = createStore()
+    vi.mocked(store.user.findUnique).mockResolvedValue({
+      aiMonthlyLimit: 0,
+      aiMonthlyUsed: 0,
+    })
+    const provider: AiDigestProvider = {
+      generate: vi.fn(),
+      model: "local-digest-v1",
+      name: "local",
+    }
+
+    await expect(
+      processAiDigestWithClient({
+        digestId: "digest-1",
+        provider,
+        store,
+      }),
+    ).rejects.toThrow("AI monthly limit reached.")
+
+    expect(provider.generate).not.toHaveBeenCalled()
+  })
+
   it("stores generated items and records one usage unit", async () => {
     const store = createStore()
     const provider: AiDigestProvider = {
@@ -336,7 +483,7 @@ describe("AI digest processing", () => {
             },
           },
         }),
-      })
+      }),
     )
     expect(store.aiDigestItem.createMany).toHaveBeenCalledWith({
       data: expect.arrayContaining([
@@ -358,16 +505,7 @@ describe("AI digest processing", () => {
         userId: "user-1",
       }),
     })
-    expect(store.user.update).toHaveBeenCalledWith({
-      data: {
-        aiMonthlyUsed: {
-          increment: 1,
-        },
-      },
-      where: {
-        id: "user-1",
-      },
-    })
+    expect(store.user.update).not.toHaveBeenCalled()
     expect(result).toEqual({
       articleCount: 2,
       digestId: "digest-1",
@@ -381,7 +519,7 @@ describe("AI digest processing", () => {
       generate: vi
         .fn()
         .mockRejectedValue(
-          new Error(`Provider failed with secret ${"x".repeat(700)}`)
+          new Error(`Provider failed with secret ${"x".repeat(700)}`),
         ),
       model: "broken-model",
       name: "broken",
@@ -392,7 +530,7 @@ describe("AI digest processing", () => {
         digestId: "digest-1",
         provider,
         store,
-      })
+      }),
     ).rejects.toBeInstanceOf(AiDigestError)
 
     expect(store.aiDigest.update).toHaveBeenLastCalledWith({
@@ -437,7 +575,7 @@ describe("AI digest lookup", () => {
           id: "digest-1",
           userId: "user-1",
         },
-      })
+      }),
     )
     expect(digest?.id).toBe("digest-1")
   })
