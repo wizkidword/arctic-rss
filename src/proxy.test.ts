@@ -50,6 +50,15 @@ describe("proxy host validation", () => {
     )
   })
 
+  it("redirects the canonical hostname when a proxy preserves port 80", () => {
+    const response = proxy(request("/login", { host: "arcticrss.com:80" }))
+
+    expect(response.status).toBe(308)
+    expect(response.headers.get("location")).toBe(
+      "https://arcticrss.com/login"
+    )
+  })
+
   it("rejects unexpected ports and Unicode/punycode host lookalikes", () => {
     expect(
       proxy(request("/login", { host: "arcticrss.com:444" })).status

@@ -61,6 +61,7 @@ describe("app origin configuration", () => {
     )
     expect(isAllowedAppHost("ARCTICRSS.COM", environment)).toBe(true)
     expect(isAllowedAppHost("www.arcticrss.com", environment)).toBe(true)
+    expect(isAllowedAppHost("arcticrss.com:80", environment)).toBe(true)
     expect(isAllowedAppHost("arcticrss.com:444", environment)).toBe(false)
     expect(isAllowedAppHost("b\u00fccher.example", environment)).toBe(true)
     expect(normalizeRequestHost("arcticrss.com, attacker.example")).toBeNull()

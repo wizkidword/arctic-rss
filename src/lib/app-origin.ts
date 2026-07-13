@@ -137,7 +137,26 @@ export function isAllowedAppHost(
 ) {
   const host = normalizeRequestHost(value)
 
-  return host ? getAllowedAppHosts(environment).has(host) : false
+  if (!host) {
+    return false
+  }
+
+  if (getAllowedAppHosts(environment).has(host)) {
+    return true
+  }
+
+  const canonicalOrigin = getAppOrigin(environment)
+  const parsedHost = new URL(`https://${host}`)
+
+  // TLS-terminating proxies can preserve the origin-facing HTTP port in the
+  // Host header. Treat the canonical hostname on port 80 as an alias only
+  // when the configured origin does not use a custom port; proxy() then
+  // redirects it straight back to the canonical HTTPS origin.
+  return (
+    !canonicalOrigin.port &&
+    canonicalOrigin.hostname === parsedHost.hostname &&
+    parsedHost.port === "80"
+  )
 }
 
 export function isLoopbackHost(value: string | null) {
