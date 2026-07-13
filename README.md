@@ -40,11 +40,11 @@ cp .env.example .env
    service names; when running `npm run dev` directly on the host, use
    `localhost` for PostgreSQL and Redis.
 
-1. Generate the Prisma client and push the schema:
+1. Generate the Prisma client and apply committed migrations:
 
 ```bash
 npm run prisma:generate
-npx prisma db push
+npm run prisma:deploy
 ```
 
 1. Start the app:
@@ -69,7 +69,7 @@ Services:
 - `worker`: background feed refresh worker
 - `postgres`: PostgreSQL database
 - `redis`: Redis queue/cache dependency
-- `migrate`: one-shot Prisma `db push` for this foundation milestone
+- `migrate`: one-shot Prisma `migrate deploy` for committed migrations
 - `cloudflared`: optional tunnel service behind the `tunnel` profile
 
 To run with Cloudflare Tunnel:

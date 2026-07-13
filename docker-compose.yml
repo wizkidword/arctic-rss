@@ -43,7 +43,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["npx", "prisma", "db", "push"]
+    command: ["npx", "prisma", "migrate", "deploy"]
     restart: "no"
 
   web:

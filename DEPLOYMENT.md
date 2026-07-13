@@ -361,25 +361,27 @@ Redis through `REDIS_URL`.
 
 ## Schema Management
 
-The current MVP uses:
-
-```bash
-npx prisma db push
-```
-
-through the one-shot `migrate` container because the repository does not yet
-have a migration baseline. Back up the database before every schema-changing
-upgrade.
-
-Before a multi-instance or long-lived production rollout, create a Prisma
-migration baseline and change the deployment command to:
+Production uses the one-shot `migrate` service with committed Prisma
+migrations:
 
 ```bash
 npx prisma migrate deploy
 ```
 
-Do not switch commands until the migration history has been created and tested
-against a restored backup.
+The initial migration baseline describes the schema that already exists in
+production. Record it with `prisma migrate resolve --applied` only after a
+read-only schema diff confirms the live database matches it; do not execute its
+CREATE TABLE SQL against the existing database.
+
+For every schema-changing upgrade:
+
+```bash
+docker compose run --rm --no-deps migrate
+docker compose run --rm --no-deps worker npx prisma migrate status
+```
+
+Back up the database first, review the migration SQL, and use expand/contract
+steps for risky changes. Never use `db push` in production.
 
 ## Upgrade
 

@@ -12,8 +12,8 @@ reviewed target commit are mandatory first.
   managed Cloudflare connector.
 - The deployed source directory is not a Git checkout, so use a reviewed source
   archive or a deliberately introduced commit-addressable release process.
-- The current migration service uses `prisma db push`. Do **not** deploy a
-  schema-changing release until DB-001 replaces this with reviewed migrations.
+- The migration service uses `prisma migrate deploy`; schema changes must be
+  committed, reviewed Prisma migrations.
 
 ## Pre-deployment checklist
 
@@ -23,9 +23,8 @@ reviewed target commit are mandatory first.
 3. Confirm production `.env` is present, mode 0600, and will be copied into the
    new release without printing it.
 4. Confirm a recovery console is available and the previous release is intact.
-5. Confirm the change is schema-compatible. If a migration is required, stop
-   until it is a committed, reviewed Prisma migration with an expand/contract
-   plan.
+5. Confirm the change is schema-compatible. If a migration is required, it
+   must be a committed, reviewed Prisma migration with an expand/contract plan.
 
 ## Code-only deployment pattern
 
@@ -54,6 +53,30 @@ imports. Upload it to a staging directory beside the active release.
    ```
 
 7. Verify the public health endpoint, login page, and the changed user flow.
+
+## Schema-changing deployment pattern
+
+Use this pattern only after a fresh backup/snapshot gate and after reviewing
+the migration SQL. Do not use `prisma db push` in production.
+
+1. Build the reviewed release.
+2. Run the one-off migration service and verify its status before replacing
+   web or worker:
+
+   ```bash
+   cd "$APP_DIR"
+   docker compose run --rm --no-deps migrate
+   docker compose run --rm --no-deps worker npx prisma migrate status
+   ```
+
+3. Recreate web, then worker, and run the normal health and smoke tests.
+4. For a risky change, use expand/contract: add nullable fields first,
+   deploy dual-read/write code, backfill in bounded batches, then remove old
+   fields in a later release.
+
+The initial baseline migration is recorded with `prisma migrate resolve
+--applied` only after a read-only schema diff proves that production already
+matches it. It must never be executed as CREATE TABLE SQL against production.
 
 ## SEC-001 administrator-role remediation
 
