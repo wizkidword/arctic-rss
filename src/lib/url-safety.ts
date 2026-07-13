@@ -27,7 +27,12 @@ export class FeedFetchError extends Error {
 }
 
 export type SafeFetchTextResult = {
+  bytes?: number
   contentType: string
+  etag?: string
+  lastModified?: string
+  notModified?: boolean
+  status?: number
   text: string
   url: URL
 }
@@ -35,6 +40,10 @@ export type SafeFetchTextResult = {
 export type SafeFetchBytesResult = {
   bytes: Uint8Array
   contentType: string
+  etag?: string
+  lastModified?: string
+  notModified: boolean
+  status: number
   url: URL
 }
 
@@ -46,6 +55,9 @@ type SafeFetchOptions = {
   timeoutMs?: number
   totalTimeoutMs?: number
   hostRequestLimiter?: HostRequestLimiter
+  ifModifiedSince?: string
+  ifNoneMatch?: string
+  allowNotModified?: boolean
   now?: () => number
   accept?: string
   userAgent?: string
@@ -298,7 +310,12 @@ export async function safeFetchText(
   const result = await safeFetchBytes(inputUrl, options)
 
   return {
+    bytes: result.bytes.byteLength,
     contentType: result.contentType,
+    etag: result.etag,
+    lastModified: result.lastModified,
+    notModified: result.notModified,
+    status: result.status,
     text: new TextDecoder().decode(result.bytes),
     url: result.url,
   }
@@ -352,6 +369,15 @@ export async function safeFetchBytes(
       dispose = request.dispose
       const { response } = request
 
+      if (response.status === 304 && options.allowNotModified) {
+        return responseResult({
+          bytes: new Uint8Array(),
+          notModified: true,
+          response,
+          url,
+        })
+      }
+
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location")
 
@@ -367,11 +393,12 @@ export async function safeFetchBytes(
         throw new FeedFetchError(`The URL returned HTTP ${response.status}.`)
       }
 
-      return {
-        contentType: response.headers.get("content-type") ?? "",
+      return responseResult({
         bytes: await readResponseBytes(response, maxBytes),
+        notModified: false,
+        response,
         url,
-      }
+      })
     } catch (error) {
       if (isResponseTooLargeError(error)) {
         throw new FeedFetchError("The response is too large to inspect safely.")
@@ -472,13 +499,13 @@ function createRelease(
 
 function createFetchOptions(
   signal: AbortSignal,
-  options: Pick<SafeFetchOptions, "accept" | "userAgent">
+  options: Pick<
+    SafeFetchOptions,
+    "accept" | "ifModifiedSince" | "ifNoneMatch" | "userAgent"
+  >
 ): RequestInit {
   return {
-    headers: {
-      accept: options.accept ?? ACCEPT_HEADER,
-      "user-agent": options.userAgent ?? USER_AGENT,
-    },
+    headers: requestHeaders(options),
     redirect: "manual",
     signal,
   }
@@ -514,7 +541,10 @@ async function fetchWithPinnedAddress(
   signal: AbortSignal,
   timeoutMs: number,
   maxBytes: number,
-  options: Pick<SafeFetchOptions, "accept" | "userAgent">
+  options: Pick<
+    SafeFetchOptions,
+    "accept" | "ifModifiedSince" | "ifNoneMatch" | "userAgent"
+  >
 ): Promise<PinnedFetchResponse> {
   const dispatcher = new Agent({
     bodyTimeout: timeoutMs,
@@ -536,10 +566,7 @@ async function fetchWithPinnedAddress(
   try {
     const fetchedResponse = (await undiciFetch(url, {
       dispatcher,
-      headers: {
-        accept: options.accept ?? ACCEPT_HEADER,
-        "user-agent": options.userAgent ?? USER_AGENT,
-      },
+      headers: requestHeaders(options),
       redirect: "manual",
       signal,
     })) as unknown as FetchResponse
@@ -559,6 +586,60 @@ async function fetchWithPinnedAddress(
     await dispatcher.destroy().catch(() => undefined)
     throw error
   }
+}
+
+function requestHeaders(
+  options: Pick<
+    SafeFetchOptions,
+    "accept" | "ifModifiedSince" | "ifNoneMatch" | "userAgent"
+  >
+) {
+  const headers: Record<string, string> = {
+    accept: options.accept ?? ACCEPT_HEADER,
+    "user-agent": options.userAgent ?? USER_AGENT,
+  }
+  const ifNoneMatch = safeHeaderValue(options.ifNoneMatch)
+  const ifModifiedSince = safeHeaderValue(options.ifModifiedSince)
+
+  if (ifNoneMatch) {
+    headers["if-none-match"] = ifNoneMatch
+  }
+
+  if (ifModifiedSince) {
+    headers["if-modified-since"] = ifModifiedSince
+  }
+
+  return headers
+}
+
+function responseResult({
+  bytes,
+  notModified,
+  response,
+  url,
+}: {
+  bytes: Uint8Array
+  notModified: boolean
+  response: FetchResponse
+  url: URL
+}): SafeFetchBytesResult {
+  return {
+    bytes,
+    contentType: response.headers.get("content-type") ?? "",
+    etag: safeHeaderValue(response.headers.get("etag")),
+    lastModified: safeHeaderValue(response.headers.get("last-modified")),
+    notModified,
+    status: response.status,
+    url,
+  }
+}
+
+function safeHeaderValue(value: string | null | undefined) {
+  if (!value || value.length > 512 || /[\r\n]/.test(value)) {
+    return undefined
+  }
+
+  return value
 }
 
 export function createPinnedLookup(address: PublicAddress): LookupFunction {

@@ -69,12 +69,11 @@ console.log(
 const worker = new Worker<FeedRefreshJobData>(
   FEED_REFRESH_QUEUE_NAME,
   async (job) => {
-    const result = await refreshFeed(job.data.feedId)
-    console.log(
-      `[worker] refreshed ${result.feedId} with ${result.articleCount} articles`
-    )
-
-    return result
+    return runTrackedRefresh({
+      kind: "feed",
+      refresh: () => refreshFeed(job.data.feedId),
+      sourceId: job.data.feedId,
+    })
   },
   {
     connection: redisConnectionOptions(),
@@ -140,12 +139,11 @@ const smartDigestEmailWorker = new Worker<SmartDigestEmailJobData>(
 const podcastWorker = new Worker<PodcastRefreshJobData>(
   PODCAST_REFRESH_QUEUE_NAME,
   async (job) => {
-    const result = await refreshPodcast(job.data.podcastId)
-    console.log(
-      `[worker] refreshed podcast ${result.podcastId} with ${result.episodeCount} episodes`
-    )
-
-    return result
+    return runTrackedRefresh({
+      kind: "podcast",
+      refresh: () => refreshPodcast(job.data.podcastId),
+      sourceId: job.data.podcastId,
+    })
   },
   {
     connection: redisConnectionOptions(),
@@ -237,6 +235,54 @@ let nextAuthTokenMaintenanceAt = 0
 
 function schedulerErrorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : "unknown error"
+}
+
+async function runTrackedRefresh<
+  Result extends {
+    articleCount?: number
+    episodeCount?: number
+    metrics?: Record<string, number | boolean>
+  },
+>({
+  kind,
+  refresh,
+  sourceId,
+}: {
+  kind: "feed" | "podcast"
+  refresh: () => Promise<Result>
+  sourceId: string
+}) {
+  const startedAt = performance.now()
+
+  try {
+    const result = await refresh()
+
+    console.log(
+      JSON.stringify({
+        ...(result.metrics ?? {}),
+        event: "source_refresh",
+        itemCount: result.articleCount ?? result.episodeCount ?? 0,
+        kind,
+        outcome: "success",
+        sourceId,
+      })
+    )
+
+    return result
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+        event: "source_refresh",
+        failed: true,
+        kind,
+        outcome: "failed",
+        sourceId,
+      })
+    )
+
+    throw error
+  }
 }
 
 async function schedulerTick() {

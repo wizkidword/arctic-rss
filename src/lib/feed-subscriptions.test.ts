@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
   articleDeleteMany,
-  articleUpsert,
+  articleCreateMany,
+  articleFindMany,
+  articleUpdate,
   articleStateDeleteMany,
   countUnreadArticlesForFeed,
   deleteMany,
@@ -20,7 +22,9 @@ const {
   userFindUnique,
 } = vi.hoisted(() => ({
   articleDeleteMany: vi.fn(),
-  articleUpsert: vi.fn(),
+  articleCreateMany: vi.fn(),
+  articleFindMany: vi.fn(),
+  articleUpdate: vi.fn(),
   articleStateDeleteMany: vi.fn(),
   countUnreadArticlesForFeed: vi.fn(),
   deleteMany: vi.fn(),
@@ -45,8 +49,10 @@ vi.mock("react", () => ({
 vi.mock("./db", () => ({
   getPrisma: () => ({
     article: {
+      createMany: articleCreateMany,
       deleteMany: articleDeleteMany,
-      upsert: articleUpsert,
+      findMany: articleFindMany,
+      update: articleUpdate,
     },
     articleState: {
       deleteMany: articleStateDeleteMany,
@@ -70,6 +76,7 @@ vi.mock("./db", () => ({
     user: {
       findUnique: userFindUnique,
     },
+    $transaction: (operations: Array<Promise<unknown>>) => Promise.all(operations),
   }),
 }))
 
@@ -92,7 +99,9 @@ import {
 describe("feed subscriptions", () => {
   beforeEach(() => {
     articleDeleteMany.mockReset()
-    articleUpsert.mockReset()
+    articleCreateMany.mockReset()
+    articleFindMany.mockReset()
+    articleUpdate.mockReset()
     articleStateDeleteMany.mockReset()
     countUnreadArticlesForFeed.mockReset()
     deleteMany.mockReset()
@@ -109,7 +118,9 @@ describe("feed subscriptions", () => {
     userFindUnique.mockReset()
     countUnreadArticlesForFeed.mockResolvedValue(3)
     feedUpdate.mockResolvedValue({})
-    articleUpsert.mockResolvedValue({})
+    articleCreateMany.mockResolvedValue({ count: 1 })
+    articleFindMany.mockResolvedValue([])
+    articleUpdate.mockResolvedValue({})
     userFindUnique.mockResolvedValue({
       _count: {
         podcastSubscriptions: 0,
@@ -582,8 +593,12 @@ describe("feed subscriptions", () => {
       title: "Example Feed",
     })
     feedFindUnique.mockResolvedValue({
+      consecutiveFailures: 0,
+      etag: null,
       feedUrl: "https://example.com/feed.xml",
       id: "feed-1",
+      lastModified: null,
+      refreshIntervalMinutes: 60,
     })
     feedSubscriptionCreate.mockResolvedValue({
       feed: {
@@ -602,24 +617,16 @@ describe("feed subscriptions", () => {
       initialArticleCount: 1,
       sourceCountBeforeSubscribe: 0,
     })
-    expect(articleUpsert).toHaveBeenCalledWith({
-      create: expect.objectContaining({
-        externalId: "item-1",
-        feedId: "feed-1",
-        title: "Already Fetched",
-        url: "https://example.com/already-fetched",
-      }),
-      update: expect.objectContaining({
-        summary: "Imported from the discovery response.",
-        title: "Already Fetched",
-        url: "https://example.com/already-fetched",
-      }),
-      where: {
-        feedId_externalId: {
+    expect(articleCreateMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
           externalId: "item-1",
           feedId: "feed-1",
-        },
-      },
+          title: "Already Fetched",
+          url: "https://example.com/already-fetched",
+        }),
+      ],
+      skipDuplicates: true,
     })
   })
 })

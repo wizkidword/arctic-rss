@@ -4,24 +4,41 @@ import { parseFeedArticles, type ParsedFeedArticle } from "./feed-articles"
 import {
   normalizeHttpUrl,
   safeFetchText,
+  type SafeFetchTextOptions,
   type SafeFetchTextResult,
 } from "./url-safety"
 import { nextFetchAt } from "./refresh-schedule"
+import { writeRefreshItems, type RefreshWriteStats } from "./refresh-write-batch"
 
-const MAX_LINKED_ARTICLE_FETCHES = 12
+export const MAX_LINKED_ARTICLE_FETCHES = 12
+export const MAX_LINKED_ARTICLE_FETCH_CONCURRENCY = 3
+export const MAX_REQUESTS_PER_FEED_REFRESH = 1 + MAX_LINKED_ARTICLE_FETCHES
 
 type RefreshableFeed = {
   consecutiveFailures: number
+  etag: string | null
   feedUrl: string
   id: string
+  lastModified: string | null
   refreshIntervalMinutes: number
 }
 
 type FeedRefreshStore = {
+  $transaction(operations: Array<Promise<unknown>>): Promise<unknown>
   article: {
-    upsert(args: {
-      create: Record<string, unknown>
-      update: Record<string, unknown>
+    createMany(args: {
+      data: Array<Record<string, unknown>>
+      skipDuplicates: boolean
+    }): Promise<{ count: number }>
+    findMany(args: {
+      select: { externalId: true }
+      where: {
+        externalId: { in: string[] }
+        feedId: string
+      }
+    }): Promise<Array<{ externalId: string }>>
+    update(args: {
+      data: Record<string, unknown>
       where: {
         feedId_externalId: {
           externalId: string
@@ -34,8 +51,10 @@ type FeedRefreshStore = {
     findUnique(args: {
       select: {
         consecutiveFailures: true
+        etag: true
         feedUrl: true
         id: true
+        lastModified: true
         refreshIntervalMinutes: true
       }
       where: {
@@ -54,15 +73,28 @@ type FeedRefreshStore = {
 type RefreshFeedOptions = {
   feedId: string
   fetchArticleContent?: (url: URL) => Promise<SafeFetchTextResult>
-  fetchText?: (url: URL) => Promise<SafeFetchTextResult>
+  fetchText?: (
+    url: URL,
+    options?: SafeFetchTextOptions
+  ) => Promise<SafeFetchTextResult>
   now?: () => Date
   random?: () => number
   store?: FeedRefreshStore
 }
 
+export type RefreshMetrics = RefreshWriteStats & {
+  bytes: number
+  conditionalHit: boolean
+  durationMs: number
+  linkedArticleRequestCount: number
+  parsedCount: number
+  status: number
+}
+
 export type RefreshFeedResult = {
   articleCount: number
   feedId: string
+  metrics?: RefreshMetrics
 }
 
 export class FeedRefreshError extends Error {
@@ -90,8 +122,10 @@ export async function refreshFeedWithClient({
   const feed = await store.feed.findUnique({
     select: {
       consecutiveFailures: true,
+      etag: true,
       feedUrl: true,
       id: true,
+      lastModified: true,
       refreshIntervalMinutes: true,
     },
     where: { id: feedId },
@@ -102,40 +136,77 @@ export async function refreshFeedWithClient({
   }
 
   const fetchedAt = now()
+  const startedAt = performance.now()
 
   try {
-    const response = await fetchText(normalizeHttpUrl(feed.feedUrl))
-    const articles = await hydrateLinkedArticleContent({
-      articles: parseFeedArticles(response.text, response.url.href),
+    const response = await fetchText(normalizeHttpUrl(feed.feedUrl), {
+      allowNotModified: true,
+      ifModifiedSince: feed.lastModified ?? undefined,
+      ifNoneMatch: feed.etag ?? undefined,
+    })
+    const baseMetrics = {
+      bytes: responseBytes(response),
+      conditionalHit: Boolean(response.notModified),
+      durationMs: 0,
+      linkedArticleRequestCount: 0,
+      parsedCount: 0,
+      status: response.status ?? 200,
+    }
+
+    if (response.notModified) {
+      await recordSuccessfulFeedFetch({
+        feed,
+        fetchedAt,
+        random,
+        response,
+        store,
+      })
+
+      return {
+        articleCount: 0,
+        feedId: feed.id,
+        metrics: {
+          ...baseMetrics,
+          durationMs: elapsedMs(startedAt),
+          insertedCount: 0,
+          skippedCount: 0,
+          updatedCount: 0,
+        },
+      }
+    }
+
+    const parsedArticles = parseFeedArticles(response.text, response.url.href)
+    const hydrated = await hydrateLinkedArticleContent({
+      articles: parsedArticles,
       feedUrl: feed.feedUrl,
       fetchArticleContent,
       responseUrl: response.url.href,
     })
+    const writes = await writeFeedArticles({
+      articles: hydrated.articles,
+      feedId: feed.id,
+      store,
+    })
 
-    for (const article of articles) {
-      await store.article.upsert(articleUpsertArgs(feed.id, article))
-    }
-
-    await store.feed.update({
-      data: {
-        lastError: null,
-        lastFailedAt: null,
-        lastFetchedAt: fetchedAt,
-        lastSuccessfulFetchAt: fetchedAt,
-        consecutiveFailures: 0,
-        nextFetchAt: nextFetchAt({
-          consecutiveFailures: 0,
-          now: fetchedAt,
-          random,
-          refreshIntervalMinutes: feed.refreshIntervalMinutes,
-        }),
-      },
-      where: { id: feed.id },
+    await recordSuccessfulFeedFetch({
+      feed,
+      fetchedAt,
+      random,
+      response,
+      store,
     })
 
     return {
-      articleCount: articles.length,
+      articleCount: hydrated.articles.length,
       feedId: feed.id,
+      metrics: {
+        ...baseMetrics,
+        bytes: baseMetrics.bytes + hydrated.bytes,
+        durationMs: elapsedMs(startedAt),
+        linkedArticleRequestCount: hydrated.requestCount,
+        parsedCount: parsedArticles.length,
+        ...writes,
+      },
     }
   } catch (error) {
     const consecutiveFailures = feed.consecutiveFailures + 1
@@ -160,6 +231,76 @@ export async function refreshFeedWithClient({
   }
 }
 
+async function recordSuccessfulFeedFetch({
+  feed,
+  fetchedAt,
+  random,
+  response,
+  store,
+}: {
+  feed: RefreshableFeed
+  fetchedAt: Date
+  random: () => number
+  response: SafeFetchTextResult
+  store: FeedRefreshStore
+}) {
+  await store.feed.update({
+    data: {
+      ...responseValidators(response),
+      lastError: null,
+      lastFailedAt: null,
+      lastFetchedAt: fetchedAt,
+      lastSuccessfulFetchAt: fetchedAt,
+      consecutiveFailures: 0,
+      nextFetchAt: nextFetchAt({
+        consecutiveFailures: 0,
+        now: fetchedAt,
+        random,
+        refreshIntervalMinutes: feed.refreshIntervalMinutes,
+      }),
+    },
+    where: { id: feed.id },
+  })
+}
+
+async function writeFeedArticles({
+  articles,
+  feedId,
+  store,
+}: {
+  articles: ParsedFeedArticle[]
+  feedId: string
+  store: FeedRefreshStore
+}) {
+  return writeRefreshItems({
+    createMany: (items) =>
+      store.article.createMany({
+        data: items.map((article) => articleCreateData(feedId, article)),
+        skipDuplicates: true,
+      }),
+    findExistingExternalIds: (externalIds) =>
+      store.article.findMany({
+        select: { externalId: true },
+        where: {
+          externalId: { in: externalIds },
+          feedId,
+        },
+      }),
+    items: articles,
+    runUpdateBatch: (operations) => store.$transaction(operations),
+    update: (article) =>
+      store.article.update({
+        data: articleUpdateData(article),
+        where: {
+          feedId_externalId: {
+            externalId: article.externalId,
+            feedId,
+          },
+        },
+      }),
+  })
+}
+
 async function hydrateLinkedArticleContent({
   articles,
   feedUrl,
@@ -172,53 +313,73 @@ async function hydrateLinkedArticleContent({
   responseUrl: string
 }) {
   if (!isHackerNewsFeed(feedUrl) && !isHackerNewsFeed(responseUrl)) {
-    return articles
+    return {
+      articles,
+      bytes: 0,
+      requestCount: 0,
+    }
   }
 
-  const hydratedArticles: ParsedFeedArticle[] = []
-  let linkedArticleFetches = 0
+  const hydratedArticles = [...articles]
+  const candidates = articles
+    .map((article, index) => ({ article, index }))
+    .filter(({ article }) => needsLinkedArticleHydration(article))
+    .slice(0, MAX_LINKED_ARTICLE_FETCHES)
+  let nextCandidate = 0
+  let bytes = 0
+  let requestCount = 0
 
-  for (const article of articles) {
-    if (!needsLinkedArticleHydration(article)) {
-      hydratedArticles.push(article)
-      continue
-    }
+  await Promise.all(
+    Array.from(
+      { length: Math.min(MAX_LINKED_ARTICLE_FETCH_CONCURRENCY, candidates.length) },
+      async () => {
+        while (true) {
+          const candidate = candidates[nextCandidate]
+          nextCandidate += 1
 
-    if (linkedArticleFetches >= MAX_LINKED_ARTICLE_FETCHES) {
-      hydratedArticles.push(article)
-      continue
-    }
+          if (!candidate) {
+            return
+          }
 
-    linkedArticleFetches += 1
+          requestCount += 1
 
-    try {
-      const response = await fetchArticleContent(normalizeHttpUrl(article.url))
-      const extracted = extractReadableArticleContent(
-        response.text,
-        response.url.href
-      )
+          try {
+            const response = await fetchArticleContent(
+              normalizeHttpUrl(candidate.article.url)
+            )
+            bytes += responseBytes(response)
+            const extracted = extractReadableArticleContent(
+              response.text,
+              response.url.href
+            )
 
-      if (!extracted) {
-        hydratedArticles.push(article)
-        continue
+            if (!extracted) {
+              continue
+            }
+
+            hydratedArticles[candidate.index] = {
+              ...candidate.article,
+              contentHtml: extracted.contentHtml,
+              contentText: extracted.contentText,
+              imageUrl: candidate.article.imageUrl ?? extracted.imageUrl,
+              summary:
+                meaningfulSummary(candidate.article.summary) ??
+                extracted.summary ??
+                excerpt(extracted.contentText),
+            }
+          } catch {
+            // A linked article is optional enrichment. The feed item remains usable.
+          }
+        }
       }
+    )
+  )
 
-      hydratedArticles.push({
-        ...article,
-        contentHtml: extracted.contentHtml,
-        contentText: extracted.contentText,
-        imageUrl: article.imageUrl ?? extracted.imageUrl,
-        summary:
-          meaningfulSummary(article.summary) ??
-          extracted.summary ??
-          excerpt(extracted.contentText),
-      })
-    } catch {
-      hydratedArticles.push(article)
-    }
+  return {
+    articles: hydratedArticles,
+    bytes,
+    requestCount,
   }
-
-  return hydratedArticles
 }
 
 function isHackerNewsFeed(value: string) {
@@ -249,30 +410,40 @@ function excerpt(value: string) {
   return value.length <= 240 ? value : `${value.slice(0, 237).trimEnd()}...`
 }
 
-function articleUpsertArgs(feedId: string, article: ParsedFeedArticle) {
-  return {
-    create: withoutUndefined({
-      ...article,
-      feedId,
-    }),
-    update: withoutUndefined({
-      author: article.author,
-      canonicalUrl: article.canonicalUrl,
-      contentHtml: article.contentHtml,
-      contentText: article.contentText,
-      imageUrl: article.imageUrl,
-      publishedAt: article.publishedAt,
-      summary: article.summary,
-      title: article.title,
-      url: article.url,
-    }),
-    where: {
-      feedId_externalId: {
-        externalId: article.externalId,
-        feedId,
-      },
-    },
-  }
+function articleCreateData(feedId: string, article: ParsedFeedArticle) {
+  return withoutUndefined({
+    ...article,
+    feedId,
+  })
+}
+
+function articleUpdateData(article: ParsedFeedArticle) {
+  return withoutUndefined({
+    author: article.author,
+    canonicalUrl: article.canonicalUrl,
+    contentHtml: article.contentHtml,
+    contentText: article.contentText,
+    imageUrl: article.imageUrl,
+    publishedAt: article.publishedAt,
+    summary: article.summary,
+    title: article.title,
+    url: article.url,
+  })
+}
+
+function responseValidators(response: SafeFetchTextResult) {
+  return withoutUndefined({
+    etag: response.etag,
+    lastModified: response.lastModified,
+  })
+}
+
+function responseBytes(response: SafeFetchTextResult) {
+  return response.bytes ?? Buffer.byteLength(response.text)
+}
+
+function elapsedMs(startedAt: number) {
+  return Math.max(0, Math.round(performance.now() - startedAt))
 }
 
 function withoutUndefined(values: Record<string, unknown>) {

@@ -18,14 +18,21 @@ const rssXml = `<?xml version="1.0"?>
 
 function createStore(feedUrl = "https://example.com/rss.xml") {
   return {
+    $transaction: vi.fn(async (operations: Array<Promise<unknown>>) =>
+      Promise.all(operations)
+    ),
     article: {
-      upsert: vi.fn().mockResolvedValue({}),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findMany: vi.fn().mockResolvedValue([]),
+      update: vi.fn().mockResolvedValue({}),
     },
     feed: {
       findUnique: vi.fn().mockResolvedValue({
         consecutiveFailures: 0,
+        etag: null,
         feedUrl,
         id: "feed-1",
+        lastModified: null,
         refreshIntervalMinutes: 60,
       }),
       update: vi.fn().mockResolvedValue({}),
@@ -34,7 +41,7 @@ function createStore(feedUrl = "https://example.com/rss.xml") {
 }
 
 describe("feed refresh", () => {
-  it("fetches a feed, upserts parsed articles, and records successful health", async () => {
+  it("fetches a feed in batches and records successful health", async () => {
     const store = createStore()
     const now = new Date("2026-06-22T12:00:00.000Z")
     const fetchText = vi.fn().mockResolvedValue({
@@ -51,19 +58,67 @@ describe("feed refresh", () => {
       store,
     })
 
-    expect(result).toEqual({
-      articleCount: 1,
-      feedId: "feed-1",
-    })
-    expect(fetchText).toHaveBeenCalledWith(new URL("https://example.com/rss.xml"))
-    expect(store.article.upsert).toHaveBeenCalledWith({
-      create: expect.objectContaining({
-        externalId: "item-1",
+    expect(result).toEqual(
+      expect.objectContaining({
+        articleCount: 1,
         feedId: "feed-1",
-        title: "Stored Article",
-        url: "https://example.com/stored",
+      })
+    )
+    expect(fetchText).toHaveBeenCalledWith(new URL("https://example.com/rss.xml"), {
+      allowNotModified: true,
+      ifModifiedSince: undefined,
+      ifNoneMatch: undefined,
+    })
+    expect(store.article.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          externalId: "item-1",
+          feedId: "feed-1",
+          title: "Stored Article",
+          url: "https://example.com/stored",
+        }),
+      ],
+      skipDuplicates: true,
+    })
+    expect(store.article.update).not.toHaveBeenCalled()
+    expect(result.metrics).toEqual(
+      expect.objectContaining({
+        conditionalHit: false,
+        insertedCount: 1,
+        parsedCount: 1,
+        skippedCount: 0,
+        updatedCount: 0,
+      })
+    )
+    expect(store.feed.update).toHaveBeenCalledWith({
+      data: {
+        lastError: null,
+        lastFailedAt: null,
+        lastFetchedAt: now,
+        lastSuccessfulFetchAt: now,
+        consecutiveFailures: 0,
+        nextFetchAt: new Date("2026-06-22T13:00:00.000Z"),
+      },
+      where: { id: "feed-1" },
+    })
+  })
+
+  it("updates existing feed items in a bounded transaction batch", async () => {
+    const store = createStore()
+    store.article.findMany.mockResolvedValue([{ externalId: "item-1" }])
+
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: rssXml,
+        url: new URL("https://example.com/rss.xml"),
       }),
-      update: expect.objectContaining({
+      store,
+    })
+
+    expect(store.article.update).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         publishedAt: new Date("2026-06-22T10:30:00.000Z"),
         summary: "Stored summary",
         title: "Stored Article",
@@ -76,17 +131,56 @@ describe("feed refresh", () => {
         },
       },
     })
-    expect(store.feed.update).toHaveBeenCalledWith({
-      data: {
-        lastError: null,
-        lastFailedAt: null,
-        lastFetchedAt: now,
-        lastSuccessfulFetchAt: now,
-        consecutiveFailures: 0,
-        nextFetchAt: new Date("2026-06-22T13:00:00.000Z"),
-      },
-      where: { id: "feed-1" },
+    expect(store.$transaction).toHaveBeenCalledTimes(1)
+  })
+
+  it("uses stored validators and skips parsing after a 304 response", async () => {
+    const store = createStore()
+    store.feed.findUnique.mockResolvedValue({
+      consecutiveFailures: 0,
+      etag: 'W/"feed-v1"',
+      feedUrl: "https://example.com/rss.xml",
+      id: "feed-1",
+      lastModified: "Mon, 22 Jun 2026 10:30:00 GMT",
+      refreshIntervalMinutes: 60,
     })
+    const fetchText = vi.fn().mockResolvedValue({
+      bytes: 0,
+      contentType: "",
+      etag: 'W/"feed-v2"',
+      notModified: true,
+      status: 304,
+      text: "",
+      url: new URL("https://example.com/rss.xml"),
+    })
+
+    const result = await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText,
+      store,
+    })
+
+    expect(fetchText).toHaveBeenCalledWith(new URL("https://example.com/rss.xml"), {
+      allowNotModified: true,
+      ifModifiedSince: "Mon, 22 Jun 2026 10:30:00 GMT",
+      ifNoneMatch: 'W/"feed-v1"',
+    })
+    expect(store.article.createMany).not.toHaveBeenCalled()
+    expect(result).toEqual(
+      expect.objectContaining({ articleCount: 0, feedId: "feed-1" })
+    )
+    expect(result.metrics).toEqual(
+      expect.objectContaining({
+        bytes: 0,
+        conditionalHit: true,
+        parsedCount: 0,
+      })
+    )
+    expect(store.feed.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ etag: 'W/"feed-v2"' }),
+      })
+    )
   })
 
   it("hydrates Hacker News items from the original article when the feed only provides comments", async () => {
@@ -139,20 +233,16 @@ describe("feed refresh", () => {
     expect(fetchArticleContent).toHaveBeenCalledWith(
       new URL("https://example.com/useful-thing")
     )
-    expect(store.article.upsert).toHaveBeenCalledWith(
+    expect(store.article.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({
-          contentText:
-            "Useful Thing This is the full article body that Hacker News did not include in its RSS item. It has enough readable text to be worth showing inside Arctic RSS.",
-          imageUrl: "https://example.com/preview.jpg",
-          summary: "A useful thing for careful readers.",
-        }),
-        update: expect.objectContaining({
-          contentText:
-            "Useful Thing This is the full article body that Hacker News did not include in its RSS item. It has enough readable text to be worth showing inside Arctic RSS.",
-          imageUrl: "https://example.com/preview.jpg",
-          summary: "A useful thing for careful readers.",
-        }),
+        data: [
+          expect.objectContaining({
+            contentText:
+              "Useful Thing This is the full article body that Hacker News did not include in its RSS item. It has enough readable text to be worth showing inside Arctic RSS.",
+            imageUrl: "https://example.com/preview.jpg",
+            summary: "A useful thing for careful readers.",
+          }),
+        ],
       })
     )
   })
@@ -188,7 +278,49 @@ describe("feed refresh", () => {
     })
 
     expect(fetchArticleContent).toHaveBeenCalledTimes(12)
-    expect(store.article.upsert).toHaveBeenCalledTimes(13)
+    expect(store.article.createMany).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps linked article hydration within its small concurrency budget", async () => {
+    const store = createStore("https://news.ycombinator.com/rss")
+    const items = Array.from(
+      { length: 6 },
+      (_, index) => `
+        <item>
+          <guid>item-${index}</guid>
+          <title>Story ${index}</title>
+          <link>https://example.com/story-${index}</link>
+          <description>Comments</description>
+        </item>`
+    ).join("\n")
+    let active = 0
+    let peakActive = 0
+    const fetchArticleContent = vi.fn(async () => {
+      active += 1
+      peakActive = Math.max(peakActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active -= 1
+
+      return {
+        contentType: "text/html",
+        text: "<html><body><article>Story body</article></body></html>",
+        url: new URL("https://example.com/story"),
+      }
+    })
+
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchArticleContent,
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: `<?xml version="1.0"?><rss version="2.0"><channel>${items}</channel></rss>`,
+        url: new URL("https://news.ycombinator.com/rss"),
+      }),
+      store,
+    })
+
+    expect(fetchArticleContent).toHaveBeenCalledTimes(6)
+    expect(peakActive).toBeLessThanOrEqual(3)
   })
 
   it("does not fetch original pages for ordinary RSS summaries", async () => {
@@ -225,7 +357,7 @@ describe("feed refresh", () => {
       })
     ).rejects.toThrow("network down")
 
-    expect(store.article.upsert).not.toHaveBeenCalled()
+    expect(store.article.createMany).not.toHaveBeenCalled()
     expect(store.feed.update).toHaveBeenCalledWith({
       data: {
         lastError: "network down",

@@ -205,6 +205,63 @@ describe("feed URL safety", () => {
     }
   )
 
+  it("sends safe conditional headers and returns a 304 without reading a body", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
+    const fetchImpl = vi.fn(async () =>
+      new Response(null, {
+        headers: {
+          etag: 'W/"feed-v2"',
+          "last-modified": "Mon, 22 Jun 2026 10:30:00 GMT",
+        },
+        status: 304,
+      })
+    )
+
+    const result = await safeFetchText(new URL("https://feeds.example.com/rss.xml"), {
+      allowNotModified: true,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      ifModifiedSince: "Sun, 21 Jun 2026 10:30:00 GMT",
+      ifNoneMatch: 'W/"feed-v1"',
+      lookup: lookup as never,
+    })
+
+    expect(result).toMatchObject({
+      bytes: 0,
+      etag: 'W/"feed-v2"',
+      lastModified: "Mon, 22 Jun 2026 10:30:00 GMT",
+      notModified: true,
+      status: 304,
+      text: "",
+    })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL("https://feeds.example.com/rss.xml"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "if-modified-since": "Sun, 21 Jun 2026 10:30:00 GMT",
+          "if-none-match": 'W/"feed-v1"',
+        }),
+      })
+    )
+  })
+
+  it("rejects unsafe stored conditional header values", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
+    const fetchImpl = vi.fn(async () => new Response("<rss></rss>"))
+
+    await safeFetchText(new URL("https://feeds.example.com/rss.xml"), {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      ifNoneMatch: "valid\r\nInjected: header",
+      lookup: lookup as never,
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL("https://feeds.example.com/rss.xml"),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ "if-none-match": expect.anything() }),
+      })
+    )
+  })
+
   it("blocks a redirect from a public hostname to an internal address", async () => {
     const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
     const fetchImpl = vi.fn(async () =>
