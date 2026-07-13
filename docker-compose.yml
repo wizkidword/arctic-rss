@@ -58,6 +58,10 @@ services:
       target: worker
     env_file:
       - .env
+    environment:
+      # Production migrations use a distinct role that owns the schema. The
+      # web and worker containers retain the lower-privilege DATABASE_URL.
+      DATABASE_URL: ${MIGRATE_DATABASE_URL}
     depends_on:
       postgres:
         condition: service_healthy

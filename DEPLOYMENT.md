@@ -26,6 +26,12 @@ printing them. The file must be owned by the deployment account and mode 0600.
 It must never be committed, copied to a workstation, included in release
 archives, or pasted into tickets.
 
+Use distinct PostgreSQL credentials for `DATABASE_URL` and
+`MIGRATE_DATABASE_URL`: the runtime account needs only normal application data
+access, while the migration account owns the schema and is used solely by the
+one-shot `migrate` service. Do not use the PostgreSQL superuser connection for
+either application runtime service.
+
 For transactional email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
 `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM`. Optional safety controls are
 `SMTP_CONNECTION_TIMEOUT_MS`, `SMTP_GREETING_TIMEOUT_MS`,
