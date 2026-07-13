@@ -171,13 +171,21 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:2026.6.1
     profiles: ["tunnel"]
+    init: true
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
     cpus: 0.25
     mem_limit: 128m
     pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
-    command: ["tunnel", "--no-autoupdate", "run"]
+    command: ["tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:20241", "run"]
     depends_on:
       web:
         condition: service_healthy
