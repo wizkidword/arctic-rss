@@ -7,6 +7,7 @@ import {
   listPodcastDirectoryShows,
   searchPodcastDirectory,
 } from "@/lib/podcast-directory"
+import { imageProxyUrl } from "@/lib/image-proxy-url"
 import { cn } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
@@ -92,11 +93,13 @@ export default async function GuestDiscoverPodcastsPage({
             className="flex gap-3 rounded-lg border bg-card p-3 text-card-foreground"
             key={show.id}
           >
+            {/* The local security proxy owns caching and response validation. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               alt=""
               className="size-14 rounded-md object-cover"
               height={56}
-              src={show.artworkUrl}
+              src={imageProxyUrl(show.artworkUrl) ?? ""}
               width={56}
             />
             <div className="min-w-0 flex-1 space-y-2">

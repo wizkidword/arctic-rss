@@ -3,6 +3,7 @@ import sanitizeHtml from "sanitize-html"
 import { Prisma } from "../generated/prisma/client"
 import { getPrisma } from "./db"
 import { getDiscoverDirectory } from "./discover-directory"
+import { imageProxyUrl } from "./image-proxy-url"
 
 const PUBLIC_GUEST_PREVIEW_USER_ID = "__public_guest_preview__"
 
@@ -59,10 +60,15 @@ type PublicReaderArticleStore = {
   }
 }
 
+declare const sanitizedArticleHtmlBrand: unique symbol
+
+export type SanitizedArticleHtml = string & {
+  readonly [sanitizedArticleHtmlBrand]: true
+}
+
 export type ReaderArticle = {
   aiSummary: ReaderArticleAiSummary | null
   author: string | null
-  contentHtml: string | null
   contentText: string | null
   feedFaviconUrl: string | null
   feedId: string
@@ -73,7 +79,7 @@ export type ReaderArticle = {
   isStarred: boolean
   publishedAt: Date | null
   readAt: Date | null
-  sanitizedContentHtml: string | null
+  sanitizedContentHtml: SanitizedArticleHtml | null
   starredAt: Date | null
   summary: string | null
   title: string
@@ -147,7 +153,9 @@ export class ArticleStateError extends Error {
   }
 }
 
-export function sanitizeArticleHtml(html: string | null | undefined) {
+export function sanitizeArticleHtml(
+  html: string | null | undefined
+): SanitizedArticleHtml | null {
   if (!html) {
     return null
   }
@@ -189,24 +197,34 @@ export function sanitizeArticleHtml(html: string | null | undefined) {
       "ul",
     ],
     exclusiveFilter: (frame) =>
-      frame.tag === "img" && isTrackingPixel(frame.attribs),
+      frame.tag === "img" &&
+      (isTrackingPixel(frame.attribs) || !imageProxyUrl(frame.attribs.src)),
     transformTags: {
       a: sanitizeHtml.simpleTransform("a", {
         rel: "nofollow noreferrer",
         target: "_blank",
       }),
-      img: (tagName, attribs) => ({
-        attribs: {
-          ...attribs,
-          loading: "lazy",
-          referrerpolicy: "no-referrer",
-        },
-        tagName,
-      }),
+      img: (tagName, attribs) => {
+        const proxiedSrc = imageProxyUrl(attribs.src)
+
+        if (!proxiedSrc) {
+          return { attribs: {}, tagName }
+        }
+
+        return {
+          attribs: {
+            ...attribs,
+            loading: "lazy",
+            referrerpolicy: "no-referrer",
+            src: proxiedSrc,
+          },
+          tagName,
+        }
+      },
     },
   }).trim()
 
-  return sanitized || null
+  return sanitized ? (sanitized as SanitizedArticleHtml) : null
 }
 
 function isTrackingPixel(attributes: Record<string, string>) {
@@ -666,13 +684,12 @@ function mapReaderArticle(article: ReaderArticleRecord): ReaderArticle {
         }
       : null,
     author: article.author,
-    contentHtml: article.contentHtml,
     contentText: article.contentText,
     feedFaviconUrl: article.feed.faviconUrl,
     feedId: article.feedId,
     feedTitle: article.feed.title,
     id: article.id,
-    imageUrl: article.imageUrl,
+    imageUrl: imageProxyUrl(article.imageUrl),
     isRead: state?.isRead ?? false,
     isStarred: state?.isStarred ?? false,
     publishedAt: article.publishedAt,

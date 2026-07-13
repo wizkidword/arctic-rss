@@ -5,6 +5,7 @@ import { auth } from "@/auth"
 import { PodcastEpisodeList } from "@/components/podcast-episode-list"
 import { buttonVariants } from "@/components/ui/button"
 import { getPodcastHomeForUser } from "@/lib/podcasts"
+import { imageProxyUrl } from "@/lib/image-proxy-url"
 import { normalizeDateTimePreferences } from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
 
@@ -83,12 +84,14 @@ export default async function PodcastsPage() {
               href={`/app/podcasts/${subscription.id}`}
               key={subscription.subscriptionId}
             >
-              {subscription.artworkUrl ? (
+              {imageProxyUrl(subscription.artworkUrl) ? (
+                // The local security proxy owns caching and response validation.
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   alt=""
                   className="size-12 rounded-md object-cover"
                   height={48}
-                  src={subscription.artworkUrl}
+                  src={imageProxyUrl(subscription.artworkUrl) ?? ""}
                   width={48}
                 />
               ) : (

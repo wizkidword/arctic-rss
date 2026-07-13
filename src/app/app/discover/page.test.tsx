@@ -280,10 +280,10 @@ describe("DiscoverPage", () => {
     expect(markup).toContain("National Post - Politics")
     expect(markup).toContain("Subscribed Wire")
     expect(markup).toContain(
-      "https://www.google.com/s2/favicons?domain=politico.com&amp;sz=64"
+      "/api/image?url=https%3A%2F%2Fwww.google.com%2Fs2%2Ffavicons%3Fdomain%3Dpolitico.com%26sz%3D64"
     )
     expect(markup).toContain(
-      "https://www.google.com/s2/favicons?domain=example.com&amp;sz=64"
+      "/api/image?url=https%3A%2F%2Fwww.google.com%2Fs2%2Ffavicons%3Fdomain%3Dexample.com%26sz%3D64"
     )
     expect(markup).toContain(
       "Directory control: subscribed-wire | Subscribed Wire | subscribed=true | trigger=Follow"

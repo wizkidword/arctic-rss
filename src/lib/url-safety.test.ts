@@ -6,6 +6,7 @@ import {
   createPinnedLookup,
   isPrivateIpAddress,
   normalizeHttpUrl,
+  safeFetchBytes,
   safeFetchText,
 } from "./url-safety"
 
@@ -238,6 +239,35 @@ describe("feed URL safety", () => {
       })
     ).rejects.toThrow("The URL redirected too many times")
     expect(fetchImpl).toHaveBeenCalledTimes(6)
+  })
+
+  it("returns bounded binary responses for the image proxy", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
+    const fetchImpl = vi.fn(async () =>
+      new Response(new Uint8Array([137, 80, 78, 71]), {
+        headers: { "content-type": "image/png" },
+      })
+    )
+
+    const result = await safeFetchBytes(new URL("https://images.example.com/logo.png"), {
+      accept: "image/avif,image/webp,image/*;q=0.8",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      lookup: lookup as never,
+      maxBytes: 16,
+      userAgent: "ArcticRSS Image Proxy/0.1",
+    })
+
+    expect(result.contentType).toBe("image/png")
+    expect([...result.bytes]).toEqual([137, 80, 78, 71])
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL("https://images.example.com/logo.png"),
+      expect.objectContaining({
+        headers: {
+          accept: "image/avif,image/webp,image/*;q=0.8",
+          "user-agent": "ArcticRSS Image Proxy/0.1",
+        },
+      })
+    )
   })
 
   it("applies one deadline across a redirect chain", async () => {

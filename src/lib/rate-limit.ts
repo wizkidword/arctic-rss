@@ -29,6 +29,7 @@ export type RateLimitAction =
   | "ai_summary"
   | "feed_discovery"
   | "feedback"
+  | "image_proxy"
   | "login"
   | "opml_import"
   | "password_reset_complete"
@@ -92,6 +93,9 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
   ],
   feedback: [
     { limit: 8, scope: "user", subject: inputSubject("userId"), windowMs: 24 * 60 * 60_000 },
+  ],
+  image_proxy: [
+    { limit: 120, scope: "ip", subject: inputSubject("ip"), windowMs: 5 * 60_000 },
   ],
   login: [
     { limit: 25, scope: "ip", subject: inputSubject("ip"), windowMs: 15 * 60_000 },

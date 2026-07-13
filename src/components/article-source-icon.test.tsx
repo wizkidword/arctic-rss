@@ -21,7 +21,7 @@ describe("ArticleSourceIcon", () => {
     )
 
     expect(markup).toContain(
-      "https://www.google.com/s2/favicons?domain=mmafighting.com&amp;sz=64"
+      "/api/image?url=https%3A%2F%2Fwww.google.com%2Fs2%2Ffavicons%3Fdomain%3Dmmafighting.com%26sz%3D64"
     )
     expect(markup).not.toContain("https://www.mmafighting.com/favicon.ico")
   })
@@ -38,14 +38,16 @@ describe("ArticleSourceIcon", () => {
     const image = screen.getByAltText("Example Publisher icon")
 
     expect(image.getAttribute("src")).toBe(
-      "https://www.google.com/s2/favicons?domain=example.com&sz=64"
+      "/api/image?url=https%3A%2F%2Fwww.google.com%2Fs2%2Ffavicons%3Fdomain%3Dexample.com%26sz%3D64"
     )
 
     fireEvent.error(image)
 
     expect(
       screen.getByAltText("Example Publisher icon").getAttribute("src")
-    ).toBe("https://publisher.example.com/missing.ico")
+    ).toBe(
+      "/api/image?url=https%3A%2F%2Fpublisher.example.com%2Fmissing.ico"
+    )
   })
 
   it("falls back to source initials when the domain favicon also fails", () => {

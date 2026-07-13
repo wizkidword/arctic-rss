@@ -109,7 +109,7 @@ vi.mock("@/lib/utils", () => ({
 }))
 
 import { ReaderSurface } from "./reader-surface"
-import type { ReaderArticle } from "@/lib/articles"
+import { sanitizeArticleHtml, type ReaderArticle } from "@/lib/articles"
 
 const articles: ReaderArticle[] = [
   createArticle("article-1", "First unread article"),
@@ -220,8 +220,9 @@ describe("ReaderSurface display modes", () => {
     const article = {
       ...createArticle("article-rich", "Rich article"),
       imageUrl: "https://example.com/preview.jpg",
-      sanitizedContentHtml:
-        '<p>Full article body.</p><img src="https://example.com/body.jpg" alt="Body image">',
+      sanitizedContentHtml: sanitizeArticleHtml(
+        '<p>Full article body.</p><img src="https://example.com/body.jpg" alt="Body image">'
+      ),
       summary: "This preview text should not repeat above the article body.",
     }
 
@@ -244,7 +245,9 @@ describe("ReaderSurface display modes", () => {
     )
     expect(markup).toContain("break-words")
     expect(markup).toContain("min-w-0")
-    expect(markup).toContain('src="https://example.com/body.jpg"')
+    expect(markup).toContain(
+      'src="/api/image?url=https%3A%2F%2Fexample.com%2Fbody.jpg"'
+    )
     expect(markup).toContain("Full article body.")
   })
 
@@ -252,7 +255,9 @@ describe("ReaderSurface display modes", () => {
     const article = {
       ...createArticle("article-image", "Image article"),
       imageUrl: "https://example.com/feed-image.jpg",
-      sanitizedContentHtml: "<p>Full article body without media.</p>",
+      sanitizedContentHtml: sanitizeArticleHtml(
+        "<p>Full article body without media.</p>"
+      ),
       summary: "This preview text should not repeat above the article body.",
     }
 
@@ -269,8 +274,11 @@ describe("ReaderSurface display modes", () => {
       />
     )
 
-    expect(markup.match(/src="https:\/\/example.com\/feed-image.jpg"/g) ?? [])
-      .toHaveLength(1)
+    expect(
+      markup.match(
+        /src="\/api\/image\?url=https%3A%2F%2Fexample.com%2Ffeed-image.jpg"/g
+      ) ?? []
+    ).toHaveLength(1)
     expect(markup).toContain("object-contain")
     expect(markup).not.toContain("object-cover")
     expect(markup).not.toContain(
@@ -315,7 +323,7 @@ describe("ReaderSurface display modes", () => {
 
     expect(
       markup.match(
-        /src="https:\/\/www.google.com\/s2\/favicons\?domain=example.com&amp;sz=64"/g
+        /src="\/api\/image\?url=https%3A%2F%2Fwww.google.com%2Fs2%2Ffavicons%3Fdomain%3Dexample.com%26sz%3D64"/g
       ) ?? []
     )
       .toHaveLength(2)
@@ -335,7 +343,7 @@ describe("ReaderSurface display modes", () => {
       />
     )
 
-    expect(markup).toContain("domain=example.com&amp;sz=64")
+    expect(markup).toContain("domain%3Dexample.com%26sz%3D64")
   })
 
   it("renders a persistent action toolbar for the selected article detail", () => {
@@ -411,7 +419,6 @@ function createArticle(id: string, title: string): ReaderArticle {
   return {
     aiSummary: null,
     author: null,
-    contentHtml: null,
     contentText: "Article body",
     feedFaviconUrl: null,
     feedId: "feed-1",

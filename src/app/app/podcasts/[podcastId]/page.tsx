@@ -6,6 +6,7 @@ import { PodcastEpisodeList } from "@/components/podcast-episode-list"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { getPodcastShowForUser } from "@/lib/podcasts"
+import { imageProxyUrl } from "@/lib/image-proxy-url"
 import { normalizeDateTimePreferences } from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
 
@@ -39,12 +40,14 @@ export default async function PodcastShowPage({
     <main className="space-y-4 p-4">
       <header className="rounded-lg border bg-card p-4 text-card-foreground">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          {show.podcast.artworkUrl ? (
+          {imageProxyUrl(show.podcast.artworkUrl) ? (
+            // The local security proxy owns caching and response validation.
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               alt=""
               className="size-20 rounded-md object-cover"
               height={80}
-              src={show.podcast.artworkUrl}
+              src={imageProxyUrl(show.podcast.artworkUrl) ?? ""}
               width={80}
             />
           ) : (

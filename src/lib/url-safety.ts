@@ -32,7 +32,13 @@ export type SafeFetchTextResult = {
   url: URL
 }
 
-export type SafeFetchTextOptions = {
+export type SafeFetchBytesResult = {
+  bytes: Uint8Array
+  contentType: string
+  url: URL
+}
+
+type SafeFetchOptions = {
   // This is an internal test seam. Production calls use the pinned Undici transport.
   fetchImpl?: typeof fetch
   lookup?: typeof dns.lookup
@@ -41,7 +47,12 @@ export type SafeFetchTextOptions = {
   totalTimeoutMs?: number
   hostRequestLimiter?: HostRequestLimiter
   now?: () => number
+  accept?: string
+  userAgent?: string
 }
+
+export type SafeFetchTextOptions = SafeFetchOptions
+export type SafeFetchBytesOptions = SafeFetchOptions
 
 export type PublicAddress = {
   address: string
@@ -63,6 +74,7 @@ type PinnedFetchResponse = {
 }
 
 type FetchResponse = {
+  arrayBuffer: () => Promise<ArrayBuffer>
   body: ReadableStream<Uint8Array> | null
   bodyUsed: boolean
   headers: {
@@ -283,6 +295,19 @@ export async function safeFetchText(
   inputUrl: URL,
   options: SafeFetchTextOptions = {}
 ): Promise<SafeFetchTextResult> {
+  const result = await safeFetchBytes(inputUrl, options)
+
+  return {
+    contentType: result.contentType,
+    text: new TextDecoder().decode(result.bytes),
+    url: result.url,
+  }
+}
+
+export async function safeFetchBytes(
+  inputUrl: URL,
+  options: SafeFetchBytesOptions = {}
+): Promise<SafeFetchBytesResult> {
   const lookup = options.lookup ?? dns.lookup
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -312,10 +337,17 @@ export async function safeFetchText(
 
       const request = options.fetchImpl
         ? {
-            response: await options.fetchImpl(url, createFetchOptions(signal)),
+            response: await options.fetchImpl(url, createFetchOptions(signal, options)),
             dispose,
           }
-        : await fetchWithPinnedAddress(url, address, signal, remainingMs, maxBytes)
+        : await fetchWithPinnedAddress(
+            url,
+            address,
+            signal,
+            remainingMs,
+            maxBytes,
+            options
+          )
 
       dispose = request.dispose
       const { response } = request
@@ -337,7 +369,7 @@ export async function safeFetchText(
 
       return {
         contentType: response.headers.get("content-type") ?? "",
-        text: await readResponseText(response, maxBytes),
+        bytes: await readResponseBytes(response, maxBytes),
         url,
       }
     } catch (error) {
@@ -438,11 +470,14 @@ function createRelease(
   }
 }
 
-function createFetchOptions(signal: AbortSignal): RequestInit {
+function createFetchOptions(
+  signal: AbortSignal,
+  options: Pick<SafeFetchOptions, "accept" | "userAgent">
+): RequestInit {
   return {
     headers: {
-      accept: ACCEPT_HEADER,
-      "user-agent": USER_AGENT,
+      accept: options.accept ?? ACCEPT_HEADER,
+      "user-agent": options.userAgent ?? USER_AGENT,
     },
     redirect: "manual",
     signal,
@@ -478,7 +513,8 @@ async function fetchWithPinnedAddress(
   address: PublicAddress,
   signal: AbortSignal,
   timeoutMs: number,
-  maxBytes: number
+  maxBytes: number,
+  options: Pick<SafeFetchOptions, "accept" | "userAgent">
 ): Promise<PinnedFetchResponse> {
   const dispatcher = new Agent({
     bodyTimeout: timeoutMs,
@@ -501,8 +537,8 @@ async function fetchWithPinnedAddress(
     const fetchedResponse = (await undiciFetch(url, {
       dispatcher,
       headers: {
-        accept: ACCEPT_HEADER,
-        "user-agent": USER_AGENT,
+        accept: options.accept ?? ACCEPT_HEADER,
+        "user-agent": options.userAgent ?? USER_AGENT,
       },
       redirect: "manual",
       signal,
@@ -597,7 +633,7 @@ function parseIpv6Hextets(address: string) {
   return parts.map((part) => Number.parseInt(part, 16))
 }
 
-async function readResponseText(response: FetchResponse, maxBytes: number) {
+async function readResponseBytes(response: FetchResponse, maxBytes: number) {
   const contentLength = response.headers.get("content-length")
 
   if (contentLength && Number(contentLength) > maxBytes) {
@@ -605,7 +641,7 @@ async function readResponseText(response: FetchResponse, maxBytes: number) {
   }
 
   if (!response.body) {
-    return response.text()
+    return new Uint8Array(await response.arrayBuffer())
   }
 
   const reader = response.body.getReader()
@@ -629,5 +665,5 @@ async function readResponseText(response: FetchResponse, maxBytes: number) {
     chunks.push(value)
   }
 
-  return new TextDecoder().decode(Buffer.concat(chunks, received))
+  return new Uint8Array(Buffer.concat(chunks, received))
 }

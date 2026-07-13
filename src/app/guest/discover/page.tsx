@@ -17,6 +17,7 @@ import {
   listDiscoverInterestFeeds,
   type DiscoverInterestGroup,
 } from "@/lib/discover-interests"
+import { imageProxyUrl } from "@/lib/image-proxy-url"
 import { cn } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
@@ -292,9 +293,11 @@ function FeedFavicon({ feed }: { feed: DiscoverDirectoryFeed }) {
 function getFeedFaviconUrl(
   feed: Pick<DiscoverDirectoryFeed, "source" | "url">
 ) {
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+  const remoteFaviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
     getFeedIconDomain(feed)
   )}&sz=64`
+
+  return imageProxyUrl(remoteFaviconUrl) ?? "/favicon.ico"
 }
 
 function getFeedIconDomain(feed: Pick<DiscoverDirectoryFeed, "source" | "url">) {

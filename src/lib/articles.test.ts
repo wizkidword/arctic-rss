@@ -41,7 +41,9 @@ describe("article HTML sanitization", () => {
 
     expect(html).toContain("<strong>reader</strong>")
     expect(html).toContain('href="https://example.com/read"')
-    expect(html).toContain('src="https://example.com/image.jpg"')
+    expect(html).toContain(
+      'src="/api/image?url=https%3A%2F%2Fexample.com%2Fimage.jpg"'
+    )
     expect(html).not.toContain("onclick")
     expect(html).not.toContain("onerror")
     expect(html).not.toContain("<script")
@@ -77,13 +79,32 @@ describe("article HTML sanitization", () => {
       <img src="https://example.com/icon.png" width="16" height="16" alt="Source icon" />
     `)
 
-    expect(html).toContain('src="https://example.com/article.jpg"')
+    expect(html).toContain(
+      'src="/api/image?url=https%3A%2F%2Fexample.com%2Farticle.jpg"'
+    )
     expect(html).toContain('loading="lazy"')
     expect(html).toContain('referrerpolicy="no-referrer"')
-    expect(html).toContain('src="https://example.com/icon.png"')
+    expect(html).toContain(
+      'src="/api/image?url=https%3A%2F%2Fexample.com%2Ficon.png"'
+    )
     expect(html).not.toContain("tracker.example")
     expect(html).not.toContain("<picture")
     expect(html).not.toContain("<source")
+  })
+
+  it("removes data URLs, MathML, and CSS-based payloads", () => {
+    const html = sanitizeArticleHtml(`
+      <math><mtext>unsafe math payload</mtext></math>
+      <img src="data:image/svg+xml,&lt;svg onload=alert(1)&gt;" />
+      <a href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">bad link</a>
+      <p style="background-image:url(https://tracker.example/pixel)">Visible text</p>
+    `)
+
+    expect(html).toContain("Visible text")
+    expect(html).not.toContain("data:")
+    expect(html).not.toContain("<math")
+    expect(html).not.toContain("style=")
+    expect(html).not.toContain("tracker.example")
   })
 })
 

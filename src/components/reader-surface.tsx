@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { type ArticleReadScope, type ReaderArticle } from "@/lib/articles"
+import { imageProxyUrl } from "@/lib/image-proxy-url"
 import { type DefaultView } from "@/lib/preferences"
 import {
   articleDetailHref,
@@ -375,12 +376,12 @@ function CardArticleGrid({
           inlineActions
           key={article.id}
         >
-          {article.imageUrl && (
+          {imageProxyUrl(article.imageUrl) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               alt=""
               className="aspect-video w-full object-cover"
-              src={article.imageUrl}
+              src={imageProxyUrl(article.imageUrl) ?? ""}
             />
           )}
           <div className="flex flex-col gap-3 p-3">
@@ -554,11 +555,12 @@ function articleContextMenuArticle(
 }
 
 function ArticleBody({ article }: { article: ReaderArticle }) {
+  const proxiedImageUrl = imageProxyUrl(article.imageUrl)
   const fallbackImageUrl =
-    article.imageUrl &&
+    proxiedImageUrl &&
     !extractYouTubeVideoId(article.url) &&
     !articleHtmlHasImage(article.sanitizedContentHtml)
-      ? article.imageUrl
+      ? proxiedImageUrl
       : null
 
   if (article.sanitizedContentHtml) {

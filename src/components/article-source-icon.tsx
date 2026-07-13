@@ -2,6 +2,8 @@
 
 import { useState } from "react"
 
+import { imageProxyUrl } from "@/lib/image-proxy-url"
+
 type IconAttempt = "preferred" | "domain" | "initials"
 
 export function ArticleSourceIcon({
@@ -55,7 +57,7 @@ export function ArticleSourceIcon({
 }
 
 function normalizedFaviconUrl(faviconUrl: string | null) {
-  return faviconUrl?.trim() || null
+  return imageProxyUrl(faviconUrl)
 }
 
 function articleDomainIconUrl(articleUrl: string) {
@@ -66,9 +68,9 @@ function articleDomainIconUrl(articleUrl: string) {
       return null
     }
 
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
-      domain
-    )}&sz=64`
+    return imageProxyUrl(
+      `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`
+    )
   } catch {
     return null
   }
