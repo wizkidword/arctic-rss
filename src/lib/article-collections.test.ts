@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  COLLECTION_LIMIT,
   addArticleToCollectionWithClient,
   addPodcastEpisodeToCollectionWithClient,
   listArticleCollectionsForUserWithClient,
@@ -162,6 +163,24 @@ describe("article collections", () => {
         },
       })
     )
+  })
+
+  it("returns a clear limit error when the database rejects another collection", async () => {
+    const store = createCollectionStore({ collection: null })
+    store.articleCollection.create.mockRejectedValue(
+      new Error("ARCTIC_RSS_COLLECTION_LIMIT_REACHED")
+    )
+
+    await expect(
+      addArticleToCollectionWithClient({
+        articleId: "article-1",
+        collectionName: "Deep Reads",
+        store,
+        userId: "user-1",
+      })
+    ).rejects.toThrow(`You can create up to ${COLLECTION_LIMIT} collections.`)
+
+    expect(store.articleCollectionItem.upsert).not.toHaveBeenCalled()
   })
 
   it("does not add articles outside the user's subscriptions", async () => {

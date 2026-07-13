@@ -3,6 +3,9 @@ import { cache } from "react"
 
 import { getPrisma } from "./db"
 
+export const COLLECTION_LIMIT = 100
+export const DATABASE_COLLECTION_LIMIT_ERROR = "ARCTIC_RSS_COLLECTION_LIMIT_REACHED"
+
 type ArticleLookup = {
   id: string
 }
@@ -92,6 +95,13 @@ export class ArticleCollectionError extends Error {
     super(message)
     this.name = "ArticleCollectionError"
   }
+}
+
+function isDatabaseCollectionLimitError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.includes(DATABASE_COLLECTION_LIMIT_ERROR)
+  )
 }
 
 export const listArticleCollectionsForUser = cache(
@@ -523,16 +533,37 @@ async function createCollectionId({
   userId: string
 }) {
   const name = normalizeCollectionName(collectionName ?? "")
-  const collection = await store.articleCollection.create({
-    data: {
-      name,
-      userId,
-    },
-    select: {
-      id: true,
-      name: true,
-    },
-  })
+  let collection: CollectionLookup & { name: string }
+
+  try {
+    collection = await store.articleCollection.create({
+      data: {
+        name,
+        userId,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    })
+  } catch (error) {
+    if (isDatabaseCollectionLimitError(error)) {
+      throw new ArticleCollectionError(
+        `You can create up to ${COLLECTION_LIMIT} collections.`
+      )
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new ArticleCollectionError(
+        "A collection with that name already exists."
+      )
+    }
+
+    throw error
+  }
 
   return collection.id
 }
