@@ -44,12 +44,15 @@ import { processSmartDigestRule } from "../src/lib/smart-digest-processing"
 assertSecureProductionConfiguration()
 
 const {
+  aiDigestConcurrency,
   authTokenMaintenanceBatchSize,
   authTokenMaintenanceIntervalMs,
   feedRefreshConcurrency,
   podcastRefreshConcurrency,
   schedulerBatchSize,
   schedulerIntervalMs,
+  smartDigestConcurrency,
+  smartDigestEmailConcurrency,
 } = schedulerSettings()
 const prisma = getPrisma()
 
@@ -88,7 +91,7 @@ const aiDigestWorker = new Worker<AiDigestJobData>(
   },
   {
     connection: redisConnectionOptions(),
-    concurrency: Number(process.env.AI_DIGEST_CONCURRENCY ?? 2),
+    concurrency: aiDigestConcurrency,
   }
 )
 
@@ -107,7 +110,7 @@ const smartDigestWorker = new Worker<SmartDigestJobData>(
   },
   {
     connection: redisConnectionOptions(),
-    concurrency: Number(process.env.SMART_DIGEST_CONCURRENCY ?? 2),
+    concurrency: smartDigestConcurrency,
   }
 )
 
@@ -125,7 +128,7 @@ const smartDigestEmailWorker = new Worker<SmartDigestEmailJobData>(
   },
   {
     connection: redisConnectionOptions(),
-    concurrency: Number(process.env.SMART_DIGEST_EMAIL_CONCURRENCY ?? 2),
+    concurrency: smartDigestEmailConcurrency,
   }
 )
 

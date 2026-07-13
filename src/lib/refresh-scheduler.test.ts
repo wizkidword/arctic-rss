@@ -123,14 +123,20 @@ describe("refresh scheduler", () => {
   it("clamps scheduler environment values before they reach the worker", () => {
     expect(
       schedulerSettings({
+        AI_DIGEST_CONCURRENCY: "999",
         FEED_REFRESH_CONCURRENCY: "0",
         FEED_SCHEDULER_BATCH_SIZE: "50000",
         FEED_SCHEDULER_INTERVAL_MS: "10",
+        SMART_DIGEST_CONCURRENCY: "0",
+        SMART_DIGEST_EMAIL_CONCURRENCY: "999",
       })
     ).toMatchObject({
+      aiDigestConcurrency: 8,
       feedRefreshConcurrency: 1,
       schedulerBatchSize: 1_000,
       schedulerIntervalMs: 10_000,
+      smartDigestConcurrency: 1,
+      smartDigestEmailConcurrency: 8,
     })
   })
 })

@@ -9,6 +9,18 @@ import {
   redisConnectionOptions,
   type FeedRefreshJobData,
 } from "./feed-refresh-queue"
+import {
+  PODCAST_REFRESH_QUEUE_NAME,
+  type PodcastRefreshJobData,
+} from "./podcast-refresh-queue"
+import {
+  SMART_DIGEST_EMAIL_QUEUE_NAME,
+  type SmartDigestEmailJobData,
+} from "./smart-digest-email-queue"
+import {
+  SMART_DIGEST_QUEUE_NAME,
+  type SmartDigestJobData,
+} from "./smart-digest-queue"
 
 type AdminQueueCounts = Record<string, number>
 
@@ -31,6 +43,11 @@ export type AdminQueueReader = {
     end: number,
     asc: boolean
   ): Promise<AdminQueueJob[]>
+}
+
+export type AdminQueueClient = {
+  name: string
+  reader: AdminQueueReader
 }
 
 type AvailableAdminQueueSnapshot = {
@@ -76,41 +93,59 @@ export async function inspectAdminQueues(): Promise<AdminQueueSnapshot> {
   const digestQueue = new Queue<AiDigestJobData>(AI_DIGEST_QUEUE_NAME, {
     connection,
   })
+  const podcastQueue = new Queue<PodcastRefreshJobData>(
+    PODCAST_REFRESH_QUEUE_NAME,
+    { connection }
+  )
+  const smartDigestQueue = new Queue<SmartDigestJobData>(SMART_DIGEST_QUEUE_NAME, {
+    connection,
+  })
+  const smartDigestEmailQueue = new Queue<SmartDigestEmailJobData>(
+    SMART_DIGEST_EMAIL_QUEUE_NAME,
+    { connection }
+  )
 
   try {
     return await inspectAdminQueuesWithClients({
-      digestQueue,
-      feedQueue,
+      queues: [
+        { name: "Feed refresh", reader: feedQueue },
+        { name: "Podcast refresh", reader: podcastQueue },
+        { name: "AI digest", reader: digestQueue },
+        { name: "Smart Digest", reader: smartDigestQueue },
+        { name: "Smart Digest email", reader: smartDigestEmailQueue },
+      ],
     })
   } finally {
-    await Promise.allSettled([feedQueue.close(), digestQueue.close()])
+    await Promise.allSettled([
+      feedQueue.close(),
+      digestQueue.close(),
+      podcastQueue.close(),
+      smartDigestQueue.close(),
+      smartDigestEmailQueue.close(),
+    ])
   }
 }
 
 export async function inspectAdminQueuesWithClients({
-  digestQueue,
-  feedQueue,
+  queues,
 }: {
-  digestQueue: AdminQueueReader
-  feedQueue: AdminQueueReader
+  queues: AdminQueueClient[]
 }): Promise<AdminQueueSnapshot> {
   try {
-    const [
-      feedCounts,
-      digestCounts,
-      failedFeedJobs,
-      failedDigestJobs,
-    ] = await Promise.all([
-      feedQueue.getJobCounts("waiting", "active", "delayed", "failed"),
-      digestQueue.getJobCounts("waiting", "active", "delayed", "failed"),
-      feedQueue.getJobs(["failed"], 0, 24, false),
-      digestQueue.getJobs(["failed"], 0, 24, false),
-    ])
+    const snapshots = await Promise.all(
+      queues.map(async ({ name, reader }) => {
+        const [counts, failedJobs] = await Promise.all([
+          reader.getJobCounts("waiting", "active", "delayed", "failed"),
+          reader.getJobs(["failed"], 0, 24, false),
+        ])
 
-    const failedJobs = [
-      ...failedFeedJobs.map((job) => mapFailedJob("Feed refresh", job)),
-      ...failedDigestJobs.map((job) => mapFailedJob("AI digest", job)),
-    ]
+        return { counts, failedJobs, name }
+      })
+    )
+    const failedJobs = snapshots
+      .flatMap(({ failedJobs: jobs, name }) =>
+        jobs.map((job) => mapFailedJob(name, job))
+      )
       .sort(
         (left, right) =>
           right.occurredAt.getTime() - left.occurredAt.getTime()
@@ -120,10 +155,7 @@ export async function inspectAdminQueuesWithClients({
     return {
       available: true,
       failedJobs,
-      queues: [
-        mapQueueCounts("Feed refresh", feedCounts),
-        mapQueueCounts("AI digest", digestCounts),
-      ],
+      queues: snapshots.map(({ counts, name }) => mapQueueCounts(name, counts)),
     }
   } catch {
     return {

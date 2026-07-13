@@ -58,7 +58,10 @@ describe("podcast refresh queue", () => {
         },
         jobId: podcastRefreshJobId("podcast-1"),
         removeOnComplete: true,
-        removeOnFail: true,
+        removeOnFail: {
+          age: 24 * 60 * 60,
+          count: 1000,
+        },
       }
     )
   })
@@ -82,7 +85,10 @@ describe("podcast refresh queue", () => {
         },
         jobId: "manual-job",
         removeOnComplete: true,
-        removeOnFail: true,
+        removeOnFail: {
+          age: 24 * 60 * 60,
+          count: 1000,
+        },
       }
     )
   })

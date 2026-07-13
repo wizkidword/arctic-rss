@@ -73,6 +73,12 @@ export function schedulerSettings(
   environment: Record<string, string | undefined> = process.env
 ) {
   return {
+    aiDigestConcurrency: readClampedPositiveInteger({
+      fallback: 2,
+      maximum: 8,
+      minimum: 1,
+      value: environment.AI_DIGEST_CONCURRENCY,
+    }),
     authTokenMaintenanceBatchSize: readClampedPositiveInteger({
       fallback: 100,
       maximum: 1_000,
@@ -108,6 +114,18 @@ export function schedulerSettings(
       maximum: 60 * 60_000,
       minimum: 10_000,
       value: environment.FEED_SCHEDULER_INTERVAL_MS,
+    }),
+    smartDigestConcurrency: readClampedPositiveInteger({
+      fallback: 2,
+      maximum: 8,
+      minimum: 1,
+      value: environment.SMART_DIGEST_CONCURRENCY,
+    }),
+    smartDigestEmailConcurrency: readClampedPositiveInteger({
+      fallback: 2,
+      maximum: 8,
+      minimum: 1,
+      value: environment.SMART_DIGEST_EMAIL_CONCURRENCY,
     }),
   }
 }

@@ -36,4 +36,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY . .
 RUN npm run prisma:generate
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 worker
+USER worker
 CMD ["npm", "run", "worker"]

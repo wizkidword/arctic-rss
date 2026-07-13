@@ -38,7 +38,10 @@ export async function enqueuePodcastRefresh(
       },
       jobId: podcastRefreshJobId(podcastId),
       removeOnComplete: true,
-      removeOnFail: true,
+      removeOnFail: {
+        age: 24 * 60 * 60,
+        count: 1000,
+      },
       ...options,
     }
   )

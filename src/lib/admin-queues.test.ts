@@ -70,8 +70,10 @@ describe("admin queue inspection", () => {
     })
 
     const snapshot = await inspectAdminQueuesWithClients({
-      digestQueue,
-      feedQueue,
+      queues: [
+        { name: "Feed refresh", reader: feedQueue },
+        { name: "AI digest", reader: digestQueue },
+      ],
     })
 
     expect(feedQueue.getJobCounts).toHaveBeenCalledWith(
@@ -145,8 +147,10 @@ describe("admin queue inspection", () => {
 
     await expect(
       inspectAdminQueuesWithClients({
-        digestQueue,
-        feedQueue,
+        queues: [
+          { name: "Feed refresh", reader: feedQueue },
+          { name: "AI digest", reader: digestQueue },
+        ],
       })
     ).resolves.toEqual({
       available: false,
@@ -184,8 +188,10 @@ describe("admin queue inspection", () => {
     })
 
     const snapshot = await inspectAdminQueuesWithClients({
-      digestQueue,
-      feedQueue,
+      queues: [
+        { name: "Feed refresh", reader: feedQueue },
+        { name: "AI digest", reader: digestQueue },
+      ],
     })
 
     expect(snapshot.available).toBe(true)
@@ -196,5 +202,38 @@ describe("admin queue inspection", () => {
     expect(snapshot.failedJobs[0]?.id).toBe("refresh-feed")
     expect(snapshot.failedJobs[0]?.failedReason).toHaveLength(500)
     expect(snapshot.failedJobs[0]?.failedReason.endsWith("...")).toBe(true)
+  })
+
+  it("shows each queue supplied by the admin inspection", async () => {
+    const emptyQueue = createQueue({
+      counts: {
+        active: 0,
+        delayed: 0,
+        failed: 0,
+        waiting: 0,
+      },
+      jobs: [],
+    })
+
+    const snapshot = await inspectAdminQueuesWithClients({
+      queues: [
+        { name: "Feed refresh", reader: emptyQueue },
+        { name: "Podcast refresh", reader: emptyQueue },
+        { name: "AI digest", reader: emptyQueue },
+        { name: "Smart Digest", reader: emptyQueue },
+        { name: "Smart Digest email", reader: emptyQueue },
+      ],
+    })
+
+    expect(snapshot).toMatchObject({
+      available: true,
+      queues: [
+        { name: "Feed refresh" },
+        { name: "Podcast refresh" },
+        { name: "AI digest" },
+        { name: "Smart Digest" },
+        { name: "Smart Digest email" },
+      ],
+    })
   })
 })

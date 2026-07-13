@@ -24,7 +24,7 @@ describe("feed refresh queue", () => {
     expect(feedRefreshJobId("feed_123:abc")).toBe("feed-feed_123-abc")
   })
 
-  it("removes failed queue jobs so scheduled retries are not blocked", async () => {
+  it("retains failed queue jobs for inspection without blocking scheduled retries", async () => {
     const { enqueueFeedRefresh, feedRefreshJobId } = await import(
       "./feed-refresh-queue"
     )
@@ -42,7 +42,10 @@ describe("feed refresh queue", () => {
         },
         jobId: feedRefreshJobId("feed-1"),
         removeOnComplete: true,
-        removeOnFail: true,
+        removeOnFail: {
+          age: 24 * 60 * 60,
+          count: 1000,
+        },
       }
     )
   })
