@@ -32,6 +32,11 @@ access, while the migration account owns the schema and is used solely by the
 one-shot `migrate` service. Do not use the PostgreSQL superuser connection for
 either application runtime service.
 
+Set `REDIS_PASSWORD` to a separate high-entropy value, then include that value
+in `REDIS_URL`. Redis is an internal dependency, but its password still
+protects the job queue and rate-limit data if another local service is
+compromised.
+
 For transactional email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
 `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM`. Optional safety controls are
 `SMTP_CONNECTION_TIMEOUT_MS`, `SMTP_GREETING_TIMEOUT_MS`,

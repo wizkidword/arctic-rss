@@ -34,11 +34,13 @@ services:
     cpus: 0.25
     mem_limit: 320m
     pids_limit: 64
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     # Queue data and limiter counters share Redis. noeviction preserves queue
     # integrity; a full Redis fails protected actions closed instead of evicting jobs.
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD}"]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
       interval: 10s
       timeout: 5s
       retries: 10
