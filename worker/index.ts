@@ -12,6 +12,15 @@ import {
   type BulkReadJobData,
 } from "../src/lib/bulk-read-queue"
 import {
+  failOpmlImportJob,
+  processOpmlImportJob,
+} from "../src/lib/opml-import-jobs"
+import {
+  enqueueOpmlImportJob,
+  OPML_IMPORT_QUEUE_NAME,
+  type OpmlImportQueueData,
+} from "../src/lib/opml-import-queue"
+import {
   AI_DIGEST_QUEUE_NAME,
   type AiDigestJobData,
 } from "../src/lib/ai-digest-queue"
@@ -140,6 +149,31 @@ const bulkReadWorker = new Worker<BulkReadJobData>(
   }
 )
 
+const opmlImportWorker = new Worker<OpmlImportQueueData>(
+  OPML_IMPORT_QUEUE_NAME,
+  async (job) => {
+    const result = await processOpmlImportJob({ jobId: job.data.jobId })
+
+    if (result.status === "PROCESSING") {
+      await enqueueOpmlImportJob(job.data.jobId, job.data.run + 1)
+    }
+
+    console.log(
+      JSON.stringify({
+        event: "opml_import",
+        jobId: job.data.jobId,
+        outcome: result.status.toLowerCase(),
+      })
+    )
+
+    return result
+  },
+  {
+    connection: redisConnectionOptions(),
+    concurrency: 1,
+  }
+)
+
 const smartDigestEmailWorker = new Worker<SmartDigestEmailJobData>(
   SMART_DIGEST_EMAIL_QUEUE_NAME,
   async (job) => {
@@ -203,6 +237,23 @@ bulkReadWorker.on("failed", (job, error) => {
     }).catch((failureError) => {
       console.error(
         `[worker] could not record bulk read failure for ${job.data.jobId}: ${schedulerErrorMessage(failureError)}`
+      )
+    })
+  }
+})
+
+opmlImportWorker.on("failed", (job, error) => {
+  console.error(
+    `[worker] OPML import failed for ${job?.data.jobId ?? "unknown job"}: ${error.message}`
+  )
+
+  if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+    failOpmlImportJob({
+      error,
+      jobId: job.data.jobId,
+    }).catch((failureError) => {
+      console.error(
+        `[worker] could not record OPML import failure for ${job.data.jobId}: ${schedulerErrorMessage(failureError)}`
       )
     })
   }
@@ -494,6 +545,7 @@ async function shutdown() {
       aiDigestWorker.close(),
       smartDigestWorker.close(),
       smartDigestEmailWorker.close(),
+      opmlImportWorker.close(),
     ])
   } finally {
     clearInterval(heartbeat)

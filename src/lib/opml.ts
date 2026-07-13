@@ -7,6 +7,10 @@ import {
   subscribeToFeed as subscribeToFeedSubscription,
 } from "./feed-subscriptions"
 
+export const MAX_OPML_IMPORT_ENTRIES = 250
+export const MAX_OPML_NESTING_DEPTH = 10
+export const MAX_OPML_URL_LENGTH = 2_048
+
 type OpmlOutline = {
   htmlUrl?: unknown
   outline?: OpmlOutline | OpmlOutline[]
@@ -133,7 +137,7 @@ export function parseOpmlSubscriptions(opmlXml: string): OpmlSubscriptionEntry[]
   const entries: OpmlSubscriptionEntry[] = []
 
   for (const outline of outlines) {
-    collectOutlineSubscriptions(outline, [], entries)
+    collectOutlineSubscriptions(outline, [], entries, 0)
   }
 
   if (!entries.length) {
@@ -359,8 +363,15 @@ function opmlBody(parsed: unknown): { outline?: OpmlOutline | OpmlOutline[] } {
 function collectOutlineSubscriptions(
   outline: OpmlOutline,
   folderPath: string[],
-  entries: OpmlSubscriptionEntry[]
+  entries: OpmlSubscriptionEntry[],
+  depth: number
 ) {
+  if (depth > MAX_OPML_NESTING_DEPTH) {
+    throw new OpmlError(
+      `OPML folders can be nested no more than ${MAX_OPML_NESTING_DEPTH} levels.`
+    )
+  }
+
   const xmlUrl = stringAttribute(outline.xmlUrl)
   const title =
     stringAttribute(outline.title) ||
@@ -369,6 +380,18 @@ function collectOutlineSubscriptions(
     "Untitled feed"
 
   if (xmlUrl) {
+    if (xmlUrl.length > MAX_OPML_URL_LENGTH) {
+      throw new OpmlError(
+        `OPML feed URLs must be ${MAX_OPML_URL_LENGTH} characters or fewer.`
+      )
+    }
+
+    if (entries.length >= MAX_OPML_IMPORT_ENTRIES) {
+      throw new OpmlError(
+        `OPML imports are limited to ${MAX_OPML_IMPORT_ENTRIES} feeds.`
+      )
+    }
+
     entries.push({
       folderName: folderPath.length ? folderPath.join(" / ") : null,
       htmlUrl: stringAttribute(outline.htmlUrl) || undefined,
@@ -382,7 +405,7 @@ function collectOutlineSubscriptions(
   const nextFolderPath = folderName ? [...folderPath, folderName] : folderPath
 
   for (const childOutline of asArray(outline.outline)) {
-    collectOutlineSubscriptions(childOutline, nextFolderPath, entries)
+    collectOutlineSubscriptions(childOutline, nextFolderPath, entries, depth + 1)
   }
 }
 

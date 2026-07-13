@@ -7,6 +7,7 @@ STATE_DIR="${MONITOR_STATE_DIR:-/var/lib/arctic-rss-monitor}"
 DISK_THRESHOLD_PERCENT="${DISK_THRESHOLD_PERCENT:-85}"
 BACKUP_MAX_AGE_SECONDS="${BACKUP_MAX_AGE_SECONDS:-108000}"
 TLS_MIN_VALIDITY_SECONDS="${TLS_MIN_VALIDITY_SECONDS:-2592000}"
+IMPORT_STUCK_AFTER_SECONDS="${IMPORT_STUCK_AFTER_SECONDS:-900}"
 
 if [[ ! -r "$ALERT_ENV_FILE" ]] || [[ ! -r "$BACKUP_ENV_FILE" ]]; then
   echo "Required monitor environment file is not readable." >&2
@@ -38,6 +39,11 @@ fi
 
 if ! [[ "$TLS_MIN_VALIDITY_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "TLS_MIN_VALIDITY_SECONDS must be a positive whole number." >&2
+  exit 1
+fi
+
+if ! [[ "$IMPORT_STUCK_AFTER_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "IMPORT_STUCK_AFTER_SECONDS must be a positive whole number." >&2
   exit 1
 fi
 
@@ -101,6 +107,19 @@ if ! docker exec app-redis-1 sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSW
   | tr -d '\r' \
   | grep -q '^aof_last_write_status:ok$'; then
   failures+=("redis_persistence")
+fi
+
+stuck_import_count="$(
+  docker exec \
+    -e "IMPORT_STUCK_AFTER_SECONDS=$IMPORT_STUCK_AFTER_SECONDS" \
+    app-postgres-1 \
+    sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "SELECT count(*) FROM \"ImportJob\" WHERE \"status\" IN ('\''PENDING'\'', '\''PROCESSING'\'') AND \"updatedAt\" < NOW() - make_interval(secs => ${IMPORT_STUCK_AFTER_SECONDS});"' \
+    2>/dev/null || true
+)"
+if ! [[ "$stuck_import_count" =~ ^[0-9]+$ ]]; then
+  failures+=("import_job_probe")
+elif (( stuck_import_count > 0 )); then
+  failures+=("stuck_opml_imports")
 fi
 
 current_state="ok"

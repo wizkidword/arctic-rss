@@ -4,6 +4,9 @@ import { FeedSubscriptionError } from "./feed-subscriptions"
 import {
   buildOpmlDocument,
   importOpmlWithClient,
+  MAX_OPML_IMPORT_ENTRIES,
+  MAX_OPML_NESTING_DEPTH,
+  MAX_OPML_URL_LENGTH,
   parseOpmlSubscriptions,
 } from "./opml"
 
@@ -44,6 +47,37 @@ describe("OPML parsing", () => {
         xmlUrl: "https://example.com/feed.xml",
       },
     ])
+  })
+
+  it("rejects imports that exceed the feed, nesting, or URL safety limits", () => {
+    const tooManyFeeds = Array.from(
+      { length: MAX_OPML_IMPORT_ENTRIES + 1 },
+      (_, index) => `<outline xmlUrl="https://example.com/${index}.xml" />`
+    ).join("")
+    const deeplyNested = Array.from(
+      { length: MAX_OPML_NESTING_DEPTH + 1 },
+      () => "<outline text=\"Folder\">"
+    ).join("")
+    const closingOutlines = "</outline>".repeat(MAX_OPML_NESTING_DEPTH + 1)
+    const longUrl = `https://example.com/${"a".repeat(MAX_OPML_URL_LENGTH)}`
+
+    expect(() =>
+      parseOpmlSubscriptions(`<opml><body>${tooManyFeeds}</body></opml>`)
+    ).toThrow(`OPML imports are limited to ${MAX_OPML_IMPORT_ENTRIES} feeds.`)
+    expect(() =>
+      parseOpmlSubscriptions(
+        `<opml><body>${deeplyNested}<outline xmlUrl="https://example.com/feed.xml" />${closingOutlines}</body></opml>`
+      )
+    ).toThrow(
+      `OPML folders can be nested no more than ${MAX_OPML_NESTING_DEPTH} levels.`
+    )
+    expect(() =>
+      parseOpmlSubscriptions(
+        `<opml><body><outline xmlUrl="${longUrl}" /></body></opml>`
+      )
+    ).toThrow(
+      `OPML feed URLs must be ${MAX_OPML_URL_LENGTH} characters or fewer.`
+    )
   })
 })
 

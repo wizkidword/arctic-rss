@@ -2,10 +2,17 @@ import { DownloadIcon, FileUpIcon } from "lucide-react"
 import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
+import {
+  cancelOpmlImportAction,
+  retryOpmlImportAction,
+} from "@/app/app/actions"
 import { OpmlImportForm } from "@/components/opml-import-form"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import { listOpmlExportSubscriptions, listUserImportJobs } from "@/lib/opml"
+import {
+  listUserOpmlImportJobs,
+} from "@/lib/opml-import-jobs"
+import { listOpmlExportSubscriptions } from "@/lib/opml"
 import { cn } from "@/lib/utils"
 
 const importDateFormatter = new Intl.DateTimeFormat("en", {
@@ -22,7 +29,7 @@ export default async function ImportExportSettingsPage() {
 
   const [subscriptions, importJobs] = await Promise.all([
     listOpmlExportSubscriptions(session.user.id),
-    listUserImportJobs(session.user.id),
+    listUserOpmlImportJobs(session.user.id),
   ])
 
   return (
@@ -78,7 +85,8 @@ export default async function ImportExportSettingsPage() {
         <div className="border-b p-4">
           <h2 className="font-heading text-base font-medium">Recent Imports</h2>
           <p className="text-sm text-muted-foreground">
-            The latest OPML import summaries for this account.
+            The latest OPML import summaries for this account. Refresh this
+            page to update an import that is still running.
           </p>
         </div>
 
@@ -103,17 +111,53 @@ export default async function ImportExportSettingsPage() {
                     </span>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {job.totalFeeds} total · {job.addedFeeds} added ·{" "}
+                    {job.processedFeeds} of {job.totalFeeds} processed · {" "}
+                    {job.addedFeeds} added · {" "}
                     {job.skippedFeeds} skipped · {job.failedFeeds} failed ·{" "}
                     {job.folderCount} folders
                   </p>
+                  {job.cancelRequested && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Cancel requested; the current feed will finish before the
+                      import stops.
+                    </p>
+                  )}
+                  {job.lastError && (
+                    <p className="mt-2 text-sm text-destructive">
+                      {job.lastError}
+                    </p>
+                  )}
                 </div>
-                {job.errorCount > 0 && (
-                  <Badge variant="outline">
-                    {job.errorCount}{" "}
-                    {job.errorCount === 1 ? "error" : "errors"}
-                  </Badge>
-                )}
+                <div className="flex flex-wrap items-start gap-2">
+                  {job.failedFeeds > 0 && (
+                    <Badge variant="outline">
+                      {job.failedFeeds}{" "}
+                      {job.failedFeeds === 1 ? "error" : "errors"}
+                    </Badge>
+                  )}
+                  {(job.status === "PENDING" || job.status === "PROCESSING") &&
+                    !job.cancelRequested && (
+                      <form action={cancelOpmlImportAction}>
+                        <input name="jobId" type="hidden" value={job.id} />
+                        <button
+                          className={cn(buttonVariants({ variant: "outline" }))}
+                          type="submit"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    )}
+                  {(job.status === "CANCELED" ||
+                    job.status === "FAILED" ||
+                    (job.status === "COMPLETED" && job.failedFeeds > 0)) && (
+                    <form action={retryOpmlImportAction}>
+                      <input name="jobId" type="hidden" value={job.id} />
+                      <button className={buttonVariants({ variant: "outline" })} type="submit">
+                        {job.status === "CANCELED" ? "Resume" : "Retry failed"}
+                      </button>
+                    </form>
+                  )}
+                </div>
               </div>
             ))}
           </div>

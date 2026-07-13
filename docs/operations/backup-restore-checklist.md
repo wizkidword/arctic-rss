@@ -53,12 +53,19 @@ the repository. Test delivery after installation before relying on the alert.
 
 `scripts/production-monitor.sh` and its systemd timer check container health,
 internal and public readiness, HTTPS certificate validity, disk and inode use,
-backup freshness, and Redis AOF write status every five minutes. Set
+backup freshness, Redis AOF write status, and OPML jobs stuck in pending or
+processing state every five minutes. Set
 `OPS_PUBLIC_HEALTH_URL` and `OPS_PUBLIC_HOST` in the same private operational
 alert environment file as `APP_DIR` and `OPS_ALERT_EMAIL`; keep these settings
 out of the repository. Alerts are sent only when the recorded state changes
 from healthy to unhealthy or back again. The notifier falls back to a temporary
 worker container if the normal worker is unavailable.
+
+The monitor treats a pending or processing OPML import as stuck after 15
+minutes by default. Set the non-secret `IMPORT_STUCK_AFTER_SECONDS` operational
+environment value when a different threshold is needed. The alert identifies
+only the condition; import details remain in the account's Import / Export
+screen and application logs.
 
 If a separate SSH account pulls completed backups with `scp`, set the optional
 `BACKUP_READ_GROUP` in the private backup environment file. The backup script

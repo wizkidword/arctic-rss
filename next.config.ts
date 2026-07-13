@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 import { contentSecurityPolicyReportOnly } from "./src/lib/content-security-policy";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "2mb",
+    },
+  },
   async headers() {
     return [
       {

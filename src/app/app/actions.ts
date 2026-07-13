@@ -52,7 +52,13 @@ import {
   moveSubscriptionToFolder,
   renameFolder,
 } from "@/lib/folders"
-import { importOpmlForUser, OpmlError } from "@/lib/opml"
+import {
+  cancelOpmlImportJob,
+  createOpmlImportJob,
+  OpmlImportJobError,
+  retryOpmlImportJob,
+} from "@/lib/opml-import-jobs"
+import { OpmlError } from "@/lib/opml"
 import { isDefaultView, type DefaultView } from "@/lib/preferences"
 import {
   enforceRateLimit,
@@ -95,16 +101,9 @@ export type UnsubscribeFeedActionState = {
 }
 
 export type ImportOpmlActionState = {
-  errors?: string[]
+  jobId?: string
   message: string
   status: "idle" | "success" | "error"
-  summary?: {
-    addedFeeds: number
-    failedFeeds: number
-    folderCount: number
-    skippedFeeds: number
-    totalFeeds: number
-  }
 }
 
 export type GenerateArticleSummaryActionState = {
@@ -660,31 +659,21 @@ export async function importOpmlAction(
   }
 
   try {
-    const summary = await importOpmlForUser({
+    const queuedImport = await createOpmlImportJob({
       opmlXml: await file.text(),
       userId: session.user.id,
     })
 
-    revalidateReaderPaths()
     revalidateSettingsPaths()
     refresh()
 
     return {
-      errors: summary.errors.map(
-        (error) => `${error.title}: ${error.message}`
-      ),
-      message: `Imported ${summary.addedFeeds} feeds. Skipped ${summary.skippedFeeds}; failed ${summary.failedFeeds}.`,
+      jobId: queuedImport.jobId,
+      message: `Import queued for ${queuedImport.totalFeeds} feeds. It will continue in the background; refresh this page to follow its progress.`,
       status: "success",
-      summary: {
-        addedFeeds: summary.addedFeeds,
-        failedFeeds: summary.failedFeeds,
-        folderCount: summary.folderCount,
-        skippedFeeds: summary.skippedFeeds,
-        totalFeeds: summary.totalFeeds,
-      },
     }
   } catch (error) {
-    if (error instanceof OpmlError) {
+    if (error instanceof OpmlError || error instanceof OpmlImportJobError) {
       return {
         message: error.message,
         status: "error",
@@ -696,6 +685,45 @@ export async function importOpmlAction(
       status: "error",
     }
   }
+}
+
+export async function cancelOpmlImportAction(formData: FormData) {
+  const session = await auth()
+  const jobId = formData.get("jobId")
+
+  if (!session?.user?.id || typeof jobId !== "string" || !isImportJobId(jobId)) {
+    return
+  }
+
+  await cancelOpmlImportJob({
+    jobId,
+    userId: session.user.id,
+  })
+  revalidateSettingsPaths()
+  refresh()
+}
+
+export async function retryOpmlImportAction(formData: FormData) {
+  const session = await auth()
+  const jobId = formData.get("jobId")
+
+  if (!session?.user?.id || typeof jobId !== "string" || !isImportJobId(jobId)) {
+    return
+  }
+
+  try {
+    await retryOpmlImportJob({
+      jobId,
+      userId: session.user.id,
+    })
+  } catch (error) {
+    if (!(error instanceof OpmlImportJobError)) {
+      throw error
+    }
+  }
+
+  revalidateSettingsPaths()
+  refresh()
 }
 
 export async function submitBugReportAction(
@@ -1481,4 +1509,8 @@ function revalidateFolderPaths(folderId?: string) {
 function revalidateSettingsPaths() {
   revalidatePath("/app/settings")
   revalidatePath("/app/settings/import-export")
+}
+
+function isImportJobId(value: string) {
+  return value.length > 0 && value.length <= 100 && /^[a-zA-Z0-9_-]+$/.test(value)
 }

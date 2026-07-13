@@ -58,40 +58,13 @@ export function OpmlImportForm() {
       {state.status === "success" && (
         <div className="rounded-lg border bg-muted p-3 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">{state.message}</p>
-          {state.summary && (
-            <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-              <SummaryStat label="Total" value={state.summary.totalFeeds} />
-              <SummaryStat label="Added" value={state.summary.addedFeeds} />
-              <SummaryStat label="Skipped" value={state.summary.skippedFeeds} />
-              <SummaryStat label="Failed" value={state.summary.failedFeeds} />
-              <SummaryStat label="Folders" value={state.summary.folderCount} />
-            </dl>
-          )}
-          {state.errors?.length ? (
-            <ul className="mt-3 list-inside list-disc space-y-1">
-              {state.errors.slice(0, 5).map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </ul>
-          ) : null}
         </div>
       )}
 
       <Button className="w-fit" disabled={pending} type="submit">
         <UploadIcon data-icon="inline-start" />
-        {pending ? "Importing..." : "Import OPML"}
+        {pending ? "Queueing import..." : "Import OPML"}
       </Button>
     </form>
-  )
-}
-
-function SummaryStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="text-base font-semibold text-foreground">{value}</dd>
-    </div>
   )
 }

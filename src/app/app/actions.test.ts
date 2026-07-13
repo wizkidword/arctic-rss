@@ -36,11 +36,19 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockOpmlImportJobError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "OpmlImportJobError"
+    }
+  }
+
   return {
     addArticleToCollection: vi.fn(),
     addPodcastEpisodeToCollection: vi.fn(),
     createBugReportForUser: vi.fn(),
     createFeatureSuggestionForUser: vi.fn(),
+    createOpmlImportJob: vi.fn(),
     auth: vi.fn(),
     deleteArticleForUser: vi.fn(),
     enqueueAiDigest: vi.fn(),
@@ -53,6 +61,7 @@ const mocks = vi.hoisted(() => {
     MockArticleCollectionError,
     MockFeedSubscriptionError,
     MockFeedValidationError,
+    MockOpmlImportJobError,
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
     }),
@@ -62,6 +71,7 @@ const mocks = vi.hoisted(() => {
     refreshFeed: vi.fn(),
     requestEmailVerification: vi.fn(),
     requestAiDigestForUser: vi.fn(),
+    retryOpmlImportJob: vi.fn(),
     enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
     revalidatePath: vi.fn(),
     setArticleReadState: vi.fn(),
@@ -168,6 +178,13 @@ vi.mock("@/lib/opml", () => ({
   OpmlError: class OpmlError extends Error {},
 }))
 
+vi.mock("@/lib/opml-import-jobs", () => ({
+  cancelOpmlImportJob: vi.fn(),
+  createOpmlImportJob: mocks.createOpmlImportJob,
+  OpmlImportJobError: mocks.MockOpmlImportJobError,
+  retryOpmlImportJob: mocks.retryOpmlImportJob,
+}))
+
 vi.mock("@/lib/preferences", () => ({
   isDefaultView: vi.fn(),
 }))
@@ -188,6 +205,7 @@ import {
   deleteArticleAction,
   generateAiDigestAction,
   generateArticleSummaryAction,
+  importOpmlAction,
   markArticleReadOnOpen,
   removeArticleFromCollectionAction,
   removePodcastEpisodeFromCollectionAction,
@@ -202,6 +220,49 @@ import {
   updateDisplayMode,
   updateThemePreference,
 } from "./actions"
+
+describe("importOpmlAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.createOpmlImportJob.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.refresh.mockReset()
+    mocks.revalidatePath.mockReset()
+  })
+
+  it("queues a validated OPML import instead of processing it in the action request", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.createOpmlImportJob.mockResolvedValue({
+      jobId: "job-1",
+      totalFeeds: 2,
+    })
+    const formData = new FormData()
+    formData.set(
+      "opmlFile",
+      new File(["<opml><body /></opml>"], "feeds.opml", {
+        type: "text/xml",
+      })
+    )
+
+    const result = await importOpmlAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.createOpmlImportJob).toHaveBeenCalledWith({
+      opmlXml: "<opml><body /></opml>",
+      userId: "user-1",
+    })
+    expect(result).toEqual({
+      jobId: "job-1",
+      message:
+        "Import queued for 2 feeds. It will continue in the background; refresh this page to follow its progress.",
+      status: "success",
+    })
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+  })
+})
 
 describe("submitBugReportAction", () => {
   beforeEach(() => {
