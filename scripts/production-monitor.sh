@@ -6,6 +6,7 @@ BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/etc/arctic-rss/backup.env}"
 STATE_DIR="${MONITOR_STATE_DIR:-/var/lib/arctic-rss-monitor}"
 DISK_THRESHOLD_PERCENT="${DISK_THRESHOLD_PERCENT:-85}"
 BACKUP_MAX_AGE_SECONDS="${BACKUP_MAX_AGE_SECONDS:-108000}"
+TLS_MIN_VALIDITY_SECONDS="${TLS_MIN_VALIDITY_SECONDS:-2592000}"
 
 if [[ ! -r "$ALERT_ENV_FILE" ]] || [[ ! -r "$BACKUP_ENV_FILE" ]]; then
   echo "Required monitor environment file is not readable." >&2
@@ -22,6 +23,8 @@ set +a
 
 : "${APP_DIR:?APP_DIR is required}"
 : "${BACKUP_DIR:?BACKUP_DIR is required}"
+: "${OPS_PUBLIC_HEALTH_URL:?OPS_PUBLIC_HEALTH_URL is required}"
+: "${OPS_PUBLIC_HOST:?OPS_PUBLIC_HOST is required}"
 
 if ! [[ "$DISK_THRESHOLD_PERCENT" =~ ^[1-9][0-9]?$|^100$ ]]; then
   echo "DISK_THRESHOLD_PERCENT must be between 1 and 100." >&2
@@ -30,6 +33,11 @@ fi
 
 if ! [[ "$BACKUP_MAX_AGE_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "BACKUP_MAX_AGE_SECONDS must be a positive whole number." >&2
+  exit 1
+fi
+
+if ! [[ "$TLS_MIN_VALIDITY_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "TLS_MIN_VALIDITY_SECONDS must be a positive whole number." >&2
   exit 1
 fi
 
@@ -55,6 +63,15 @@ check_healthy_container app-redis-1
 
 if ! curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3000/api/health >/dev/null; then
   failures+=("readiness")
+fi
+
+if ! curl --fail --silent --show-error --max-time 20 "$OPS_PUBLIC_HEALTH_URL" >/dev/null; then
+  failures+=("public_readiness")
+fi
+
+if ! timeout 20 openssl s_client -connect "$OPS_PUBLIC_HOST:443" -servername "$OPS_PUBLIC_HOST" </dev/null 2>/dev/null \
+  | openssl x509 -noout -checkend "$TLS_MIN_VALIDITY_SECONDS" >/dev/null; then
+  failures+=("tls_expiry")
 fi
 
 disk_percent="$(df -P / | awk 'NR == 2 {gsub(/%/, "", $5); print $5}')"

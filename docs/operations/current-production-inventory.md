@@ -43,6 +43,7 @@ those details in the private operator inventory.
   operator inventory.
 - Monitor queue backlog and failed email delivery in the application admin
   surfaces. Host disk, inode, backup freshness, Redis persistence, container
-  health, and readiness are covered by the production monitor service.
+  health, internal and public readiness, and HTTPS certificate expiry are
+  covered by the production monitor service.
 - Review the repository history before any public release; removing sensitive
   text from current files does not erase historical commits.
