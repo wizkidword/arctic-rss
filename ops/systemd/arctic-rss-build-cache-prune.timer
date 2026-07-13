@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Arctic RSS Docker build-cache cleanup
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00 UTC
+Persistent=true
+RandomizedDelaySec=30m
+Unit=arctic-rss-build-cache-prune.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Arctic RSS verified PostgreSQL backup
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/arctic-rss/backup.env
+ExecStart=/usr/local/sbin/arctic-rss-backup
