@@ -41,7 +41,8 @@ those details in the private operator inventory.
 - Maintain encrypted, off-host backup retention and schedule restore drills.
 - Keep provider snapshots and SSH/firewall recovery procedures in the private
   operator inventory.
-- Monitor host disk use, container log rotation, Redis persistence, queue
-  backlog, failed email delivery, and readiness degradation.
+- Monitor queue backlog and failed email delivery in the application admin
+  surfaces. Host disk, inode, backup freshness, Redis persistence, container
+  health, and readiness are covered by the production monitor service.
 - Review the repository history before any public release; removing sensitive
   text from current files does not erase historical commits.

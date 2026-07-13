@@ -1,0 +1,8 @@
+[Unit]
+Description=Arctic RSS host and service monitor
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/arctic-rss-monitor

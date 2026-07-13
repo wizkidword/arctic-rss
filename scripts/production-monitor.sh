@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ALERT_ENV_FILE="${OPS_ALERT_ENV_FILE:-/etc/arctic-rss/alerts.env}"
+BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/etc/arctic-rss/backup.env}"
+STATE_DIR="${MONITOR_STATE_DIR:-/var/lib/arctic-rss-monitor}"
+DISK_THRESHOLD_PERCENT="${DISK_THRESHOLD_PERCENT:-85}"
+BACKUP_MAX_AGE_SECONDS="${BACKUP_MAX_AGE_SECONDS:-108000}"
+
+if [[ ! -r "$ALERT_ENV_FILE" ]] || [[ ! -r "$BACKUP_ENV_FILE" ]]; then
+  echo "Required monitor environment file is not readable." >&2
+  exit 1
+fi
+
+set -a
+# Both files are root-controlled and store private operational values outside Git.
+# shellcheck disable=SC1090
+. "$ALERT_ENV_FILE"
+# shellcheck disable=SC1090
+. "$BACKUP_ENV_FILE"
+set +a
+
+: "${APP_DIR:?APP_DIR is required}"
+: "${BACKUP_DIR:?BACKUP_DIR is required}"
+
+if ! [[ "$DISK_THRESHOLD_PERCENT" =~ ^[1-9][0-9]?$|^100$ ]]; then
+  echo "DISK_THRESHOLD_PERCENT must be between 1 and 100." >&2
+  exit 1
+fi
+
+if ! [[ "$BACKUP_MAX_AGE_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "BACKUP_MAX_AGE_SECONDS must be a positive whole number." >&2
+  exit 1
+fi
+
+mkdir -p "$STATE_DIR"
+chmod 700 "$STATE_DIR"
+STATE_FILE="$STATE_DIR/state"
+failures=()
+
+check_healthy_container() {
+  local container_name="$1"
+  local health
+
+  health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_name" 2>/dev/null || true)"
+  if [[ "$health" != healthy ]]; then
+    failures+=("$container_name")
+  fi
+}
+
+check_healthy_container app-web-1
+check_healthy_container app-worker-1
+check_healthy_container app-postgres-1
+check_healthy_container app-redis-1
+
+if ! curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3000/api/health >/dev/null; then
+  failures+=("readiness")
+fi
+
+disk_percent="$(df -P / | awk 'NR == 2 {gsub(/%/, "", $5); print $5}')"
+inode_percent="$(df -Pi / | awk 'NR == 2 {gsub(/%/, "", $5); print $5}')"
+if (( disk_percent >= DISK_THRESHOLD_PERCENT )); then
+  failures+=("disk")
+fi
+if (( inode_percent >= DISK_THRESHOLD_PERCENT )); then
+  failures+=("inodes")
+fi
+
+latest_backup="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -printf '%f\n' | sort | tail -n 1)"
+if [[ -z "$latest_backup" ]]; then
+  failures+=("backup_missing")
+else
+  backup_epoch="$(date -u -d "$latest_backup" +%s 2>/dev/null || true)"
+  now_epoch="$(date -u +%s)"
+  if [[ -z "$backup_epoch" ]] || (( now_epoch - backup_epoch > BACKUP_MAX_AGE_SECONDS )); then
+    failures+=("backup_stale")
+  fi
+fi
+
+if ! docker exec app-redis-1 sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO persistence' \
+  | grep -q '^aof_last_write_status:ok$'; then
+  failures+=("redis_persistence")
+fi
+
+current_state="ok"
+if (( ${#failures[@]} > 0 )); then
+  current_state="$(IFS=,; echo "${failures[*]}")"
+fi
+previous_state="$(cat "$STATE_FILE" 2>/dev/null || echo unknown)"
+
+if [[ "$current_state" != "$previous_state" ]]; then
+  if [[ "$current_state" == ok ]]; then
+    if [[ "$previous_state" != unknown ]]; then
+      /usr/local/sbin/arctic-rss-notify host-monitor-recovered "previous:$previous_state"
+    fi
+  else
+    /usr/local/sbin/arctic-rss-notify host-monitor-failed "$current_state"
+  fi
+  printf '%s\n' "$current_state" > "$STATE_FILE"
+  chmod 600 "$STATE_FILE"
+fi
+
+echo "Arctic RSS monitor state: $current_state"

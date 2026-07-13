@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Arctic RSS host and service monitor every five minutes
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=5m
+Persistent=true
+RandomizedDelaySec=30s
+Unit=arctic-rss-monitor.service
+
+[Install]
+WantedBy=timers.target

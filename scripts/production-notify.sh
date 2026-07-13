@@ -35,11 +35,8 @@ subject="Arctic RSS alert: $event_type"
 body="Arctic RSS requires attention.\n\nEvent: $event_type\nSource: $unit_name\nTime (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)\n\nCheck the production service status and logs."
 
 cd "$APP_DIR"
-docker compose -p "$COMPOSE_PROJECT" exec -T \
-  -e OPS_ALERT_TO="$OPS_ALERT_EMAIL" \
-  -e OPS_ALERT_SUBJECT="$subject" \
-  -e OPS_ALERT_BODY="$body" \
-  worker node - <<'NODE'
+send_alert() {
+  docker compose -p "$COMPOSE_PROJECT" "$@" <<'NODE'
 const nodemailer = require("nodemailer")
 
 async function main() {
@@ -76,5 +73,18 @@ main().catch(() => {
   process.exitCode = 1
 })
 NODE
+}
+
+if ! send_alert exec -T \
+  -e OPS_ALERT_TO="$OPS_ALERT_EMAIL" \
+  -e OPS_ALERT_SUBJECT="$subject" \
+  -e OPS_ALERT_BODY="$body" \
+  worker node -; then
+  send_alert run --rm --no-deps \
+    -e OPS_ALERT_TO="$OPS_ALERT_EMAIL" \
+    -e OPS_ALERT_SUBJECT="$subject" \
+    -e OPS_ALERT_BODY="$body" \
+    --entrypoint node worker -
+fi
 
 echo "Arctic RSS operational alert sent."

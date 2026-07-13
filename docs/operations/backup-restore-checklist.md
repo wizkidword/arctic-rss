@@ -51,6 +51,12 @@ alert for the automated backup job. Put `APP_DIR` and `OPS_ALERT_EMAIL` in a
 root-readable `0600` server environment file; do not add them to `.env` or
 the repository. Test delivery after installation before relying on the alert.
 
+`scripts/production-monitor.sh` and its systemd timer check container health,
+internal readiness, disk and inode use, backup freshness, and Redis AOF write
+status every five minutes. Alerts are sent only when the recorded state changes
+from healthy to unhealthy or back again. The notifier falls back to a temporary
+worker container if the normal worker is unavailable.
+
 If a separate SSH account pulls completed backups with `scp`, set the optional
 `BACKUP_READ_GROUP` in the private backup environment file. The backup script
 then makes only completed backup directories group-readable (`750` directories
