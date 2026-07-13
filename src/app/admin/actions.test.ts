@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
   refresh: vi.fn(),
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
   requireFreshAdmin: vi.fn(),
   updateDiscoverCategoryMetadata: vi.fn(),
 }))
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/cache", () => ({
   refresh: mocks.refresh,
   revalidatePath: mocks.revalidatePath,
+  revalidateTag: mocks.revalidateTag,
+  unstable_cache: (callback: () => unknown) => callback,
 }))
 
 vi.mock("@/lib/authorization", () => ({

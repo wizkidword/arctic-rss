@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  ADMIN_QUEUE_LABELS,
   inspectAdminQueuesWithClients,
   type AdminQueueReader,
 } from "./admin-queues"
@@ -31,6 +32,18 @@ function createQueue({
 }
 
 describe("admin queue inspection", () => {
+  it("lists every worker queue in the operational dashboard", () => {
+    expect(Object.values(ADMIN_QUEUE_LABELS)).toEqual([
+      "AI digest",
+      "Bulk mark read",
+      "Feed refresh",
+      "OPML import",
+      "Podcast refresh",
+      "Smart Digest",
+      "Smart Digest email",
+    ])
+  })
+
   it("maps queue counts and recent failed jobs newest first", async () => {
     const feedQueue = createQueue({
       counts: {
@@ -220,8 +233,10 @@ describe("admin queue inspection", () => {
         { name: "Feed refresh", reader: emptyQueue },
         { name: "Podcast refresh", reader: emptyQueue },
         { name: "AI digest", reader: emptyQueue },
+        { name: "Bulk mark read", reader: emptyQueue },
         { name: "Smart Digest", reader: emptyQueue },
         { name: "Smart Digest email", reader: emptyQueue },
+        { name: "OPML import", reader: emptyQueue },
       ],
     })
 
@@ -231,8 +246,10 @@ describe("admin queue inspection", () => {
         { name: "Feed refresh" },
         { name: "Podcast refresh" },
         { name: "AI digest" },
+        { name: "Bulk mark read" },
         { name: "Smart Digest" },
         { name: "Smart Digest email" },
+        { name: "OPML import" },
       ],
     })
   })

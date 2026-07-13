@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   AdminDashboardError,
+  getAdminDashboardFeedbackWithClient,
+  getAdminDashboardUsersWithClient,
   getAdminDashboardWithClient,
+  parseAdminDashboardFilters,
   type AdminDashboardStore,
 } from "./admin-dashboard"
 
@@ -195,6 +198,108 @@ function createAdminStore(): AdminDashboardStore {
 }
 
 describe("admin dashboard aggregation", () => {
+  it("bounds activity filters and independent table page numbers", () => {
+    const filters = parseAdminDashboardFilters(
+      {
+        bugReportsPage: "2",
+        featureSuggestionsPage: "3",
+        feedsPage: "4",
+        from: "2026-05-01",
+        to: "2026-06-24",
+        usersPage: "5",
+      },
+      new Date("2026-06-24T08:15:00.000Z"),
+    )
+
+    expect(filters).toMatchObject({
+      bugReportsPage: 2,
+      featureSuggestionsPage: 3,
+      feedsPage: 4,
+      from: "2026-05-01",
+      to: "2026-06-24",
+      usersPage: 5,
+    })
+    expect(filters.activityStart).toEqual(new Date("2026-05-01T00:00:00.000Z"))
+    expect(filters.activityEnd).toEqual(new Date("2026-06-25T00:00:00.000Z"))
+
+    const fallback = parseAdminDashboardFilters(
+      {
+        from: "2024-01-01",
+        to: "2026-06-24",
+        usersPage: "not-a-page",
+      },
+      new Date("2026-06-24T08:15:00.000Z"),
+    )
+
+    expect(fallback).toMatchObject({
+      from: "2026-06-01",
+      to: "2026-06-24",
+      usersPage: 1,
+    })
+  })
+
+  it("uses bounded pagination for the user table", async () => {
+    const store = createAdminStore()
+    const rows = Array.from({ length: 26 }, (_, index) => ({
+      _count: { subscriptions: index },
+      aiMonthlyLimit: 100,
+      aiUsagePeriods: [],
+      createdAt: new Date("2026-06-20T12:00:00.000Z"),
+      disabledAt: null,
+      email: `reader-${index}@example.com`,
+      id: `user-${index}`,
+      name: null,
+      plan: "FREE",
+      role: "USER",
+    }))
+    vi.mocked(store.user.findMany).mockResolvedValue(rows)
+
+    const result = await getAdminDashboardUsersWithClient({
+      isAdmin: true,
+      now: () => new Date("2026-06-24T08:15:00.000Z"),
+      page: 3,
+      store,
+    })
+
+    expect(store.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 50,
+        take: 26,
+      }),
+    )
+    expect(result.users).toHaveLength(25)
+    expect(result.pagination).toEqual({
+      hasNextPage: true,
+      page: 3,
+      pageSize: 25,
+    })
+  })
+
+  it("applies the selected activity range to each feedback table", async () => {
+    const store = createAdminStore()
+    const filters = parseAdminDashboardFilters(
+      { from: "2026-06-01", to: "2026-06-24" },
+      new Date("2026-06-24T08:15:00.000Z"),
+    )
+
+    await getAdminDashboardFeedbackWithClient({
+      filters,
+      isAdmin: true,
+      store,
+    })
+
+    const dateRange = {
+      gte: new Date("2026-06-01T00:00:00.000Z"),
+      lt: new Date("2026-06-25T00:00:00.000Z"),
+    }
+    expect(store.bugReport.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { createdAt: dateRange } }),
+    )
+    expect(store.featureSuggestion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { createdAt: dateRange } }),
+    )
+  })
+
   it("requires explicit administrator authorization before querying", async () => {
     const store = createAdminStore()
 

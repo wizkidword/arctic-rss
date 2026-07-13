@@ -41,7 +41,7 @@ vi.mock("@/components/admin-discover-subreddit-form", () => ({
   ),
 }))
 
-import { AdminDashboard } from "./admin-dashboard"
+import { AdminDashboardSnapshot as AdminDashboard } from "./admin-dashboard"
 
 vi.mock("@/components/admin-revoke-sessions-button", () => ({
   AdminRevokeSessionsButton: () => <button type="button">Revoke sessions</button>,
@@ -263,6 +263,6 @@ describe("AdminDashboard", () => {
     expect(markup).toContain("No bug reports")
     expect(markup).toContain("No feature suggestions")
     expect(markup).toContain("Queue status is temporarily unavailable.")
-    expect(markup).toContain("No AI requests this month")
+    expect(markup).toContain("No AI requests in this range")
   })
 })

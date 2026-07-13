@@ -2,16 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
-  getAdminDashboard,
-  inspectAdminQueues,
-  listDiscoverCategoryEditorOptions,
+  parseAdminDashboardFilters,
   redirect,
   requireAuthenticatedUser,
   requireFreshAdmin,
 } = vi.hoisted(() => ({
-    getAdminDashboard: vi.fn(),
-    listDiscoverCategoryEditorOptions: vi.fn(),
-    inspectAdminQueues: vi.fn(),
+    parseAdminDashboardFilters: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
     }),
@@ -25,15 +21,7 @@ vi.mock("@/lib/authorization", () => ({
 }))
 
 vi.mock("@/lib/admin-dashboard", () => ({
-  getAdminDashboard,
-}))
-
-vi.mock("@/lib/admin-queues", () => ({
-  inspectAdminQueues,
-}))
-
-vi.mock("@/lib/discover-category-customizations", () => ({
-  listDiscoverCategoryEditorOptions,
+  parseAdminDashboardFilters,
 }))
 
 vi.mock("next/navigation", () => ({
@@ -42,29 +30,13 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/admin-dashboard", () => ({
   AdminDashboard: ({
-    discoverCategories,
+    filters,
   }: {
-    discoverCategories: Array<{ id: string; label: string }>
+    filters: { from: string; to: string }
   }) => (
     <div>
-      Operational dashboard {discoverCategories.map((category) => category.label).join(", ")}
+      Operational dashboard {filters.from} through {filters.to}
     </div>
-  ),
-}))
-
-vi.mock("@/components/ui/card", () => ({
-  Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CardContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  CardDescription: ({ children }: { children: React.ReactNode }) => (
-    <p>{children}</p>
-  ),
-  CardHeader: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  CardTitle: ({ children }: { children: React.ReactNode }) => (
-    <h1>{children}</h1>
   ),
 }))
 
@@ -79,7 +51,7 @@ describe("admin page", () => {
     requireAuthenticatedUser.mockResolvedValue(null)
 
     await expect(AdminPage()).rejects.toThrow("REDIRECT:/login")
-    expect(getAdminDashboard).not.toHaveBeenCalled()
+    expect(parseAdminDashboardFilters).not.toHaveBeenCalled()
   })
 
   it("redirects non-admin users to the reader", async () => {
@@ -92,10 +64,10 @@ describe("admin page", () => {
     requireFreshAdmin.mockResolvedValue(null)
 
     await expect(AdminPage()).rejects.toThrow("REDIRECT:/app")
-    expect(getAdminDashboard).not.toHaveBeenCalled()
+    expect(parseAdminDashboardFilters).not.toHaveBeenCalled()
   })
 
-  it("loads database and queue operations for administrators", async () => {
+  it("loads independently streamed panels only after fresh-admin validation", async () => {
     requireAuthenticatedUser.mockResolvedValue({
       user: {
         id: "admin-1",
@@ -103,31 +75,23 @@ describe("admin page", () => {
       },
     })
     requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
-    getAdminDashboard.mockResolvedValue({
-      generatedAt: new Date("2026-06-24T08:15:00.000Z"),
-    })
-    inspectAdminQueues.mockResolvedValue({
-      available: true,
-      failedJobs: [],
-      queues: [],
-    })
-    listDiscoverCategoryEditorOptions.mockResolvedValue([
-      {
-        description: "National and world reporting.",
-        iconKey: "general",
-        id: "us-general",
-        label: "US General",
-      },
-    ])
+    const filters = {
+      from: "2026-06-01",
+      to: "2026-06-24",
+    }
+    parseAdminDashboardFilters.mockReturnValue(filters)
 
-    const markup = renderToStaticMarkup(await AdminPage())
+    const markup = renderToStaticMarkup(
+      await AdminPage({
+        searchParams: Promise.resolve({ from: "2026-06-01", to: "2026-06-24" }),
+      })
+    )
 
     expect(markup).toContain("Operational dashboard")
-    expect(markup).toContain("US General")
-    expect(getAdminDashboard).toHaveBeenCalledWith({
-      isAdmin: true,
+    expect(markup).toContain("2026-06-01 through 2026-06-24")
+    expect(parseAdminDashboardFilters).toHaveBeenCalledWith({
+      from: "2026-06-01",
+      to: "2026-06-24",
     })
-    expect(inspectAdminQueues).toHaveBeenCalledOnce()
-    expect(listDiscoverCategoryEditorOptions).toHaveBeenCalledOnce()
   })
 })

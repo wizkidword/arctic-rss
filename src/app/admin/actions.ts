@@ -1,8 +1,9 @@
 "use server"
 
-import { refresh, revalidatePath } from "next/cache"
+import { refresh, revalidatePath, revalidateTag } from "next/cache"
 
 import { getPrisma } from "@/lib/db"
+import { ADMIN_DASHBOARD_OVERVIEW_CACHE_TAG } from "@/lib/admin-dashboard"
 import { requireFreshAdmin } from "@/lib/authorization"
 import {
   DiscoverOpmlImportError,
@@ -103,7 +104,9 @@ export async function importDiscoverOpmlAction(
       opmlXml: await file.text(),
     })
 
+    revalidatePath("/admin")
     revalidatePath("/app/discover")
+    revalidateTag(ADMIN_DASHBOARD_OVERVIEW_CACHE_TAG, "max")
     refresh()
 
     const errors = summary.errors.map(
@@ -163,6 +166,7 @@ export async function updateDiscoverCategoryMetadataAction(
 
     revalidatePath("/admin")
     revalidatePath("/app/discover")
+    revalidateTag(ADMIN_DASHBOARD_OVERVIEW_CACHE_TAG, "max")
     refresh()
 
     return {

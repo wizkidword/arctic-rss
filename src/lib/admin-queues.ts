@@ -5,6 +5,10 @@ import {
   type AiDigestJobData,
 } from "./ai-digest-queue"
 import {
+  BULK_READ_QUEUE_NAME,
+  type BulkReadJobData,
+} from "./bulk-read-queue"
+import {
   FEED_REFRESH_QUEUE_NAME,
   redisConnectionOptions,
   type FeedRefreshJobData,
@@ -13,6 +17,10 @@ import {
   PODCAST_REFRESH_QUEUE_NAME,
   type PodcastRefreshJobData,
 } from "./podcast-refresh-queue"
+import {
+  OPML_IMPORT_QUEUE_NAME,
+  type OpmlImportQueueData,
+} from "./opml-import-queue"
 import {
   SMART_DIGEST_EMAIL_QUEUE_NAME,
   type SmartDigestEmailJobData,
@@ -23,6 +31,16 @@ import {
 } from "./smart-digest-queue"
 
 type AdminQueueCounts = Record<string, number>
+
+export const ADMIN_QUEUE_LABELS = {
+  aiDigest: "AI digest",
+  bulkRead: "Bulk mark read",
+  feedRefresh: "Feed refresh",
+  opmlImport: "OPML import",
+  podcastRefresh: "Podcast refresh",
+  smartDigest: "Smart Digest",
+  smartDigestEmail: "Smart Digest email",
+} as const
 
 type AdminQueueJob = {
   attemptsMade: number
@@ -93,6 +111,9 @@ export async function inspectAdminQueues(): Promise<AdminQueueSnapshot> {
   const digestQueue = new Queue<AiDigestJobData>(AI_DIGEST_QUEUE_NAME, {
     connection,
   })
+  const bulkReadQueue = new Queue<BulkReadJobData>(BULK_READ_QUEUE_NAME, {
+    connection,
+  })
   const podcastQueue = new Queue<PodcastRefreshJobData>(
     PODCAST_REFRESH_QUEUE_NAME,
     { connection }
@@ -104,24 +125,31 @@ export async function inspectAdminQueues(): Promise<AdminQueueSnapshot> {
     SMART_DIGEST_EMAIL_QUEUE_NAME,
     { connection }
   )
+  const opmlImportQueue = new Queue<OpmlImportQueueData>(OPML_IMPORT_QUEUE_NAME, {
+    connection,
+  })
 
   try {
     return await inspectAdminQueuesWithClients({
       queues: [
-        { name: "Feed refresh", reader: feedQueue },
-        { name: "Podcast refresh", reader: podcastQueue },
-        { name: "AI digest", reader: digestQueue },
-        { name: "Smart Digest", reader: smartDigestQueue },
-        { name: "Smart Digest email", reader: smartDigestEmailQueue },
+        { name: ADMIN_QUEUE_LABELS.feedRefresh, reader: feedQueue },
+        { name: ADMIN_QUEUE_LABELS.podcastRefresh, reader: podcastQueue },
+        { name: ADMIN_QUEUE_LABELS.aiDigest, reader: digestQueue },
+        { name: ADMIN_QUEUE_LABELS.bulkRead, reader: bulkReadQueue },
+        { name: ADMIN_QUEUE_LABELS.smartDigest, reader: smartDigestQueue },
+        { name: ADMIN_QUEUE_LABELS.smartDigestEmail, reader: smartDigestEmailQueue },
+        { name: ADMIN_QUEUE_LABELS.opmlImport, reader: opmlImportQueue },
       ],
     })
   } finally {
     await Promise.allSettled([
       feedQueue.close(),
       digestQueue.close(),
+      bulkReadQueue.close(),
       podcastQueue.close(),
       smartDigestQueue.close(),
       smartDigestEmailQueue.close(),
+      opmlImportQueue.close(),
     ])
   }
 }

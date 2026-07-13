@@ -1,15 +1,17 @@
 import { redirect } from "next/navigation"
 
 import { AdminDashboard } from "@/components/admin-dashboard"
-import { getAdminDashboard } from "@/lib/admin-dashboard"
-import { inspectAdminQueues } from "@/lib/admin-queues"
+import { parseAdminDashboardFilters } from "@/lib/admin-dashboard"
 import {
   requireAuthenticatedUser,
   requireFreshAdmin,
 } from "@/lib/authorization"
-import { listDiscoverCategoryEditorOptions } from "@/lib/discover-category-customizations"
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+} = {}) {
   const session = await requireAuthenticatedUser().catch(() => null)
 
   if (!session?.user?.id) {
@@ -22,19 +24,7 @@ export default async function AdminPage() {
     redirect("/app")
   }
 
-  const [dashboard, queues, discoverCategories] = await Promise.all([
-    getAdminDashboard({
-      isAdmin: true,
-    }),
-    inspectAdminQueues(),
-    listDiscoverCategoryEditorOptions(),
-  ])
+  const filters = parseAdminDashboardFilters(await searchParams)
 
-  return (
-    <AdminDashboard
-      dashboard={dashboard}
-      discoverCategories={discoverCategories}
-      queues={queues}
-    />
-  )
+  return <AdminDashboard filters={filters} />
 }

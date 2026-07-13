@@ -1,4 +1,12 @@
+import { unstable_cache } from "next/cache"
+
 import { getPrisma } from "./db"
+
+export const ADMIN_DASHBOARD_OVERVIEW_CACHE_TAG = "admin-dashboard-overview"
+export const ADMIN_DASHBOARD_AI_USAGE_CACHE_TAG = "admin-dashboard-ai-usage"
+export const ADMIN_DASHBOARD_PAGE_SIZE = 25
+const ADMIN_DASHBOARD_MAX_PAGE = 10_000
+const ADMIN_DASHBOARD_MAX_RANGE_DAYS = 366
 
 type DecimalLike =
   | number
@@ -164,6 +172,167 @@ export class AdminDashboardError extends Error {
 export type AdminDashboardData = Awaited<
   ReturnType<typeof getAdminDashboardWithClient>
 >
+
+export type AdminDashboardFilters = {
+  activityEnd: Date
+  activityStart: Date
+  bugReportsPage: number
+  from: string
+  to: string
+  featureSuggestionsPage: number
+  feedsPage: number
+  usersPage: number
+}
+
+export type AdminDashboardPagination = {
+  hasNextPage: boolean
+  page: number
+  pageSize: number
+}
+
+type AdminActivityRange = Pick<
+  AdminDashboardFilters,
+  "activityEnd" | "activityStart"
+>
+
+type AdminDashboardOverview = {
+  generatedAt: Date
+  overview: {
+    activeSubscriptionCount: number
+    activeUserCount: number
+    articleCount: number
+    failingFeedCount: number
+    feedCount: number
+    userCount: number
+  }
+}
+
+type AdminDashboardFeedHealth = {
+  failingCount: number
+  staleCount: number
+}
+
+export function parseAdminDashboardFilters(
+  params: Record<string, string | string[] | undefined>,
+  now = new Date(),
+): AdminDashboardFilters {
+  const defaultStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  )
+  const defaultEnd = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  )
+  const requestedStart = parseUtcDate(firstValue(params.from))
+  const requestedEnd = parseUtcDate(firstValue(params.to))
+  const rangeIsValid =
+    requestedStart &&
+    requestedEnd &&
+    requestedEnd.getTime() >= requestedStart.getTime() &&
+    requestedEnd.getTime() - requestedStart.getTime() <=
+      ADMIN_DASHBOARD_MAX_RANGE_DAYS * 24 * 60 * 60 * 1_000
+  const activityStart = rangeIsValid ? requestedStart : defaultStart
+  const inclusiveEnd = rangeIsValid ? requestedEnd : defaultEnd
+
+  return {
+    activityEnd: new Date(inclusiveEnd.getTime() + 24 * 60 * 60 * 1_000),
+    activityStart,
+    bugReportsPage: parsePage(params.bugReportsPage),
+    featureSuggestionsPage: parsePage(params.featureSuggestionsPage),
+    feedsPage: parsePage(params.feedsPage),
+    from: dateInputValue(activityStart),
+    to: dateInputValue(inclusiveEnd),
+    usersPage: parsePage(params.usersPage),
+  }
+}
+
+export async function getAdminDashboardOverview() {
+  return getCachedAdminDashboardOverview()
+}
+
+export async function getAdminDashboardUsers({
+  page,
+}: {
+  page: number
+}) {
+  return getAdminDashboardUsersWithClient({
+    isAdmin: true,
+    page,
+    store: getPrisma() as unknown as AdminDashboardStore,
+  })
+}
+
+export async function getAdminDashboardFeedHealth({
+  page,
+}: {
+  page: number
+}) {
+  const [counts, feeds] = await Promise.all([
+    getCachedAdminDashboardFeedHealth(),
+    getAdminDashboardFailingFeedsWithClient({
+      isAdmin: true,
+      page,
+      store: getPrisma() as unknown as AdminDashboardStore,
+    }),
+  ])
+
+  return {
+    ...counts,
+    ...feeds,
+  }
+}
+
+export async function getAdminDashboardFeedback({
+  filters,
+}: {
+  filters: Pick<
+    AdminDashboardFilters,
+    "activityEnd" | "activityStart" | "bugReportsPage" | "featureSuggestionsPage"
+  >
+}) {
+  return getAdminDashboardFeedbackWithClient({
+    filters,
+    isAdmin: true,
+    store: getPrisma() as unknown as AdminDashboardStore,
+  })
+}
+
+export async function getAdminDashboardAiUsage({
+  filters,
+}: {
+  filters: AdminActivityRange
+}) {
+  const keyParts = [
+    "admin-dashboard-ai-usage-v1",
+    filters.activityStart.toISOString(),
+    filters.activityEnd.toISOString(),
+  ]
+
+  return unstable_cache(
+    () =>
+      getAdminDashboardAiUsageWithClient({
+        filters,
+        isAdmin: true,
+        store: getPrisma() as unknown as AdminDashboardStore,
+      }),
+    keyParts,
+    {
+      revalidate: 60,
+      tags: [ADMIN_DASHBOARD_AI_USAGE_CACHE_TAG],
+    },
+  )()
+}
+
+export async function getAdminDashboardPersistedFailures({
+  filters,
+}: {
+  filters: AdminActivityRange
+}) {
+  return getAdminDashboardPersistedFailuresWithClient({
+    filters,
+    isAdmin: true,
+    store: getPrisma() as unknown as AdminDashboardStore,
+  })
+}
 
 export async function getAdminDashboard({ isAdmin }: { isAdmin: boolean }) {
   return getAdminDashboardWithClient({
@@ -613,4 +782,587 @@ function boundedMessage(value: unknown, fallback: string) {
   }
 
   return message.length > 500 ? `${message.slice(0, 497)}...` : message
+}
+
+const getCachedAdminDashboardOverview = unstable_cache(
+  () =>
+    getAdminDashboardOverviewWithClient({
+      isAdmin: true,
+      store: getPrisma() as unknown as AdminDashboardStore,
+    }),
+  ["admin-dashboard-overview-v1"],
+  {
+    revalidate: 30,
+    tags: [ADMIN_DASHBOARD_OVERVIEW_CACHE_TAG],
+  },
+)
+
+const getCachedAdminDashboardFeedHealth = unstable_cache(
+  () =>
+    getAdminDashboardFeedHealthCountsWithClient({
+      isAdmin: true,
+      store: getPrisma() as unknown as AdminDashboardStore,
+    }),
+  ["admin-dashboard-feed-health-v1"],
+  {
+    revalidate: 30,
+    tags: [ADMIN_DASHBOARD_OVERVIEW_CACHE_TAG],
+  },
+)
+
+export async function getAdminDashboardOverviewWithClient({
+  isAdmin,
+  now = () => new Date(),
+  store,
+}: {
+  isAdmin: boolean
+  now?: () => Date
+  store: AdminDashboardStore
+}): Promise<AdminDashboardOverview> {
+  assertAdmin(isAdmin)
+
+  const generatedAt = now()
+  const [
+    userCount,
+    activeUserCount,
+    feedCount,
+    failingFeedCount,
+    articleCount,
+    activeSubscriptionCount,
+  ] = await Promise.all([
+    store.user.count({}),
+    store.user.count({
+      where: {
+        disabledAt: null,
+      },
+    }),
+    store.feed.count({}),
+    store.feed.count({
+      where: {
+        lastError: {
+          not: null,
+        },
+      },
+    }),
+    store.article.count({}),
+    store.feedSubscription.count({
+      where: {
+        isPaused: false,
+      },
+    }),
+  ])
+
+  return {
+    generatedAt,
+    overview: {
+      activeSubscriptionCount,
+      activeUserCount,
+      articleCount,
+      failingFeedCount,
+      feedCount,
+      userCount,
+    },
+  }
+}
+
+export async function getAdminDashboardUsersWithClient({
+  isAdmin,
+  now = () => new Date(),
+  page,
+  store,
+}: {
+  isAdmin: boolean
+  now?: () => Date
+  page: number
+  store: AdminDashboardStore
+}) {
+  assertAdmin(isAdmin)
+
+  const currentPage = boundedPage(page)
+  const monthStart = startOfUtcMonth(now())
+  const rows = await store.user.findMany({
+    orderBy: {
+      createdAt: "desc",
+    },
+    select: {
+      _count: {
+        select: {
+          subscriptions: true,
+        },
+      },
+      aiMonthlyLimit: true,
+      aiUsagePeriods: {
+        select: {
+          consumedUnits: true,
+          reservedUnits: true,
+        },
+        where: {
+          periodStart: monthStart,
+        },
+      },
+      createdAt: true,
+      disabledAt: true,
+      email: true,
+      id: true,
+      name: true,
+      plan: true,
+      role: true,
+    },
+    skip: (currentPage - 1) * ADMIN_DASHBOARD_PAGE_SIZE,
+    take: ADMIN_DASHBOARD_PAGE_SIZE + 1,
+  })
+
+  const result = paginate(
+    rows.map((user) => ({
+      aiMonthlyLimit: user.aiMonthlyLimit,
+      aiMonthlyUsed:
+        (user.aiUsagePeriods[0]?.consumedUnits ?? 0) +
+        (user.aiUsagePeriods[0]?.reservedUnits ?? 0),
+      createdAt: user.createdAt,
+      disabledAt: user.disabledAt,
+      email: user.email,
+      id: user.id,
+      name: user.name,
+      plan: user.plan,
+      role: user.role,
+      subscriptionCount: user._count.subscriptions,
+    })),
+    currentPage,
+  )
+
+  return {
+    pagination: result.pagination,
+    users: result.items,
+  }
+}
+
+export async function getAdminDashboardFeedHealthCountsWithClient({
+  isAdmin,
+  now = () => new Date(),
+  store,
+}: {
+  isAdmin: boolean
+  now?: () => Date
+  store: AdminDashboardStore
+}): Promise<AdminDashboardFeedHealth> {
+  assertAdmin(isAdmin)
+
+  const staleBefore = new Date(now().getTime() - 24 * 60 * 60 * 1_000)
+  const [failingCount, staleCount] = await Promise.all([
+    store.feed.count({
+      where: {
+        lastError: {
+          not: null,
+        },
+      },
+    }),
+    store.feed.count({
+      where: {
+        OR: [
+          {
+            lastSuccessfulFetchAt: null,
+          },
+          {
+            lastSuccessfulFetchAt: {
+              lt: staleBefore,
+            },
+          },
+        ],
+        subscriptions: {
+          some: {
+            isPaused: false,
+          },
+        },
+      },
+    }),
+  ])
+
+  return {
+    failingCount,
+    staleCount,
+  }
+}
+
+export async function getAdminDashboardFailingFeedsWithClient({
+  isAdmin,
+  page,
+  store,
+}: {
+  isAdmin: boolean
+  page: number
+  store: AdminDashboardStore
+}) {
+  assertAdmin(isAdmin)
+
+  const currentPage = boundedPage(page)
+  const rows = await store.feed.findMany({
+    orderBy: {
+      lastFailedAt: "desc",
+    },
+    select: {
+      _count: {
+        select: {
+          subscriptions: true,
+        },
+      },
+      feedUrl: true,
+      id: true,
+      lastError: true,
+      lastFailedAt: true,
+      lastSuccessfulFetchAt: true,
+      title: true,
+    },
+    skip: (currentPage - 1) * ADMIN_DASHBOARD_PAGE_SIZE,
+    take: ADMIN_DASHBOARD_PAGE_SIZE + 1,
+    where: {
+      lastError: {
+        not: null,
+      },
+    },
+  })
+
+  const result = paginate(
+    rows.map((feed) => ({
+      feedUrl: feed.feedUrl,
+      id: feed.id,
+      lastError: boundedMessage(feed.lastError, "Feed refresh failed."),
+      lastFailedAt: feed.lastFailedAt,
+      lastSuccessfulFetchAt: feed.lastSuccessfulFetchAt,
+      subscriberCount: feed._count.subscriptions,
+      title: feed.title,
+    })),
+    currentPage,
+  )
+
+  return {
+    failingFeeds: result.items,
+    pagination: result.pagination,
+  }
+}
+
+export async function getAdminDashboardFeedbackWithClient({
+  filters,
+  isAdmin,
+  store,
+}: {
+  filters: Pick<
+    AdminDashboardFilters,
+    "activityEnd" | "activityStart" | "bugReportsPage" | "featureSuggestionsPage"
+  >
+  isAdmin: boolean
+  store: AdminDashboardStore
+}) {
+  assertAdmin(isAdmin)
+
+  const bugReportsPage = boundedPage(filters.bugReportsPage)
+  const featureSuggestionsPage = boundedPage(filters.featureSuggestionsPage)
+  const createdAt = dateRangeWhere(filters)
+  const [bugReports, featureSuggestions] = await Promise.all([
+    store.bugReport.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: feedbackSelection(),
+      skip: (bugReportsPage - 1) * ADMIN_DASHBOARD_PAGE_SIZE,
+      take: ADMIN_DASHBOARD_PAGE_SIZE + 1,
+      where: { createdAt },
+    }),
+    store.featureSuggestion.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: feedbackSelection(),
+      skip: (featureSuggestionsPage - 1) * ADMIN_DASHBOARD_PAGE_SIZE,
+      take: ADMIN_DASHBOARD_PAGE_SIZE + 1,
+      where: { createdAt },
+    }),
+  ])
+
+  return {
+    bugReports: paginate(
+      bugReports.map(mapFeedbackRecord),
+      bugReportsPage,
+    ),
+    featureSuggestions: paginate(
+      featureSuggestions.map(mapFeedbackRecord),
+      featureSuggestionsPage,
+    ),
+  }
+}
+
+export async function getAdminDashboardAiUsageWithClient({
+  filters,
+  isAdmin,
+  store,
+}: {
+  filters: AdminActivityRange
+  isAdmin: boolean
+  store: AdminDashboardStore
+}) {
+  assertAdmin(isAdmin)
+
+  const aggregate = {
+    _count: {
+      _all: true,
+    },
+    _sum: {
+      costEstimate: true,
+      inputTokens: true,
+      outputTokens: true,
+    },
+  }
+  const where = {
+    createdAt: dateRangeWhere(filters),
+  }
+  const [usage, byAction, byProviderModel, recent] = await Promise.all([
+    store.aiUsageLog.aggregate({ ...aggregate, where }),
+    store.aiUsageLog.groupBy({
+      ...aggregate,
+      by: ["action"],
+      orderBy: {
+        action: "asc",
+      },
+      where,
+    }),
+    store.aiUsageLog.groupBy({
+      ...aggregate,
+      by: ["provider", "model"],
+      orderBy: [{ provider: "asc" }, { model: "asc" }],
+      where,
+    }),
+    store.aiUsageLog.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        action: true,
+        costEstimate: true,
+        createdAt: true,
+        id: true,
+        inputTokens: true,
+        model: true,
+        outputTokens: true,
+        provider: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
+      },
+      take: 10,
+      where,
+    }),
+  ])
+
+  return {
+    byAction: (byAction as AiActionGroup[]).map((group) => ({
+      action: group.action,
+      costEstimate: finiteNumber(group._sum.costEstimate),
+      inputTokens: group._sum.inputTokens ?? 0,
+      outputTokens: group._sum.outputTokens ?? 0,
+      requestCount: group._count._all,
+    })),
+    byProviderModel: (byProviderModel as AiProviderGroup[]).map((group) => ({
+      costEstimate: finiteNumber(group._sum.costEstimate),
+      inputTokens: group._sum.inputTokens ?? 0,
+      model: group.model,
+      outputTokens: group._sum.outputTokens ?? 0,
+      provider: group.provider,
+      requestCount: group._count._all,
+    })),
+    costEstimate: finiteNumber(usage._sum.costEstimate),
+    inputTokens: usage._sum.inputTokens ?? 0,
+    rangeEnd: filters.activityEnd,
+    rangeStart: filters.activityStart,
+    outputTokens: usage._sum.outputTokens ?? 0,
+    recent: recent.map((item) => ({
+      action: item.action,
+      costEstimate: finiteNumber(item.costEstimate),
+      createdAt: item.createdAt,
+      id: item.id,
+      inputTokens: item.inputTokens,
+      model: item.model,
+      outputTokens: item.outputTokens,
+      provider: item.provider,
+      userEmail: item.user.email,
+    })),
+    requestCount: usage._count._all,
+  }
+}
+
+export async function getAdminDashboardPersistedFailuresWithClient({
+  filters,
+  isAdmin,
+  store,
+}: {
+  filters: AdminActivityRange
+  isAdmin: boolean
+  store: AdminDashboardStore
+}) {
+  assertAdmin(isAdmin)
+
+  const updatedAt = dateRangeWhere(filters)
+  const [failedDigests, failedImports] = await Promise.all([
+    store.aiDigest.findMany({
+      orderBy: {
+        updatedAt: "desc",
+      },
+      select: {
+        errorMessage: true,
+        id: true,
+        updatedAt: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
+      },
+      take: 25,
+      where: {
+        status: "FAILED",
+        updatedAt,
+      },
+    }),
+    store.importJob.findMany({
+      orderBy: {
+        updatedAt: "desc",
+      },
+      select: {
+        errorLog: true,
+        id: true,
+        updatedAt: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
+      },
+      take: 25,
+      where: {
+        status: "FAILED",
+        updatedAt,
+      },
+    }),
+  ])
+
+  return [
+    ...failedDigests.map((digest) => ({
+      id: digest.id,
+      message: boundedMessage(digest.errorMessage, "AI digest processing failed."),
+      occurredAt: digest.updatedAt,
+      type: "AI digest" as const,
+      userEmail: digest.user.email,
+    })),
+    ...failedImports.map((job) => ({
+      id: job.id,
+      message: boundedMessage(job.errorLog, "OPML import failed."),
+      occurredAt: job.updatedAt,
+      type: "OPML import" as const,
+      userEmail: job.user.email,
+    })),
+  ]
+    .sort(
+      (left, right) => right.occurredAt.getTime() - left.occurredAt.getTime(),
+    )
+    .slice(0, 25)
+}
+
+function assertAdmin(isAdmin: boolean) {
+  if (!isAdmin) {
+    throw new AdminDashboardError("Administrator access is required.")
+  }
+}
+
+function dateRangeWhere({
+  activityEnd,
+  activityStart,
+}: AdminActivityRange) {
+  return {
+    gte: activityStart,
+    lt: activityEnd,
+  }
+}
+
+function feedbackSelection() {
+  return {
+    contactEmail: true,
+    createdAt: true,
+    description: true,
+    id: true,
+    pageUrl: true,
+    status: true,
+    title: true,
+    userAgent: true,
+    user: {
+      select: {
+        email: true,
+      },
+    },
+  }
+}
+
+function mapFeedbackRecord(record: BugReportRecord | FeatureSuggestionRecord) {
+  return {
+    contactEmail: record.contactEmail,
+    createdAt: record.createdAt,
+    description: boundedMessage(record.description, "No details provided."),
+    id: record.id,
+    pageUrl: record.pageUrl,
+    status: record.status,
+    title: boundedMessage(record.title, "Untitled report"),
+    userAgent: record.userAgent,
+    userEmail: record.user?.email ?? record.contactEmail ?? "Unknown reader",
+  }
+}
+
+function paginate<T>(rows: T[], page: number) {
+  const hasNextPage = rows.length > ADMIN_DASHBOARD_PAGE_SIZE
+
+  return {
+    items: rows.slice(0, ADMIN_DASHBOARD_PAGE_SIZE),
+    pagination: {
+      hasNextPage,
+      page,
+      pageSize: ADMIN_DASHBOARD_PAGE_SIZE,
+    },
+  }
+}
+
+function boundedPage(value: number) {
+  return Number.isInteger(value) && value > 0
+    ? Math.min(value, ADMIN_DASHBOARD_MAX_PAGE)
+    : 1
+}
+
+function parsePage(value: string | string[] | undefined) {
+  const parsed = Number(firstValue(value))
+
+  return boundedPage(parsed)
+}
+
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function parseUtcDate(value: string | undefined) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null
+  }
+
+  const [year, month, day] = value.split("-").map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+
+  return parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+    ? parsed
+    : null
+}
+
+function dateInputValue(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
+function startOfUtcMonth(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1))
 }

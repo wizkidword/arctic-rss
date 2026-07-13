@@ -176,8 +176,9 @@ Done:
 - Local digest provider with optional OpenAI provider
 - Per-user automatic-summary and daily-digest preferences
 - Operational admin statistics and user monitoring
+- Paginated admin user, feedback, and feed-health reports with independently streamed panels
 - Failing and stale feed health views
-- Current-month AI token, request, provider/model, and cost reporting
+- Date-range AI token, request, provider/model, and cost reporting
 - Persisted and BullMQ failed-job monitoring
 - Dependency-aware readiness checks for PostgreSQL and Redis
 - Loopback-only production Docker port bindings
