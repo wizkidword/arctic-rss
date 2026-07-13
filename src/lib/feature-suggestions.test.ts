@@ -12,6 +12,7 @@ function createStore(): FeatureSuggestionStore {
       create: vi.fn().mockResolvedValue({
         id: "feature-1",
       }),
+      findFirst: vi.fn().mockResolvedValue(null),
     },
   }
 }
@@ -50,6 +51,24 @@ describe("feature suggestion creation", () => {
     expect(suggestion).toEqual({
       id: "feature-1",
     })
+  })
+
+  it("coalesces an identical suggestion from the same reader", async () => {
+    const store = createStore()
+    vi.mocked(store.featureSuggestion.findFirst).mockResolvedValue({
+      id: "feature-1",
+    })
+
+    await expect(
+      createFeatureSuggestionForUserWithClient({
+        description: " Add a command palette. ",
+        store,
+        title: " Command palette ",
+        userId: "user-1",
+      })
+    ).resolves.toEqual({ id: "feature-1" })
+
+    expect(store.featureSuggestion.create).not.toHaveBeenCalled()
   })
 
   it("requires a title and description", async () => {

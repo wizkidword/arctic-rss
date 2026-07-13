@@ -17,6 +17,14 @@ type CreateFeatureSuggestionInput = {
 
 export type FeatureSuggestionStore = {
   featureSuggestion: {
+    findFirst(args: {
+      select: { id: true }
+      where: {
+        description: string
+        title: string
+        userId: string
+      }
+    }): Promise<{ id: string } | null>
     create(args: {
       data: {
         contactEmail: string | null
@@ -68,6 +76,19 @@ export async function createFeatureSuggestionForUserWithClient({
 
   if (!cleanTitle || !cleanDescription) {
     throw new FeatureSuggestionError("Describe the feature before sending it.")
+  }
+
+  const duplicate = await store.featureSuggestion.findFirst({
+    select: { id: true },
+    where: {
+      description: cleanDescription,
+      title: cleanTitle,
+      userId,
+    },
+  })
+
+  if (duplicate) {
+    return duplicate
   }
 
   return store.featureSuggestion.create({

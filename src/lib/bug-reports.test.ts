@@ -12,6 +12,7 @@ function createStore(): BugReportStore {
       create: vi.fn().mockResolvedValue({
         id: "bug-1",
       }),
+      findFirst: vi.fn().mockResolvedValue(null),
     },
   }
 }
@@ -49,6 +50,22 @@ describe("bug report creation", () => {
     expect(report).toEqual({
       id: "bug-1",
     })
+  })
+
+  it("coalesces an identical report from the same reader", async () => {
+    const store = createStore()
+    vi.mocked(store.bugReport.findFirst).mockResolvedValue({ id: "bug-1" })
+
+    await expect(
+      createBugReportForUserWithClient({
+        description: " The player stopped. ",
+        store,
+        title: " Podcast issue ",
+        userId: "user-1",
+      })
+    ).resolves.toEqual({ id: "bug-1" })
+
+    expect(store.bugReport.create).not.toHaveBeenCalled()
   })
 
   it("requires a title and description", async () => {
