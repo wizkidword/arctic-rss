@@ -7,7 +7,7 @@ CREATE TABLE "UserPlanQuota" (
   "sourceCount" INTEGER NOT NULL DEFAULT 0,
   "enabledSmartDigestCount" INTEGER NOT NULL DEFAULT 0,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
 
   CONSTRAINT "UserPlanQuota_pkey" PRIMARY KEY ("userId"),
   CONSTRAINT "UserPlanQuota_sourceCount_nonnegative" CHECK ("sourceCount" >= 0),
@@ -22,13 +22,17 @@ IN SHARE ROW EXCLUSIVE MODE;
 INSERT INTO "UserPlanQuota" (
   "userId",
   "sourceCount",
-  "enabledSmartDigestCount"
+  "enabledSmartDigestCount",
+  "createdAt",
+  "updatedAt"
 )
 SELECT
   user_row."id",
   (SELECT COUNT(*) FROM "FeedSubscription" WHERE "userId" = user_row."id") +
     (SELECT COUNT(*) FROM "PodcastSubscription" WHERE "userId" = user_row."id"),
-  (SELECT COUNT(*) FROM "SmartDigestRule" WHERE "userId" = user_row."id" AND "isEnabled")
+  (SELECT COUNT(*) FROM "SmartDigestRule" WHERE "userId" = user_row."id" AND "isEnabled"),
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP
 FROM "User" AS user_row;
 
 ALTER TABLE "UserPlanQuota"
@@ -45,8 +49,8 @@ DECLARE
   updated_count INTEGER;
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    INSERT INTO "UserPlanQuota" ("userId")
-    VALUES (NEW."userId")
+    INSERT INTO "UserPlanQuota" ("userId", "createdAt", "updatedAt")
+    VALUES (NEW."userId", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT ("userId") DO NOTHING;
 
     SELECT "plan"
@@ -134,8 +138,8 @@ BEGIN
 
   IF (TG_OP = 'INSERT' AND NEW."isEnabled")
      OR (TG_OP = 'UPDATE' AND NOT OLD."isEnabled" AND NEW."isEnabled") THEN
-    INSERT INTO "UserPlanQuota" ("userId")
-    VALUES (NEW."userId")
+    INSERT INTO "UserPlanQuota" ("userId", "createdAt", "updatedAt")
+    VALUES (NEW."userId", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT ("userId") DO NOTHING;
 
     SELECT "plan"
