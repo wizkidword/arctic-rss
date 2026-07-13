@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ALERT_ENV_FILE="${OPS_ALERT_ENV_FILE:-/etc/arctic-rss/alerts.env}"
+
+if [[ ! -r "$ALERT_ENV_FILE" ]]; then
+  echo "Operational alert environment file is not readable." >&2
+  exit 1
+fi
+
+set -a
+# The file is root-controlled and stores only operational settings kept outside Git.
+# shellcheck disable=SC1090
+. "$ALERT_ENV_FILE"
+set +a
+
 : "${APP_DIR:?APP_DIR is required}"
 : "${OPS_ALERT_EMAIL:?OPS_ALERT_EMAIL is required}"
 
