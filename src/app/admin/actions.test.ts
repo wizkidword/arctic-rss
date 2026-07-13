@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   addDiscoverSubredditToRedditTopic: vi.fn(),
   getPrisma: vi.fn(),
   importDiscoverOpml: vi.fn(),
+  enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
   refresh: vi.fn(),
   revalidatePath: vi.fn(),
   requireFreshAdmin: vi.fn(),
@@ -35,6 +36,11 @@ vi.mock("@/lib/discover-category-customizations", () => ({
 vi.mock("@/lib/discover-subreddits", () => ({
   DiscoverSubredditError: class DiscoverSubredditError extends Error {},
   addDiscoverSubredditToRedditTopic: mocks.addDiscoverSubredditToRedditTopic,
+}))
+
+vi.mock("@/lib/rate-limit", () => ({
+  enforceRateLimit: mocks.enforceRateLimit,
+  getRateLimitErrorMessage: () => "Too many requests. Please wait a few minutes and try again.",
 }))
 
 import {

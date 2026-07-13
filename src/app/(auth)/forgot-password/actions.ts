@@ -6,6 +6,12 @@ import {
 } from "@/lib/password-reset"
 import { isPasswordResetEmailConfigured } from "@/lib/mail"
 import {
+  enforceRateLimit,
+  getCurrentRequestIp,
+  getRateLimitErrorMessage,
+} from "@/lib/rate-limit"
+import {
+  getTurnstileExpectedHostname,
   getTurnstileTokenFromFormData,
   verifyTurnstileToken,
 } from "@/lib/turnstile"
@@ -34,10 +40,26 @@ export async function forgotPasswordAction(
     }
   }
 
+  const ip = await getCurrentRequestIp()
+  const rateLimit = await enforceRateLimit({
+    account: parsed.data.email,
+    action: "password_reset_request",
+    ip,
+  })
+
+  if (!rateLimit.allowed) {
+    return {
+      status: "error",
+      message: getRateLimitErrorMessage(),
+    }
+  }
+
   const turnstile = await verifyTurnstileToken(
     getTurnstileTokenFromFormData(formData),
     {
       expectedAction: "password_reset",
+      expectedHostname: getTurnstileExpectedHostname(),
+      remoteIp: ip ?? undefined,
     }
   )
 

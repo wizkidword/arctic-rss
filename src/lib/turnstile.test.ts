@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  assertTurnstileConfiguration,
+  getTurnstileExpectedHostname,
   getTurnstileSiteKey,
   getTurnstileTokenFromFormData,
+  isTurnstileRequired,
   isTurnstileConfigured,
   verifyTurnstileToken,
 } from "./turnstile"
@@ -25,6 +28,22 @@ describe("turnstile helpers", () => {
     expect(getTurnstileSiteKey()).toBe("site-key")
   })
 
+  it("uses the canonical application hostname for validation", () => {
+    expect(
+      getTurnstileExpectedHostname({ APP_ORIGIN: "https://arcticrss.com" })
+    ).toBe("arcticrss.com")
+  })
+
+  it("fails startup validation when required Turnstile settings are missing", () => {
+    expect(isTurnstileRequired({ TURNSTILE_REQUIRED: "true" })).toBe(true)
+    expect(() =>
+      assertTurnstileConfiguration({
+        APP_ORIGIN: "https://arcticrss.com",
+        TURNSTILE_REQUIRED: "true",
+      })
+    ).toThrow("TURNSTILE_REQUIRED requires TURNSTILE_SECRET_KEY")
+  })
+
   it("skips verification when Turnstile is not configured", async () => {
     vi.stubEnv("TURNSTILE_SECRET_KEY", "")
     const fetchSpy = vi.spyOn(globalThis, "fetch")
@@ -40,10 +59,12 @@ describe("turnstile helpers", () => {
     vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key")
     const fetchSpy = vi.spyOn(globalThis, "fetch")
 
-    await expect(verifyTurnstileToken(" ")).resolves.toEqual({
-      success: false,
-      errorCodes: ["missing-input-response"],
-    })
+    await expect(
+      verifyTurnstileToken(" ", {
+        expectedAction: "login",
+        expectedHostname: "arcticrss.com",
+      })
+    ).resolves.toEqual({ success: false, errorCodes: ["missing-input-response"] })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -58,7 +79,11 @@ describe("turnstile helpers", () => {
     )
 
     await expect(
-      verifyTurnstileToken("reader-token", { expectedAction: "login" })
+      verifyTurnstileToken("reader-token", {
+        expectedAction: "login",
+        expectedHostname: "arcticrss.com",
+        remoteIp: "198.51.100.8",
+      })
     ).resolves.toEqual({
       success: true,
       action: "login",
@@ -76,6 +101,8 @@ describe("turnstile helpers", () => {
     const body = fetchSpy.mock.calls[0]?.[1]?.body as URLSearchParams
     expect(body.get("secret")).toBe("secret-key")
     expect(body.get("response")).toBe("reader-token")
+    expect(body.get("remoteip")).toBe("198.51.100.8")
+    expect(fetchSpy.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
   })
 
   it("rejects successful tokens with the wrong action", async () => {
@@ -89,10 +116,73 @@ describe("turnstile helpers", () => {
     )
 
     await expect(
-      verifyTurnstileToken("reader-token", { expectedAction: "login" })
+      verifyTurnstileToken("reader-token", {
+        expectedAction: "login",
+        expectedHostname: "arcticrss.com",
+      })
     ).resolves.toEqual({
       success: false,
       errorCodes: ["action-mismatch"],
+    })
+  })
+
+  it("rejects a successful token without the expected action", async () => {
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key")
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ success: true, hostname: "arcticrss.com" })
+    )
+
+    await expect(
+      verifyTurnstileToken("reader-token", {
+        expectedAction: "login",
+        expectedHostname: "arcticrss.com",
+      })
+    ).resolves.toEqual({
+      success: false,
+      errorCodes: ["action-mismatch"],
+    })
+  })
+
+  it("rejects successful tokens from a different hostname", async () => {
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key")
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        success: true,
+        action: "login",
+        hostname: "attacker.example",
+      })
+    )
+
+    await expect(
+      verifyTurnstileToken("reader-token", {
+        expectedAction: "login",
+        expectedHostname: "arcticrss.com",
+      })
+    ).resolves.toEqual({
+      success: false,
+      errorCodes: ["hostname-mismatch"],
+    })
+  })
+
+  it("rejects a success response that also reports verification errors", async () => {
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "secret-key")
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        success: true,
+        action: "login",
+        hostname: "arcticrss.com",
+        "error-codes": ["internal-error"],
+      })
+    )
+
+    await expect(
+      verifyTurnstileToken("reader-token", {
+        expectedAction: "login",
+        expectedHostname: "arcticrss.com",
+      })
+    ).resolves.toEqual({
+      success: false,
+      errorCodes: ["siteverify-error-codes"],
     })
   })
 
@@ -105,10 +195,12 @@ describe("turnstile helpers", () => {
       })
     )
 
-    await expect(verifyTurnstileToken("reader-token")).resolves.toEqual({
-      success: false,
-      errorCodes: ["timeout-or-duplicate"],
-    })
+    await expect(
+      verifyTurnstileToken("reader-token", {
+        expectedAction: "password_reset",
+        expectedHostname: "arcticrss.com",
+      })
+    ).resolves.toEqual({ success: false, errorCodes: ["timeout-or-duplicate"] })
   })
 
   it("reads the standard Turnstile token field from form data", () => {

@@ -5,6 +5,7 @@ import {
   getAllowedAppHosts,
   getAppOrigin,
 } from "./app-origin"
+import { assertTurnstileConfiguration } from "./turnstile"
 
 export class UnsafeProductionConfigurationError extends Error {
   constructor(message: string) {
@@ -74,4 +75,6 @@ export function assertSecureProductionConfiguration(
       )
     }
   }
+
+  assertTurnstileConfiguration(environment)
 }

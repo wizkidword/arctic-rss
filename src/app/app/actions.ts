@@ -55,6 +55,10 @@ import {
 import { importOpmlForUser, OpmlError } from "@/lib/opml"
 import { isDefaultView, type DefaultView } from "@/lib/preferences"
 import {
+  enforceRateLimit,
+  getRateLimitErrorMessage,
+} from "@/lib/rate-limit"
+import {
   isDateFormatPreference,
   isDisplayMode,
   isSupportedTimeZone,
@@ -292,6 +296,15 @@ export async function addFeedAction(
     }
   }
 
+  const rateLimit = await enforceRateLimit({
+    action: "feed_discovery",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
   try {
     const subscription = await subscribeToFeed({
       folderId,
@@ -367,6 +380,15 @@ export async function subscribeDirectoryFeedAction(
       message: "That directory feed is not available.",
       status: "error",
     }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "feed_discovery",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
   }
 
   let subscription: Awaited<ReturnType<typeof subscribeToFeed>>
@@ -475,6 +497,15 @@ export async function refreshFeedAction(
       message: "That feed subscription was not found.",
       status: "error",
     }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "feed_discovery",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
   }
 
   const cooldownMessage = manualFeedRefreshCooldownMessage(
@@ -619,6 +650,15 @@ export async function importOpmlAction(
     }
   }
 
+  const rateLimit = await enforceRateLimit({
+    action: "opml_import",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
   try {
     const summary = await importOpmlForUser({
       opmlXml: await file.text(),
@@ -671,6 +711,15 @@ export async function submitBugReportAction(
     }
   }
 
+  const rateLimit = await enforceRateLimit({
+    action: "feedback",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
   try {
     await createBugReportForUser({
       contactEmail: session.user.email ?? null,
@@ -713,6 +762,15 @@ export async function submitFeatureSuggestionAction(
       message: "You need to sign in before suggesting a feature.",
       status: "error",
     }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "feedback",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
   }
 
   try {
@@ -779,6 +837,15 @@ export async function resendEmailVerificationAction(
       message: "Your email is already verified.",
       status: "success",
     }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "verification_resend",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
   }
 
   try {
@@ -1112,6 +1179,15 @@ export async function generateArticleSummaryAction(
     }
   }
 
+  const rateLimit = await enforceRateLimit({
+    action: "ai_summary",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
   try {
     const summary = await generateArticleSummaryForUser({
       articleId,
@@ -1154,6 +1230,15 @@ export async function generateAiDigestAction(
       message: "You need to sign in before generating a digest.",
       status: "error",
     }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "ai_digest",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
   }
 
   try {

@@ -6,6 +6,11 @@ import {
   passwordResetConfirmSchema,
   resetPasswordWithToken,
 } from "@/lib/password-reset"
+import {
+  enforceRateLimit,
+  getCurrentRequestIp,
+  getRateLimitErrorMessage,
+} from "@/lib/rate-limit"
 
 export type ResetPasswordActionState = {
   status?: "error"
@@ -32,6 +37,19 @@ export async function resetPasswordAction(
       status: "error",
       message: "Please fix the highlighted fields.",
       errors: parsed.error.flatten().fieldErrors,
+    }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "password_reset_complete",
+    ip: await getCurrentRequestIp(),
+    token: parsed.data.token,
+  })
+
+  if (!rateLimit.allowed) {
+    return {
+      status: "error",
+      message: getRateLimitErrorMessage(),
     }
   }
 

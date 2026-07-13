@@ -63,6 +63,15 @@ describe("production security configuration", () => {
     ).toThrow("APP_ORIGIN must use HTTPS")
   })
 
+  it("rejects a required but incomplete Turnstile configuration", () => {
+    expect(() =>
+      assertSecureProductionConfiguration({
+        ...secureProductionEnvironment,
+        TURNSTILE_REQUIRED: "true",
+      })
+    ).toThrow("TURNSTILE_REQUIRED requires TURNSTILE_SECRET_KEY")
+  })
+
   it("allows a non-production test configuration", () => {
     expect(() =>
       assertSecureProductionConfiguration({

@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   getPrisma: vi.fn(),
   hashPassword: vi.fn(),
   notifyAdminsOfNewRegistration: vi.fn(),
+  enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
+  getCurrentRequestIp: vi.fn().mockResolvedValue(null),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
   }),
@@ -29,6 +31,12 @@ vi.mock("@/lib/email-verification", () => ({
 
 vi.mock("@/lib/registration-notifications", () => ({
   notifyAdminsOfNewRegistration: mocks.notifyAdminsOfNewRegistration,
+}))
+
+vi.mock("@/lib/rate-limit", () => ({
+  enforceRateLimit: mocks.enforceRateLimit,
+  getCurrentRequestIp: mocks.getCurrentRequestIp,
+  getRateLimitErrorMessage: () => "Too many requests. Please wait a few minutes and try again.",
 }))
 
 vi.mock("@/lib/turnstile", async (importOriginal) => ({

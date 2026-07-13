@@ -174,6 +174,20 @@ redirect to `invalid.example`. Replace `CANONICAL_HOST` only after checking the
 reviewed public origin. Do not paste the production `.env` into a shell or
 ticket.
 
+## SEC-005 rate limiting and Turnstile deployment
+
+This release has no schema change. It adds Redis-backed protected-action limits
+and a 256 MB Redis ceiling with `noeviction`, so queued worker jobs cannot be
+evicted by limiter keys. Check current Redis memory before deployment with the
+safe commands in [rate-limit-turnstile-runbook.md](rate-limit-turnstile-runbook.md).
+
+Turnstile remains optional until the Cloudflare widget keys are configured. Do
+not set `TURNSTILE_REQUIRED=true` until both keys have been placed in the VPS
+`.env`; otherwise the secure production configuration intentionally stops the
+web service at startup. Follow the secret-safe configuration steps in the
+rate-limit and Turnstile runbook, then smoke-test login, signup, and password
+reset with a real challenge.
+
 ## Rollback
 
 1. Keep the currently running failed release and its logs for diagnosis.

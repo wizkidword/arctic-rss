@@ -10,8 +10,15 @@ import { isGoogleAuthConfigured } from "@/lib/google-auth"
 import { sendWelcomeEmail } from "@/lib/mail"
 import { applyVerifiedOAuthDefaults } from "@/lib/oauth-user-provisioning"
 import { verifyPassword } from "@/lib/password"
+import {
+  enforceRateLimit,
+  getTrustedClientIp,
+} from "@/lib/rate-limit"
 import { notifyAdminsOfNewRegistration } from "@/lib/registration-notifications"
-import { verifyTurnstileToken } from "@/lib/turnstile"
+import {
+  getTurnstileExpectedHostname,
+  verifyTurnstileToken,
+} from "@/lib/turnstile"
 
 type AppRole = "USER" | "ADMIN"
 type AppPlan = "FREE" | "PRO" | "ADMIN"
@@ -79,10 +86,21 @@ function credentialsProvider() {
       password: { label: "Password", type: "password" },
       turnstileToken: { label: "Turnstile token", type: "text" },
     },
-    async authorize(credentials) {
+    async authorize(credentials, request) {
       const parsed = credentialsSchema.safeParse(credentials)
 
       if (!parsed.success) {
+        return null
+      }
+
+      const ip = getTrustedClientIp(request.headers)
+      const rateLimit = await enforceRateLimit({
+        account: parsed.data.email,
+        action: "login",
+        ip,
+      })
+
+      if (!rateLimit.allowed) {
         return null
       }
 
@@ -90,6 +108,8 @@ function credentialsProvider() {
         parsed.data.turnstileToken,
         {
           expectedAction: "login",
+          expectedHostname: getTurnstileExpectedHostname(),
+          remoteIp: ip ?? undefined,
         }
       )
 

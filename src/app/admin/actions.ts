@@ -17,6 +17,10 @@ import {
   addDiscoverSubredditToRedditTopic,
 } from "@/lib/discover-subreddits"
 import { OpmlError } from "@/lib/opml"
+import {
+  enforceRateLimit,
+  getRateLimitErrorMessage,
+} from "@/lib/rate-limit"
 
 const MAX_DISCOVER_OPML_IMPORT_BYTES = 4 * 1024 * 1024
 
@@ -73,6 +77,18 @@ export async function importDiscoverOpmlAction(
   if (file.size > MAX_DISCOVER_OPML_IMPORT_BYTES) {
     return {
       message: "Discover OPML imports are limited to 4 MB.",
+      status: "error",
+    }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "admin_opml_import",
+    userId: admin.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return {
+      message: getRateLimitErrorMessage(),
       status: "error",
     }
   }

@@ -62,6 +62,7 @@ const mocks = vi.hoisted(() => {
     refreshFeed: vi.fn(),
     requestEmailVerification: vi.fn(),
     requestAiDigestForUser: vi.fn(),
+    enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
     revalidatePath: vi.fn(),
     setArticleReadState: vi.fn(),
     subscribeToFeed: vi.fn(),
@@ -169,6 +170,11 @@ vi.mock("@/lib/opml", () => ({
 
 vi.mock("@/lib/preferences", () => ({
   isDefaultView: vi.fn(),
+}))
+
+vi.mock("@/lib/rate-limit", () => ({
+  enforceRateLimit: mocks.enforceRateLimit,
+  getRateLimitErrorMessage: () => "Too many requests. Please wait a few minutes and try again.",
 }))
 
 vi.mock("@/lib/url-safety", () => ({

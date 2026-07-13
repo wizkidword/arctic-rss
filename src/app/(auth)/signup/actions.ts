@@ -9,10 +9,16 @@ import {
   shouldFailSignupWhenVerificationEmailFails,
 } from "@/lib/email-verification-policy"
 import { hashPassword } from "@/lib/password"
+import {
+  enforceRateLimit,
+  getCurrentRequestIp,
+  getRateLimitErrorMessage,
+} from "@/lib/rate-limit"
 import { notifyAdminsOfNewRegistration } from "@/lib/registration-notifications"
 import { defaultUserSettings } from "@/lib/settings"
 import { validateSignupInput } from "@/lib/signup"
 import {
+  getTurnstileExpectedHostname,
   getTurnstileTokenFromFormData,
   verifyTurnstileToken,
 } from "@/lib/turnstile"
@@ -44,6 +50,17 @@ export async function signupAction(
   }
 
   const { email, name, password } = parsed.data
+  const ip = await getCurrentRequestIp()
+  const rateLimit = await enforceRateLimit({
+    account: email,
+    action: "signup",
+    ip,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage() }
+  }
+
   const prisma = getPrisma()
   const existingUser = await prisma.user.findUnique({ where: { email } })
 
@@ -60,6 +77,8 @@ export async function signupAction(
     getTurnstileTokenFromFormData(formData),
     {
       expectedAction: "signup",
+      expectedHostname: getTurnstileExpectedHostname(),
+      remoteIp: ip ?? undefined,
     }
   )
 
