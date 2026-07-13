@@ -1,6 +1,7 @@
 import { Prisma } from "../generated/prisma/client"
 import { cache } from "react"
 
+import { getUnreadArticleCountsByFeed } from "./articles"
 import { getPrisma } from "./db"
 
 type FolderLookup = {
@@ -96,15 +97,23 @@ export const listUserFolders = cache(async function listUserFolders(
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     where: { userId },
   })
+  const unreadCounts = await getUnreadArticleCountsByFeed(
+    userId,
+    folders.flatMap((folder) =>
+      folder.subscriptions.map((subscription) => subscription.feedId)
+    )
+  )
 
-  return Promise.all(
-    folders.map(async (folder) => ({
+  return folders.map((folder) => ({
       id: folder.id,
       name: folder.name,
       subscriptionCount: folder.subscriptions.length,
-      unreadCount: await countUnreadArticlesForFolder(userId, folder.id),
+      unreadCount: folder.subscriptions.reduce(
+        (total, subscription) =>
+          total + (unreadCounts.get(subscription.feedId) ?? 0),
+        0
+      ),
     }))
-  )
 })
 
 export async function getUserFolder(

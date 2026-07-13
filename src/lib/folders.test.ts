@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
-const { reactCache } = vi.hoisted(() => ({
+const { folderFindMany, getUnreadArticleCountsByFeed, reactCache } = vi.hoisted(() => ({
+  folderFindMany: vi.fn(),
+  getUnreadArticleCountsByFeed: vi.fn(),
   reactCache: vi.fn((loader) => loader),
 }))
 
@@ -8,9 +10,22 @@ vi.mock("react", () => ({
   cache: reactCache,
 }))
 
+vi.mock("./articles", () => ({
+  getUnreadArticleCountsByFeed,
+}))
+
+vi.mock("./db", () => ({
+  getPrisma: () => ({
+    folder: {
+      findMany: folderFindMany,
+    },
+  }),
+}))
+
 import {
   createFolderWithClient,
   deleteFolderWithClient,
+  listUserFolders,
   moveSubscriptionToFolderWithClient,
   renameFolderWithClient,
 } from "./folders"
@@ -127,6 +142,52 @@ describe("folders", () => {
     expect(store.folder.delete).toHaveBeenCalledWith({
       where: { id: "folder-1" },
     })
+  })
+
+  it("loads folder unread counts from one grouped feed lookup", async () => {
+    folderFindMany.mockResolvedValue([
+      {
+        id: "folder-1",
+        name: "News",
+        subscriptions: [{ feedId: "feed-1" }, { feedId: "feed-2" }],
+      },
+      {
+        id: "folder-2",
+        name: "Tech",
+        subscriptions: [{ feedId: "feed-3" }],
+      },
+    ])
+    getUnreadArticleCountsByFeed.mockResolvedValue(
+      new Map([
+        ["feed-1", 2],
+        ["feed-2", 3],
+        ["feed-3", 5],
+      ])
+    )
+
+    const folders = await listUserFolders("user-1")
+
+    expect(folderFindMany).toHaveBeenCalledWith({
+      include: {
+        subscriptions: {
+          select: {
+            feedId: true,
+          },
+        },
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      where: { userId: "user-1" },
+    })
+    expect(getUnreadArticleCountsByFeed).toHaveBeenCalledTimes(1)
+    expect(getUnreadArticleCountsByFeed).toHaveBeenCalledWith("user-1", [
+      "feed-1",
+      "feed-2",
+      "feed-3",
+    ])
+    expect(folders).toEqual([
+      { id: "folder-1", name: "News", subscriptionCount: 2, unreadCount: 5 },
+      { id: "folder-2", name: "Tech", subscriptionCount: 1, unreadCount: 5 },
+    ])
   })
 
   it("does not alter subscriptions when the folder is not owned by the user", async () => {

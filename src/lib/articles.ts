@@ -404,6 +404,51 @@ export async function countUnreadArticlesForFeed(userId: string, feedId: string)
   })
 }
 
+/**
+ * Returns unread counts for a set of subscribed feeds with one grouped query.
+ * Navigation uses this instead of issuing one count query per feed or folder.
+ */
+export async function getUnreadArticleCountsByFeed(
+  userId: string,
+  feedIds: string[]
+) {
+  const uniqueFeedIds = [...new Set(feedIds)]
+
+  if (uniqueFeedIds.length === 0) {
+    return new Map<string, number>()
+  }
+
+  const counts = await getPrisma().article.groupBy({
+    _count: {
+      _all: true,
+    },
+    by: ["feedId"],
+    where: {
+      AND: [
+        subscribedArticleWhere(userId),
+        {
+          feedId: {
+            in: uniqueFeedIds,
+          },
+        },
+        notArchivedArticleWhere(userId),
+        {
+          states: {
+            none: {
+              isRead: true,
+              userId,
+            },
+          },
+        },
+      ],
+    },
+  })
+
+  return new Map(
+    counts.map((count) => [count.feedId, count._count._all])
+  )
+}
+
 export async function setArticleReadState({
   articleId,
   isRead,

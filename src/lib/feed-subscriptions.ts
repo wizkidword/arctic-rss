@@ -1,7 +1,7 @@
 import { Prisma } from "../generated/prisma/client"
 import { cache } from "react"
 
-import { countUnreadArticlesForFeed } from "./articles"
+import { getUnreadArticleCountsByFeed } from "./articles"
 import { discoverFeedFromUrl } from "./feed-discovery"
 import {
   feedDirectoryFeeds,
@@ -53,9 +53,12 @@ export const listUserFeedSubscriptions = cache(async function listUserFeedSubscr
     },
     orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
   })
+  const unreadCounts = await getUnreadArticleCountsByFeed(
+    userId,
+    subscriptions.map((subscription) => subscription.feedId)
+  )
 
-  return Promise.all(
-    subscriptions.map(async (subscription) => ({
+  return subscriptions.map((subscription) => ({
       faviconUrl: subscription.feed.faviconUrl,
       feedId: subscription.feedId,
       feedUrl: subscription.feed.feedUrl,
@@ -66,9 +69,8 @@ export const listUserFeedSubscriptions = cache(async function listUserFeedSubscr
       lastError: subscription.feed.lastError,
       siteUrl: subscription.feed.siteUrl,
       title: subscription.customTitle || subscription.feed.title,
-      unreadCount: await countUnreadArticlesForFeed(userId, subscription.feedId),
+      unreadCount: unreadCounts.get(subscription.feedId) ?? 0,
     }))
-  )
 })
 
 export async function hasUserFeedSubscriptions(userId: string) {

@@ -6,7 +6,7 @@ const {
   articleFindMany,
   articleUpdate,
   articleStateDeleteMany,
-  countUnreadArticlesForFeed,
+  getUnreadArticleCountsByFeed,
   deleteMany,
   discoverFeedFromUrl,
   feedSubscriptionCreate,
@@ -26,7 +26,7 @@ const {
   articleFindMany: vi.fn(),
   articleUpdate: vi.fn(),
   articleStateDeleteMany: vi.fn(),
-  countUnreadArticlesForFeed: vi.fn(),
+  getUnreadArticleCountsByFeed: vi.fn(),
   deleteMany: vi.fn(),
   discoverFeedFromUrl: vi.fn(),
   feedSubscriptionCreate: vi.fn(),
@@ -81,7 +81,7 @@ vi.mock("./db", () => ({
 }))
 
 vi.mock("./articles", () => ({
-  countUnreadArticlesForFeed,
+  getUnreadArticleCountsByFeed,
 }))
 
 vi.mock("./feed-discovery", () => ({
@@ -103,7 +103,7 @@ describe("feed subscriptions", () => {
     articleFindMany.mockReset()
     articleUpdate.mockReset()
     articleStateDeleteMany.mockReset()
-    countUnreadArticlesForFeed.mockReset()
+    getUnreadArticleCountsByFeed.mockReset()
     deleteMany.mockReset()
     discoverFeedFromUrl.mockReset()
     feedSubscriptionCreate.mockReset()
@@ -116,7 +116,7 @@ describe("feed subscriptions", () => {
     findMany.mockReset()
     folderFindFirst.mockReset()
     userFindUnique.mockReset()
-    countUnreadArticlesForFeed.mockResolvedValue(3)
+    getUnreadArticleCountsByFeed.mockResolvedValue(new Map([["feed-1", 3]]))
     feedUpdate.mockResolvedValue({})
     articleCreateMany.mockResolvedValue({ count: 1 })
     articleFindMany.mockResolvedValue([])
@@ -181,6 +181,9 @@ describe("feed subscriptions", () => {
       orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
       where: { userId: "user-1" },
     })
+    expect(getUnreadArticleCountsByFeed).toHaveBeenCalledWith("user-1", [
+      "feed-1",
+    ])
     expect(subscriptions).toEqual([
       {
         faviconUrl: null,
@@ -196,6 +199,38 @@ describe("feed subscriptions", () => {
         unreadCount: 3,
       },
     ])
+  })
+
+  it("loads a large navigation with one grouped unread-count lookup", async () => {
+    const subscriptions = Array.from({ length: 200 }, (_, index) => ({
+      customTitle: null,
+      feed: {
+        faviconUrl: null,
+        feedUrl: `https://example.com/feed-${index}.xml`,
+        lastError: null,
+        siteUrl: null,
+        title: `Feed ${index}`,
+      },
+      feedId: `feed-${index}`,
+      folder: null,
+      folderId: null,
+      id: `subscription-${index}`,
+      isPaused: false,
+    }))
+    findMany.mockResolvedValue(subscriptions)
+    getUnreadArticleCountsByFeed.mockResolvedValue(
+      new Map(subscriptions.map((subscription) => [subscription.feedId, 1]))
+    )
+
+    const result = await listUserFeedSubscriptions("user-1")
+
+    expect(result).toHaveLength(200)
+    expect(result.every((subscription) => subscription.unreadCount === 1)).toBe(true)
+    expect(getUnreadArticleCountsByFeed).toHaveBeenCalledTimes(1)
+    expect(getUnreadArticleCountsByFeed).toHaveBeenCalledWith(
+      "user-1",
+      subscriptions.map((subscription) => subscription.feedId)
+    )
   })
 
   it("unsubscribes only the current user's subscription", async () => {
