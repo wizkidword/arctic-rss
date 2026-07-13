@@ -63,6 +63,9 @@ services:
         condition: service_healthy
     command: ["npx", "prisma", "migrate", "deploy"]
     restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     cap_drop:
       - ALL
     cpus: 0.5
@@ -84,6 +87,9 @@ services:
         NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
     init: true
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     cap_drop:
       - ALL
     cpus: 0.75
@@ -125,6 +131,9 @@ services:
       target: worker
     init: true
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     cap_drop:
       - ALL
     cpus: 0.75
