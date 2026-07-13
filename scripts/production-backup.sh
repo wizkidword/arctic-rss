@@ -8,6 +8,7 @@ umask 077
 
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-app}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
+BACKUP_READ_GROUP="${BACKUP_READ_GROUP:-}"
 
 if [[ "$BACKUP_DIR" != /* ]] || [[ "$BACKUP_DIR" == "/" ]]; then
   echo "BACKUP_DIR must be a non-root absolute path." >&2
@@ -16,6 +17,11 @@ fi
 
 if ! [[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]]; then
   echo "RETENTION_DAYS must be a positive whole number." >&2
+  exit 1
+fi
+
+if [[ -n "$BACKUP_READ_GROUP" ]] && ! getent group "$BACKUP_READ_GROUP" >/dev/null; then
+  echo "BACKUP_READ_GROUP does not exist." >&2
   exit 1
 fi
 
@@ -61,6 +67,12 @@ printf 'created_at=%s\n' "$timestamp" > "$staging/metadata"
 
 mv "$staging" "$final"
 trap - EXIT
+
+if [[ -n "$BACKUP_READ_GROUP" ]]; then
+  chgrp -R "$BACKUP_READ_GROUP" "$final"
+  find "$final" -type d -exec chmod 750 {} +
+  find "$final" -type f -exec chmod 640 {} +
+fi
 
 while IFS= read -r -d '' expired; do
   rm -rf -- "$expired"
