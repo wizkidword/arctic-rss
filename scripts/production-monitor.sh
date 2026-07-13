@@ -70,7 +70,8 @@ latest_backup="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '20???
 if [[ -z "$latest_backup" ]]; then
   failures+=("backup_missing")
 else
-  backup_epoch="$(date -u -d "$latest_backup" +%s 2>/dev/null || true)"
+  backup_timestamp="${latest_backup:0:4}-${latest_backup:4:2}-${latest_backup:6:2} ${latest_backup:9:2}:${latest_backup:11:2}:${latest_backup:13:2} UTC"
+  backup_epoch="$(date -u -d "$backup_timestamp" +%s 2>/dev/null || true)"
   now_epoch="$(date -u +%s)"
   if [[ -z "$backup_epoch" ]] || (( now_epoch - backup_epoch > BACKUP_MAX_AGE_SECONDS )); then
     failures+=("backup_stale")
@@ -78,6 +79,7 @@ else
 fi
 
 if ! docker exec app-redis-1 sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO persistence' \
+  | tr -d '\r' \
   | grep -q '^aof_last_write_status:ok$'; then
   failures+=("redis_persistence")
 fi
