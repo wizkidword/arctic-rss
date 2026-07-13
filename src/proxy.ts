@@ -14,10 +14,11 @@ const INVALID_HOST_CACHE_CONTROL = "no-store"
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host")
   const normalizedHost = normalizeRequestHost(host)
-  const isHealthCheck =
-    request.nextUrl.pathname === "/api/health" && isLoopbackHost(host)
+  const isInternalHealthProbe =
+    ["/api/health", "/api/live"].includes(request.nextUrl.pathname) &&
+    isLoopbackHost(host)
 
-  if (!isHealthCheck && !isAllowedAppHost(host)) {
+  if (!isInternalHealthProbe && !isAllowedAppHost(host)) {
     console.warn(
       "host_validation_rejected",
       JSON.stringify({
@@ -32,9 +33,13 @@ export function proxy(request: NextRequest) {
     })
   }
 
+  if (request.nextUrl.pathname === "/api/live" && !isLoopbackHost(host)) {
+    return new NextResponse("Not found.", { status: 404 })
+  }
+
   const canonicalOrigin = getAppOrigin()
 
-  if (!isHealthCheck && normalizedHost !== canonicalOrigin.host) {
+  if (!isInternalHealthProbe && normalizedHost !== canonicalOrigin.host) {
     return NextResponse.redirect(
       buildAppUrl(`${request.nextUrl.pathname}${request.nextUrl.search}`),
       308
@@ -43,7 +48,7 @@ export function proxy(request: NextRequest) {
 
   const response = NextResponse.next()
 
-  if (!isHealthCheck && canonicalOrigin.protocol === "https:") {
+  if (!isInternalHealthProbe && canonicalOrigin.protocol === "https:") {
     response.headers.set("Strict-Transport-Security", HSTS_HEADER)
   }
 

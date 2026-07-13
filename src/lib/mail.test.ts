@@ -14,6 +14,7 @@ vi.mock("nodemailer", () => ({
 import {
   isPasswordResetEmailConfigured,
   isTransactionalEmailConfigured,
+  resetSmtpTransportCache,
   sendSmartDigestEmail,
   sendAdminSignupNotificationEmail,
   sendEmailVerificationEmail,
@@ -31,6 +32,8 @@ describe("mail configuration", () => {
   })
 
   afterEach(() => {
+    resetSmtpTransportCache()
+    vi.useRealTimers()
     vi.unstubAllEnvs()
   })
 
@@ -199,5 +202,39 @@ describe("mail configuration", () => {
         messageId: "<stable@example.test>",
       })
     )
+  })
+
+  it("reuses a bounded SMTP connection pool for matching configuration", async () => {
+    vi.stubEnv("SMTP_HOST", "smtp.example.test")
+    vi.stubEnv("SMTP_USER", "reader@example.test")
+    vi.stubEnv("SMTP_PASSWORD", "app-password")
+
+    await sendWelcomeEmail({ to: "first@example.test" })
+    await sendWelcomeEmail({ to: "second@example.test" })
+
+    expect(mailerMocks.createTransport).toHaveBeenCalledOnce()
+    expect(mailerMocks.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxConnections: 2,
+        pool: true,
+      })
+    )
+  })
+
+  it("bounds the total time a caller waits for SMTP delivery", async () => {
+    vi.useFakeTimers()
+    vi.stubEnv("SMTP_HOST", "smtp.example.test")
+    vi.stubEnv("SMTP_USER", "reader@example.test")
+    vi.stubEnv("SMTP_PASSWORD", "app-password")
+    vi.stubEnv("SMTP_SEND_TIMEOUT_MS", "1000")
+    mailerMocks.sendMail.mockImplementation(
+      () => new Promise(() => undefined)
+    )
+
+    const result = sendWelcomeEmail({ to: "reader@example.test" })
+    const expectation = expect(result).rejects.toThrow("SMTP send timed out.")
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    await expectation
   })
 })

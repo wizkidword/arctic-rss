@@ -76,4 +76,18 @@ describe("proxy host validation", () => {
     expect(response.headers.get("location")).toBeNull()
     expect(response.headers.get("strict-transport-security")).toBeNull()
   })
+
+  it("allows the loopback-only liveness probe without a redirect", () => {
+    const response = proxy(request("/api/live", { host: "127.0.0.1:3000" }))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("location")).toBeNull()
+    expect(response.headers.get("strict-transport-security")).toBeNull()
+  })
+
+  it("keeps the liveness probe off the public origin", () => {
+    const response = proxy(request("/api/live", { host: "arcticrss.com" }))
+
+    expect(response.status).toBe(404)
+  })
 })

@@ -5,7 +5,7 @@ import { checkSystemHealthWithClients } from "./system-health"
 function healthyClients() {
   return {
     database: {
-      countUsers: vi.fn().mockResolvedValue(3),
+      checkConnection: vi.fn().mockResolvedValue(undefined),
     },
     queue: {
       checkConnection: vi.fn().mockResolvedValue(undefined),
@@ -26,13 +26,13 @@ describe("system health", () => {
       },
       status: "ok",
     })
-    expect(clients.database.countUsers).toHaveBeenCalledOnce()
+    expect(clients.database.checkConnection).toHaveBeenCalledOnce()
     expect(clients.queue.checkConnection).toHaveBeenCalledOnce()
   })
 
   it("reports a sanitized degraded state when PostgreSQL fails", async () => {
     const clients = healthyClients()
-    clients.database.countUsers.mockRejectedValue(
+    clients.database.checkConnection.mockRejectedValue(
       new Error("password authentication failed for postgres")
     )
 
@@ -64,5 +64,25 @@ describe("system health", () => {
       status: "degraded",
     })
     expect(JSON.stringify(result)).not.toContain("redis:6379")
+  })
+
+  it("reports degraded when a dependency misses its deadline", async () => {
+    const clients = healthyClients()
+    clients.database.checkConnection.mockImplementation(
+      () => new Promise<void>(() => undefined)
+    )
+
+    const result = await checkSystemHealthWithClients({
+      ...clients,
+      timeoutMs: 1,
+    })
+
+    expect(result).toEqual({
+      checks: {
+        database: "failed",
+        redis: "ok",
+      },
+      status: "degraded",
+    })
   })
 })

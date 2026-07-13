@@ -48,6 +48,14 @@ type MailResult =
 
 export type SmartDigestMailResult = MailResult
 
+type SmtpTransport = {
+  close(): void
+  sendMail(message: nodemailer.SendMailOptions): Promise<{ messageId?: string }>
+}
+
+let cachedSmtpTransport: SmtpTransport | undefined
+let smtpTransportFingerprint: string | undefined
+
 function parseSmtpPort() {
   const rawPort = process.env.SMTP_PORT
 
@@ -69,23 +77,96 @@ function parseSmtpTimeout(variable: string, fallback: number) {
   return Math.min(120_000, Math.max(1_000, Math.round(parsed)))
 }
 
+function parseSmtpPoolMaxConnections() {
+  const parsed = Number(process.env.SMTP_POOL_MAX_CONNECTIONS)
+
+  if (!Number.isFinite(parsed)) {
+    return 2
+  }
+
+  return Math.min(5, Math.max(1, Math.round(parsed)))
+}
+
+export function resetSmtpTransportCache() {
+  const transport = cachedSmtpTransport
+  cachedSmtpTransport = undefined
+  smtpTransportFingerprint = undefined
+
+  try {
+    transport?.close?.()
+  } catch {
+    // A new connection can still be created for the current configuration.
+  }
+}
+
 function getSmtpTransport() {
   const host = process.env.SMTP_HOST
   const user = process.env.SMTP_USER
   const pass = process.env.SMTP_PASSWORD
 
   if (!host || !user || !pass) {
+    resetSmtpTransportCache()
     return null
   }
 
-  return nodemailer.createTransport({
+  const port = parseSmtpPort()
+  const secure = process.env.SMTP_SECURE === "true"
+  const connectionTimeout = parseSmtpTimeout("SMTP_CONNECTION_TIMEOUT_MS", 10_000)
+  const greetingTimeout = parseSmtpTimeout("SMTP_GREETING_TIMEOUT_MS", 10_000)
+  const socketTimeout = parseSmtpTimeout("SMTP_SOCKET_TIMEOUT_MS", 30_000)
+  const maxConnections = parseSmtpPoolMaxConnections()
+  const fingerprint = [
     host,
-    port: parseSmtpPort(),
-    secure: process.env.SMTP_SECURE === "true",
+    port,
+    secure,
+    user,
+    pass,
+    connectionTimeout,
+    greetingTimeout,
+    socketTimeout,
+    maxConnections,
+  ].join("\u0000")
+
+  if (cachedSmtpTransport && smtpTransportFingerprint === fingerprint) {
+    return cachedSmtpTransport
+  }
+
+  resetSmtpTransportCache()
+  const transport = nodemailer.createTransport({
+    host,
+    port,
+    secure,
     auth: { user, pass },
-    connectionTimeout: parseSmtpTimeout("SMTP_CONNECTION_TIMEOUT_MS", 10_000),
-    greetingTimeout: parseSmtpTimeout("SMTP_GREETING_TIMEOUT_MS", 10_000),
-    socketTimeout: parseSmtpTimeout("SMTP_SOCKET_TIMEOUT_MS", 30_000),
+    connectionTimeout,
+    greetingTimeout,
+    socketTimeout,
+    maxConnections,
+    pool: true,
+  })
+  cachedSmtpTransport = transport
+  smtpTransportFingerprint = fingerprint
+
+  return transport
+}
+
+function sendMailWithDeadline<T>(operation: Promise<T>) {
+  const timeoutMs = parseSmtpTimeout("SMTP_SEND_TIMEOUT_MS", 45_000)
+
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error("SMTP send timed out."))
+    }, timeoutMs)
+
+    operation.then(
+      (result) => {
+        clearTimeout(timeout)
+        resolve(result)
+      },
+      (error) => {
+        clearTimeout(timeout)
+        reject(error)
+      }
+    )
   })
 }
 
@@ -163,14 +244,10 @@ export async function sendPasswordResetEmail({
   const transport = getSmtpTransport()
 
   if (!transport) {
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`Password reset link for ${to}: ${resetUrl}`)
-    }
-
     return { status: "not-configured", url: resetUrl }
   }
 
-  await transport.sendMail({
+  await sendMailWithDeadline(transport.sendMail({
     from: getMailFrom(),
     to,
     subject: "Reset your Arctic RSS password",
@@ -186,7 +263,7 @@ export async function sendPasswordResetEmail({
       `<p><a href="${resetUrl}">Reset your password</a></p>`,
       "<p>This link expires in 1 hour. If you did not request it, you can ignore this email.</p>",
     ].join(""),
-  })
+  }))
 
   return { status: "sent" }
 }
@@ -198,14 +275,10 @@ export async function sendEmailVerificationEmail({
   const transport = getSmtpTransport()
 
   if (!transport) {
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`Email verification link for ${to}: ${verificationUrl}`)
-    }
-
     return { status: "not-configured", url: verificationUrl }
   }
 
-  await transport.sendMail({
+  await sendMailWithDeadline(transport.sendMail({
     from: getMailFrom(),
     to,
     subject: "Verify your Arctic RSS email",
@@ -224,7 +297,7 @@ export async function sendEmailVerificationEmail({
       `<p><a href="${verificationUrl}">Verify your email</a></p>`,
       "<p>This link expires in 24 hours. If you did not create an Arctic RSS account, you can ignore this email.</p>",
     ].join(""),
-  })
+  }))
 
   return { status: "sent" }
 }
@@ -235,14 +308,10 @@ export async function sendWelcomeEmail({
   const transport = getSmtpTransport()
 
   if (!transport) {
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`Welcome email would be sent to ${to}`)
-    }
-
     return { status: "not-configured" }
   }
 
-  await transport.sendMail({
+  await sendMailWithDeadline(transport.sendMail({
     from: getMailFrom(),
     to,
     subject: "Welcome to Arctic RSS",
@@ -258,7 +327,7 @@ export async function sendWelcomeEmail({
       "<p>Your account is ready. You can now log in, add feeds, browse Discover, and start building your reader.</p>",
       "<p>Thanks for being here.</p>",
     ].join(""),
-  })
+  }))
 
   return { status: "sent" }
 }
@@ -275,14 +344,10 @@ export async function sendAdminSignupNotificationEmail({
   const displayName = userName?.trim() || "Unnamed reader"
 
   if (!transport) {
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`Admin signup notification would be sent to ${to}`)
-    }
-
     return { status: "not-configured" }
   }
 
-  await transport.sendMail({
+  await sendMailWithDeadline(transport.sendMail({
     from: getMailFrom(),
     to,
     subject: `New Arctic RSS signup: ${userEmail}`,
@@ -308,7 +373,7 @@ export async function sendAdminSignupNotificationEmail({
       "</ul>",
       "<p>You can review recent users from the Arctic RSS admin dashboard.</p>",
     ].join(""),
-  })
+  }))
 
   return { status: "sent" }
 }
@@ -321,10 +386,6 @@ export async function sendSmartDigestEmail({
   const transport = getSmtpTransport()
 
   if (!transport) {
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`Smart Digest email would be sent to ${to}`)
-    }
-
     return { status: "not-configured" }
   }
 
@@ -371,14 +432,14 @@ export async function sendSmartDigestEmail({
     ),
   ].join("")
 
-  const result = await transport.sendMail({
+  const result = await sendMailWithDeadline(transport.sendMail({
     from: getMailFrom(),
     html,
     ...(messageId ? { messageId } : {}),
     subject: digest.title,
     text,
     to,
-  })
+  }))
 
   return {
     providerMessageId: result?.messageId || messageId,

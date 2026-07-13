@@ -3,6 +3,8 @@ import { getFeedRefreshQueue } from "./feed-refresh-queue"
 
 type HealthCheckState = "failed" | "ok"
 
+export const HEALTH_CHECK_TIMEOUT_MS = 1_500
+
 export type SystemHealthResult = {
   checks: {
     database: HealthCheckState
@@ -14,11 +16,15 @@ export type SystemHealthResult = {
 export async function checkSystemHealth(): Promise<SystemHealthResult> {
   return checkSystemHealthWithClients({
     database: {
-      countUsers: () => getPrisma().user.count(),
+      checkConnection: async () => {
+        await getPrisma().$queryRaw`SELECT 1`
+      },
     },
     queue: {
       checkConnection: async () => {
-        await getFeedRefreshQueue().getJobCounts("waiting")
+        const queue = getFeedRefreshQueue()
+        const client = await queue.client
+        await client.get(queue.toKey("meta"))
       },
     },
   })
@@ -27,17 +33,20 @@ export async function checkSystemHealth(): Promise<SystemHealthResult> {
 export async function checkSystemHealthWithClients({
   database,
   queue,
+  timeoutMs = HEALTH_CHECK_TIMEOUT_MS,
 }: {
   database: {
-    countUsers(): Promise<number>
+    checkConnection(): Promise<void>
   }
   queue: {
     checkConnection(): Promise<void>
   }
+  timeoutMs?: number
 }): Promise<SystemHealthResult> {
+  const boundedTimeoutMs = Math.max(1, Math.round(timeoutMs))
   const [databaseResult, redisResult] = await Promise.allSettled([
-    database.countUsers(),
-    queue.checkConnection(),
+    checkWithDeadline(database.checkConnection, boundedTimeoutMs),
+    checkWithDeadline(queue.checkConnection, boundedTimeoutMs),
   ])
   const checks = {
     database:
@@ -55,4 +64,28 @@ export async function checkSystemHealthWithClients({
     status:
       checks.database === "ok" && checks.redis === "ok" ? "ok" : "degraded",
   }
+}
+
+function checkWithDeadline(
+  operation: () => Promise<void>,
+  timeoutMs: number
+) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error("Health check timed out."))
+    }, timeoutMs)
+
+    Promise.resolve()
+      .then(operation)
+      .then(
+        () => {
+          clearTimeout(timeout)
+          resolve()
+        },
+        (error) => {
+          clearTimeout(timeout)
+          reject(error)
+        }
+      )
+  })
 }
