@@ -41,8 +41,9 @@ For a Windows-operated off-VPS copy, use
 `scripts/windows/sync-vps-backups.ps1` with a private JSON configuration file
 outside the repository. It copies only a completed backup directory, verifies
 both SHA-256 checksums locally, and can request a VPS email alert if the copy
-fails. Schedule it after the VPS backup timer and keep its SSH host, account,
-and key path out of Git.
+fails. Its VPS counterpart, `scripts/production-latest-backup.sh`, exposes
+only the identifier of a completed backup. Schedule the Windows task after the
+VPS backup timer and keep its SSH host, account, and key path out of Git.
 
 `scripts/production-notify.sh` and
 `ops/systemd/arctic-rss-backup-alert@.service` provide a failure-only SMTP
