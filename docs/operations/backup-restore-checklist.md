@@ -6,10 +6,13 @@ the secure server session; do not put credentials in shell history or commits.
 
 ## Automated local backup
 
-`scripts/production-backup.sh` creates a custom-format PostgreSQL backup,
-validates it with `pg_restore -l`, writes a checksum, and retains only the
-configured number of dated backup directories. It requires these non-secret
-systemd environment values outside the repository:
+`scripts/production-backup.sh` creates a custom-format PostgreSQL database
+backup plus a separate SQL export of cluster-wide role definitions. It validates
+the database archive with `pg_restore -l`, verifies checksums for both files,
+and retains only the configured number of dated backup directories. The role
+export may contain password hashes, so treat the whole backup directory as
+sensitive and encrypt it before any off-host copy. The script requires these
+non-secret systemd environment values outside the repository:
 
 ```dotenv
 APP_DIR=/private/path/to/active/arctic-rss-release
@@ -51,16 +54,22 @@ to encrypted off-host storage and perform regular restore drills.
    cd "$APP_DIR"
    ```
 
-5. Make a PostgreSQL custom-format backup without printing any environment
-   values:
+5. Make a PostgreSQL custom-format backup and its role-definition companion
+   without printing any environment values:
 
    ```bash
    docker compose exec -T postgres sh -lc \
      'pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
      > "$BACKUP_DIR/postgres.dump"
+   docker compose exec -T postgres sh -lc \
+     'pg_dumpall --globals-only -U "$POSTGRES_USER"' \
+     > "$BACKUP_DIR/postgres.globals.sql"
    test -s "$BACKUP_DIR/postgres.dump"
+   test -s "$BACKUP_DIR/postgres.globals.sql"
    pg_restore -l "$BACKUP_DIR/postgres.dump" > "$BACKUP_DIR/postgres.dump.list"
    sha256sum "$BACKUP_DIR/postgres.dump" > "$BACKUP_DIR/SHA256SUMS"
+   sha256sum "$BACKUP_DIR/postgres.globals.sql" >> "$BACKUP_DIR/SHA256SUMS"
+   sha256sum -c "$BACKUP_DIR/SHA256SUMS"
    ```
 
 6. Back up Compose/proxy/service configuration and environment files into an
@@ -73,9 +82,13 @@ to encrypted off-host storage and perform regular restore drills.
 ## Restore drill
 
 Test restores in a disposable, non-production PostgreSQL target. Never restore
-over production to validate a backup.
+over production to validate a backup. On a clean test cluster, restore the
+role definitions first; this recreates the application accounts and their
+credential hashes.
 
 ```bash
+psql --set=ON_ERROR_STOP=on --dbname=postgres \
+  -f "$BACKUP_DIR/postgres.globals.sql"
 pg_restore --clean --if-exists --no-owner \
   --dbname="$RESTORE_DATABASE_URL" \
   "$BACKUP_DIR/postgres.dump"
@@ -91,3 +104,5 @@ the drill date, operator, target, duration, and result outside the repository.
 - An existing file does not prove the backup is readable.
 - A local-only copy does not satisfy off-host recovery.
 - An unencrypted `.env` copy is not an acceptable durable backup.
+- A role-definition export contains credential hashes and must receive the same
+  access controls and encryption as the database archive.

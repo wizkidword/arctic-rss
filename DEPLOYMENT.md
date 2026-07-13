@@ -49,7 +49,9 @@ Before every production change:
 
 1. Confirm a recovery console is available.
 2. Record the reviewed commit and archive checksum.
-3. Create a custom-format PostgreSQL backup and verify it with `pg_restore -l`.
+3. Run the verified PostgreSQL backup job. It must include the custom-format
+   database archive and the protected role-definition export, with checksums
+   verified before deployment.
 4. Stage the archive beside the active release and copy the existing `.env`
    into it with mode 0600.
 5. Run `docker compose config -q` in the staged release.

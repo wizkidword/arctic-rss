@@ -42,13 +42,20 @@ docker compose -p "$COMPOSE_PROJECT" exec -T postgres \
   </dev/null > "$staging/database.dump"
 docker compose -p "$COMPOSE_PROJECT" exec -T postgres pg_restore -l \
   < "$staging/database.dump" > "$staging/database.catalog"
+docker compose -p "$COMPOSE_PROJECT" exec -T postgres \
+  sh -c 'pg_dumpall --globals-only -U "$POSTGRES_USER"' \
+  </dev/null > "$staging/database.globals.sql"
 
 test -s "$staging/database.dump"
 test -s "$staging/database.catalog"
+test -s "$staging/database.globals.sql"
+grep -q '^CREATE ROLE ' "$staging/database.globals.sql"
 (
   cd "$staging"
   sha256sum database.dump > database.dump.sha256
   sha256sum -c database.dump.sha256 >/dev/null
+  sha256sum database.globals.sql > database.globals.sql.sha256
+  sha256sum -c database.globals.sql.sha256 >/dev/null
 )
 printf 'created_at=%s\n' "$timestamp" > "$staging/metadata"
 
@@ -59,7 +66,7 @@ while IFS= read -r -d '' expired; do
   rm -rf -- "$expired"
 done < <(
   find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d \
-    -name '20????????T??????Z' -mtime "+$RETENTION_DAYS" -print0
+    -name '20??????T??????Z' -mtime "+$RETENTION_DAYS" -print0
 )
 
 echo "Arctic RSS backup verified: $final"
