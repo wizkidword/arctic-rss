@@ -19,6 +19,7 @@ const {
   findMany,
   folderFindFirst,
   reactCache,
+  transaction,
   userFindUnique,
 } = vi.hoisted(() => ({
   articleDeleteMany: vi.fn(),
@@ -39,6 +40,7 @@ const {
   findMany: vi.fn(),
   folderFindFirst: vi.fn(),
   reactCache: vi.fn((loader) => loader),
+  transaction: vi.fn(),
   userFindUnique: vi.fn(),
 }))
 
@@ -76,7 +78,7 @@ vi.mock("./db", () => ({
     user: {
       findUnique: userFindUnique,
     },
-    $transaction: (operations: Array<Promise<unknown>>) => Promise.all(operations),
+    $transaction: transaction,
   }),
 }))
 
@@ -115,6 +117,7 @@ describe("feed subscriptions", () => {
     findFirst.mockReset()
     findMany.mockReset()
     folderFindFirst.mockReset()
+    transaction.mockReset()
     userFindUnique.mockReset()
     getUnreadArticleCountsByFeed.mockResolvedValue(new Map([["feed-1", 3]]))
     feedUpdate.mockResolvedValue({})
@@ -128,6 +131,19 @@ describe("feed subscriptions", () => {
       },
       plan: "FREE",
     })
+    transaction.mockImplementation(async (callback) =>
+      callback({
+        feed: {
+          upsert: feedUpsert,
+        },
+        feedSubscription: {
+          create: feedSubscriptionCreate,
+        },
+        folder: {
+          create: folderCreate,
+        },
+      })
+    )
   })
 
   it("creates the reader loader through React cache", () => {
@@ -598,6 +614,77 @@ describe("feed subscriptions", () => {
         feed: true,
       },
     })
+  })
+
+  it("rolls back a requested folder and feed when subscription creation fails", async () => {
+    discoverFeedFromUrl.mockResolvedValue({
+      description: "Example feed.",
+      faviconUrl: "https://example.com/favicon.ico",
+      feedUrl: "https://example.com/feed.xml",
+      format: "rss",
+      language: "en",
+      siteUrl: "https://example.com",
+      title: "Example Feed",
+    })
+    findMany.mockResolvedValue([])
+
+    const committed = {
+      feedUrls: [] as string[],
+      folderNames: [] as string[],
+    }
+    const staged = {
+      feedUrls: [] as string[],
+      folderNames: [] as string[],
+    }
+    const transactionStore = {
+      feed: {
+        upsert: vi.fn(async () => {
+          staged.feedUrls.push("https://example.com/feed.xml")
+          return { id: "feed-1", title: "Example Feed" }
+        }),
+      },
+      feedSubscription: {
+        create: vi.fn(async () => {
+          throw new Error("Injected subscription failure.")
+        }),
+      },
+      folder: {
+        create: vi.fn(async () => {
+          staged.folderNames.push("Tech Watch")
+          return { id: "folder-new", name: "Tech Watch" }
+        }),
+      },
+    }
+
+    folderCreate.mockImplementation(() => {
+      throw new Error("Folder write escaped its transaction.")
+    })
+    feedUpsert.mockImplementation(() => {
+      throw new Error("Feed write escaped its transaction.")
+    })
+    feedSubscriptionCreate.mockImplementation(() => {
+      throw new Error("Subscription write escaped its transaction.")
+    })
+    transaction.mockImplementation(async (callback) => {
+      const result = await callback(transactionStore)
+      committed.feedUrls.push(...staged.feedUrls)
+      committed.folderNames.push(...staged.folderNames)
+      return result
+    })
+
+    await expect(
+      subscribeToFeed({
+        folderName: "Tech Watch",
+        url: "https://example.com/feed.xml",
+        userId: "user-1",
+      })
+    ).rejects.toThrow("Injected subscription failure.")
+
+    expect(transaction).toHaveBeenCalledTimes(1)
+    expect(transactionStore.folder.create).toHaveBeenCalledTimes(1)
+    expect(transactionStore.feed.upsert).toHaveBeenCalledTimes(1)
+    expect(transactionStore.feedSubscription.create).toHaveBeenCalledTimes(1)
+    expect(committed).toEqual({ feedUrls: [], folderNames: [] })
   })
 
   it("imports articles from the feed XML fetched during discovery", async () => {

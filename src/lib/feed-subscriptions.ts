@@ -1,4 +1,4 @@
-import { Prisma } from "../generated/prisma/client"
+import { Prisma, PrismaClient } from "../generated/prisma/client"
 import { cache } from "react"
 
 import { getUnreadArticleCountsByFeed } from "./articles"
@@ -41,6 +41,17 @@ type FeedSubscriptionWithFeed = Prisma.FeedSubscriptionGetPayload<{
     feed: true
   }
 }>
+
+type FeedSubscriptionTransactionStore = Pick<
+  PrismaClient,
+  "feed" | "feedSubscription" | "folder"
+>
+
+type FeedSubscriptionStore = FeedSubscriptionTransactionStore & {
+  $transaction<T>(
+    callback: (transaction: FeedSubscriptionTransactionStore) => Promise<T>
+  ): Promise<T>
+}
 
 export const listUserFeedSubscriptions = cache(async function listUserFeedSubscriptions(
   userId: string
@@ -158,7 +169,7 @@ export async function subscribeToFeed({
   url: string
   userId: string
 }) {
-  const prisma = getPrisma()
+  const prisma = getFeedSubscriptionStore()
   const normalizedFolderId = folderId?.trim() || undefined
   const shouldCreateFolder = folderName !== undefined
 
@@ -240,64 +251,71 @@ export async function subscribeToFeed({
     throw error
   }
 
-  let resolvedFolderId = normalizedFolderId
-
-  if (!resolvedFolderId && shouldCreateFolder) {
-    const folder = await prisma.folder.create({
-      data: {
-        name: normalizeFolderName(folderName),
-        userId,
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-    })
-    resolvedFolderId = folder.id
-  }
-
   const now = new Date()
-
-  const feed = await prisma.feed.upsert({
-    where: { feedUrl: persistedFeedUrl },
-    create: {
-      description: discoveredFeed.description,
-      faviconUrl: discoveredFeed.faviconUrl,
-      feedUrl: persistedFeedUrl,
-      language: discoveredFeed.language,
-      lastError: null,
-      lastFetchedAt: now,
-      lastFailedAt: null,
-      lastSuccessfulFetchAt: now,
-      siteUrl: discoveredFeed.siteUrl,
-      title: discoveredFeed.title,
-    },
-    update: {
-      description: discoveredFeed.description,
-      faviconUrl: discoveredFeed.faviconUrl,
-      language: discoveredFeed.language,
-      lastError: null,
-      lastFetchedAt: now,
-      lastFailedAt: null,
-      lastSuccessfulFetchAt: now,
-      siteUrl: discoveredFeed.siteUrl,
-      title: discoveredFeed.title,
-    },
-  })
-
+  let feed: { id: string }
   let subscription: FeedSubscriptionWithFeed
 
   try {
-    subscription = await prisma.feedSubscription.create({
-      data: {
-        feedId: feed.id,
-        folderId: resolvedFolderId,
-        userId,
-      },
-      include: {
-        feed: true,
-      },
+    const result = await prisma.$transaction(async (transaction) => {
+      let resolvedFolderId = normalizedFolderId
+
+      if (!resolvedFolderId && shouldCreateFolder) {
+        const folder = await transaction.folder.create({
+          data: {
+            name: normalizeFolderName(folderName),
+            userId,
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+        })
+        resolvedFolderId = folder.id
+      }
+
+      const feed = await transaction.feed.upsert({
+        where: { feedUrl: persistedFeedUrl },
+        create: {
+          description: discoveredFeed.description,
+          faviconUrl: discoveredFeed.faviconUrl,
+          feedUrl: persistedFeedUrl,
+          language: discoveredFeed.language,
+          lastError: null,
+          lastFetchedAt: now,
+          lastFailedAt: null,
+          lastSuccessfulFetchAt: now,
+          siteUrl: discoveredFeed.siteUrl,
+          title: discoveredFeed.title,
+        },
+        update: {
+          description: discoveredFeed.description,
+          faviconUrl: discoveredFeed.faviconUrl,
+          language: discoveredFeed.language,
+          lastError: null,
+          lastFetchedAt: now,
+          lastFailedAt: null,
+          lastSuccessfulFetchAt: now,
+          siteUrl: discoveredFeed.siteUrl,
+          title: discoveredFeed.title,
+        },
+      })
+
+      const subscription = await transaction.feedSubscription.create({
+        data: {
+          feedId: feed.id,
+          folderId: resolvedFolderId,
+          userId,
+        },
+        include: {
+          feed: true,
+        },
+      })
+
+      return { feed, subscription }
     })
+
+    feed = result.feed
+    subscription = result.subscription
   } catch (error) {
     if (isDatabaseSourceLimitError(error)) {
       throw new FeedSubscriptionError(
@@ -310,7 +328,7 @@ export async function subscribeToFeed({
       error.code === "P2002"
     ) {
       throw new FeedSubscriptionError(
-        `You are already subscribed to ${feed.title}.`
+        `You are already subscribed to ${discoveredFeed.title}.`
       )
     }
 
@@ -357,4 +375,8 @@ function normalizeFolderName(name: string) {
   }
 
   return normalizedName
+}
+
+function getFeedSubscriptionStore() {
+  return getPrisma() as unknown as FeedSubscriptionStore
 }
