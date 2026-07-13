@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
+import { getAppOrigin } from "@/lib/app-origin"
+
 vi.mock("next/font/google", () => ({
   Geist: () => ({ variable: "font-geist-sans" }),
   Geist_Mono: () => ({ variable: "font-geist-mono" }),
@@ -33,8 +35,8 @@ describe("RootLayout", () => {
     expect(element.props.suppressHydrationWarning).toBe(true)
   })
 
-  it("uses the production canonical origin and does not describe the private app as open-source", () => {
-    expect(String(metadata.metadataBase)).toBe("https://arcticrss.com/")
+  it("uses the configured canonical origin and does not describe the private app as open-source", () => {
+    expect(String(metadata.metadataBase)).toBe(String(getAppOrigin()))
     expect(metadata.description).toBe("A calm, private RSS reader inspired by Google Reader.")
     expect(metadata.description).not.toContain("open-source")
   })

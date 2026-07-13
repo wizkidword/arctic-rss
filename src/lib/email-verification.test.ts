@@ -34,8 +34,8 @@ describe("email verification helpers", () => {
     expect(tokenHash).toMatch(/^[a-f0-9]{64}$/)
   })
 
-  it("builds verification URLs from the public app URL", () => {
-    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://arcticrss.com/")
+  it("builds verification URLs from the canonical app origin", () => {
+    vi.stubEnv("APP_ORIGIN", "https://arcticrss.com/")
 
     expect(buildEmailVerificationUrl("verify-token")).toBe(
       "https://arcticrss.com/verify-email?token=verify-token"

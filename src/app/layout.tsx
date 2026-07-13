@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { GoogleAnalyticsScripts } from "@/components/google-analytics-scripts";
+import { getAppOrigin } from "@/lib/app-origin";
 import { getGoogleAnalyticsMeasurementId } from "@/lib/google-analytics";
 
 import "./globals.css";
@@ -21,7 +22,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Arctic RSS",
   description: "A calm, private RSS reader inspired by Google Reader.",
-  metadataBase: new URL("https://arcticrss.com"),
+  metadataBase: getAppOrigin(),
 };
 
 export default function RootLayout({

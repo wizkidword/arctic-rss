@@ -160,6 +160,8 @@ function createAuthConfig(): NextAuthConfig {
       error: "/login",
       signIn: "/login",
     },
+    // Auth.js requires this flag. Its request URL is pinned by AUTH_URL, and
+    // Next's proxy rejects any request host outside the explicit allowlist.
     trustHost: true,
     session: {
       strategy: "jwt",

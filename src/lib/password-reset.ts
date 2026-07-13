@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import type { PrismaClient } from "../generated/prisma/client"
 
+import { getAppOrigin } from "@/lib/app-origin"
 import { getPrisma } from "@/lib/db"
 import { sendPasswordResetEmail } from "@/lib/mail"
 import { hashPassword } from "@/lib/password"
@@ -58,13 +59,7 @@ export function getPasswordResetExpiresAt(now = new Date()) {
 }
 
 export function getAppBaseUrl() {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.AUTH_URL ||
-    process.env.NEXTAUTH_URL ||
-    "http://localhost:3000"
-
-  return baseUrl.replace(/\/+$/, "")
+  return getAppOrigin().origin
 }
 
 export function buildPasswordResetUrl(token: string) {

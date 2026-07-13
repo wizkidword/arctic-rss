@@ -40,10 +40,14 @@ POSTGRES_PORT=5432
 REDIS_PORT=6379
 
 AUTH_SECRET="REPLACE_AUTH_SECRET"
+# The only browser-facing origin. It must be HTTPS in production.
+APP_ORIGIN="https://rss.example.com"
+# Optional comma-separated aliases that redirect to APP_ORIGIN.
+APP_ALLOWED_HOSTS=""
+# Auth.js requires trustHost, but the Next proxy validates Host first.
 AUTH_TRUST_HOST=true
+# Required by Auth.js and must exactly match APP_ORIGIN.
 AUTH_URL="https://rss.example.com"
-NEXTAUTH_URL="https://rss.example.com"
-NEXT_PUBLIC_APP_URL="https://rss.example.com"
 AUTH_GOOGLE_ID=""
 AUTH_GOOGLE_SECRET=""
 
@@ -66,6 +70,13 @@ openssl rand -base64 32
 The database password in `DATABASE_URL` must match `POSTGRES_PASSWORD`.
 Percent-encode URL-reserved characters in the password used by
 `DATABASE_URL`.
+
+`APP_ORIGIN` is the sole canonical origin for metadata and generated password
+reset and email-verification links. `AUTH_URL` is retained because Auth.js
+uses it to pin authentication request URLs; it must match `APP_ORIGIN` exactly.
+Do not introduce a conflicting `NEXTAUTH_URL` or `NEXT_PUBLIC_APP_URL`. If a
+legacy deployment still retains either variable, the application requires it to
+match `APP_ORIGIN` before startup.
 
 ## Administrator access
 
@@ -204,6 +215,14 @@ The core application services bind only to loopback addresses. Public traffic
 is routed by Cloudflare through a separately managed `arctic-rss-cloudflared`
 container, so do not start the optional Compose `tunnel` profile on production
 unless intentionally changing that routing architecture.
+
+The application validates the direct `Host` header against `APP_ORIGIN` and
+optional `APP_ALLOWED_HOSTS`; it deliberately ignores forwarding headers for
+redirect construction. The loopback-only `/api/health` probe remains available
+to Docker health checks. Review the Cloudflare Tunnel's public-hostname routing
+in Cloudflare before adding an alias, then add that alias to
+`APP_ALLOWED_HOSTS` so it redirects to the canonical HTTPS origin. See [the
+canonical-origin runbook](docs/operations/canonical-origin-proxy-runbook.md).
 
 Deploy source as a clean archive, preserving the existing production `.env`:
 
@@ -406,6 +425,16 @@ default batch size is 100 tokens per token type. The worker writes structured
 `auth_token_maintenance` and `auth_token_attempt` events without raw tokens,
 token hashes, email addresses, or secrets. The full operator procedure is in
 [the authentication-token maintenance runbook](docs/operations/auth-token-maintenance-runbook.md).
+
+### Canonical-origin and proxy hardening
+
+SEC-004 adds the required production `APP_ORIGIN` setting and validates it at
+startup. It has no database migration. Before building the release, add the
+canonical HTTPS origin to the untracked production `.env`, confirm `AUTH_URL`
+matches it exactly, and leave `APP_ALLOWED_HOSTS` empty unless a reviewed
+public alias is needed. The application refuses to start when these origins
+conflict. Follow [the canonical-origin runbook](docs/operations/canonical-origin-proxy-runbook.md)
+for the safe probes and rollback procedure.
 
 ## Upgrade
 

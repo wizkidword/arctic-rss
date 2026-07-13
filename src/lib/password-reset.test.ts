@@ -84,8 +84,8 @@ describe("password reset helpers", () => {
     expect(tokenHash).toMatch(/^[a-f0-9]{64}$/)
   })
 
-  it("builds reset URLs from the public app URL", () => {
-    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://arcticrss.com/")
+  it("builds reset URLs from the canonical app origin", () => {
+    vi.stubEnv("APP_ORIGIN", "https://arcticrss.com/")
 
     expect(buildPasswordResetUrl("reset-token")).toBe(
       "https://arcticrss.com/reset-password?token=reset-token"

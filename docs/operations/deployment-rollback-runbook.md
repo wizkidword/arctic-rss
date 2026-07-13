@@ -137,6 +137,43 @@ Do not rotate `AUTH_SECRET` as an incidental deployment step. See
 administrator control, verification steps, and the security implication of a
 code rollback.
 
+## SEC-004 canonical-origin and trusted-proxy deployment
+
+This release has no schema change. It requires one secret-safe edit to the
+production `.env` before starting the new web or worker image:
+
+1. Set `APP_ORIGIN` to the reviewed canonical HTTPS public origin.
+2. Confirm `AUTH_URL` matches it exactly without printing either value.
+3. Leave `APP_ALLOWED_HOSTS` blank unless a reviewed Cloudflare public-hostname
+   alias must redirect to the canonical origin.
+4. Do not rely on `X-Forwarded-Host`, `X-Forwarded-Proto`, or `CF-Visitor` for
+   app redirects. Cloudflare is responsible for the external HTTP-to-HTTPS
+   redirect; the app validates the direct Host value it receives.
+
+Keep the existing `AUTH_URL` because Auth.js uses it to pin authentication
+request URLs. Legacy `NEXTAUTH_URL` and `NEXT_PUBLIC_APP_URL`, if still
+present, must match `APP_ORIGIN`; otherwise startup intentionally fails.
+
+After the normal source swap and rebuild, verify the local Docker health probe,
+public health, login, and these local header probes from the VPS:
+
+```bash
+curl -fsS http://127.0.0.1:3000/api/health
+curl -sS -o /dev/null -D - \
+  -H 'Host: invalid.example' \
+  http://127.0.0.1:3000/login | head
+curl -sS -o /dev/null -D - \
+  -H 'Host: CANONICAL_HOST' \
+  -H 'X-Forwarded-Host: invalid.example' \
+  -H 'X-Forwarded-Proto: http' \
+  http://127.0.0.1:3000/login | head
+```
+
+The first login probe must return `400`; the second must not contain a
+redirect to `invalid.example`. Replace `CANONICAL_HOST` only after checking the
+reviewed public origin. Do not paste the production `.env` into a shell or
+ticket.
+
 ## Rollback
 
 1. Keep the currently running failed release and its logs for diagnosis.
