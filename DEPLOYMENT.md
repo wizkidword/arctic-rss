@@ -392,6 +392,21 @@ release must sign in again. Do not rotate `AUTH_SECRET` unless intentionally
 invalidating every session for a separate reason. The full operator procedure
 is in [the session-revocation runbook](docs/operations/session-revocation-runbook.md).
 
+### Authentication-token claim migration
+
+The SEC-003 migration creates the additive `SecurityEvent` table. Apply it
+before recreating web and worker. Password-reset and email-verification tokens
+are conditionally claimed inside a transaction; the database permits exactly
+one successful submission for a token.
+
+Expired authentication-token cleanup runs from the existing worker. Keep this
+Compose service at one replica unless the scheduler is changed to use a
+distributed ownership lock. The default cleanup interval is 15 minutes and the
+default batch size is 100 tokens per token type. The worker writes structured
+`auth_token_maintenance` and `auth_token_attempt` events without raw tokens,
+token hashes, email addresses, or secrets. The full operator procedure is in
+[the authentication-token maintenance runbook](docs/operations/auth-token-maintenance-runbook.md).
+
 ## Upgrade
 
 ```bash

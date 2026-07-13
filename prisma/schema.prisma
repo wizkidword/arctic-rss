@@ -153,6 +153,7 @@ model User {
   bugReports              BugReport[]
   featureSuggestions      FeatureSuggestion[]
   adminAuditLogs          AdminAuditLog[]          @relation("AdminAuditActor")
+  securityEvents          SecurityEvent[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
 }
@@ -221,6 +222,18 @@ model EmailVerificationToken {
 
   @@index([userId, createdAt])
   @@index([expiresAt])
+}
+
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  eventType String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model UserSettings {

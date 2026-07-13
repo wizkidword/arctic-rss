@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   buildEmailVerificationUrl,
@@ -10,8 +10,18 @@ import {
   verifyEmailWithToken,
 } from "./email-verification"
 
+const now = new Date("2026-06-26T12:00:00.000Z")
+const future = new Date("2026-06-27T12:00:00.000Z")
+
 describe("email verification helpers", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined)
+    vi.spyOn(console, "info").mockImplementation(() => undefined)
+  })
+
   afterEach(() => {
+    vi.clearAllMocks()
+    vi.restoreAllMocks()
     vi.unstubAllEnvs()
   })
 
@@ -37,20 +47,17 @@ describe("email verification helpers", () => {
   })
 
   it("expires verification links twenty-four hours from creation", () => {
-    const now = new Date("2026-06-26T12:00:00.000Z")
-
     expect(getEmailVerificationExpiresAt(now).toISOString()).toBe(
       "2026-06-27T12:00:00.000Z"
     )
   })
 
-  it("creates a fresh verification request and emails the link", async () => {
-    const now = new Date("2026-06-26T12:00:00.000Z")
+  it("creates a fresh verification request without unbounded expired-token cleanup", async () => {
     const store = {
       emailVerificationToken: {
+        create: vi.fn(async () => ({ id: "token-1" })),
         deleteMany: vi.fn(async () => ({ count: 0 })),
         updateMany: vi.fn(async () => ({ count: 1 })),
-        create: vi.fn(async () => ({ id: "token-1" })),
       },
     }
     const sendVerificationEmail = vi.fn(async () => ({ status: "sent" as const }))
@@ -61,9 +68,7 @@ describe("email verification helpers", () => {
     )
 
     expect(result).toEqual({ status: "sent" })
-    expect(store.emailVerificationToken.deleteMany).toHaveBeenCalledWith({
-      where: { expiresAt: { lt: now } },
-    })
+    expect(store.emailVerificationToken.deleteMany).not.toHaveBeenCalled()
     expect(store.emailVerificationToken.updateMany).toHaveBeenCalledWith({
       where: { userId: "user-1", usedAt: null },
       data: { usedAt: now },
@@ -72,7 +77,7 @@ describe("email verification helpers", () => {
       data: {
         userId: "user-1",
         tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-        expiresAt: new Date("2026-06-27T12:00:00.000Z"),
+        expiresAt: future,
       },
     })
     expect(sendVerificationEmail).toHaveBeenCalledWith({
@@ -81,69 +86,227 @@ describe("email verification helpers", () => {
     })
   })
 
-  it("verifies a valid token, consumes open tokens, and sends welcome mail", async () => {
-    const now = new Date("2026-06-26T12:00:00.000Z")
+  it("claims a verification token atomically and sends one welcome message", async () => {
     const { token, tokenHash } = createEmailVerificationToken()
-    const store = {
+    const tokenUpdateMany = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValue({ count: 0 })
+    const userUpdateMany = vi.fn().mockResolvedValue({ count: 1 })
+    const securityEventCreate = vi.fn().mockResolvedValue({ id: "event-1" })
+    const transactionClient = {
       emailVerificationToken: {
         findUnique: vi.fn(async () => ({
+          expiresAt: future,
           id: "token-1",
-          userId: "user-1",
           usedAt: null,
-          expiresAt: new Date("2026-06-27T12:00:00.000Z"),
           user: {
-            id: "user-1",
+            disabledAt: null,
             email: "reader@example.com",
             emailVerified: null,
-            disabledAt: null,
+            id: "user-1",
           },
+          userId: "user-1",
         })),
-        update: vi.fn(async () => ({ id: "token-1" })),
-        updateMany: vi.fn(async () => ({ count: 2 })),
+        updateMany: tokenUpdateMany,
       },
-      user: {
-        update: vi.fn(async () => ({ id: "user-1" })),
-      },
-      $transaction: vi.fn(async (operations: unknown[]) => operations),
+      securityEvent: { create: securityEventCreate },
+      user: { updateMany: userUpdateMany },
+    }
+    const store = {
+      $transaction: vi.fn(
+        async (
+          callback: (client: typeof transactionClient) => Promise<unknown>
+        ) => callback(transactionClient)
+      ),
     }
     const sendWelcomeEmail = vi.fn(async () => ({ status: "sent" as const }))
 
-    const result = await verifyEmailWithToken(token, {
-      now,
-      sendWelcomeEmail,
-      store,
-    })
+    await expect(
+      verifyEmailWithToken(token, { now, sendWelcomeEmail, store })
+    ).resolves.toEqual({ status: "verified" })
 
-    expect(result).toEqual({ status: "verified" })
-    expect(store.emailVerificationToken.findUnique).toHaveBeenCalledWith({
+    expect(transactionClient.emailVerificationToken.findUnique).toHaveBeenCalledWith({
       where: { tokenHash },
-      include: {
+      select: {
+        expiresAt: true,
+        id: true,
+        usedAt: true,
         user: {
           select: {
-            id: true,
+            disabledAt: true,
             email: true,
             emailVerified: true,
-            disabledAt: true,
+            id: true,
           },
         },
+        userId: true,
       },
     })
-    expect(store.user.update).toHaveBeenCalledWith({
-      where: { id: "user-1" },
+    expect(tokenUpdateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        expiresAt: { gt: now },
+        id: "token-1",
+        tokenHash,
+        usedAt: null,
+        user: { is: { disabledAt: null, id: "user-1" } },
+      },
+      data: { usedAt: now },
+    })
+    expect(userUpdateMany).toHaveBeenCalledWith({
+      where: { disabledAt: null, id: "user-1" },
       data: { emailVerified: now },
     })
-    expect(store.emailVerificationToken.update).toHaveBeenCalledWith({
-      where: { id: "token-1" },
-      data: { usedAt: now },
-    })
-    expect(store.emailVerificationToken.updateMany).toHaveBeenCalledWith({
-      where: {
+    expect(securityEventCreate).toHaveBeenCalledWith({
+      data: {
+        eventType: "EMAIL_VERIFICATION_COMPLETED",
         userId: "user-1",
-        usedAt: null,
-        id: { not: "token-1" },
       },
-      data: { usedAt: now },
     })
     expect(sendWelcomeEmail).toHaveBeenCalledWith({ to: "reader@example.com" })
+  })
+
+  it("allows exactly one of 100 concurrent verification submissions", async () => {
+    const { token } = createEmailVerificationToken()
+    let claimed = false
+    const tokenUpdateMany = vi.fn(
+      async ({ where }: { where: { id?: unknown } }) => {
+        if (where.id === "token-1") {
+          if (claimed) {
+            return { count: 0 }
+          }
+
+          claimed = true
+          return { count: 1 }
+        }
+
+        return { count: 0 }
+      }
+    )
+    const userUpdateMany = vi.fn().mockResolvedValue({ count: 1 })
+    const securityEventCreate = vi.fn().mockResolvedValue({ id: "event-1" })
+    const transactionClient = {
+      emailVerificationToken: {
+        findUnique: vi.fn(async () => ({
+          expiresAt: future,
+          id: "token-1",
+          usedAt: null,
+          user: {
+            disabledAt: null,
+            email: "reader@example.com",
+            emailVerified: null,
+            id: "user-1",
+          },
+          userId: "user-1",
+        })),
+        updateMany: tokenUpdateMany,
+      },
+      securityEvent: { create: securityEventCreate },
+      user: { updateMany: userUpdateMany },
+    }
+    const store = {
+      $transaction: vi.fn(
+        async (
+          callback: (client: typeof transactionClient) => Promise<unknown>
+        ) => callback(transactionClient)
+      ),
+    }
+    const sendWelcomeEmail = vi.fn(async () => ({ status: "sent" as const }))
+
+    const results = await Promise.all(
+      Array.from({ length: 100 }, () =>
+        verifyEmailWithToken(token, { now, sendWelcomeEmail, store })
+      )
+    )
+
+    expect(results.filter((result) => result.status === "verified")).toHaveLength(1)
+    expect(
+      results.filter((result) => result.status === "invalid-token")
+    ).toHaveLength(99)
+    expect(userUpdateMany).toHaveBeenCalledTimes(1)
+    expect(securityEventCreate).toHaveBeenCalledTimes(1)
+    expect(sendWelcomeEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects expired and already-used verification tokens before claiming them", async () => {
+    for (const verificationToken of [
+      { expiresAt: new Date(now.getTime() - 1), usedAt: null },
+      { expiresAt: future, usedAt: now },
+    ]) {
+      const tokenUpdateMany = vi.fn().mockResolvedValue({ count: 1 })
+      const transactionClient = {
+        emailVerificationToken: {
+          findUnique: vi.fn(async () => ({
+            ...verificationToken,
+            id: "token-1",
+            user: {
+              disabledAt: null,
+              email: "reader@example.com",
+              emailVerified: null,
+              id: "user-1",
+            },
+            userId: "user-1",
+          })),
+          updateMany: tokenUpdateMany,
+        },
+        securityEvent: { create: vi.fn() },
+        user: { updateMany: vi.fn() },
+      }
+      const store = {
+        $transaction: vi.fn(
+          async (
+            callback: (client: typeof transactionClient) => Promise<unknown>
+          ) => callback(transactionClient)
+        ),
+      }
+
+      await expect(
+        verifyEmailWithToken("x".repeat(40), { now, store })
+      ).resolves.toEqual({ status: "invalid-token" })
+
+      expect(tokenUpdateMany).not.toHaveBeenCalled()
+    }
+  })
+
+  it("does not send welcome mail when a verification transaction fails", async () => {
+    const { token } = createEmailVerificationToken()
+    const transactionClient = {
+      emailVerificationToken: {
+        findUnique: vi.fn(async () => ({
+          expiresAt: future,
+          id: "token-1",
+          usedAt: null,
+          user: {
+            disabledAt: null,
+            email: "reader@example.com",
+            emailVerified: null,
+            id: "user-1",
+          },
+          userId: "user-1",
+        })),
+        updateMany: vi
+          .fn()
+          .mockResolvedValueOnce({ count: 1 })
+          .mockResolvedValue({ count: 0 }),
+      },
+      securityEvent: {
+        create: vi.fn().mockRejectedValue(new Error("simulated database error")),
+      },
+      user: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    }
+    const store = {
+      $transaction: vi.fn(
+        async (
+          callback: (client: typeof transactionClient) => Promise<unknown>
+        ) => callback(transactionClient)
+      ),
+    }
+    const sendWelcomeEmail = vi.fn(async () => ({ status: "sent" as const }))
+
+    await expect(
+      verifyEmailWithToken(token, { now, sendWelcomeEmail, store })
+    ).resolves.toEqual({ status: "invalid-token" })
+
+    expect(sendWelcomeEmail).not.toHaveBeenCalled()
   })
 })

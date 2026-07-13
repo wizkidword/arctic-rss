@@ -40,6 +40,14 @@ export async function resetPasswordAction(
     password: parsed.data.password,
   })
 
+  if (result.status === "error") {
+    return {
+      status: "error",
+      message:
+        "We could not update your password right now. Please try again in a moment.",
+    }
+  }
+
   if (result.status !== "reset") {
     return {
       status: "error",

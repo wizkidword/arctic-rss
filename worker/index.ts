@@ -2,6 +2,7 @@ import "dotenv/config"
 
 import { Worker } from "bullmq"
 
+import { cleanupExpiredAuthTokens } from "../src/lib/auth-token-maintenance"
 import {
   AI_DIGEST_QUEUE_NAME,
   type AiDigestJobData,
@@ -36,6 +37,12 @@ const schedulerIntervalMs = Number(
   process.env.FEED_SCHEDULER_INTERVAL_MS ?? 60_000
 )
 const schedulerBatchSize = Number(process.env.FEED_SCHEDULER_BATCH_SIZE ?? 100)
+const authTokenMaintenanceBatchSize = Number(
+  process.env.AUTH_TOKEN_MAINTENANCE_BATCH_SIZE ?? 100
+)
+const authTokenMaintenanceIntervalMs = Number(
+  process.env.AUTH_TOKEN_MAINTENANCE_INTERVAL_MS ?? 15 * 60_000
+)
 const prisma = getPrisma()
 
 console.log("Arctic RSS worker online")
@@ -239,6 +246,7 @@ async function enqueueDueSmartDigests() {
 }
 
 let schedulerRunning = false
+let nextAuthTokenMaintenanceAt = 0
 
 function schedulerErrorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : "unknown error"
@@ -252,11 +260,12 @@ async function schedulerTick() {
   schedulerRunning = true
 
   try {
-    const [feedResult, podcastResult, smartDigestResult] =
+    const [feedResult, podcastResult, smartDigestResult, maintenanceResult] =
       await Promise.allSettled([
         enqueueDueFeeds(),
         enqueueDuePodcasts(),
         enqueueDueSmartDigests(),
+        runAuthTokenMaintenance(),
       ])
 
     if (feedResult.status === "rejected") {
@@ -278,9 +287,44 @@ async function schedulerTick() {
         )}`
       )
     }
+
+    if (maintenanceResult.status === "rejected") {
+      console.error(
+        `[worker] auth token maintenance failed: ${schedulerErrorMessage(
+          maintenanceResult.reason
+        )}`
+      )
+    }
   } finally {
     schedulerRunning = false
   }
+}
+
+async function runAuthTokenMaintenance() {
+  const now = Date.now()
+
+  if (now < nextAuthTokenMaintenanceAt) {
+    return
+  }
+
+  nextAuthTokenMaintenanceAt = now + authTokenMaintenanceIntervalMs
+
+  const result = await cleanupExpiredAuthTokens({
+    batchSize: authTokenMaintenanceBatchSize,
+    store: prisma,
+  })
+  const deleted =
+    result.passwordResetTokensDeleted + result.emailVerificationTokensDeleted
+
+  console.log(
+    JSON.stringify({
+      emailVerificationTokensDeleted: result.emailVerificationTokensDeleted,
+      event: "auth_token_maintenance",
+      outcome: "success",
+      passwordResetTokensDeleted: result.passwordResetTokensDeleted,
+      totalDeleted: deleted,
+    })
+  )
 }
 
 const scheduler = setInterval(() => {

@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "crypto"
 
+import type { PrismaClient } from "../generated/prisma/client"
+
 import { getPrisma } from "@/lib/db"
 import {
   sendEmailVerificationEmail,
@@ -10,32 +12,10 @@ import { getAppBaseUrl } from "@/lib/password-reset"
 const EMAIL_VERIFICATION_TOKEN_BYTES = 32
 const EMAIL_VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 
-type EmailVerificationTokenRecord = {
-  id: string
-  userId: string
-  usedAt: Date | null
-  expiresAt: Date
-  user: {
-    id: string
-    email: string
-    emailVerified: Date | null
-    disabledAt: Date | null
-  }
-}
-
-type EmailVerificationStore = {
-  emailVerificationToken: {
-    deleteMany(input: unknown): Promise<unknown>
-    updateMany(input: unknown): Promise<unknown>
-    create(input: unknown): Promise<unknown>
-    findUnique(input: unknown): Promise<EmailVerificationTokenRecord | null>
-    update(input: unknown): Promise<unknown>
-  }
-  user: {
-    update(input: unknown): Promise<unknown>
-  }
-  $transaction(operations: unknown[]): Promise<unknown>
-}
+type EmailVerificationStore = Pick<
+  PrismaClient,
+  "$transaction" | "emailVerificationToken"
+>
 
 type EmailVerificationRequestInput = {
   userId: string
@@ -93,10 +73,6 @@ export async function requestEmailVerification(
   const store = getStore(deps.store)
   const now = deps.now ?? new Date()
 
-  await store.emailVerificationToken.deleteMany({
-    where: { expiresAt: { lt: now } },
-  })
-
   await store.emailVerificationToken.updateMany({
     where: { userId, usedAt: null },
     data: { usedAt: now },
@@ -135,58 +111,133 @@ export async function verifyEmailWithToken(
   const now = deps.now ?? new Date()
   const store = getStore(deps.store)
   const tokenHash = hashEmailVerificationToken(normalizedToken)
-  const verificationToken =
-    await store.emailVerificationToken.findUnique({
-      where: { tokenHash },
-      include: {
-        user: {
+  let result: {
+    email?: string
+    outcome: "error" | "expired" | "invalid" | "replayed" | "success"
+    shouldSendWelcome?: boolean
+    status: "invalid-token" | "verified"
+  }
+
+  try {
+    result = await store.$transaction(async (transaction) => {
+      const verificationToken =
+        await transaction.emailVerificationToken.findUnique({
+          where: { tokenHash },
           select: {
+            expiresAt: true,
             id: true,
-            email: true,
-            emailVerified: true,
-            disabledAt: true,
+            usedAt: true,
+            user: {
+              select: {
+                disabledAt: true,
+                email: true,
+                emailVerified: true,
+                id: true,
+              },
+            },
+            userId: true,
+          },
+        })
+
+      if (!verificationToken || verificationToken.user.disabledAt) {
+        return { outcome: "invalid", status: "invalid-token" as const }
+      }
+
+      if (verificationToken.usedAt) {
+        return { outcome: "replayed", status: "invalid-token" as const }
+      }
+
+      if (verificationToken.expiresAt <= now) {
+        return { outcome: "expired", status: "invalid-token" as const }
+      }
+
+      const claim = await transaction.emailVerificationToken.updateMany({
+        where: {
+          expiresAt: { gt: now },
+          id: verificationToken.id,
+          tokenHash,
+          usedAt: null,
+          user: {
+            is: {
+              disabledAt: null,
+              id: verificationToken.userId,
+            },
           },
         },
-      },
-    })
+        data: { usedAt: now },
+      })
 
-  if (
-    !verificationToken ||
-    verificationToken.usedAt ||
-    verificationToken.expiresAt <= now ||
-    verificationToken.user.disabledAt
-  ) {
+      if (claim.count !== 1) {
+        return { outcome: "replayed", status: "invalid-token" as const }
+      }
+
+      const userUpdate = await transaction.user.updateMany({
+        where: {
+          disabledAt: null,
+          id: verificationToken.userId,
+        },
+        data: {
+          emailVerified: verificationToken.user.emailVerified ?? now,
+        },
+      })
+
+      if (userUpdate.count !== 1) {
+        throw new Error("Email verification user update was not applied.")
+      }
+
+      await transaction.emailVerificationToken.updateMany({
+        where: {
+          id: { not: verificationToken.id },
+          userId: verificationToken.userId,
+          usedAt: null,
+        },
+        data: { usedAt: now },
+      })
+
+      await transaction.securityEvent.create({
+        data: {
+          eventType: "EMAIL_VERIFICATION_COMPLETED",
+          userId: verificationToken.userId,
+        },
+      })
+
+      return {
+        email: verificationToken.user.email,
+        outcome: "success" as const,
+        shouldSendWelcome: !verificationToken.user.emailVerified,
+        status: "verified" as const,
+      }
+    })
+  } catch {
+    console.error("Email verification token transaction failed.")
+    console.info(
+      JSON.stringify({
+        event: "auth_token_attempt",
+        outcome: "error",
+        purpose: "email_verification",
+      })
+    )
+
     return { status: "invalid-token" as const }
   }
 
-  await store.$transaction([
-    store.user.update({
-      where: { id: verificationToken.user.id },
-      data: { emailVerified: verificationToken.user.emailVerified ?? now },
-    }),
-    store.emailVerificationToken.update({
-      where: { id: verificationToken.id },
-      data: { usedAt: now },
-    }),
-    store.emailVerificationToken.updateMany({
-      where: {
-        userId: verificationToken.userId,
-        usedAt: null,
-        id: { not: verificationToken.id },
-      },
-      data: { usedAt: now },
-    }),
-  ])
+  console.info(
+    JSON.stringify({
+      event: "auth_token_attempt",
+      outcome: result.outcome,
+      purpose: "email_verification",
+    })
+  )
 
-  if (!verificationToken.user.emailVerified) {
+  if (result.status === "verified" && result.shouldSendWelcome && result.email) {
     try {
       await (deps.sendWelcomeEmail ?? sendWelcomeEmail)({
-        to: verificationToken.user.email,
+        to: result.email,
       })
-    } catch (error) {
-      console.error("Failed to send welcome email after verification.", error)
+    } catch {
+      console.error("Failed to send welcome email after verification.")
     }
   }
 
-  return { status: "verified" as const }
+  return { status: result.status }
 }

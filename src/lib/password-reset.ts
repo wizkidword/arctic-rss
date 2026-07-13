@@ -1,12 +1,25 @@
 import { createHash, randomBytes } from "crypto"
 import { z } from "zod"
 
+import type { PrismaClient } from "../generated/prisma/client"
+
 import { getPrisma } from "@/lib/db"
 import { sendPasswordResetEmail } from "@/lib/mail"
 import { hashPassword } from "@/lib/password"
 
 const RESET_TOKEN_BYTES = 32
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000
+
+type PasswordResetStore = Pick<
+  PrismaClient,
+  "$transaction" | "passwordResetToken" | "user"
+>
+
+type PasswordResetDeps = {
+  hashPassword?: typeof hashPassword
+  now?: Date
+  store?: unknown
+}
 
 export const passwordResetRequestSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -60,6 +73,10 @@ export function buildPasswordResetUrl(token: string) {
   return url.toString()
 }
 
+function getStore(store?: unknown) {
+  return (store ?? getPrisma()) as PasswordResetStore
+}
+
 export async function requestPasswordReset(email: string) {
   const parsed = passwordResetRequestSchema.safeParse({ email })
 
@@ -67,16 +84,8 @@ export async function requestPasswordReset(email: string) {
     return { status: "invalid-email" as const }
   }
 
-  const prisma = getPrisma()
+  const prisma = getStore()
   const now = new Date()
-
-  await prisma.passwordResetToken.deleteMany({
-    where: {
-      expiresAt: {
-        lt: now,
-      },
-    },
-  })
 
   const user = await prisma.user.findUnique({
     where: { email: parsed.data.email },
@@ -130,56 +139,117 @@ export async function resetPasswordWithToken({
 }: {
   token: string
   password: string
-}) {
+}, deps: PasswordResetDeps = {}) {
   const tokenHash = hashPasswordResetToken(token.trim())
-  const prisma = getPrisma()
-  const resetToken = await prisma.passwordResetToken.findUnique({
-    where: { tokenHash },
-    include: {
-      user: {
+  const prisma = getStore(deps.store)
+  const now = deps.now ?? new Date()
+
+  try {
+    const passwordHash = await (deps.hashPassword ?? hashPassword)(password)
+    const result = await prisma.$transaction(async (transaction) => {
+      const resetToken = await transaction.passwordResetToken.findUnique({
+        where: { tokenHash },
         select: {
+          expiresAt: true,
           id: true,
-          disabledAt: true,
+          usedAt: true,
+          user: {
+            select: {
+              disabledAt: true,
+              passwordHash: true,
+            },
+          },
+          userId: true,
         },
-      },
-    },
-  })
+      })
 
-  if (
-    !resetToken ||
-    resetToken.usedAt ||
-    resetToken.expiresAt <= new Date() ||
-    resetToken.user.disabledAt
-  ) {
-    return { status: "invalid-token" as const }
+      if (!resetToken || resetToken.user.disabledAt || !resetToken.user.passwordHash) {
+        return { outcome: "invalid", status: "invalid-token" as const }
+      }
+
+      if (resetToken.usedAt) {
+        return { outcome: "replayed", status: "invalid-token" as const }
+      }
+
+      if (resetToken.expiresAt <= now) {
+        return { outcome: "expired", status: "invalid-token" as const }
+      }
+
+      const claim = await transaction.passwordResetToken.updateMany({
+        where: {
+          expiresAt: { gt: now },
+          id: resetToken.id,
+          tokenHash,
+          usedAt: null,
+          user: {
+            is: {
+              disabledAt: null,
+              id: resetToken.userId,
+              passwordHash: { not: null },
+            },
+          },
+        },
+        data: { usedAt: now },
+      })
+
+      if (claim.count !== 1) {
+        return { outcome: "replayed", status: "invalid-token" as const }
+      }
+
+      const userUpdate = await transaction.user.updateMany({
+        where: {
+          disabledAt: null,
+          id: resetToken.userId,
+          passwordHash: { not: null },
+        },
+        data: {
+          authVersion: { increment: 1 },
+          passwordHash,
+        },
+      })
+
+      if (userUpdate.count !== 1) {
+        throw new Error("Password reset user update was not applied.")
+      }
+
+      await transaction.passwordResetToken.updateMany({
+        where: {
+          id: { not: resetToken.id },
+          userId: resetToken.userId,
+          usedAt: null,
+        },
+        data: { usedAt: now },
+      })
+
+      await transaction.securityEvent.create({
+        data: {
+          eventType: "PASSWORD_RESET_COMPLETED",
+          userId: resetToken.userId,
+        },
+      })
+
+      return { outcome: "success", status: "reset" as const }
+    })
+
+    console.info(
+      JSON.stringify({
+        event: "auth_token_attempt",
+        outcome: result.outcome,
+        purpose: "password_reset",
+      })
+    )
+
+    return { status: result.status }
+  } catch {
+    console.error("Password reset token transaction failed.")
+    console.info(
+      JSON.stringify({
+        event: "auth_token_attempt",
+        outcome: "error",
+        purpose: "password_reset",
+      })
+    )
+
+    return { status: "error" as const }
   }
-
-  const now = new Date()
-  const passwordHash = await hashPassword(password)
-
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: resetToken.userId },
-      data: {
-        authVersion: { increment: 1 },
-        passwordHash,
-      },
-    }),
-    prisma.passwordResetToken.update({
-      where: { id: resetToken.id },
-      data: { usedAt: now },
-    }),
-    prisma.passwordResetToken.updateMany({
-      where: {
-        userId: resetToken.userId,
-        usedAt: null,
-        id: {
-          not: resetToken.id,
-        },
-      },
-      data: { usedAt: now },
-    }),
-  ])
-
-  return { status: "reset" as const }
 }
