@@ -52,6 +52,18 @@ function Assert-Checksum {
   }
 }
 
+function Remove-ExpiredBackups {
+  param(
+    [Parameter(Mandatory)][string]$Destination,
+    [Parameter(Mandatory)][int]$RetentionDays
+  )
+
+  $cutoff = (Get-Date).ToUniversalTime().AddDays(-$RetentionDays)
+  Get-ChildItem -LiteralPath $Destination -Directory | Where-Object {
+    $_.Name -match '^20\d{6}T\d{6}Z$' -and $_.LastWriteTimeUtc -lt $cutoff
+  } | Remove-Item -Recurse -Force
+}
+
 function Send-FailureNotification {
   param([Parameter(Mandatory)][pscustomobject]$Config)
 
@@ -112,6 +124,7 @@ try {
   if (Test-Path -LiteralPath $final -PathType Container) {
     Assert-Checksum -FilePath (Join-Path $final "database.dump") -ChecksumPath (Join-Path $final "database.dump.sha256")
     Assert-Checksum -FilePath (Join-Path $final "database.globals.sql") -ChecksumPath (Join-Path $final "database.globals.sql.sha256")
+    Remove-ExpiredBackups -Destination $destination -RetentionDays $retentionDays
     Write-SyncLog "Backup $latest is already present and verified."
     exit 0
   }
@@ -141,10 +154,7 @@ try {
     }
   }
 
-  $cutoff = (Get-Date).ToUniversalTime().AddDays(-$retentionDays)
-  Get-ChildItem -LiteralPath $destination -Directory | Where-Object {
-    $_.Name -match '^20\d{6}T\d{6}Z$' -and $_.LastWriteTimeUtc -lt $cutoff
-  } | Remove-Item -Recurse -Force
+  Remove-ExpiredBackups -Destination $destination -RetentionDays $retentionDays
 
   Write-SyncLog "Backup $latest copied and checksum verified."
 } catch {

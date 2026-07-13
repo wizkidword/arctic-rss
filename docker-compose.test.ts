@@ -8,7 +8,7 @@ describe("Cloudflare Tunnel Compose configuration", () => {
 
     expect(compose).toContain("TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}")
     expect(compose).toContain(
-      'command: ["tunnel", "--no-autoupdate", "run"]'
+      'command: ["tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:20241", "run"]'
     )
     expect(compose).not.toContain(
       'command: ["tunnel", "--no-autoupdate", "run", "--token"'
