@@ -61,7 +61,9 @@ check_healthy_container app-worker-1
 check_healthy_container app-postgres-1
 check_healthy_container app-redis-1
 
-if ! curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3000/api/health >/dev/null; then
+if ! curl --fail --silent --show-error --max-time 10 \
+  -H "Host: $OPS_PUBLIC_HOST" \
+  http://127.0.0.1:3000/api/health >/dev/null; then
   failures+=("readiness")
 fi
 

@@ -14,6 +14,8 @@ reviewed target commit are mandatory first.
   archive or a deliberately introduced commit-addressable release process.
 - The migration service uses `prisma migrate deploy`; schema changes must be
   committed, reviewed Prisma migrations.
+- In shell examples, replace `CANONICAL_HOST` with the reviewed public host
+  name. Do not read it by printing the production `.env`.
 
 ## Pre-deployment checklist
 
@@ -51,8 +53,8 @@ imports. Upload it to a staging directory beside the active release.
 
    ```bash
    docker compose ps
-   curl -fsS http://127.0.0.1:3000/api/live
-   curl -fsS http://127.0.0.1:3000/api/health
+   curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/live
+   curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/health
    ```
 
 7. Verify the public health endpoint, login page, and the changed user flow.
@@ -94,7 +96,7 @@ cd "$APP_DIR"
 docker compose build web worker
 docker compose up -d --no-deps --force-recreate web worker
 docker compose ps
-curl -fsS http://127.0.0.1:3000/api/health
+curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/health
 ```
 
 Before starting the new containers, make these secret-safe edits in the
@@ -133,7 +135,7 @@ docker compose run --rm --no-deps migrate
 docker compose build web worker
 docker compose up -d --no-deps --force-recreate web worker
 docker compose run --rm --no-deps worker npx prisma migrate status
-curl -fsS http://127.0.0.1:3000/api/health
+curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/health
 ```
 
 Do not rotate `AUTH_SECRET` as an incidental deployment step. See
@@ -163,8 +165,8 @@ probe, local readiness, public health, login, and these local header probes
 from the VPS:
 
 ```bash
-curl -fsS http://127.0.0.1:3000/api/live
-curl -fsS http://127.0.0.1:3000/api/health
+curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/live
+curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/health
 curl -sS -o /dev/null -D - \
   -H 'Host: invalid.example' \
   http://127.0.0.1:3000/login | head
@@ -204,8 +206,8 @@ reset with a real challenge.
    cd "$APP_DIR"
    docker compose up -d --no-deps --force-recreate web worker
    docker compose ps
-   curl -fsS http://127.0.0.1:3000/api/live
-   curl -fsS http://127.0.0.1:3000/api/health
+   curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/live
+   curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/health
    ```
 
 4. If the release included a schema change, do not roll application code back
@@ -218,6 +220,6 @@ reset with a real challenge.
 
 - Target commit/archive checksum and deploy time.
 - Backup/snapshot identifiers and restore verification.
-- Container status and local/public health results.
+- Container status and local/public health results. Local checks must send the reviewed canonical Host header; a bare loopback Host is intentionally rejected.
 - Smoke-test results for the changed behavior.
 - Rollback target and whether it was retained.
