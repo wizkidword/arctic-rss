@@ -22,9 +22,8 @@ export async function checkSystemHealth(): Promise<SystemHealthResult> {
     },
     queue: {
       checkConnection: async () => {
-        const queue = getFeedRefreshQueue()
-        const client = await queue.client
-        await client.get(queue.toKey("meta"))
+        // This is one constant-time queue metadata read, not a global scan.
+        await getFeedRefreshQueue().getJobCounts("waiting")
       },
     },
   })
