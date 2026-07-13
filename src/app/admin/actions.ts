@@ -209,6 +209,7 @@ export async function addDiscoverSubredditAction(
 
     revalidatePath("/admin")
     revalidatePath("/app/discover")
+    revalidateTag(ADMIN_DASHBOARD_OVERVIEW_CACHE_TAG, "max")
     refresh()
 
     return {

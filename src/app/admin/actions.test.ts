@@ -208,6 +208,10 @@ describe("updateDiscoverCategoryMetadataAction", () => {
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/discover")
+    expect(mocks.revalidateTag).toHaveBeenCalledWith(
+      "admin-dashboard-overview",
+      "max"
+    )
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Updated US General.",
@@ -266,6 +270,10 @@ describe("addDiscoverSubredditAction", () => {
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/discover")
+    expect(mocks.revalidateTag).toHaveBeenCalledWith(
+      "admin-dashboard-overview",
+      "max"
+    )
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Added r/localhistory to Reddit.",
