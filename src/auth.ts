@@ -1,4 +1,3 @@
-import { PrismaAdapter } from "@auth/prisma-adapter"
 import NextAuth, { CredentialsSignin, type NextAuthConfig } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import Google, { type GoogleProfile } from "next-auth/providers/google"
@@ -8,6 +7,7 @@ import { getPrisma } from "@/lib/db"
 import { shouldBlockLoginForUnverifiedEmail } from "@/lib/email-verification-policy"
 import { isGoogleAuthConfigured } from "@/lib/google-auth"
 import { sendWelcomeEmail } from "@/lib/mail"
+import { createTokenMinimizingPrismaAdapter } from "@/lib/oauth-account-storage"
 import { applyVerifiedOAuthDefaults } from "@/lib/oauth-user-provisioning"
 import { verifyPassword } from "@/lib/password"
 import {
@@ -171,9 +171,7 @@ function createAuthConfig(): NextAuthConfig {
   return {
     ...(googleAuthConfigured
       ? {
-          adapter: PrismaAdapter(
-            getPrisma() as unknown as Parameters<typeof PrismaAdapter>[0]
-          ),
+          adapter: createTokenMinimizingPrismaAdapter(getPrisma()),
         }
       : {}),
     pages: {
