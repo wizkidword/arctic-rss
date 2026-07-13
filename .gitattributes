@@ -1,0 +1,2 @@
+# Shell scripts run on the Linux VPS and must retain Unix line endings.
+*.sh text eol=lf
