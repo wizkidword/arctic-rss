@@ -25,7 +25,8 @@ those details in the private operator inventory.
   swap and retains the prior release directory for rollback.
 - Database-level integrity guards prevent cross-user folder links, malformed
   collection items, and case-only duplicate account emails; the matching folder
-  deletion operation is transactional.
+  deletion operation is transactional. Administrator audit records retain an
+  immutable actor snapshot and survive actor-account deletion.
 
 ## Delivery and verification controls
 

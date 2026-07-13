@@ -1,10 +1,11 @@
 # Database integrity guardrails
 
-The committed migration `20260713180000_add_database_integrity_guards` adds
-database-level protection that complements the application ownership checks.
-It prevents a feed subscription from referring to another user's folder,
-requires every collection item to contain exactly one supported target, and
-prevents user accounts whose email addresses differ only by case.
+The committed migrations add database-level protection that complements the
+application ownership checks. They prevent a feed subscription from referring
+to another user's folder, require every collection item to contain exactly one
+supported target, prevent user accounts whose email addresses differ only by
+case, and preserve administrator audit history when an actor account is
+deleted.
 
 ## Pre-deployment gate
 
@@ -31,7 +32,24 @@ FROM (
   GROUP BY lower(email)
   HAVING COUNT(*) > 1
 ) collisions;
+
+SELECT COUNT(*)
+FROM "AdminAuditLog" AS log
+LEFT JOIN "User" AS actor ON actor.id = log."adminUserId"
+WHERE actor.id IS NULL;
 ```
+
+The audit-history query must be zero before
+`20260713190000_preserve_admin_audit_history` is applied. It confirms that
+every existing record can receive an immutable actor snapshot.
+
+## Audit evidence policy
+
+The audit migration snapshots the acting administrator's ID, email, and name
+when an event is created. The live user relation becomes nullable and uses
+`ON DELETE SET NULL`, so removal of an account cannot remove prior evidence.
+The database rejects audit-row edits and deletions; it permits only the
+foreign-key action that clears the live relation after actor deletion.
 
 ## Deployment and rollback
 
