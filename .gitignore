@@ -31,6 +31,9 @@
 /.codex/
 /.superpowers/
 
+# private release-operator configuration
+/scripts/windows/release-config.json
+
 # misc
 .DS_Store
 *.pem

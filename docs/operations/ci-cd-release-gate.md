@@ -31,7 +31,9 @@ for npm packages and workflow actions.
 1. Review the exact commit and confirm all required CI checks passed.
 2. Explicitly approve the release with an operator who has console recovery
    access.
-3. Follow [deployment-rollback-runbook.md](deployment-rollback-runbook.md):
+3. Use the approval-gated
+   [release command](approved-release-command.md), or follow
+   [deployment-rollback-runbook.md](deployment-rollback-runbook.md) manually:
    record the commit and archive checksum, run a verified backup, stage and
    build the exact archive, run the one-shot migration, then recreate only the
    web and worker services.

@@ -1,0 +1,9 @@
+{
+  "SshHost": "your-vps-host.example",
+  "SshUser": "arctic-admin",
+  "SshKeyPath": "C:\\Users\\your-user\\.ssh\\arctic_rss_vps_console",
+  "AppDirectory": "/opt/arctic-rss/app",
+  "ComposeProject": "app",
+  "CanonicalHost": "your-public-host.example",
+  "ReleaseRecordDirectory": "C:\\Users\\your-user\\.arctic-rss\\release-records"
+}
