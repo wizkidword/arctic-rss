@@ -685,25 +685,25 @@ model AiDigestItem {
 }
 
 model SmartDigestRule {
-  id            String                  @id @default(cuid())
-  userId        String
-  name          String
-  topicPrompt   String
-  matchingMode  SmartDigestMatchingMode @default(RULES)
-  includeTerms  String[]                @default([])
-  excludeTerms  String[]                @default([])
-  sourceScope   SmartDigestSourceScope  @default(ALL_FEEDS)
-  emailEnabled  Boolean                 @default(false)
-  cadence       SmartDigestCadence      @default(DAILY)
-  scheduledHour Int                     @default(8)
-  timeZone      String                  @default("UTC")
-  lastRunAt     DateTime?
-  nextRunAt     DateTime?
-  lastMatchedAt DateTime?
+  id                 String                  @id @default(cuid())
+  userId             String
+  name               String
+  topicPrompt        String
+  matchingMode       SmartDigestMatchingMode @default(RULES)
+  includeTerms       String[]                @default([])
+  excludeTerms       String[]                @default([])
+  sourceScope        SmartDigestSourceScope  @default(ALL_FEEDS)
+  emailEnabled       Boolean                 @default(false)
+  cadence            SmartDigestCadence      @default(DAILY)
+  scheduledHour      Int                     @default(8)
+  timeZone           String                  @default("UTC")
+  lastRunAt          DateTime?
+  nextRunAt          DateTime?
+  lastMatchedAt      DateTime?
   contentWatermarkAt DateTime?
-  isEnabled     Boolean                 @default(true)
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
+  isEnabled          Boolean                 @default(true)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   user          User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
   folders       SmartDigestRuleFolder[]
@@ -789,10 +789,10 @@ model SmartDigest {
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
-  user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  rule  SmartDigestRule   @relation(fields: [userId, ruleId], references: [userId, id], onDelete: Cascade)
-  items SmartDigestItem[]
-  digestRun DigestRun?    @relation("DigestRunDigest")
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rule      SmartDigestRule   @relation(fields: [userId, ruleId], references: [userId, id], onDelete: Cascade)
+  items     SmartDigestItem[]
+  digestRun DigestRun?        @relation("DigestRunDigest")
 
   @@index([userId, createdAt])
   @@index([ruleId, createdAt])
