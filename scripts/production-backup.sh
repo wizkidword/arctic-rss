@@ -26,6 +26,10 @@ if [[ -n "$BACKUP_READ_GROUP" ]] && ! getent group "$BACKUP_READ_GROUP" >/dev/nu
 fi
 
 mkdir -p "$BACKUP_DIR"
+if [[ -n "$BACKUP_READ_GROUP" ]]; then
+  chgrp "$BACKUP_READ_GROUP" "$BACKUP_DIR"
+  chmod 750 "$BACKUP_DIR"
+fi
 exec 9>"$BACKUP_DIR/.backup.lock"
 
 if ! flock -n 9; then
