@@ -14,6 +14,9 @@ reviewed target commit are mandatory first.
   archive or a deliberately introduced commit-addressable release process.
 - The migration service uses `prisma migrate deploy`; schema changes must be
   committed, reviewed Prisma migrations.
+- The migration service has its own Docker image. Rebuild that image from the
+  staged release immediately before running it; `docker compose run migrate`
+  alone may reuse an older image that cannot see a newly committed migration.
 - In shell examples, replace `CANONICAL_HOST` with the reviewed public host
   name. Do not read it by printing the production `.env`.
 
@@ -37,9 +40,10 @@ imports. Upload it to a staging directory beside the active release.
 1. Unpack to a new release directory.
 2. Copy the existing production `.env` into that directory without displaying
    its contents.
-3. Validate the staged Compose file, build `web`, `worker`, and `migrate`, and
-   run the one-shot migration service. `migrate deploy` is safe when no
-   migration is pending.
+3. Validate the staged Compose file, then build `web`, `worker`, and `migrate`
+   from that exact staged directory. Run the one-shot migration service only
+   after its build completes. `migrate deploy` is safe when no migration is
+   pending.
 4. Retain the old app directory as the rollback candidate, then switch the
    staged directory into the active app path.
 5. Recreate web and worker without rebuilding unrelated data services:
@@ -64,15 +68,22 @@ imports. Upload it to a staging directory beside the active release.
 Use this pattern only after a fresh backup/snapshot gate and after reviewing
 the migration SQL. Do not use `prisma db push` in production.
 
-1. Build the reviewed release.
+1. Build the reviewed release, including the migration image.
 2. Run the one-off migration service and verify its status before replacing
-   web or worker:
+   web or worker. Run the status command through the freshly built `migrate`
+   image as well:
 
    ```bash
    cd "$APP_DIR"
+   docker compose build migrate
    docker compose run --rm --no-deps migrate
-   docker compose run --rm --no-deps worker npx prisma migrate status
+   docker compose run --rm --no-deps migrate npx prisma migrate status
    ```
+
+   The deploy output must list the reviewed new migration when one is expected.
+   If it instead reports an older migration count or "up to date", stop the
+   release and rebuild `migrate` from the staged directory; do not switch web
+   or worker to code that depends on an unapplied schema change.
 
 3. Recreate web and worker, then run the normal liveness, readiness, and smoke
    tests.
