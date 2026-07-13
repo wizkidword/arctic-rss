@@ -29,11 +29,11 @@ import { updateAiPreferencesForUser } from "@/lib/ai-dashboard"
 import {
   ArticleStateError,
   deleteArticleForUser,
-  markArticlesRead,
   setArticleReadState,
   setArticleStarredState,
   type ArticleReadScope,
 } from "@/lib/articles"
+import { cancelBulkReadJob, startBulkRead } from "@/lib/bulk-read-jobs"
 import { getPrisma } from "@/lib/db"
 import { getDiscoverDirectoryFeed } from "@/lib/discover-directory"
 import { requestEmailVerification } from "@/lib/email-verification"
@@ -980,11 +980,26 @@ export async function markAllReadAction(formData: FormData) {
     throw new Error("Unsupported read scope.")
   }
 
-  await markArticlesRead({
+  await startBulkRead({
     scope,
     userId: session.user.id,
   })
 
+  revalidateReaderPaths()
+  refresh()
+}
+
+export async function cancelBulkReadAction(jobId: string) {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized")
+  }
+
+  await cancelBulkReadJob({
+    jobId,
+    userId: session.user.id,
+  })
   revalidateReaderPaths()
   refresh()
 }

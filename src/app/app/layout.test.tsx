@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
+  getCurrentBulkReadJobForUser: vi.fn(),
   getOrCreateUserSettings: vi.fn(),
   getPrisma: vi.fn(),
   getReaderCounts: vi.fn(),
@@ -58,6 +59,10 @@ vi.mock("@/lib/articles", () => ({
   getReaderCounts: mocks.getReaderCounts,
 }))
 
+vi.mock("@/lib/bulk-read-jobs", () => ({
+  getCurrentBulkReadJobForUser: mocks.getCurrentBulkReadJobForUser,
+}))
+
 vi.mock("@/lib/article-collections", () => ({
   listArticleCollectionsForUser: mocks.listArticleCollectionsForUser,
 }))
@@ -100,6 +105,7 @@ describe("AuthenticatedAppLayout", () => {
       starredCount: 0,
       unreadCount: 0,
     })
+    mocks.getCurrentBulkReadJobForUser.mockResolvedValue(null)
     mocks.listUserFeedSubscriptions.mockResolvedValue([])
     mocks.listUserFolders.mockResolvedValue([])
     mocks.getPrisma.mockReturnValue({

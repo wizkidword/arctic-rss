@@ -22,6 +22,8 @@ function createStateStore({
       findMany: vi.fn().mockResolvedValue(articles),
     },
     articleState: {
+      createMany: vi.fn().mockResolvedValue({ count: articles.length }),
+      updateMany: vi.fn().mockResolvedValue({ count: articles.length }),
       upsert: vi.fn().mockResolvedValue({}),
     },
   }
@@ -337,17 +339,35 @@ describe("article state mutations", () => {
         },
       },
     })
-    expect(store.articleState.upsert).toHaveBeenCalledTimes(2)
-    expect(store.articleState.upsert).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
+    expect(store.articleState.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          articleId: "article-1",
+          isRead: true,
+          readAt: now,
+          userId: "user-1",
+        },
+        {
           articleId: "article-2",
           isRead: true,
           readAt: now,
           userId: "user-1",
-        }),
-      })
-    )
+        },
+      ],
+      skipDuplicates: true,
+    })
+    expect(store.articleState.updateMany).toHaveBeenCalledWith({
+      data: {
+        isRead: true,
+        readAt: now,
+      },
+      where: {
+        articleId: {
+          in: ["article-1", "article-2"],
+        },
+        userId: "user-1",
+      },
+    })
   })
 
   it("marks every article in a folder read without crossing user boundaries", async () => {

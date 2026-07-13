@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import { AppShell } from "@/components/app-shell"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
 import { getReaderCounts } from "@/lib/articles"
+import { getCurrentBulkReadJobForUser } from "@/lib/bulk-read-jobs"
 import { getPrisma } from "@/lib/db"
 import { listDiscoverInterestNavigation } from "@/lib/discover-interests"
 import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
@@ -29,6 +30,7 @@ export default async function AuthenticatedAppLayout({
     folders,
     settings,
     discoverInterests,
+    bulkReadJob,
     userVerification,
   ] = await Promise.all([
     listArticleCollectionsForUser(session.user.id),
@@ -37,6 +39,7 @@ export default async function AuthenticatedAppLayout({
     listUserFolders(session.user.id),
     getOrCreateUserSettings(session.user.id),
     listDiscoverInterestNavigation(),
+    getCurrentBulkReadJobForUser(session.user.id),
     getPrisma().user.findUnique({
       where: { id: session.user.id },
       select: { emailVerified: true },
@@ -46,6 +49,7 @@ export default async function AuthenticatedAppLayout({
   return (
     <AppShell
       articleCollections={articleCollections}
+      bulkReadJob={bulkReadJob}
       discoverInterests={discoverInterests}
       displayMode={normalizeDisplayMode(settings.displayMode)}
       feedSubscriptions={feedSubscriptions}

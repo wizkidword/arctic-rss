@@ -4,6 +4,14 @@ import { Worker } from "bullmq"
 
 import { cleanupExpiredAuthTokens } from "../src/lib/auth-token-maintenance"
 import {
+  failBulkReadJob,
+  processBulkReadJob,
+} from "../src/lib/bulk-read-jobs"
+import {
+  BULK_READ_QUEUE_NAME,
+  type BulkReadJobData,
+} from "../src/lib/bulk-read-queue"
+import {
   AI_DIGEST_QUEUE_NAME,
   type AiDigestJobData,
 } from "../src/lib/ai-digest-queue"
@@ -118,6 +126,20 @@ const smartDigestWorker = new Worker<SmartDigestJobData>(
   }
 )
 
+const bulkReadWorker = new Worker<BulkReadJobData>(
+  BULK_READ_QUEUE_NAME,
+  async (job) => {
+    return processBulkReadJob({
+      jobId: job.data.jobId,
+      onProgress: (progress) => job.updateProgress(progress),
+    })
+  },
+  {
+    connection: redisConnectionOptions(),
+    concurrency: 1,
+  }
+)
+
 const smartDigestEmailWorker = new Worker<SmartDigestEmailJobData>(
   SMART_DIGEST_EMAIL_QUEUE_NAME,
   async (job) => {
@@ -167,6 +189,23 @@ smartDigestWorker.on("failed", (job, error) => {
   console.error(
     `[worker] smart digest failed for ${job?.data.ruleId ?? "unknown rule"}: ${error.message}`
   )
+})
+
+bulkReadWorker.on("failed", (job, error) => {
+  console.error(
+    `[worker] bulk read failed for ${job?.data.jobId ?? "unknown job"}: ${error.message}`
+  )
+
+  if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+    failBulkReadJob({
+      error,
+      jobId: job.data.jobId,
+    }).catch((failureError) => {
+      console.error(
+        `[worker] could not record bulk read failure for ${job.data.jobId}: ${schedulerErrorMessage(failureError)}`
+      )
+    })
+  }
 })
 
 smartDigestEmailWorker.on("failed", (job, error) => {

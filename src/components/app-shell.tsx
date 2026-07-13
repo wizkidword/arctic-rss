@@ -27,6 +27,7 @@ import {
 import { AddFeedSheet } from "@/components/add-feed-sheet"
 import { AdminAccountLink } from "@/components/admin-account-link"
 import { BugReportDialog } from "@/components/bug-report-dialog"
+import { BulkReadProgress } from "@/components/bulk-read-progress"
 import { EmailVerificationReminder } from "@/components/email-verification-reminder"
 import { FeedNavContextMenu } from "@/components/feed-nav-context-menu"
 import { FeatureSuggestionDialog } from "@/components/feature-suggestion-dialog"
@@ -52,6 +53,7 @@ import {
 import { Button } from "@/components/ui/button"
 import type { ThemePreference } from "@/lib/settings"
 import type { DisplayMode } from "@/lib/settings"
+import type { BulkReadJobProgress } from "@/lib/bulk-read-jobs"
 import { legalLinks } from "@/lib/legal-links"
 import { isDarkThemePreference } from "@/lib/settings"
 import {
@@ -625,6 +627,7 @@ function GuestAccountMenu({ compact = false }: { compact?: boolean }) {
 
 export function AppShell({
   articleCollections,
+  bulkReadJob,
   children,
   discoverInterests,
   displayMode,
@@ -637,6 +640,7 @@ export function AppShell({
   user,
 }: {
   articleCollections: ShellArticleCollection[]
+  bulkReadJob?: BulkReadJobProgress | null
   children: ReactNode
   discoverInterests: ShellDiscoverInterest[]
   displayMode: DisplayMode
@@ -760,6 +764,7 @@ export function AppShell({
             <EmailVerificationReminder className="mx-auto max-w-[1600px]" />
           </div>
         ) : null}
+        {bulkReadJob ? <BulkReadProgress job={bulkReadJob} /> : null}
         {children}
       </main>
     </div>

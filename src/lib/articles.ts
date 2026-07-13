@@ -4,6 +4,7 @@ import { Prisma } from "../generated/prisma/client"
 import { getPrisma } from "./db"
 import { getDiscoverDirectory } from "./discover-directory"
 import { imageProxyUrl } from "./image-proxy-url"
+import { writeArticleReadStateBatches } from "./article-read-batch"
 
 const PUBLIC_GUEST_PREVIEW_USER_ID = "__public_guest_preview__"
 
@@ -36,6 +37,27 @@ type ArticleStateStore = {
     }): Promise<ArticleLookup[]>
   }
   articleState: {
+    createMany(args: {
+      data: Array<{
+        articleId: string
+        isRead: boolean
+        readAt: Date
+        userId: string
+      }>
+      skipDuplicates: true
+    }): Promise<{ count: number }>
+    updateMany(args: {
+      data: {
+        isRead: boolean
+        readAt: Date
+      }
+      where: {
+        articleId: {
+          in: string[]
+        }
+        userId: string
+      }
+    }): Promise<{ count: number }>
     upsert(args: {
       create: Record<string, unknown>
       update: Record<string, unknown>
@@ -639,26 +661,12 @@ export async function markArticlesReadWithClient({
     where: articleReadScopeWhere(userId, scope),
   })
 
-  for (const article of articles) {
-    await store.articleState.upsert({
-      create: {
-        articleId: article.id,
-        isRead: true,
-        readAt,
-        userId,
-      },
-      update: {
-        isRead: true,
-        readAt,
-      },
-      where: {
-        userId_articleId: {
-          articleId: article.id,
-          userId,
-        },
-      },
-    })
-  }
+  await writeArticleReadStateBatches({
+    articleIds: articles.map((article) => article.id),
+    readAt,
+    store,
+    userId,
+  })
 
   return {
     markedCount: articles.length,
@@ -829,7 +837,7 @@ function collectionArticleWhere(
   }
 }
 
-function articleReadScopeWhere(
+export function articleReadScopeWhere(
   userId: string,
   scope: ArticleReadScope
 ): Prisma.ArticleWhereInput {

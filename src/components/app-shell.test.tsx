@@ -29,6 +29,10 @@ vi.mock("@/components/bug-report-dialog", () => ({
   BugReportDialog: () => null,
 }))
 
+vi.mock("@/components/bulk-read-progress", () => ({
+  BulkReadProgress: () => <div>Bulk read in progress</div>,
+}))
+
 vi.mock("@/components/feature-suggestion-dialog", () => ({
   FeatureSuggestionDialog: () => null,
 }))

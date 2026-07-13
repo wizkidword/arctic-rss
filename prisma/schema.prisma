@@ -70,6 +70,14 @@ enum ImportStatus {
   FAILED
 }
 
+enum BulkReadJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
 enum AiAction {
   ARTICLE_SUMMARY
   DAILY_DIGEST
@@ -158,6 +166,7 @@ model User {
   podcastSubscriptions    PodcastSubscription[]
   articleStates           ArticleState[]
   podcastEpisodeStates    PodcastEpisodeState[]
+  bulkReadJobs            BulkReadJob[]
   articleCollections      ArticleCollection[]
   aiUsageLogs             AiUsageLog[]
   aiUsagePeriods          AiUsagePeriod[]
@@ -485,6 +494,30 @@ model ArticleState {
   @@unique([userId, articleId])
   @@index([userId, isRead])
   @@index([userId, isStarred])
+}
+
+model BulkReadJob {
+  id                String            @id @default(cuid())
+  userId            String
+  scopeType         String
+  feedId            String?
+  folderId          String?
+  status            BulkReadJobStatus @default(QUEUED)
+  totalArticles     Int
+  processedArticles Int               @default(0)
+  markedArticles    Int               @default(0)
+  lastArticleId     String?
+  errorMessage      String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  canceledAt        DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, updatedAt])
+  @@index([status, updatedAt])
 }
 
 model ArticleCollection {
