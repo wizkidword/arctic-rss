@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  DATABASE_SOURCE_LIMIT_ERROR,
   FREE_PLAN_SOURCE_LIMIT,
   assertUserCanAddSource,
+  isDatabaseSourceLimitError,
   SourceLimitError,
 } from "./source-limits"
 
@@ -84,5 +86,14 @@ describe("source limits", () => {
         userId: "user-1",
       })
     ).rejects.toThrow(SourceLimitError)
+  })
+
+  it("recognizes the database guard's limit error without exposing database details", () => {
+    expect(
+      isDatabaseSourceLimitError(
+        new Error(`Database error: ${DATABASE_SOURCE_LIMIT_ERROR}`)
+      )
+    ).toBe(true)
+    expect(isDatabaseSourceLimitError(new Error("unrelated failure"))).toBe(false)
   })
 })

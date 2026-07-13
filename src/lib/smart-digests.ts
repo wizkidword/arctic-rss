@@ -3,7 +3,10 @@ import type { Plan } from "../generated/prisma/enums"
 
 import { getPrisma } from "./db"
 import { isSupportedTimeZone, type SupportedTimeZone } from "./settings"
-import { smartDigestEnabledLimitForPlan } from "./smart-digest-limits"
+import {
+  isDatabaseSmartDigestLimitError,
+  smartDigestEnabledLimitForPlan,
+} from "./smart-digest-limits"
 import { parseSmartDigestTerms } from "./smart-digest-rules"
 
 export type SmartDigestSourceScope = "ALL_FEEDS" | "FOLDERS" | "FEEDS"
@@ -445,37 +448,45 @@ export async function createSmartDigestRuleForUserWithClient({
     })
   }
 
-  return store.smartDigestRule.create({
-    data: {
-      cadence: "DAILY",
-      emailEnabled: normalized.emailEnabled,
-      excludeTerms: normalized.excludeTerms,
-      folders: {
-        create: normalized.folderIds.map((folderId) => ({
-          folderId,
-          userId,
-        })),
-      },
-      includeTerms: normalized.includeTerms,
-      name: normalized.name,
-      nextRunAt: scheduleNextSmartDigestRun({
-        from: now,
+  try {
+    return await store.smartDigestRule.create({
+      data: {
+        cadence: "DAILY",
+        emailEnabled: normalized.emailEnabled,
+        excludeTerms: normalized.excludeTerms,
+        folders: {
+          create: normalized.folderIds.map((folderId) => ({
+            folderId,
+            userId,
+          })),
+        },
+        includeTerms: normalized.includeTerms,
+        name: normalized.name,
+        nextRunAt: scheduleNextSmartDigestRun({
+          from: now,
+          scheduledHour: normalized.scheduledHour,
+          timeZone: normalized.timeZone,
+        }),
         scheduledHour: normalized.scheduledHour,
+        sourceScope: normalized.sourceScope,
+        subscriptions: {
+          create: normalized.feedSubscriptionIds.map((subscriptionId) => ({
+            subscriptionId,
+            userId,
+          })),
+        },
         timeZone: normalized.timeZone,
-      }),
-      scheduledHour: normalized.scheduledHour,
-      sourceScope: normalized.sourceScope,
-      subscriptions: {
-        create: normalized.feedSubscriptionIds.map((subscriptionId) => ({
-          subscriptionId,
-          userId,
-        })),
+        topicPrompt: normalized.topicPrompt,
+        userId,
       },
-      timeZone: normalized.timeZone,
-      topicPrompt: normalized.topicPrompt,
-      userId,
-    },
-  })
+    })
+  } catch (error) {
+    if (isDatabaseSmartDigestLimitError(error)) {
+      throw new SmartDigestError(limitMessageForPlan(user.plan))
+    }
+
+    throw error
+  }
 }
 
 export async function listSmartDigestRulesForUser(userId: string) {

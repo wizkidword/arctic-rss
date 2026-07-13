@@ -3,6 +3,7 @@ import type { Plan } from "../generated/prisma/enums"
 import { getPrisma } from "./db"
 
 export const FREE_PLAN_SOURCE_LIMIT = 200
+export const DATABASE_SOURCE_LIMIT_ERROR = "ARCTIC_RSS_SOURCE_LIMIT_REACHED"
 
 type SourceLimitStore = {
   user: {
@@ -32,6 +33,13 @@ export class SourceLimitError extends Error {
     super(message)
     this.name = "SourceLimitError"
   }
+}
+
+export function isDatabaseSourceLimitError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.includes(DATABASE_SOURCE_LIMIT_ERROR)
+  )
 }
 
 // Service-boundary cap check; billing-grade atomicity needs stricter create locking.

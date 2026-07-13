@@ -3,6 +3,7 @@ import { Prisma } from "../generated/prisma/client"
 
 const {
   assertUserCanAddSource,
+  isDatabaseSourceLimitError,
   parsePodcastFeed,
   podcastSubscriptionCreate,
   podcastSubscriptionDeleteMany,
@@ -31,6 +32,7 @@ const {
 
   return {
     assertUserCanAddSource: vi.fn(),
+    isDatabaseSourceLimitError: vi.fn(),
     podcastParseError: MockPodcastParseError,
     parsePodcastFeed: vi.fn(),
     podcastSubscriptionCreate: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock("./podcast-refresh", () => ({
 
 vi.mock("./source-limits", () => ({
   assertUserCanAddSource,
+  isDatabaseSourceLimitError,
   SourceLimitError: sourceLimitError,
 }))
 
@@ -121,6 +124,7 @@ describe("podcast subscriptions", () => {
 
   beforeEach(() => {
     assertUserCanAddSource.mockReset()
+    isDatabaseSourceLimitError.mockReset()
     parsePodcastFeed.mockReset()
     podcastSubscriptionCreate.mockReset()
     podcastSubscriptionDeleteMany.mockReset()
@@ -134,6 +138,7 @@ describe("podcast subscriptions", () => {
       currentSourceCount: 0,
       limit: 200,
     })
+    isDatabaseSourceLimitError.mockReturnValue(false)
     safeFetchText.mockResolvedValue(fetchedResponse)
     parsePodcastFeed.mockReturnValue(parsedPodcast)
     podcastSubscriptionFindFirst.mockResolvedValue(null)

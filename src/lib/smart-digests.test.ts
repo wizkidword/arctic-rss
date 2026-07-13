@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  DATABASE_SMART_DIGEST_LIMIT_ERROR,
+  isDatabaseSmartDigestLimitError,
   SMART_DIGEST_FREE_ENABLED_LIMIT,
   SMART_DIGEST_PRO_ENABLED_LIMIT,
   smartDigestEnabledLimitForPlan,
@@ -37,6 +39,15 @@ describe("smart digest limits", () => {
       SMART_DIGEST_PRO_ENABLED_LIMIT
     )
     expect(smartDigestEnabledLimitForPlan("ADMIN")).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it("recognizes the database guard's limit error without exposing database details", () => {
+    expect(
+      isDatabaseSmartDigestLimitError(
+        new Error(`Database error: ${DATABASE_SMART_DIGEST_LIMIT_ERROR}`)
+      )
+    ).toBe(true)
+    expect(isDatabaseSmartDigestLimitError(new Error("unrelated failure"))).toBe(false)
   })
 })
 

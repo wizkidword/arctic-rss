@@ -11,6 +11,7 @@ import { refreshFeedWithClient } from "./feed-refresh"
 import { getPrisma } from "./db"
 import {
   assertUserCanAddSource,
+  isDatabaseSourceLimitError,
   SourceLimitError,
 } from "./source-limits"
 
@@ -296,6 +297,12 @@ export async function subscribeToFeed({
       },
     })
   } catch (error) {
+    if (isDatabaseSourceLimitError(error)) {
+      throw new FeedSubscriptionError(
+        "Free accounts can subscribe to up to 200 sources."
+      )
+    }
+
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"

@@ -5,7 +5,11 @@ import { getPrisma } from "./db"
 import { fetchPodcastFeedText } from "./podcast-fetch"
 import { parsePodcastFeed, PodcastParseError } from "./podcast-parser"
 import { refreshPodcastWithClient } from "./podcast-refresh"
-import { assertUserCanAddSource, SourceLimitError } from "./source-limits"
+import {
+  assertUserCanAddSource,
+  isDatabaseSourceLimitError,
+  SourceLimitError,
+} from "./source-limits"
 import {
   FeedFetchError,
   normalizeHttpUrl,
@@ -201,6 +205,12 @@ export async function subscribeToPodcast({
       },
     })
   } catch (error) {
+    if (isDatabaseSourceLimitError(error)) {
+      throw new PodcastSubscriptionError(
+        "Free accounts can subscribe to up to 200 sources."
+      )
+    }
+
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
