@@ -9,6 +9,7 @@ import {
 } from "@/lib/app-origin"
 
 const HSTS_HEADER = "max-age=31536000; includeSubDomains"
+const INVALID_HOST_CACHE_CONTROL = "no-store"
 
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host")
@@ -17,7 +18,18 @@ export function proxy(request: NextRequest) {
     request.nextUrl.pathname === "/api/health" && isLoopbackHost(host)
 
   if (!isHealthCheck && !isAllowedAppHost(host)) {
-    return new NextResponse("Invalid host.", { status: 400 })
+    console.warn(
+      "host_validation_rejected",
+      JSON.stringify({
+        host: host?.slice(0, 256) ?? null,
+        pathname: request.nextUrl.pathname,
+      })
+    )
+
+    return new NextResponse("Invalid host.", {
+      headers: { "Cache-Control": INVALID_HOST_CACHE_CONTROL },
+      status: 400,
+    })
   }
 
   const canonicalOrigin = getAppOrigin()

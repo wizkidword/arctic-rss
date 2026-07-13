@@ -21,6 +21,7 @@ describe("proxy host validation", () => {
     const response = proxy(request("/api/auth/signin", { host: "attacker.example" }))
 
     expect(response.status).toBe(400)
+    expect(response.headers.get("cache-control")).toBe("no-store")
   })
 
   it("ignores malicious forwarded host and protocol headers", () => {
