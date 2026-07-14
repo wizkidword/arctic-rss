@@ -13,14 +13,6 @@ vi.mock("@/components/google-analytics", () => ({
   ),
 }))
 
-vi.mock("@/components/google-analytics-scripts", () => ({
-  GoogleAnalyticsScripts: ({
-    measurementId,
-  }: {
-    measurementId: string | undefined
-  }) => <div data-google-analytics-scripts={measurementId ?? ""} />,
-}))
-
 vi.mock("@/lib/google-analytics", () => ({
   getGoogleAnalyticsMeasurementId: () => "G-TEST123",
 }))

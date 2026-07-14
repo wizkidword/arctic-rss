@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState, useSyncExternalStore } from "react"
 
 import { GoogleAnalytics } from "@/components/google-analytics"
-import { GoogleAnalyticsScripts } from "@/components/google-analytics-scripts"
 import {
   readAnalyticsConsent,
   type AnalyticsConsentChoice,
@@ -48,12 +47,9 @@ export function AnalyticsConsent({ measurementId }: AnalyticsConsentProps) {
   return (
     <>
       {choice === "accepted" ? (
-        <>
-          <GoogleAnalyticsScripts measurementId={normalizedMeasurementId} />
-          <Suspense fallback={null}>
-            <GoogleAnalytics measurementId={normalizedMeasurementId} />
-          </Suspense>
-        </>
+        <Suspense fallback={null}>
+          <GoogleAnalytics measurementId={normalizedMeasurementId} />
+        </Suspense>
       ) : null}
       {showChoices ? (
         <aside
