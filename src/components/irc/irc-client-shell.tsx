@@ -72,6 +72,12 @@ type ChatRoomSnapshot = {
 type IrcTheme = "classic" | "light" | "modern" | "terminal"
 type ConnectionState = "connected" | "connecting" | "offline"
 
+export function getNetworkStatusPresentation(connectionState: ConnectionState) {
+  return connectionState === "connected"
+    ? { icon: "wifi" as const, label: "Network online" }
+    : { icon: "wifi-off" as const, label: "Network offline" }
+}
+
 const HIDE_ARCTIC_BOT_STORAGE_KEY = "arctic-rss:irc:hide-arctic-bot"
 const ARCTIC_BOT_VISIBILITY_EVENT = "arctic-rss:irc:arctic-bot-visibility"
 const BOT_VISIBILITY_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1_000
@@ -741,10 +747,10 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
         <IrcToolbar connectionState={connectionState} notice={notice} onConnect={connect} theme={theme} onThemeChange={setTheme} />
         <div className="flex min-h-0 flex-1">
           <aside className="hidden w-60 shrink-0 border-r bg-muted/30 p-3 lg:block">
-            <ServerTree activeTab={activeTab} joinedRooms={joinedRooms} onSelect={setActiveTab} profile={profile} rooms={rooms} onJoin={joinRoom} />
+            <ServerTree activeTab={activeTab} connectionState={connectionState} joinedRooms={joinedRooms} onSelect={setActiveTab} profile={profile} rooms={rooms} onJoin={joinRoom} />
           </aside>
           <div className="flex min-w-0 flex-1 flex-col">
-            <MobileRoomControls activeTab={activeTab} joinedRooms={joinedRooms} onSelect={setActiveTab} profile={profile} rooms={rooms} onJoin={joinRoom} />
+            <MobileRoomControls activeTab={activeTab} connectionState={connectionState} joinedRooms={joinedRooms} onSelect={setActiveTab} profile={profile} rooms={rooms} onJoin={joinRoom} />
             <IrcTabs activeTab={activeTab} joinedRooms={joinedRooms} onSelect={setActiveTab} />
             <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_13rem]">
               <section className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -824,15 +830,19 @@ function IrcToolbar({ connectionState, notice, onConnect, onThemeChange, theme }
   )
 }
 
-function ServerTree({ activeTab, joinedRooms, onJoin, onSelect, profile, rooms }: {
+function ServerTree({ activeTab, connectionState, joinedRooms, onJoin, onSelect, profile, rooms }: {
   activeTab: string
+  connectionState: ConnectionState
   joinedRooms: Record<string, ChatRoomSnapshot>
   onJoin: (room: ChatRoom) => void
   onSelect: (tab: string) => void
   profile: ChatProfile
   rooms: ChatRoom[]
 }) {
-  return <div className="flex h-full min-h-0 flex-col gap-4"><div><p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Networks</p><button className={treeItemClass(activeTab === "status")} onClick={() => onSelect("status")} type="button"><WifiOffIcon className="size-3.5" aria-hidden="true" />Status</button></div><div className="min-h-0 flex-1 overflow-y-auto"><p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Channels</p>{rooms.map((room) => joinedRooms[room.id] ? <button className={treeItemClass(activeTab === room.id)} key={room.id} onClick={() => onSelect(room.id)} type="button"><HashIcon className="size-3.5" aria-hidden="true" />{room.slug}</button> : <button className={treeItemClass(false)} key={room.id} onClick={() => onJoin(room)} title={room.description} type="button"><HashIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />{room.slug}<span className="ml-auto text-[10px] text-muted-foreground">Join</span></button>)}</div><div className="border-t pt-3"><p className="truncate font-mono text-xs text-muted-foreground">{profile.handle}</p><p className="mt-1 text-xs text-muted-foreground">Arctic account</p></div></div>
+  const networkStatus = getNetworkStatusPresentation(connectionState)
+  const NetworkStatusIcon = networkStatus.icon === "wifi" ? WifiIcon : WifiOffIcon
+
+  return <div className="flex h-full min-h-0 flex-col gap-4"><div><p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Networks</p><button aria-label={networkStatus.label} className={treeItemClass(activeTab === "status")} onClick={() => onSelect("status")} type="button"><NetworkStatusIcon className={cn("size-3.5", networkStatus.icon === "wifi" && "text-emerald-500")} aria-hidden="true" />Status</button></div><div className="min-h-0 flex-1 overflow-y-auto"><p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Channels</p>{rooms.map((room) => joinedRooms[room.id] ? <button className={treeItemClass(activeTab === room.id)} key={room.id} onClick={() => onSelect(room.id)} type="button"><HashIcon className="size-3.5" aria-hidden="true" />{room.slug}</button> : <button className={treeItemClass(false)} key={room.id} onClick={() => onJoin(room)} title={room.description} type="button"><HashIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />{room.slug}<span className="ml-auto text-[10px] text-muted-foreground">Join</span></button>)}</div><div className="border-t pt-3"><p className="truncate font-mono text-xs text-muted-foreground">{profile.handle}</p><p className="mt-1 text-xs text-muted-foreground">Arctic account</p></div></div>
 }
 
 function MobileRoomControls(props: Parameters<typeof ServerTree>[0]) {

@@ -11,9 +11,24 @@ vi.mock("socket.io-client", () => ({
   io: vi.fn(),
 }))
 
-import { IrcClientShell } from "./irc-client-shell"
+import { getNetworkStatusPresentation, IrcClientShell } from "./irc-client-shell"
 
 describe("Arctic IRC client shell", () => {
+  it("uses the live gateway connection state for the network status indicator", () => {
+    expect(getNetworkStatusPresentation("connected")).toEqual({
+      icon: "wifi",
+      label: "Network online",
+    })
+    expect(getNetworkStatusPresentation("connecting")).toEqual({
+      icon: "wifi-off",
+      label: "Network offline",
+    })
+    expect(getNetworkStatusPresentation("offline")).toEqual({
+      icon: "wifi-off",
+      label: "Network offline",
+    })
+  })
+
   it("guides a first-time chat user through handle creation", () => {
     const markup = renderToStaticMarkup(
       <IrcClientShell initialProfile={null} rooms={[]} />
@@ -43,6 +58,7 @@ describe("Arctic IRC client shell", () => {
     expect(markup).toContain("Arctic Network")
     expect(markup).toContain("Connect")
     expect(markup).toContain("Status")
+    expect(markup).toContain('aria-label="Network offline"')
     expect(markup).toContain("ai")
     expect(markup).toContain("Ctrl/⌘ K focuses the composer")
   })
