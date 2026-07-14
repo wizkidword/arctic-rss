@@ -64,8 +64,13 @@ describe("IrcDiscoverPage", () => {
 
     const markup = renderToStaticMarkup(await IrcDiscoverPage({ searchParams: Promise.resolve({}) }))
 
-    expect(markup).toContain("Browse public rooms by topic")
+    expect(markup).toContain("Browse public Arctic rooms")
     expect(markup).toContain("#ai")
+    expect(markup).toContain("External IRC starter channels")
+    expect(markup).toContain("#libera")
+    expect(markup).toContain("https://web.libera.chat/#libera")
+    expect(markup).toContain('target="_blank"')
+    expect(markup).toContain("Arctic RSS does not connect to, relay, or store content from these networks")
     expect(markup).not.toContain("Matches your Discover interests")
     expect(markup).not.toContain("private.example.test")
   })
@@ -78,6 +83,7 @@ describe("IrcDiscoverPage", () => {
     const markup = renderToStaticMarkup(await IrcDiscoverPage({ searchParams: Promise.resolve({}) }))
 
     expect(markup).toContain("Matches your Discover interests")
+    expect(markup).toContain('href="/irc?room=ai"')
     expect(markup).not.toContain("private.example.test")
   })
 
@@ -88,5 +94,14 @@ describe("IrcDiscoverPage", () => {
 
     await expect(IrcDiscoverPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NOT_FOUND")
     expect(roomsMock).not.toHaveBeenCalled()
+  })
+
+  it("filters both native rooms and external starter channels", async () => {
+    authMock.mockResolvedValue(null)
+
+    const markup = renderToStaticMarkup(await IrcDiscoverPage({ searchParams: Promise.resolve({ q: "debian" }) }))
+
+    expect(markup).toContain("#debian")
+    expect(markup).not.toContain("#ai")
   })
 })
