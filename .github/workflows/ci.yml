@@ -184,7 +184,7 @@ jobs:
       - name: Build production migration image
         run: docker build --target migrate --tag arctic-rss-migrate:ci .
       - name: Scan web image for high and critical vulnerabilities
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: arctic-rss-web:ci
           format: table
@@ -193,7 +193,7 @@ jobs:
           severity: CRITICAL,HIGH
           vuln-type: os,library
       - name: Scan worker image for high and critical vulnerabilities
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: arctic-rss-worker:ci
           format: table
@@ -203,7 +203,7 @@ jobs:
           vuln-type: os,library
           skip-setup-trivy: true
       - name: Scan chat gateway image for high and critical vulnerabilities
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: arctic-rss-chat-gateway:ci
           format: table
@@ -213,7 +213,7 @@ jobs:
           vuln-type: os,library
           skip-setup-trivy: true
       - name: Scan migration image for high and critical vulnerabilities
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: arctic-rss-migrate:ci
           format: table
