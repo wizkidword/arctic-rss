@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest"
 import {
   AdminDashboardError,
   getAdminDashboardFeedbackWithClient,
+  getAdminDashboardAiUsageWithClient,
   getAdminDashboardUsersWithClient,
   getAdminDashboardWithClient,
+  normalizeCachedAdminDashboardAiUsage,
   parseAdminDashboardFilters,
   type AdminDashboardStore,
 } from "./admin-dashboard"
@@ -199,6 +201,32 @@ function createAdminStore(): AdminDashboardStore {
 }
 
 describe("admin dashboard aggregation", () => {
+  it("restores Date values returned by the persistent AI usage cache", async () => {
+    const usage = await getAdminDashboardAiUsageWithClient({
+      filters: {
+        activityEnd: new Date("2026-06-25T00:00:00.000Z"),
+        activityStart: new Date("2026-06-01T00:00:00.000Z"),
+      },
+      isAdmin: true,
+      store: createAdminStore(),
+    })
+
+    const restored = normalizeCachedAdminDashboardAiUsage({
+      ...usage,
+      rangeEnd: usage.rangeEnd.toISOString(),
+      rangeStart: usage.rangeStart.toISOString(),
+      recent: usage.recent.map((item) => ({
+        ...item,
+        createdAt: item.createdAt.toISOString(),
+      })),
+    })
+
+    expect(restored.rangeStart).toBeInstanceOf(Date)
+    expect(restored.rangeEnd).toBeInstanceOf(Date)
+    expect(restored.rangeEnd).toEqual(usage.rangeEnd)
+    expect(restored.recent[0]?.createdAt).toBeInstanceOf(Date)
+  })
+
   it("bounds activity filters and independent table page numbers", () => {
     const filters = parseAdminDashboardFilters(
       {

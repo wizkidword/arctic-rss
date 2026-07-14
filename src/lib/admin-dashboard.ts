@@ -310,12 +310,12 @@ export async function getAdminDashboardAiUsage({
   filters: AdminActivityRange
 }) {
   const keyParts = [
-    "admin-dashboard-ai-usage-v1",
+    "admin-dashboard-ai-usage-v2",
     filters.activityStart.toISOString(),
     filters.activityEnd.toISOString(),
   ]
 
-  return unstable_cache(
+  const usage = await unstable_cache(
     () =>
       getAdminDashboardAiUsageWithClient({
         filters,
@@ -328,6 +328,8 @@ export async function getAdminDashboardAiUsage({
       tags: [ADMIN_DASHBOARD_AI_USAGE_CACHE_TAG],
     },
   )()
+
+  return normalizeCachedAdminDashboardAiUsage(usage)
 }
 
 export async function getAdminDashboardPersistedFailures({
@@ -1204,6 +1206,43 @@ export async function getAdminDashboardAiUsageWithClient({
     })),
     requestCount: usage._count._all,
   }
+}
+
+type AdminDashboardAiUsage = Awaited<
+  ReturnType<typeof getAdminDashboardAiUsageWithClient>
+>
+
+type CachedAdminDashboardAiUsage = Omit<
+  AdminDashboardAiUsage,
+  "rangeEnd" | "rangeStart" | "recent"
+> & {
+  rangeEnd: Date | string
+  rangeStart: Date | string
+  recent: Array<
+    Omit<AdminDashboardAiUsage["recent"][number], "createdAt"> & {
+      createdAt: Date | string
+    }
+  >
+}
+
+// Next's persistent cache serializes Date values. Restore them at this
+// boundary so callers keep the promised Date-based dashboard contract.
+export function normalizeCachedAdminDashboardAiUsage(
+  usage: CachedAdminDashboardAiUsage,
+): AdminDashboardAiUsage {
+  return {
+    ...usage,
+    rangeEnd: toCachedDate(usage.rangeEnd),
+    rangeStart: toCachedDate(usage.rangeStart),
+    recent: usage.recent.map((item) => ({
+      ...item,
+      createdAt: toCachedDate(item.createdAt),
+    })),
+  }
+}
+
+function toCachedDate(value: Date | string) {
+  return value instanceof Date ? value : new Date(value)
 }
 
 export async function getAdminDashboardPersistedFailuresWithClient({

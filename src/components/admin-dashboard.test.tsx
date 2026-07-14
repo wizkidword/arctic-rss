@@ -324,4 +324,19 @@ describe("AdminDashboard", () => {
     expect(markup).toContain("Unavailable")
     expect(markup).toContain("A background task reported an invalid timestamp.")
   })
+
+  it("renders AI dates when the persistent cache returns serialized timestamps", () => {
+    const dashboard = dashboardData()
+    dashboard.generatedAt = "2026-06-24T08:15:00.000Z" as unknown as Date
+
+    const markup = renderToStaticMarkup(
+      <AdminDashboard
+        dashboard={dashboard}
+        discoverCategories={[]}
+        queues={{ available: true, failedJobs: [], queues: [] }}
+      />,
+    )
+
+    expect(markup).toContain("Jun 1, 2026 through Jun 24, 2026")
+  })
 })

@@ -520,7 +520,7 @@ function AiUsageSection({ usage }: { usage: AiUsageData }) {
   return (
     <section className="overflow-hidden rounded-lg border bg-card">
       <SectionHeader badge={`${usage.requestCount} requests`} icon={BotIcon} title="AI usage" />
-      <div className="border-b px-4 py-2 text-xs text-muted-foreground">{formatDateOnly(usage.rangeStart)} through {formatDateOnly(new Date(usage.rangeEnd.getTime() - 1))}</div>
+      <div className="border-b px-4 py-2 text-xs text-muted-foreground">{formatDateOnly(usage.rangeStart)} through {formatExclusiveRangeEnd(usage.rangeEnd)}</div>
       <div className="grid border-b sm:grid-cols-2 xl:grid-cols-3">
         <AiMetric label="Input tokens" value={integerFormatter.format(usage.inputTokens)} />
         <AiMetric label="Output tokens" value={integerFormatter.format(usage.outputTokens)} />
@@ -623,6 +623,8 @@ function EmptyState({ destructive = false, icon: Icon = CircleAlertIcon, message
 
 function formatOptionalDate(value: Date | null) { return value ? formatDateTime(value) : "Never" }
 function formatLastLogin(value: Date | null) { return value ? formatDateTime(value) : "Not recorded" }
-function formatDateTime(value: Date | string | number | null | undefined) { const date = value instanceof Date ? value : new Date(value ?? Number.NaN); return Number.isFinite(date.getTime()) ? dateFormatter.format(date) : "Unavailable" }
-function formatDateOnly(value: Date | string | number | null | undefined) { const date = value instanceof Date ? value : new Date(value ?? Number.NaN); return Number.isFinite(date.getTime()) ? dateOnlyFormatter.format(date) : "Unavailable" }
+function formatDateTime(value: Date | string | number | null | undefined) { const date = toValidDate(value); return date ? dateFormatter.format(date) : "Unavailable" }
+function formatDateOnly(value: Date | string | number | null | undefined) { const date = toValidDate(value); return date ? dateOnlyFormatter.format(date) : "Unavailable" }
+function formatExclusiveRangeEnd(value: Date | string | number | null | undefined) { const date = toValidDate(value); return date ? formatDateOnly(new Date(date.getTime() - 1)) : "Unavailable" }
+function toValidDate(value: Date | string | number | null | undefined) { const date = value instanceof Date ? value : new Date(value ?? Number.NaN); return Number.isFinite(date.getTime()) ? date : null }
 function humanizeEnum(value: string) { const normalized = value.replace(/_/g, " ").toLowerCase(); return normalized.charAt(0).toUpperCase() + normalized.slice(1) }
