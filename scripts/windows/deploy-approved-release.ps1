@@ -347,6 +347,27 @@ done
 
 test "$postgres_health" = healthy
 test "$redis_health" = healthy
+
+# A running chat gateway holds its own fail-closed Redis clients for token
+# replay protection. Recreate it after Redis so fresh browser sessions do not
+# authenticate against a stale client connection. Do not start chat when it
+# was intentionally inactive before the release.
+chat_gateway_health="not-running"
+chat_gateway_was_running="$(sudo -n docker inspect -f '{{.State.Running}}' app-chat-gateway-1 2>/dev/null || true)"
+if [ "$chat_gateway_was_running" = true ]; then
+  sudo -n docker compose -p "$compose_project" --project-directory "$live" --profile chat up -d --no-deps --force-recreate chat-gateway
+
+  for attempt in $(seq 1 18); do
+    chat_gateway_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-chat-gateway-1)"
+    if [ "$chat_gateway_health" = healthy ]; then
+      break
+    fi
+    sleep 5
+  done
+
+  test "$chat_gateway_health" = healthy
+fi
+
 sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate web worker
 
 for attempt in $(seq 1 18); do
@@ -379,12 +400,14 @@ test "$monitor_status" = 0
 printf 'PREVIOUS_RELEASE=%s\n' "$previous"
 printf 'WEB_HEALTH=%s\n' "$web_health"
 printf 'WORKER_HEALTH=%s\n' "$worker_health"
+printf 'CHAT_GATEWAY_HEALTH=%s\n' "$chat_gateway_health"
 '@
   $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost)
   $stageOutput = Invoke-RemoteScript -Config $config -Script $remoteScript
   $previousRelease = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_RELEASE"
   $webHealth = Get-ReleaseMarker -Output $stageOutput -Name "WEB_HEALTH"
   $workerHealth = Get-ReleaseMarker -Output $stageOutput -Name "WORKER_HEALTH"
+  $chatGatewayHealth = Get-ReleaseMarker -Output $stageOutput -Name "CHAT_GATEWAY_HEALTH"
 
   $publicHealth = (Invoke-RequiredCommand -FilePath "curl.exe" -Arguments @(
     "-fsS", "https://$($config.CanonicalHost)/api/health"
@@ -412,6 +435,7 @@ printf 'WORKER_HEALTH=%s\n' "$worker_health"
     loginHttpStatus = $loginStatus
     previousRelease = $previousRelease
     publicHealth = $publicHealth
+    chatGatewayHealth = $chatGatewayHealth
     webHealth = $webHealth
     workerHealth = $workerHealth
   } | ConvertTo-Json | Set-Content -LiteralPath $recordPath -Encoding utf8
