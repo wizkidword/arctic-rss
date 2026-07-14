@@ -14,6 +14,10 @@ import {
   type FeedRefreshJobData,
 } from "./feed-refresh-queue"
 import {
+  CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
+  type ChatArticleIntegrationJobData,
+} from "./chat/bot-queue"
+import {
   PODCAST_REFRESH_QUEUE_NAME,
   type PodcastRefreshJobData,
 } from "./podcast-refresh-queue"
@@ -35,6 +39,7 @@ type AdminQueueCounts = Record<string, number>
 export const ADMIN_QUEUE_LABELS = {
   aiDigest: "AI digest",
   bulkRead: "Bulk mark read",
+  chatArticleIntegration: "Chat article integration",
   feedRefresh: "Feed refresh",
   opmlImport: "OPML import",
   podcastRefresh: "Podcast refresh",
@@ -108,6 +113,10 @@ export async function inspectAdminQueues(): Promise<AdminQueueSnapshot> {
   const feedQueue = new Queue<FeedRefreshJobData>(FEED_REFRESH_QUEUE_NAME, {
     connection,
   })
+  const chatArticleIntegrationQueue = new Queue<ChatArticleIntegrationJobData>(
+    CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
+    { connection }
+  )
   const digestQueue = new Queue<AiDigestJobData>(AI_DIGEST_QUEUE_NAME, {
     connection,
   })
@@ -133,6 +142,7 @@ export async function inspectAdminQueues(): Promise<AdminQueueSnapshot> {
     return await inspectAdminQueuesWithClients({
       queues: [
         { name: ADMIN_QUEUE_LABELS.feedRefresh, reader: feedQueue },
+        { name: ADMIN_QUEUE_LABELS.chatArticleIntegration, reader: chatArticleIntegrationQueue },
         { name: ADMIN_QUEUE_LABELS.podcastRefresh, reader: podcastQueue },
         { name: ADMIN_QUEUE_LABELS.aiDigest, reader: digestQueue },
         { name: ADMIN_QUEUE_LABELS.bulkRead, reader: bulkReadQueue },
@@ -144,6 +154,7 @@ export async function inspectAdminQueues(): Promise<AdminQueueSnapshot> {
   } finally {
     await Promise.allSettled([
       feedQueue.close(),
+      chatArticleIntegrationQueue.close(),
       digestQueue.close(),
       bulkReadQueue.close(),
       podcastQueue.close(),

@@ -24,9 +24,13 @@ type RateLimitRule = {
 }
 
 export type RateLimitAction =
+  | "account_deletion_reauthentication"
   | "admin_opml_import"
   | "ai_digest"
   | "ai_summary"
+  | "chat_message"
+  | "chat_moderation"
+  | "chat_report"
   | "feed_discovery"
   | "feedback"
   | "image_proxy"
@@ -79,6 +83,15 @@ const combinedSubject = (
   }
 
 const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
+  account_deletion_reauthentication: [
+    { limit: 5, scope: "user", subject: inputSubject("userId"), windowMs: 15 * 60_000 },
+    {
+      limit: 5,
+      scope: "user-ip",
+      subject: combinedSubject("userId", "ip"),
+      windowMs: 15 * 60_000,
+    },
+  ],
   admin_opml_import: [
     { limit: 3, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
   ],
@@ -87,6 +100,15 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
   ],
   ai_summary: [
     { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
+  ],
+  chat_message: [
+    { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+  ],
+  chat_moderation: [
+    { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+  ],
+  chat_report: [
+    { limit: 6, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
   ],
   feed_discovery: [
     { limit: 20, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },

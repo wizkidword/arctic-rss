@@ -90,7 +90,7 @@ foreach ($property in "DestinationPath", "RemoteBackupDirectory", "SshHost", "Ss
   }
 }
 
-$retentionDays = if ($config.RetentionDays) { [int]$config.RetentionDays } else { 90 }
+$retentionDays = if ($config.RetentionDays) { [int]$config.RetentionDays } else { 30 }
 if ($retentionDays -lt 1) {
   throw "RetentionDays must be at least one."
 }

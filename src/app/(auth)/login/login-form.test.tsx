@@ -50,6 +50,10 @@ describe("LoginForm", () => {
   it("tracks completed email signups after the signup success redirect", async () => {
     const gtag = vi.fn()
     ;(window as TestWindow).gtag = gtag
+    window.localStorage.setItem(
+      "arcticrss.analytics-consent.v1",
+      JSON.stringify({ choice: "accepted", updatedAt: new Date().toISOString() })
+    )
     navigation.searchParams = new URLSearchParams("registered=1")
 
     const { rerender } = render(

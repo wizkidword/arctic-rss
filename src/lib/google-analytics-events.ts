@@ -23,7 +23,7 @@ export function trackAnalyticsEvent(
   eventName: AnalyticsEventName,
   params: AnalyticsEventParams = {}
 ) {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !hasAnalyticsConsent()) {
     return
   }
 
@@ -60,3 +60,4 @@ export function trackSourceSubscription({
     })
   }
 }
+import { hasAnalyticsConsent } from "./analytics-consent"

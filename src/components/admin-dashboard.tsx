@@ -36,6 +36,7 @@ import {
   type AdminDashboardPagination,
 } from "@/lib/admin-dashboard"
 import { inspectAdminQueues, type AdminQueueSnapshot } from "@/lib/admin-queues"
+import { isChatEnabled } from "@/lib/chat/feature-flags"
 import { listDiscoverCategoryEditorOptions, type DiscoverCategoryEditorOption } from "@/lib/discover-category-customizations"
 import { cn } from "@/lib/utils"
 
@@ -235,13 +236,19 @@ function DashboardFrame({
               Loaded {dateFormatter.format(generatedAt)} · panels update independently
             </p>
           </div>
-          <Link
-            className={cn(buttonVariants({ variant: "outline" }), "w-fit gap-1.5")}
-            href="/app"
-          >
-            <ArrowLeftIcon data-icon="inline-start" />
-            Back to reader
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {isChatEnabled() ? <>
+              <Link className={cn(buttonVariants({ variant: "outline" }), "w-fit")} href="/admin/chat-reports">Chat reports</Link>
+              <Link className={cn(buttonVariants({ variant: "outline" }), "w-fit")} href="/admin/chat-legal-holds">Legal holds</Link>
+            </> : null}
+            <Link
+              className={cn(buttonVariants({ variant: "outline" }), "w-fit gap-1.5")}
+              href="/app"
+            >
+              <ArrowLeftIcon data-icon="inline-start" />
+              Back to reader
+            </Link>
+          </div>
         </div>
       </header>
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4 p-3 sm:p-5 lg:p-6">

@@ -304,6 +304,27 @@ describe("AppShell", () => {
     expect(markup).toContain('class="dark min-h-screen bg-background text-foreground"')
   })
 
+  it("shows Chat only when the native chat feature is enabled", () => {
+    const markup = renderToStaticMarkup(
+      <AppShell
+        articleCollections={[]}
+        chatEnabled
+        discoverInterests={discoverInterests}
+        feedSubscriptions={[]}
+        folders={[]}
+        displayMode="THREE_PANE"
+        readerCounts={{ allCount: 0, starredCount: 0, unreadCount: 0 }}
+        themePreference="SYSTEM"
+        user={{ email: "reader@example.com", name: "Reader", role: "USER" }}
+      >
+        <div>Reader content</div>
+      </AppShell>
+    )
+
+    expect(markup.match(/href="\/irc"/g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Chat</g) ?? []).toHaveLength(2)
+  })
+
   it("uses a collapsed navigation shell for minimal display mode", () => {
     const markup = renderToStaticMarkup(
       <AppShell

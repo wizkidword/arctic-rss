@@ -2,7 +2,8 @@ import Image from "next/image"
 import Link from "next/link"
 import type { ReactNode } from "react"
 
-import { legalLastUpdated, legalLinks } from "@/lib/legal-links"
+import { getPolicyPublicationDate } from "@/lib/approved-policy"
+import { legalLinks } from "@/lib/legal-links"
 import { cn } from "@/lib/utils"
 
 type LegalPageLayoutProps = {
@@ -16,6 +17,8 @@ export function LegalPageLayout({
   description,
   title,
 }: LegalPageLayoutProps) {
+  const publicationDate = getPolicyPublicationDate()
+
   return (
     <main className="min-h-screen bg-[#f3fbff] text-slate-950">
       <section className="mx-auto flex min-h-screen max-w-4xl flex-col px-4 py-6 sm:px-6 lg:px-8">
@@ -53,9 +56,9 @@ export function LegalPageLayout({
             <p className="max-w-2xl text-base leading-7 text-slate-600">
               {description}
             </p>
-            <p className="text-sm text-slate-500">
-              Last updated: {legalLastUpdated}
-            </p>
+            {publicationDate ? (
+              <p className="text-sm text-slate-500">Last updated: {publicationDate}</p>
+            ) : null}
           </div>
           <nav
             aria-label="Legal pages"

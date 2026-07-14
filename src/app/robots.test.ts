@@ -9,8 +9,9 @@ describe("robots", () => {
         allow: "/",
         disallow: [
           "/admin/",
-          "/api/",
-          "/app/",
+        "/api/",
+        "/app/",
+        "/irc/",
           "/forgot-password",
           "/login",
           "/reset-password",

@@ -390,6 +390,10 @@ describe("FeedDirectorySubscribeButton", () => {
         gtag?: ReturnType<typeof vi.fn>
       }
     ).gtag = gtag
+    window.localStorage.setItem(
+      "arcticrss.analytics-consent.v1",
+      JSON.stringify({ choice: "accepted", updatedAt: new Date().toISOString() })
+    )
     const successMessage =
       "Subscribed to NPR - National. Imported 12 articles."
     subscribeDirectoryFeedAction.mockResolvedValueOnce({

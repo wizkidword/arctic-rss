@@ -90,6 +90,27 @@ describe("rate limiter", () => {
     })
   })
 
+  it("bounds native chat message sends per account", async () => {
+    const store = createCounterStore()
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await expect(
+        enforceRateLimit(
+          { action: "chat_message", userId: "user-789" },
+          { store }
+        )
+      ).resolves.toEqual({ allowed: true })
+    }
+
+    await expect(
+      enforceRateLimit({ action: "chat_message", userId: "user-789" }, { store })
+    ).resolves.toMatchObject({
+      allowed: false,
+      retryAfterSeconds: 60,
+      scope: "user",
+    })
+  })
+
   it("shares a Redis counter across application instances", async () => {
     const redisStore = createCounterStore()
     const firstInstance = { store: redisStore }

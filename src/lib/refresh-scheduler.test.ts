@@ -127,6 +127,8 @@ describe("refresh scheduler", () => {
         FEED_REFRESH_CONCURRENCY: "0",
         FEED_SCHEDULER_BATCH_SIZE: "50000",
         FEED_SCHEDULER_INTERVAL_MS: "10",
+        SECURITY_EVENT_MAINTENANCE_BATCH_SIZE: "0",
+        SECURITY_EVENT_MAINTENANCE_INTERVAL_MS: "999999999",
         SMART_DIGEST_CONCURRENCY: "0",
         SMART_DIGEST_EMAIL_CONCURRENCY: "999",
       })
@@ -135,6 +137,8 @@ describe("refresh scheduler", () => {
       feedRefreshConcurrency: 1,
       schedulerBatchSize: 1_000,
       schedulerIntervalMs: 10_000,
+      securityEventMaintenanceBatchSize: 1,
+      securityEventMaintenanceIntervalMs: 24 * 60 * 60_000,
       smartDigestConcurrency: 1,
       smartDigestEmailConcurrency: 8,
     })

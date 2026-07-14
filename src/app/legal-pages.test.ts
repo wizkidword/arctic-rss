@@ -11,27 +11,37 @@ const legalPages = [
   {
     heading: "Privacy Policy",
     route: "privacy",
-    requiredCopy: "Google Analytics",
+    requiredCopy: "ApprovedPolicyDocument",
   },
   {
     heading: "Terms of Service",
     route: "terms",
-    requiredCopy: "Ko-fi tips are voluntary support",
+    requiredCopy: "ApprovedPolicyDocument",
   },
   {
     heading: "Cookie Policy",
     route: "cookies",
-    requiredCopy: "Google Analytics",
+    requiredCopy: "ApprovedPolicyDocument",
   },
   {
     heading: "Security",
     route: "security",
-    requiredCopy: "Vulnerability disclosure",
+    requiredCopy: "ApprovedPolicyDocument",
+  },
+  {
+    heading: "Community Guidelines",
+    route: "community",
+    requiredCopy: "ApprovedPolicyDocument",
+  },
+  {
+    heading: "Retention and Deletion",
+    route: "retention",
+    requiredCopy: "ApprovedPolicyDocument",
   },
 ]
 
 describe("public legal pages", () => {
-  it("publishes the expected policy routes with Arctic RSS contact copy", () => {
+  it("publishes the approved-policy routes", () => {
     const missing = legalPages.filter(({ route }) => {
       const pagePath = path.join(
         process.cwd(),

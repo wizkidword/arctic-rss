@@ -309,13 +309,33 @@ test -f "$live/.env"
 
 sudo -n install -d -m 755 "$stage"
 sudo -n tar -xzf "$archive" -C "$stage"
+test -f "$stage/ops/systemd/60-arctic-rss-log-retention.conf"
 sudo -n install -m 600 -o root -g root "$live/.env" "$stage/.env"
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" config -q
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" build migrate web worker
+sudo -n install -d -m 755 /etc/systemd/journald.conf.d
+sudo -n install -m 644 "$stage/ops/systemd/60-arctic-rss-log-retention.conf" /etc/systemd/journald.conf.d/60-arctic-rss-log-retention.conf
+sudo -n systemctl restart systemd-journald
+sudo -n systemd-analyze cat-config systemd/journald.conf | grep -qx 'MaxRetentionSec=30day'
+sudo -n journalctl --rotate
+sudo -n journalctl --vacuum-time=30d
+sudo -n docker compose -p "$compose_project" --project-directory "$stage" build migrate web worker chat-gateway
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate </dev/null
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
 sudo -n mv "$live" "$previous"
 sudo -n mv "$stage" "$live"
+sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate postgres redis
+
+for attempt in $(seq 1 18); do
+  postgres_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-postgres-1)"
+  redis_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-redis-1)"
+  if [ "$postgres_health" = healthy ] && [ "$redis_health" = healthy ]; then
+    break
+  fi
+  sleep 5
+done
+
+test "$postgres_health" = healthy
+test "$redis_health" = healthy
 sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate web worker
 
 for attempt in $(seq 1 18); do
@@ -329,6 +349,11 @@ done
 
 test "$web_health" = healthy
 test "$worker_health" = healthy
+
+for container in app-postgres-1 app-redis-1 app-web-1 app-worker-1; do
+  test "$(sudo -n docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$container")" = journald
+done
+
 local_health="$(curl -fsS -H "Host: $canonical_host" http://127.0.0.1:3000/api/health)"
 local_live="$(curl -fsS http://127.0.0.1:3000/api/live)"
 test "$local_health" = '{"status":"ok"}'

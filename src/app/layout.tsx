@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Suspense } from "react";
 
-import { GoogleAnalytics } from "@/components/google-analytics";
-import { GoogleAnalyticsScripts } from "@/components/google-analytics-scripts";
+import { AnalyticsConsent } from "@/components/analytics-consent";
 import { getAppOrigin } from "@/lib/app-origin";
 import { getGoogleAnalyticsMeasurementId } from "@/lib/google-analytics";
 
@@ -40,10 +38,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
-        <GoogleAnalyticsScripts measurementId={googleAnalyticsMeasurementId} />
-        <Suspense fallback={null}>
-          <GoogleAnalytics measurementId={googleAnalyticsMeasurementId} />
-        </Suspense>
+        <AnalyticsConsent measurementId={googleAnalyticsMeasurementId} />
       </body>
     </html>
   );

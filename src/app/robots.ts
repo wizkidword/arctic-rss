@@ -10,6 +10,7 @@ export default function robots(): MetadataRoute.Robots {
         "/admin/",
         "/api/",
         "/app/",
+        "/irc/",
         "/forgot-password",
         "/login",
         "/reset-password",

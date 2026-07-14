@@ -115,6 +115,18 @@ export function schedulerSettings(
       minimum: 10_000,
       value: environment.FEED_SCHEDULER_INTERVAL_MS,
     }),
+    securityEventMaintenanceBatchSize: readClampedPositiveInteger({
+      fallback: 100,
+      maximum: 1_000,
+      minimum: 1,
+      value: environment.SECURITY_EVENT_MAINTENANCE_BATCH_SIZE,
+    }),
+    securityEventMaintenanceIntervalMs: readClampedPositiveInteger({
+      fallback: 6 * 60 * 60_000,
+      maximum: 24 * 60 * 60_000,
+      minimum: 60 * 60_000,
+      value: environment.SECURITY_EVENT_MAINTENANCE_INTERVAL_MS,
+    }),
     smartDigestConcurrency: readClampedPositiveInteger({
       fallback: 2,
       maximum: 8,

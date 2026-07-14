@@ -25,7 +25,7 @@ export function GoogleAnalyticsScripts({
             "window.dataLayer = window.dataLayer || [];",
             "window.gtag = window.gtag || function(){window.dataLayer.push(arguments);};",
             "window.gtag('js', new Date());",
-            `window.gtag('config', ${JSON.stringify(normalizedMeasurementId)});`,
+            `window.gtag('config', ${JSON.stringify(normalizedMeasurementId)}, { allow_google_signals: false, allow_ad_personalization_signals: false });`,
           ].join("\n"),
         }}
       />

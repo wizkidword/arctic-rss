@@ -28,6 +28,18 @@ import { processAiDigest } from "../src/lib/ai-digests"
 import { getPrisma } from "../src/lib/db"
 import { refreshFeed } from "../src/lib/feed-refresh"
 import {
+  processChatArticleIntegration,
+  processPendingChatBotDeliveries,
+} from "../src/lib/chat/bot"
+import {
+  CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
+  enqueueChatArticleIntegration,
+  type ChatArticleIntegrationJobData,
+} from "../src/lib/chat/bot-queue"
+import { getChatFeatureFlags } from "../src/lib/chat/feature-flags"
+import { getChatRetentionSettings, purgeExpiredChatRecords } from "../src/lib/chat/retention"
+import { publishChatRoomMessage } from "../src/lib/chat/room-events"
+import {
   enqueueFeedRefresh,
   FEED_REFRESH_QUEUE_NAME,
   redisConnectionOptions,
@@ -45,6 +57,7 @@ import {
   schedulerSettings,
 } from "../src/lib/refresh-scheduler"
 import { assertSecureProductionConfiguration } from "../src/lib/production-security"
+import { cleanupExpiredSecurityEvents } from "../src/lib/security-event-maintenance"
 import { processSmartDigestEmailDelivery } from "../src/lib/smart-digest-delivery"
 import {
   enqueueSmartDigestEmail,
@@ -72,9 +85,12 @@ const {
   podcastRefreshConcurrency,
   schedulerBatchSize,
   schedulerIntervalMs,
+  securityEventMaintenanceBatchSize,
+  securityEventMaintenanceIntervalMs,
   smartDigestConcurrency,
   smartDigestEmailConcurrency,
 } = schedulerSettings()
+const { intervalMs: chatRetentionIntervalMs } = getChatRetentionSettings()
 const prisma = getPrisma()
 const WORKER_HEARTBEAT_INTERVAL_MS = 30_000
 
@@ -88,7 +104,7 @@ const worker = new Worker<FeedRefreshJobData>(
   async (job) => {
     return runTrackedRefresh({
       kind: "feed",
-      refresh: () => refreshFeed(job.data.feedId),
+      refresh: () => refreshFeedAndQueueChatIntegration(job.data.feedId),
       sourceId: job.data.feedId,
     })
   },
@@ -132,6 +148,21 @@ const smartDigestWorker = new Worker<SmartDigestJobData>(
   {
     connection: redisConnectionOptions(),
     concurrency: smartDigestConcurrency,
+  }
+)
+
+const chatArticleIntegrationWorker = new Worker<ChatArticleIntegrationJobData>(
+  CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
+  async (job) => {
+    const result = await processChatArticleIntegration({
+      articleId: job.data.articleId,
+    })
+    await publishChatMessagesSafely(result.messages)
+    return result
+  },
+  {
+    connection: redisConnectionOptions(),
+    concurrency: 1,
   }
 )
 
@@ -225,6 +256,12 @@ smartDigestWorker.on("failed", (job, error) => {
   )
 })
 
+chatArticleIntegrationWorker.on("failed", (job, error) => {
+  console.error(
+    `[worker] chat article integration failed for ${job?.data.articleId ?? "unknown article"}: ${error.message}`
+  )
+})
+
 bulkReadWorker.on("failed", (job, error) => {
   console.error(
     `[worker] bulk read failed for ${job?.data.jobId ?? "unknown job"}: ${error.message}`
@@ -279,6 +316,52 @@ async function enqueueDueFeeds() {
   })
 }
 
+async function refreshFeedAndQueueChatIntegration(feedId: string) {
+  const result = await refreshFeed(feedId)
+
+  if (!getChatFeatureFlags().botEnabled || !result.newArticleIds?.length) {
+    return result
+  }
+
+  const queued = await Promise.allSettled(
+    result.newArticleIds.map((articleId) => enqueueChatArticleIntegration(articleId))
+  )
+  const failed = queued.filter((entry) => entry.status === "rejected").length
+  if (failed) {
+    console.error(
+      JSON.stringify({
+        event: "chat_article_integration_enqueue",
+        failed,
+        outcome: "deferred",
+      })
+    )
+  }
+
+  return result
+}
+
+async function processPendingChatBotMessages() {
+  const result = await processPendingChatBotDeliveries({
+    limit: schedulerBatchSize,
+  })
+  await publishChatMessagesSafely(result.messages)
+  return result
+}
+
+async function publishChatMessagesSafely(
+  messages: Awaited<ReturnType<typeof processChatArticleIntegration>>["messages"]
+) {
+  const results = await Promise.allSettled(
+    messages.map((message) => publishChatRoomMessage(message))
+  )
+  const failed = results.filter((entry) => entry.status === "rejected").length
+  if (failed) {
+    console.error(
+      JSON.stringify({ event: "chat_room_event_publish", failed, outcome: "deferred" })
+    )
+  }
+}
+
 async function enqueueDuePodcasts() {
   return enqueueDuePodcastRefreshes({
     batchSize: schedulerBatchSize,
@@ -322,6 +405,8 @@ async function enqueueDueSmartDigests() {
 
 let schedulerRunning = false
 let nextAuthTokenMaintenanceAt = 0
+let nextChatRetentionAt = 0
+let nextSecurityEventMaintenanceAt = 0
 
 function schedulerErrorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : "unknown error"
@@ -388,13 +473,19 @@ async function schedulerTick() {
       podcastResult,
       smartDigestResult,
       smartDigestEmailResult,
+      chatBotResult,
+      chatRetentionResult,
       maintenanceResult,
+      securityEventMaintenanceResult,
     ] = await Promise.allSettled([
       enqueueDueFeeds(),
       enqueueDuePodcasts(),
       enqueueDueSmartDigests(),
       enqueuePendingSmartDigestEmails(),
+      processPendingChatBotMessages(),
+      runChatRetention(),
       runAuthTokenMaintenance(),
+      runSecurityEventMaintenance(),
     ])
 
     if (feedResult.status === "fulfilled") {
@@ -422,6 +513,29 @@ async function schedulerTick() {
         JSON.stringify({
           event: "smart_digest_email_scheduler",
           ...smartDigestEmailResult.value,
+        })
+      )
+    }
+
+    if (chatBotResult.status === "fulfilled" && !chatBotResult.value.disabled) {
+      console.log(
+        JSON.stringify({
+          event: "chat_bot_scheduler",
+          posted: chatBotResult.value.messages.length,
+          roomFeedCount: chatBotResult.value.roomFeedCount,
+        })
+      )
+    }
+
+    if (
+      chatRetentionResult.status === "fulfilled" &&
+      !("disabled" in chatRetentionResult.value && chatRetentionResult.value.disabled)
+    ) {
+      console.log(
+        JSON.stringify({
+          event: "chat_retention",
+          ...chatRetentionResult.value,
+          outcome: "success",
         })
       )
     }
@@ -454,6 +568,18 @@ async function schedulerTick() {
       )
     }
 
+    if (chatBotResult.status === "rejected") {
+      console.error(
+        `[worker] chat bot scheduler failed: ${schedulerErrorMessage(chatBotResult.reason)}`
+      )
+    }
+
+    if (chatRetentionResult.status === "rejected") {
+      console.error(
+        `[worker] chat retention failed: ${schedulerErrorMessage(chatRetentionResult.reason)}`
+      )
+    }
+
     if (maintenanceResult.status === "rejected") {
       console.error(
         `[worker] auth token maintenance failed: ${schedulerErrorMessage(
@@ -461,9 +587,45 @@ async function schedulerTick() {
         )}`
       )
     }
+
+    if (securityEventMaintenanceResult.status === "fulfilled") {
+      console.log(
+        JSON.stringify({
+          event: "security_event_maintenance",
+          outcome: "success",
+          ...securityEventMaintenanceResult.value,
+        })
+      )
+    }
+
+    if (securityEventMaintenanceResult.status === "rejected") {
+      console.error(
+        `[worker] security event maintenance failed: ${schedulerErrorMessage(
+          securityEventMaintenanceResult.reason
+        )}`
+      )
+    }
   } finally {
     schedulerRunning = false
   }
+}
+
+async function runChatRetention() {
+  if (!getChatFeatureFlags().enabled) {
+    return { disabled: true }
+  }
+
+  const now = Date.now()
+
+  if (now < nextChatRetentionAt) {
+    return { disabled: true }
+  }
+
+  nextChatRetentionAt = now + chatRetentionIntervalMs
+  return purgeExpiredChatRecords({
+    batchSize: getChatRetentionSettings().batchSize,
+    store: prisma,
+  })
 }
 
 async function enqueuePendingSmartDigestEmails() {
@@ -512,6 +674,20 @@ async function runAuthTokenMaintenance() {
   )
 }
 
+async function runSecurityEventMaintenance() {
+  const now = Date.now()
+
+  if (now < nextSecurityEventMaintenanceAt) {
+    return { securityEventsDeleted: 0 }
+  }
+
+  nextSecurityEventMaintenanceAt = now + securityEventMaintenanceIntervalMs
+  return cleanupExpiredSecurityEvents({
+    batchSize: securityEventMaintenanceBatchSize,
+    store: prisma,
+  })
+}
+
 const scheduler = setInterval(() => {
   schedulerTick().catch(() => undefined)
 }, schedulerIntervalMs)
@@ -541,6 +717,7 @@ async function shutdown() {
   try {
     await Promise.all([
       worker.close(),
+      chatArticleIntegrationWorker.close(),
       podcastWorker.close(),
       aiDigestWorker.close(),
       smartDigestWorker.close(),

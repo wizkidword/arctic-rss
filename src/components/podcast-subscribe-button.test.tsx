@@ -41,6 +41,10 @@ describe("PodcastSubscribeButton", () => {
     const user = userEvent.setup()
     const gtag = vi.fn()
     ;(window as TestWindow).gtag = gtag
+    window.localStorage.setItem(
+      "arcticrss.analytics-consent.v1",
+      JSON.stringify({ choice: "accepted", updatedAt: new Date().toISOString() })
+    )
     mocks.subscribeToPodcastStateAction.mockResolvedValueOnce({
       analytics: {
         firstSourceSubscribed: true,

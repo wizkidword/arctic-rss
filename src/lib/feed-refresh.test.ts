@@ -43,6 +43,9 @@ function createStore(feedUrl = "https://example.com/rss.xml") {
 describe("feed refresh", () => {
   it("fetches a feed in batches and records successful health", async () => {
     const store = createStore()
+    store.article.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ externalId: "item-1", id: "article-1" }])
     const now = new Date("2026-06-22T12:00:00.000Z")
     const fetchText = vi.fn().mockResolvedValue({
       contentType: "application/rss+xml",
@@ -62,6 +65,7 @@ describe("feed refresh", () => {
       expect.objectContaining({
         articleCount: 1,
         feedId: "feed-1",
+        newArticleIds: ["article-1"],
       })
     )
     expect(fetchText).toHaveBeenCalledWith(new URL("https://example.com/rss.xml"), {

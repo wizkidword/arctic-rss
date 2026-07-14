@@ -52,3 +52,15 @@ RUN npm run prisma:generate \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 USER worker
 CMD ["./node_modules/.bin/tsx", "worker/index.ts"]
+
+FROM deps AS chat-gateway
+WORKDIR /app
+ENV NODE_ENV=production
+COPY . .
+RUN npm run prisma:generate \
+  && addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 chatgateway \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+USER chatgateway
+EXPOSE 3001
+CMD ["./node_modules/.bin/tsx", "services/chat-gateway/index.ts"]

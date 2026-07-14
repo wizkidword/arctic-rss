@@ -17,5 +17,10 @@ describe("production Docker images", () => {
     expect(dockerfile).toContain(
       'CMD ["./node_modules/.bin/tsx", "worker/index.ts"]',
     );
+    expect(dockerfile).toContain("FROM deps AS chat-gateway");
+    expect(dockerfile).toContain(
+      'CMD ["./node_modules/.bin/tsx", "services/chat-gateway/index.ts"]',
+    );
+    expect(dockerfile).toContain("USER chatgateway");
   });
 });
