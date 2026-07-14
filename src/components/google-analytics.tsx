@@ -24,13 +24,15 @@ declare global {
   }
 }
 
+function queueGtagCommand() {
+  // gtag.js consumes command records as browser `arguments` objects, not arrays.
+  // eslint-disable-next-line prefer-rest-params
+  window.dataLayer?.push(arguments)
+}
+
 function ensureGtag() {
   window.dataLayer = window.dataLayer ?? []
-  window.gtag =
-    window.gtag ??
-    ((...args: GtagArguments) => {
-      window.dataLayer?.push(args)
-    })
+  window.gtag = window.gtag ?? (queueGtagCommand as Gtag)
 }
 
 function loadGoogleAnalyticsScript(measurementId: string) {

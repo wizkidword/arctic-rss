@@ -100,7 +100,10 @@ describe("GoogleAnalytics", () => {
     rerender(<GoogleAnalytics measurementId="G-QUEUE12345" />)
 
     expect(typeof window.gtag).toBe("function")
-    expect(window.dataLayer).toEqual([
+    expect(Object.prototype.toString.call(window.dataLayer?.[0])).toBe("[object Arguments]")
+    expect(
+      window.dataLayer?.map((entry) => Array.from(entry as ArrayLike<unknown>))
+    ).toEqual([
       ["js", expect.any(Date)],
       [
         "config",
