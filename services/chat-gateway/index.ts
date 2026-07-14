@@ -58,6 +58,12 @@ export async function createProductionChatGateway(
 
   try {
     await Promise.all([
+      redis.connect(),
+      redisSubscriber.connect(),
+      roomEventSubscriber.connect(),
+    ])
+
+    await Promise.all([
       redis.ping(),
       redisSubscriber.ping(),
       roomEventSubscriber.ping(),
@@ -173,6 +179,7 @@ function createGatewayRedisClient() {
   const redis = new Redis(redisConnectionOptions().url, {
     connectTimeout: 1_000,
     enableOfflineQueue: false,
+    lazyConnect: true,
     maxRetriesPerRequest: 0,
     retryStrategy: () => null,
   })
