@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 describe("Arctic IRC client shell", () => {
-  it("requests a fresh session and reconnects after a page refresh", async () => {
+  it("requests a fresh session when the member explicitly connects", async () => {
     const listeners = new Map<string, () => void>()
     const socket = {
       connect: vi.fn(() => {
@@ -52,6 +52,9 @@ describe("Arctic IRC client shell", () => {
         rooms={[]}
       />
     )
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/chat/session", { method: "POST" }))
     await waitFor(() => expect(socket.connect).toHaveBeenCalledTimes(1))
