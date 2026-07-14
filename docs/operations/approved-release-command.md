@@ -28,6 +28,11 @@ head, runs the local verification stack, and waits for all required GitHub CI
 jobs. It stops before any VPS action and tells the operator to rerun with
 `-Approve`.
 
+On a Windows checkout that normalizes `prisma/schema.prisma` to CRLF, Prisma's
+format checker can report a line-ending-only false positive. The command
+detects that case, still validates the local schema, and requires the exact
+commit's CI check of the canonical LF schema to succeed before release.
+
 Use `-DryRun` to prove the same local and CI gates without creating an archive
 or contacting the VPS.
 

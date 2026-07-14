@@ -237,7 +237,18 @@ Invoke-LocalCheck -Label "Running unit tests" -FilePath "npm" -Arguments @("test
 Invoke-LocalCheck -Label "Checking TypeScript" -FilePath "npm" -Arguments @("run", "typecheck")
 Invoke-LocalCheck -Label "Running lint" -FilePath "npm" -Arguments @("run", "lint")
 Invoke-LocalCheck -Label "Building production application" -FilePath "npm" -Arguments @("run", "build")
-Invoke-LocalCheck -Label "Checking Prisma format" -FilePath "npx" -Arguments @("prisma", "format", "--check")
+$schemaEol = (Invoke-RequiredCommand -FilePath "git" -Arguments @(
+  "ls-files", "--eol", "--", "prisma/schema.prisma"
+) | Out-String).Trim()
+if ([string]::IsNullOrWhiteSpace($schemaEol)) {
+  throw "The tracked Prisma schema could not be located for formatting verification."
+}
+
+if ($schemaEol -match "\bw/crlf\b") {
+  Write-Host "Prisma schema is CRLF-normalized locally; exact-commit CI verifies canonical LF formatting."
+} else {
+  Invoke-LocalCheck -Label "Checking Prisma format" -FilePath "npx" -Arguments @("prisma", "format", "--check")
+}
 Invoke-LocalCheck -Label "Validating Prisma schema" -FilePath "npx" -Arguments @("prisma", "validate")
 
 $repository = (Invoke-RequiredCommand -FilePath "gh" -Arguments @("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner") | Select-Object -Last 1).Trim()
