@@ -6,6 +6,7 @@ import { z } from "zod"
 import { getPrisma } from "@/lib/db"
 import { shouldBlockLoginForUnverifiedEmail } from "@/lib/email-verification-policy"
 import { isGoogleAuthConfigured } from "@/lib/google-auth"
+import { recordSuccessfulLoginSafely } from "@/lib/last-login"
 import { sendWelcomeEmail } from "@/lib/mail"
 import { createTokenMinimizingPrismaAdapter } from "@/lib/oauth-account-storage"
 import { applyVerifiedOAuthDefaults } from "@/lib/oauth-user-provisioning"
@@ -250,6 +251,12 @@ function createAuthConfig(): NextAuthConfig {
       },
     },
     events: {
+      async signIn({ user }) {
+        await recordSuccessfulLoginSafely({
+          store: getPrisma(),
+          userId: user.id,
+        })
+      },
       async createUser({ user }) {
         if (!user.id || !user.email) {
           return

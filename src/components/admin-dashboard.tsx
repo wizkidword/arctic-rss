@@ -400,10 +400,10 @@ function UsersSection({
       <SectionHeader badge={`${users.length} shown`} icon={UsersIcon} title="Users" />
       {users.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-left text-sm">
+          <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
               <tr>
-                <TableHeading>User</TableHeading><TableHeading>Access</TableHeading><TableHeading>Subscriptions</TableHeading><TableHeading>AI usage</TableHeading><TableHeading>Joined</TableHeading><TableHeading>Status</TableHeading><TableHeading>Sessions</TableHeading>
+                <TableHeading>User</TableHeading><TableHeading>Access</TableHeading><TableHeading>Subscriptions</TableHeading><TableHeading>AI usage</TableHeading><TableHeading>Joined</TableHeading><TableHeading>Last logged in</TableHeading><TableHeading>Status</TableHeading><TableHeading>Sessions</TableHeading>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -414,6 +414,7 @@ function UsersSection({
                   <TableCell className="font-mono tabular-nums">{integerFormatter.format(user.subscriptionCount)}</TableCell>
                   <TableCell className="font-mono tabular-nums">{integerFormatter.format(user.aiMonthlyUsed)}<span className="text-muted-foreground"> / {integerFormatter.format(user.aiMonthlyLimit)}</span></TableCell>
                   <TableCell>{formatDateTime(user.createdAt)}</TableCell>
+                  <TableCell>{formatLastLogin(user.lastLoginAt)}</TableCell>
                   <TableCell><Badge variant={user.disabledAt ? "destructive" : "outline"}>{user.disabledAt ? "Disabled" : "Active"}</Badge></TableCell>
                   <TableCell><AdminRevokeSessionsButton userId={user.id} /></TableCell>
                 </tr>
@@ -621,6 +622,7 @@ function EmptyState({ destructive = false, icon: Icon = CircleAlertIcon, message
 }
 
 function formatOptionalDate(value: Date | null) { return value ? formatDateTime(value) : "Never" }
+function formatLastLogin(value: Date | null) { return value ? formatDateTime(value) : "Not recorded" }
 function formatDateTime(value: Date | string | number | null | undefined) { const date = value instanceof Date ? value : new Date(value ?? Number.NaN); return Number.isFinite(date.getTime()) ? dateFormatter.format(date) : "Unavailable" }
 function formatDateOnly(value: Date | string | number | null | undefined) { const date = value instanceof Date ? value : new Date(value ?? Number.NaN); return Number.isFinite(date.getTime()) ? dateOnlyFormatter.format(date) : "Unavailable" }
 function humanizeEnum(value: string) { const normalized = value.replace(/_/g, " ").toLowerCase(); return normalized.charAt(0).toUpperCase() + normalized.slice(1) }

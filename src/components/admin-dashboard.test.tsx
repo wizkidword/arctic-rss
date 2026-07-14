@@ -161,6 +161,7 @@ function dashboardData() {
         disabledAt: null,
         email: "reader@example.com",
         id: "user-1",
+        lastLoginAt: null,
         name: "Example Reader",
         plan: "FREE",
         role: "USER",
@@ -247,6 +248,8 @@ describe("AdminDashboard", () => {
     expect(markup).toContain('href="/app"')
     expect(markup).toContain("8 total")
     expect(markup).toContain("Example Reader")
+    expect(markup).toContain("Last logged in")
+    expect(markup).toContain("Not recorded")
     expect(markup).toContain("HTTP 503 from upstream")
     expect(markup).toContain("$0.0425")
     expect(markup).toContain("Article summary")

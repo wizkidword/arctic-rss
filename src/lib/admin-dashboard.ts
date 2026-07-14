@@ -30,6 +30,7 @@ type AdminUserRecord = {
   disabledAt: Date | null
   email: string
   id: string
+  lastLoginAt: Date | null
   name: string | null
   plan: string
   role: string
@@ -440,6 +441,7 @@ export async function getAdminDashboardWithClient({
         disabledAt: true,
         email: true,
         id: true,
+        lastLoginAt: true,
         name: true,
         plan: true,
         role: true,
@@ -745,6 +747,7 @@ export async function getAdminDashboardWithClient({
       disabledAt: user.disabledAt,
       email: user.email,
       id: user.id,
+      lastLoginAt: user.lastLoginAt,
       name: user.name,
       plan: user.plan,
       role: user.role,
@@ -911,6 +914,7 @@ export async function getAdminDashboardUsersWithClient({
       disabledAt: true,
       email: true,
       id: true,
+      lastLoginAt: true,
       name: true,
       plan: true,
       role: true,
@@ -929,6 +933,7 @@ export async function getAdminDashboardUsersWithClient({
       disabledAt: user.disabledAt,
       email: user.email,
       id: user.id,
+      lastLoginAt: user.lastLoginAt,
       name: user.name,
       plan: user.plan,
       role: user.role,
