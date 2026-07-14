@@ -46,7 +46,7 @@ export function AdminDiscoverCategoryMetadataForm({
 
   return (
     <form action={action} className="grid gap-4 p-4">
-      <div className="grid gap-3 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.4fr)_minmax(160px,0.45fr)_auto]">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field
           icon={TagsIcon}
           id="discover-category-card"
@@ -69,6 +69,7 @@ export function AdminDiscoverCategoryMetadataForm({
         </Field>
 
         <Field
+          className="sm:col-span-2"
           icon={TextIcon}
           id="discover-category-description"
           label="Description"
@@ -106,7 +107,7 @@ export function AdminDiscoverCategoryMetadataForm({
           </select>
         </Field>
 
-        <div className="flex items-end">
+        <div className="flex items-end sm:col-span-2">
           <Button className="w-full" disabled={pending} type="submit">
             <SaveIcon data-icon="inline-start" />
             {pending ? "Saving" : "Save"}
@@ -132,18 +133,20 @@ const controlClassName =
   "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80"
 
 function Field({
+  className,
   children,
   icon: Icon,
   id,
   label,
 }: {
+  className?: string
   children: React.ReactNode
   icon: React.ComponentType<{ className?: string }>
   id: string
   label: string
 }) {
   return (
-    <div className="grid gap-1.5">
+    <div className={cn("grid min-w-0 gap-1.5", className)}>
       <label
         className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
         htmlFor={id}

@@ -24,7 +24,7 @@ export function AdminDiscoverImportForm() {
 
   return (
     <form action={action} className="grid gap-4 p-4">
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(120px,0.4fr)] xl:grid-cols-[minmax(0,1fr)_120px_minmax(180px,0.45fr)_minmax(220px,0.7fr)_auto]">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field
           icon={FileUpIcon}
           id="discover-opml-file"
@@ -81,7 +81,7 @@ export function AdminDiscoverImportForm() {
           />
         </Field>
 
-        <div className="flex items-end">
+        <div className="flex items-end sm:col-span-2">
           <Button className="w-full" disabled={pending} type="submit">
             <FileUpIcon data-icon="inline-start" />
             {pending ? "Importing" : "Import"}
@@ -141,7 +141,7 @@ function Field({
   label: string
 }) {
   return (
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 gap-1.5">
       <label
         className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
         htmlFor={id}
