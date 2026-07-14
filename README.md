@@ -1,11 +1,43 @@
 # Arctic RSS
 
-Arctic RSS is a self-hosted RSS reader inspired by Google Reader. The current foundation includes Next.js App Router, TypeScript, Tailwind, shadcn/ui, Auth.js credentials auth, Prisma/PostgreSQL, a protected reader shell, per-user view settings, an operational admin dashboard, feed subscription discovery, RSS/Atom article ingestion, folder management, OPML import/export, on-demand article AI summaries, stored unread AI digests, Redis-backed workers, and Docker Compose.
+> Follow the open web without the noise.
 
-The active deployment is the self-hosted site at
-[arcticrss.com](https://arcticrss.com). See [PROJECT.md](PROJECT.md) for the
-operating model and [DEPLOYMENT.md](DEPLOYMENT.md) for deployment and recovery
-procedures.
+[Open Arctic RSS](https://arcticrss.com) · [Report a security issue](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+
+Arctic RSS is a browser-based reader and community space for the open web. It
+brings RSS and Atom feeds, podcasts, AI-assisted reading, and Arctic IRC into
+one account and one calm reading experience. The active deployment is
+[arcticrss.com](https://arcticrss.com); this repository also contains the
+Docker-based self-hosting stack and non-secret operational documentation.
+
+## Product
+
+- **Reader and discovery:** Follow RSS and Atom feeds, browse a curated
+  directory, organize sources into folders, use Classic/Card/Compact/River
+  views, and keep personal read and starred states.
+- **Podcasts and collections:** Discover or add podcast RSS feeds, stream and
+  resume episodes, and save articles or episodes into personal collections.
+- **AI digests:** Generate on-demand article summaries, keep digest history,
+  and create topic-focused Smart Digests from selected sources.
+- **Arctic IRC:** Use the same Arctic account for browser-first native community
+  rooms, article sharing, reporting, moderation, and room discovery. Arctic
+  IRC is an account-based chat experience, not an IRC protocol server.
+- **Operations:** Email-verified accounts, role-protected administration,
+  background refresh workers, health checks, backups, and a production
+  Docker Compose deployment.
+
+## Scope
+
+Arctic RSS reads and organizes third-party feeds; publishers retain ownership
+of their content. Podcast audio is streamed from the original enclosure URL.
+Arctic IRC is currently a beta feature for eligible signed-in users. External
+network and channel links lead to independently operated services with their
+own rules and retention practices.
+
+See [PROJECT.md](PROJECT.md) for the operating model,
+[DEPLOYMENT.md](DEPLOYMENT.md) for generic deployment and recovery guidance,
+and [docs/roadmaps/product-roadmap.md](docs/roadmaps/product-roadmap.md) for
+planned product work.
 
 ## Stack
 
@@ -124,72 +156,12 @@ npm run prisma:deploy
 npm run worker
 ```
 
-## Current Milestone
+## Product status
 
-Done:
-
-- Public landing page
-- Signup and login pages
-- Authenticated `/app` reader shell
-- Sidebar placeholder
-- Classic/Card/Compact/River view switcher
-- User settings model and persistence action
-- Admin role support and protected `/admin`
-- Prisma schema for the planned RSS reader domain
-- Docker Compose foundation
-- Add Feed sheet
-- Safe feed URL validation and SSRF checks
-- RSS/Atom feed discovery from website URLs
-- Feed subscription persistence
-- Curated Feed Directory with extensible categories
-- One-click catalog subscription with Uncategorized or folder assignment
-- Sidebar feed display
-- RSS/Atom article parsing
-- Article upsert and duplicate prevention
-- Feed health/error tracking during refresh
-- Manual feed refresh action
-- BullMQ feed refresh queue and worker
-- Stored articles on the All Articles and feed pages
-- Placeholder route for general settings
-- Main reader surface for Classic, Card, Compact, and River views
-- Per-user read/unread state
-- Per-user starred state and Starred view
-- Unread counts in the sidebar and feed list
-- Folder management with create, rename, delete, and feed move actions
-- Confirmed feed unsubscribe from feed pages and Feed Organization
-- Subscription removal that preserves shared articles and personal read/starred history
-- Sidebar folder navigation with folder unread counts
-- Folder-scoped reader pages
-- Add Feed folder assignment
-- OPML import/export with folder preservation and import summaries
-- Mark all read for all articles, folders, and individual feeds
-- Sanitized article HTML rendering
-- On-demand article AI summaries with cached results
-- Per-user AI monthly usage limits and usage logging
-- Local summary provider with optional OpenAI provider
-- Stable article detail routes with reader permalinks
-- Reader keyboard shortcuts for next, previous, read/unread, star, and open original
-- AI dashboard with monthly usage and recent summary history
-- Stored AI digests generated from unread articles
-- Must Read and Skim Later digest sections with topic labels
-- Dedicated BullMQ digest queue and worker processing
-- Digest history with pending, completed, and failed states
-- Local digest provider with optional OpenAI provider
-- Per-user automatic-summary and daily-digest preferences
-- Operational admin statistics and user monitoring
-- Paginated admin user, feedback, and feed-health reports with independently streamed panels
-- Failing and stale feed health views
-- Date-range AI token, request, provider/model, and cost reporting
-- Persisted and BullMQ failed-job monitoring
-- Dependency-aware readiness checks for PostgreSQL and Redis
-- Loopback-only production Docker port bindings
-- Production deployment, backup, restore, upgrade, and rollback documentation
-- Self-hosted production deployment at `arcticrss.com`
-
-Status:
-
-- Original MVP milestones 1-11 complete
-- Post-MVP work can proceed from the deployed, self-hosted foundation
+The reader, podcasts, AI features, Arctic IRC beta, administration tools, and
+production deployment are active. The roadmap distinguishes planned work from
+the product described above; it is not a statement of currently available
+features.
 
 ## License
 
