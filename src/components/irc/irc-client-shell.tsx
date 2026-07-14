@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import {
   BookOpenIcon,
@@ -227,6 +227,7 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
   const [composer, setComposer] = useState("")
   const [theme, setTheme] = useState<IrcTheme>("classic")
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const autoConnectAttempted = useRef(false)
   const initialRoomJoinAttempted = useRef(false)
   const socketRef = useRef<Socket | null>(null)
   const hideArcticBotMessages = useSyncExternalStore(
@@ -264,7 +265,7 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
     }
   }, [])
 
-  async function connect() {
+  const connect = useCallback(async () => {
     if (connectionState === "connecting" || connectionState === "connected") {
       return
     }
@@ -331,7 +332,16 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
       setConnectionState("offline")
       setNotice(reason instanceof Error ? reason.message : "Unable to connect to chat.")
     }
-  }
+  }, [connectionState, joinedRooms])
+
+  useEffect(() => {
+    if (autoConnectAttempted.current) {
+      return
+    }
+
+    autoConnectAttempted.current = true
+    void connect()
+  }, [connect])
 
   async function joinRoom(room: ChatRoom) {
     setNotice(`Joining #${room.slug}…`)

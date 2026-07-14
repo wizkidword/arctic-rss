@@ -1,5 +1,8 @@
+// @vitest-environment jsdom
+
+import { render, screen, waitFor } from "@testing-library/react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: React.ComponentProps<"a"> & { href: string }) => (
@@ -12,8 +15,52 @@ vi.mock("socket.io-client", () => ({
 }))
 
 import { getNetworkStatusPresentation, IrcClientShell } from "./irc-client-shell"
+import { io } from "socket.io-client"
+
+afterEach(() => {
+  vi.clearAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe("Arctic IRC client shell", () => {
+  it("requests a fresh session and reconnects after a page refresh", async () => {
+    const listeners = new Map<string, () => void>()
+    const socket = {
+      connect: vi.fn(() => {
+        socket.connected = true
+        listeners.get("connect")?.()
+      }),
+      connected: false,
+      disconnect: vi.fn(),
+      emit: vi.fn(),
+      on: vi.fn((event: string, listener: () => void) => {
+        listeners.set(event, listener)
+        return socket
+      }),
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ token: "fresh-session-token" }),
+      ok: true,
+    })
+
+    vi.mocked(io).mockReturnValue(socket as never)
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { unmount } = render(
+      <IrcClientShell
+        initialProfile={{ handle: "northernlights", id: "profile-1", userId: "user-1" }}
+        rooms={[]}
+      />
+    )
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/chat/session", { method: "POST" }))
+    await waitFor(() => expect(socket.connect).toHaveBeenCalledTimes(1))
+    expect(screen.getByLabelText("Network online")).toBeTruthy()
+
+    unmount()
+    expect(socket.disconnect).toHaveBeenCalledTimes(1)
+  })
+
   it("uses the live gateway connection state for the network status indicator", () => {
     expect(getNetworkStatusPresentation("connected")).toEqual({
       icon: "wifi",
