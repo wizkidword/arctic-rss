@@ -233,7 +233,7 @@ function DashboardFrame({
               <h1 className="font-heading text-xl font-semibold">Admin Dashboard</h1>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Loaded {dateFormatter.format(generatedAt)} · panels update independently
+              Loaded {formatDateTime(generatedAt)} · panels update independently
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -413,7 +413,7 @@ function UsersSection({
                   <TableCell><div className="flex items-center gap-1.5"><Badge variant="outline">{user.role}</Badge><Badge variant="secondary">{user.plan}</Badge></div></TableCell>
                   <TableCell className="font-mono tabular-nums">{integerFormatter.format(user.subscriptionCount)}</TableCell>
                   <TableCell className="font-mono tabular-nums">{integerFormatter.format(user.aiMonthlyUsed)}<span className="text-muted-foreground"> / {integerFormatter.format(user.aiMonthlyLimit)}</span></TableCell>
-                  <TableCell>{dateFormatter.format(user.createdAt)}</TableCell>
+                  <TableCell>{formatDateTime(user.createdAt)}</TableCell>
                   <TableCell><Badge variant={user.disabledAt ? "destructive" : "outline"}>{user.disabledAt ? "Disabled" : "Active"}</Badge></TableCell>
                   <TableCell><AdminRevokeSessionsButton userId={user.id} /></TableCell>
                 </tr>
@@ -510,7 +510,7 @@ function FeedbackRow({ report }: { report: FeedbackRecord }) {
       <TableCell className="max-w-56">{report.pageUrl ? <a className="block truncate text-xs text-muted-foreground underline-offset-4 hover:underline" href={report.pageUrl} rel="noreferrer" target="_blank">{report.pageUrl}</a> : <span className="text-xs text-muted-foreground">Not captured</span>}</TableCell>
       <TableCell className="max-w-60"><span className="line-clamp-2 text-xs text-muted-foreground">{report.userAgent || "Not captured"}</span></TableCell>
       <TableCell><Badge variant="outline">{report.status}</Badge></TableCell>
-      <TableCell>{dateFormatter.format(report.createdAt)}</TableCell>
+      <TableCell>{formatDateTime(report.createdAt)}</TableCell>
     </tr>
   )
 }
@@ -519,14 +519,14 @@ function AiUsageSection({ usage }: { usage: AiUsageData }) {
   return (
     <section className="overflow-hidden rounded-lg border bg-card">
       <SectionHeader badge={`${usage.requestCount} requests`} icon={BotIcon} title="AI usage" />
-      <div className="border-b px-4 py-2 text-xs text-muted-foreground">{dateOnlyFormatter.format(usage.rangeStart)} through {dateOnlyFormatter.format(new Date(usage.rangeEnd.getTime() - 1))}</div>
+      <div className="border-b px-4 py-2 text-xs text-muted-foreground">{formatDateOnly(usage.rangeStart)} through {formatDateOnly(new Date(usage.rangeEnd.getTime() - 1))}</div>
       <div className="grid border-b sm:grid-cols-2 xl:grid-cols-3">
         <AiMetric label="Input tokens" value={integerFormatter.format(usage.inputTokens)} />
         <AiMetric label="Output tokens" value={integerFormatter.format(usage.outputTokens)} />
         <AiMetric label="Estimated cost" value={costFormatter.format(usage.costEstimate)} />
       </div>
       {usage.byAction.length || usage.byProviderModel.length ? <div className="grid xl:grid-cols-2"><BreakdownTable rows={usage.byAction.map((group) => ({ cost: group.costEstimate, label: humanizeEnum(group.action), requests: group.requestCount, tokens: group.inputTokens + group.outputTokens }))} title="By action" /><BreakdownTable className="border-t xl:border-t-0 xl:border-l" rows={usage.byProviderModel.map((group) => ({ cost: group.costEstimate, label: `${group.provider} · ${group.model}`, requests: group.requestCount, tokens: group.inputTokens + group.outputTokens }))} title="By provider and model" /></div> : <EmptyState icon={BotIcon} message="No AI requests in this range" />}
-      {usage.recent.length ? <div className="border-t"><div className="border-b px-4 py-3"><h3 className="font-heading text-sm font-medium">Recent AI requests</h3></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b bg-muted/40 text-xs text-muted-foreground"><tr><TableHeading>User</TableHeading><TableHeading>Action</TableHeading><TableHeading>Provider</TableHeading><TableHeading>Tokens</TableHeading><TableHeading>Cost</TableHeading><TableHeading>Time</TableHeading></tr></thead><tbody className="divide-y">{usage.recent.map((item) => <tr key={item.id}><TableCell>{item.userEmail}</TableCell><TableCell>{humanizeEnum(item.action)}</TableCell><TableCell>{item.provider} · {item.model}</TableCell><TableCell className="font-mono tabular-nums">{integerFormatter.format(item.inputTokens + item.outputTokens)}</TableCell><TableCell className="font-mono tabular-nums">{costFormatter.format(item.costEstimate)}</TableCell><TableCell>{dateFormatter.format(item.createdAt)}</TableCell></tr>)}</tbody></table></div></div> : null}
+      {usage.recent.length ? <div className="border-t"><div className="border-b px-4 py-3"><h3 className="font-heading text-sm font-medium">Recent AI requests</h3></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b bg-muted/40 text-xs text-muted-foreground"><tr><TableHeading>User</TableHeading><TableHeading>Action</TableHeading><TableHeading>Provider</TableHeading><TableHeading>Tokens</TableHeading><TableHeading>Cost</TableHeading><TableHeading>Time</TableHeading></tr></thead><tbody className="divide-y">{usage.recent.map((item) => <tr key={item.id}><TableCell>{item.userEmail}</TableCell><TableCell>{humanizeEnum(item.action)}</TableCell><TableCell>{item.provider} · {item.model}</TableCell><TableCell className="font-mono tabular-nums">{integerFormatter.format(item.inputTokens + item.outputTokens)}</TableCell><TableCell className="font-mono tabular-nums">{costFormatter.format(item.costEstimate)}</TableCell><TableCell>{formatDateTime(item.createdAt)}</TableCell></tr>)}</tbody></table></div></div> : null}
     </section>
   )
 }
@@ -613,12 +613,14 @@ function BreakdownTable({ className, rows, title }: { className?: string; rows: 
 }
 
 function FailureList({ emptyMessage, failures, title }: { emptyMessage: string; failures: Array<{ detail: string; id: string; message: string; occurredAt: Date; title: string }>; title: string }) {
-  return <div><div className="border-b px-4 py-3"><h3 className="font-heading text-sm font-medium">{title}</h3></div>{failures.length ? <div className="divide-y">{failures.map((failure) => <article className="p-4" key={failure.id}><div className="flex flex-wrap items-center gap-2"><Badge variant="destructive">{failure.title}</Badge><span className="text-xs text-muted-foreground">{failure.detail}</span></div><p className="mt-2 text-sm leading-6 text-destructive">{failure.message}</p><p className="mt-1 text-xs text-muted-foreground">{dateFormatter.format(failure.occurredAt)}</p></article>)}</div> : <EmptyState message={emptyMessage} />}</div>
+  return <div><div className="border-b px-4 py-3"><h3 className="font-heading text-sm font-medium">{title}</h3></div>{failures.length ? <div className="divide-y">{failures.map((failure) => <article className="p-4" key={failure.id}><div className="flex flex-wrap items-center gap-2"><Badge variant="destructive">{failure.title}</Badge><span className="text-xs text-muted-foreground">{failure.detail}</span></div><p className="mt-2 text-sm leading-6 text-destructive">{failure.message}</p><p className="mt-1 text-xs text-muted-foreground">{formatDateTime(failure.occurredAt)}</p></article>)}</div> : <EmptyState message={emptyMessage} />}</div>
 }
 
 function EmptyState({ destructive = false, icon: Icon = CircleAlertIcon, message }: { destructive?: boolean; icon?: React.ComponentType<{ className?: string }>; message: string }) {
   return <div className={cn("flex min-h-28 items-center justify-center gap-2 px-4 py-8 text-sm text-muted-foreground", destructive && "text-destructive")}><Icon className="size-4 shrink-0" /><span>{message}</span></div>
 }
 
-function formatOptionalDate(value: Date | null) { return value ? dateFormatter.format(value) : "Never" }
+function formatOptionalDate(value: Date | null) { return value ? formatDateTime(value) : "Never" }
+function formatDateTime(value: Date | string | number | null | undefined) { const date = value instanceof Date ? value : new Date(value ?? Number.NaN); return Number.isFinite(date.getTime()) ? dateFormatter.format(date) : "Unavailable" }
+function formatDateOnly(value: Date | string | number | null | undefined) { const date = value instanceof Date ? value : new Date(value ?? Number.NaN); return Number.isFinite(date.getTime()) ? dateOnlyFormatter.format(date) : "Unavailable" }
 function humanizeEnum(value: string) { const normalized = value.replace(/_/g, " ").toLowerCase(); return normalized.charAt(0).toUpperCase() + normalized.slice(1) }

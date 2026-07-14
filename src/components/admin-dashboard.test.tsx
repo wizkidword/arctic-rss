@@ -297,4 +297,28 @@ describe("AdminDashboard", () => {
     expect(markup).toContain("Queue status is temporarily unavailable.")
     expect(markup).toContain("No AI requests in this range")
   })
+
+  it("keeps the dashboard available when a stored timestamp is invalid", () => {
+    const dashboard = dashboardData()
+    dashboard.persistedFailures = [
+      {
+        id: "invalid-timestamp",
+        message: "A background task reported an invalid timestamp.",
+        occurredAt: new Date("not a date"),
+        type: "AI digest" as const,
+        userEmail: "reader@example.com",
+      },
+    ]
+
+    const markup = renderToStaticMarkup(
+      <AdminDashboard
+        dashboard={dashboard}
+        discoverCategories={[]}
+        queues={{ available: true, failedJobs: [], queues: [] }}
+      />
+    )
+
+    expect(markup).toContain("Unavailable")
+    expect(markup).toContain("A background task reported an invalid timestamp.")
+  })
 })
