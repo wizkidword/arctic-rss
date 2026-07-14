@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 
+import { hasAnalyticsConsent } from "@/lib/analytics-consent"
+
 type GoogleAnalyticsProps = {
   measurementId: string
 }
@@ -35,7 +37,7 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (!normalizedMeasurementId || !pathname) {
+    if (!normalizedMeasurementId || !pathname || !hasAnalyticsConsent()) {
       return
     }
 

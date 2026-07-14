@@ -13,6 +13,7 @@ export class AuthorizationError extends Error {
 type CurrentUser = {
   authVersion: number
   disabledAt: Date | null
+  emailVerified: Date | null
   id: string
   plan: "FREE" | "PRO" | "ADMIN"
   role: "USER" | "ADMIN"
@@ -38,6 +39,7 @@ export async function requireFreshUser(
     select: {
       authVersion: true,
       disabledAt: true,
+      emailVerified: true,
       id: true,
       plan: true,
       role: true,

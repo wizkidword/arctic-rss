@@ -10,38 +10,48 @@ export const metadata: Metadata = {
 
 const policies = [
   {
-    description: "How we collect, use, retain, and protect account and reader data.",
+    description: "Standards for constructive, safe community discussion in ArcticIRC.",
+    href: "/community",
+    label: "Community Guidelines",
+  },
+  {
+    description: "How Arctic RSS and ArcticIRC handle information.",
     href: "/privacy",
     label: "Privacy Policy",
   },
   {
-    description: "The ground rules for accounts, feeds, AI summaries, tips, and service use.",
+    description: "The terms that apply to Arctic RSS and ArcticIRC.",
     href: "/terms",
     label: "Terms of Service",
   },
   {
-    description: "The essential cookies and security tokens used to keep Arctic RSS working.",
+    description: "Browser-storage and analytics choices for Arctic RSS and ArcticIRC.",
     href: "/cookies",
     label: "Cookie Policy",
   },
   {
-    description: "How to report vulnerabilities and what security behavior we ask of researchers.",
+    description: "Security practices and responsible disclosure information.",
     href: "/security",
     label: "Security",
+  },
+  {
+    description: "How long ArcticIRC data is kept and how deletion requests work.",
+    href: "/retention",
+    label: "Retention and Deletion",
   },
 ]
 
 export default function LegalPage() {
   return (
     <LegalPageLayout
-      description="The fine print for Arctic RSS: privacy, terms, cookies, and security."
+      description="Policies for Arctic RSS and ArcticIRC."
       title="Legal"
     >
       <PolicySection title="Policies">
         <p>
-          These pages explain how Arctic RSS handles accounts, feeds, support
-          requests, voluntary Ko-fi tips, and security reports. They are written
-          as practical starter policies for the current free reader service.
+          These policies are the published source of truth for Arctic RSS and
+          ArcticIRC. ArcticIRC remains feature-gated until its launch requirements
+          are configured and verified by the operator.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {policies.map((policy) => (

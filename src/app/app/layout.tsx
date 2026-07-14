@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
 import { getReaderCounts } from "@/lib/articles"
 import { getCurrentBulkReadJobForUser } from "@/lib/bulk-read-jobs"
+import { isChatEnabled } from "@/lib/chat/feature-flags"
 import { getPrisma } from "@/lib/db"
 import { listDiscoverInterestNavigation } from "@/lib/discover-interests"
 import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
@@ -50,6 +51,7 @@ export default async function AuthenticatedAppLayout({
     <AppShell
       articleCollections={articleCollections}
       bulkReadJob={bulkReadJob}
+      chatEnabled={isChatEnabled()}
       discoverInterests={discoverInterests}
       displayMode={normalizeDisplayMode(settings.displayMode)}
       feedSubscriptions={feedSubscriptions}

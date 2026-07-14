@@ -31,12 +31,12 @@ type FeedRefreshStore = {
       skipDuplicates: boolean
     }): Promise<{ count: number }>
     findMany(args: {
-      select: { externalId: true }
+      select: { externalId: true; id?: true }
       where: {
         externalId: { in: string[] }
         feedId: string
       }
-    }): Promise<Array<{ externalId: string }>>
+    }): Promise<Array<{ externalId: string; id?: string }>>
     update(args: {
       data: Record<string, unknown>
       where: {
@@ -95,6 +95,7 @@ export type RefreshFeedResult = {
   articleCount: number
   feedId: string
   metrics?: RefreshMetrics
+  newArticleIds?: string[]
 }
 
 export class FeedRefreshError extends Error {
@@ -207,6 +208,7 @@ export async function refreshFeedWithClient({
         parsedCount: parsedArticles.length,
         ...writes,
       },
+      ...(writes.newArticleIds.length ? { newArticleIds: writes.newArticleIds } : {}),
     }
   } catch (error) {
     const consecutiveFailures = feed.consecutiveFailures + 1
@@ -272,20 +274,27 @@ async function writeFeedArticles({
   feedId: string
   store: FeedRefreshStore
 }) {
-  return writeRefreshItems({
+  const existing = await store.article.findMany({
+    select: { externalId: true },
+    where: {
+      externalId: { in: articles.map((article) => article.externalId) },
+      feedId,
+    },
+  })
+  const existingExternalIds = new Set(existing.map((article) => article.externalId))
+  const candidateExternalIds = [
+    ...new Set(articles.map((article) => article.externalId)),
+  ].filter((externalId) => !existingExternalIds.has(externalId))
+  const writes = await writeRefreshItems({
     createMany: (items) =>
       store.article.createMany({
         data: items.map((article) => articleCreateData(feedId, article)),
         skipDuplicates: true,
       }),
-    findExistingExternalIds: (externalIds) =>
-      store.article.findMany({
-        select: { externalId: true },
-        where: {
-          externalId: { in: externalIds },
-          feedId,
-        },
-      }),
+    findExistingExternalIds: async (externalIds) =>
+      externalIds
+        .filter((externalId) => existingExternalIds.has(externalId))
+        .map((externalId) => ({ externalId })),
     items: articles,
     runUpdateBatch: (operations) => store.$transaction(operations),
     update: (article) =>
@@ -299,6 +308,26 @@ async function writeFeedArticles({
         },
       }),
   })
+
+  // When a concurrent refresh wins a create race, do not emit a possibly old
+  // item as a fresh chat event. Under-posting is safer than bot duplication.
+  if (writes.insertedCount !== candidateExternalIds.length || !candidateExternalIds.length) {
+    return { ...writes, newArticleIds: [] }
+  }
+
+  const inserted = await store.article.findMany({
+    select: { externalId: true, id: true },
+    where: { externalId: { in: candidateExternalIds }, feedId },
+  })
+  const newArticleIds = inserted
+    .map((article) => article.id)
+    .filter((id): id is string => typeof id === "string")
+
+  return {
+    ...writes,
+    newArticleIds:
+      newArticleIds.length === candidateExternalIds.length ? newArticleIds : [],
+  }
 }
 
 async function hydrateLinkedArticleContent({

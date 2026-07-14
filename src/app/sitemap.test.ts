@@ -16,6 +16,8 @@ describe("sitemap", () => {
       "https://arcticrss.com/terms",
       "https://arcticrss.com/cookies",
       "https://arcticrss.com/security",
+      "https://arcticrss.com/community",
+      "https://arcticrss.com/retention",
     ])
     expect(urls.some((url) => url.includes("articleId="))).toBe(false)
   })

@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { trackAnalyticsEvent } from "./google-analytics-events"
+import { ANALYTICS_CONSENT_STORAGE_KEY } from "./analytics-consent"
 
 type TestWindow = Window & {
   gtag?: ReturnType<typeof vi.fn>
@@ -11,11 +12,16 @@ type TestWindow = Window & {
 describe("trackAnalyticsEvent", () => {
   afterEach(() => {
     delete (window as TestWindow).gtag
+    window.localStorage.clear()
   })
 
   it("sends privacy-safe custom events to Google Analytics", () => {
     const gtag = vi.fn()
     ;(window as TestWindow).gtag = gtag
+    window.localStorage.setItem(
+      ANALYTICS_CONSENT_STORAGE_KEY,
+      JSON.stringify({ choice: "accepted", updatedAt: new Date().toISOString() })
+    )
 
     trackAnalyticsEvent("first_source_subscribed", {
       empty: undefined,
@@ -33,5 +39,14 @@ describe("trackAnalyticsEvent", () => {
         link_location: "landing_hero",
       })
     }).not.toThrow()
+  })
+
+  it("does not send events without affirmative optional-analytics consent", () => {
+    const gtag = vi.fn()
+    ;(window as TestWindow).gtag = gtag
+
+    trackAnalyticsEvent("create_account_click")
+
+    expect(gtag).not.toHaveBeenCalled()
   })
 })

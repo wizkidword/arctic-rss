@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { render } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { GoogleAnalytics } from "./google-analytics"
 
@@ -16,11 +16,19 @@ vi.mock("next/navigation", () => ({
 }))
 
 describe("GoogleAnalytics", () => {
+  beforeEach(() => {
+    window.localStorage.setItem(
+      "arcticrss.analytics-consent.v1",
+      JSON.stringify({ choice: "accepted", updatedAt: new Date().toISOString() })
+    )
+  })
+
   afterEach(() => {
     navigation.pathname = "/"
     navigation.searchParams = new URLSearchParams()
     delete window.dataLayer
     delete window.gtag
+    window.localStorage.clear()
   })
 
   it("does not render markup without a measurement id", () => {

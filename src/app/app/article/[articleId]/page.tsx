@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation"
 
 import { auth } from "@/auth"
+import { DiscussInChatButton } from "@/components/discuss-in-chat-button"
 import { ReaderSurface } from "@/components/reader-surface"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
 import {
@@ -11,6 +12,8 @@ import {
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
+import { listChatRoomRecommendationsForArticle } from "@/lib/chat/article-recommendations"
+import { isChatEnabled } from "@/lib/chat/feature-flags"
 
 export default async function ArticleDetailPage({
   params,
@@ -24,7 +27,8 @@ export default async function ArticleDetailPage({
   }
 
   const { articleId } = await params
-  const [settings, selectedArticle, articles, articleCollections] = await Promise.all([
+  const chatEnabled = isChatEnabled()
+  const [settings, selectedArticle, articles, articleCollections, chatRooms] = await Promise.all([
     getOrCreateUserSettings(session.user.id),
     getReaderArticleForUser({
       articleId,
@@ -34,6 +38,12 @@ export default async function ArticleDetailPage({
       userId: session.user.id,
     }),
     listArticleCollectionsForUser(session.user.id),
+    chatEnabled
+      ? listChatRoomRecommendationsForArticle({
+          articleId,
+          userId: session.user.id,
+        })
+      : Promise.resolve([]),
   ])
 
   if (!selectedArticle) {
@@ -54,6 +64,11 @@ export default async function ArticleDetailPage({
       emptyMessage="That article is not available in your active subscriptions."
       selectedArticleId={selectedArticle.id}
       title="Article"
+      toolbar={
+        chatEnabled ? (
+          <DiscussInChatButton articleId={selectedArticle.id} rooms={chatRooms} />
+        ) : null
+      }
     />
   )
 }

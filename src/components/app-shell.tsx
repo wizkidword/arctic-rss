@@ -19,6 +19,7 @@ import {
   LogOutIcon,
   MailIcon,
   MenuIcon,
+  MessageCircleIcon,
   SettingsIcon,
   SparklesIcon,
   StarIcon,
@@ -227,6 +228,7 @@ function HelpMenu() {
 
 function ReaderNav({
   articleCollections,
+  chatEnabled = false,
   discoverInterests,
   feedSubscriptions,
   folders,
@@ -234,6 +236,7 @@ function ReaderNav({
   readerCounts,
 }: {
   articleCollections: ShellArticleCollection[]
+  chatEnabled?: boolean
   discoverInterests: ShellDiscoverInterest[]
   feedSubscriptions: ShellFeedSubscription[]
   folders: ShellFolder[]
@@ -291,6 +294,16 @@ function ReaderNav({
           label: "Podcasts",
           icon: HeadphonesIcon,
         },
+        ...(chatEnabled
+          ? [
+              {
+                count: 0,
+                href: "/irc",
+                label: "Chat",
+                icon: MessageCircleIcon,
+              },
+            ]
+          : []),
       ]
 
   return (
@@ -628,6 +641,7 @@ function GuestAccountMenu({ compact = false }: { compact?: boolean }) {
 export function AppShell({
   articleCollections,
   bulkReadJob,
+  chatEnabled = false,
   children,
   discoverInterests,
   displayMode,
@@ -641,6 +655,7 @@ export function AppShell({
 }: {
   articleCollections: ShellArticleCollection[]
   bulkReadJob?: BulkReadJobProgress | null
+  chatEnabled?: boolean
   children: ReactNode
   discoverInterests: ShellDiscoverInterest[]
   displayMode: DisplayMode
@@ -685,6 +700,7 @@ export function AppShell({
           </Link>
           <ReaderNav
             articleCollections={articleCollections}
+            chatEnabled={chatEnabled}
             discoverInterests={discoverInterests}
             feedSubscriptions={feedSubscriptions}
             folders={folders}
@@ -715,6 +731,7 @@ export function AppShell({
             <div className="px-4">
               <ReaderNav
                 articleCollections={articleCollections}
+                chatEnabled={chatEnabled}
                 discoverInterests={discoverInterests}
                 feedSubscriptions={feedSubscriptions}
                 folders={folders}

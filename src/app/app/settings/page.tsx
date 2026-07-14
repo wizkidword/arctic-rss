@@ -5,6 +5,7 @@ import { auth } from "@/auth"
 import { DateTimePreferenceControls } from "@/components/date-time-preference-controls"
 import { DisplayModeSwitcher } from "@/components/display-mode-switcher"
 import { ThemePreferenceSwitcher } from "@/components/theme-preference-switcher"
+import { AccountDeletionControl } from "@/components/account-deletion-control"
 import { Badge } from "@/components/ui/badge"
 import {
   normalizeDateTimePreferences,
@@ -71,6 +72,8 @@ export default async function SettingsPage() {
         </div>
         <DateTimePreferenceControls preferences={dateTimePreferences} />
       </section>
+
+      <AccountDeletionControl />
     </div>
   )
 }

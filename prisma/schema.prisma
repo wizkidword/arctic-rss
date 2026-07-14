@@ -150,6 +150,97 @@ enum DigestRunStatus {
   FAILED
 }
 
+enum ChatRoomVisibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+enum ChatRoomJoinPolicy {
+  OPEN
+  REQUEST
+  INVITE
+}
+
+enum ChatRoomHistoryVisibility {
+  PUBLIC_PREVIEW
+  MEMBERS
+  AFTER_JOIN
+}
+
+enum ChatRoomState {
+  ACTIVE
+  READ_ONLY
+  ARCHIVED
+  SUSPENDED
+}
+
+enum ChatRoomFeedPostingMode {
+  OFF
+  LIVE
+  DIGEST
+}
+
+enum ChatRoomMemberRole {
+  OWNER
+  ADMIN
+  OPERATOR
+  VOICE
+  MEMBER
+}
+
+enum ChatRoomMemberStatus {
+  ACTIVE
+  LEFT
+  PENDING
+}
+
+enum ChatNotificationMode {
+  ALL
+  MENTIONS
+  NONE
+}
+
+enum ChatMessageKind {
+  TEXT
+  ACTION
+  NOTICE
+  SYSTEM
+  ARTICLE
+  BOT
+}
+
+enum ChatBotDeliveryStatus {
+  PENDING
+  POSTED
+}
+
+enum ChatReportStatus {
+  OPEN
+  REVIEWING
+  ACTIONED
+  DISMISSED
+}
+
+enum ChatReportRetentionClass {
+  ORDINARY
+  SERIOUS
+}
+
+enum ChatLegalHoldSubject {
+  CHAT_AUDIT_LOG
+  CHAT_MESSAGE
+  CHAT_REPORT
+}
+
+enum ExternalIrcConnectionState {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  BACKING_OFF
+  DISABLED
+}
+
 model User {
   id             String    @id @default(cuid())
   email          String    @unique
@@ -190,6 +281,25 @@ model User {
   securityEvents          SecurityEvent[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  chatProfile             ChatProfile?
+  chatBetaAccess          ChatBetaAccess?          @relation("ChatBetaAccessUser")
+  chatPolicyAcceptance    ChatPolicyAcceptance?
+  grantedChatBetaAccess   ChatBetaAccess[]         @relation("ChatBetaAccessGrantor")
+  createdChatRooms        ChatRoom[]               @relation("ChatRoomCreator")
+  chatRoomMemberships     ChatRoomMember[]
+  sentChatMessages        ChatMessage[]            @relation("ChatMessageSender")
+  deletedChatMessages     ChatMessage[]            @relation("ChatMessageDeletedBy")
+  createdChatBlocks       ChatBlock[]              @relation("ChatBlockCreator")
+  receivedChatBlocks      ChatBlock[]              @relation("ChatBlockTarget")
+  createdChatRoomBans     ChatRoomBan[]            @relation("ChatRoomBanCreator")
+  receivedChatRoomBans    ChatRoomBan[]            @relation("ChatRoomBanTarget")
+  createdChatReports      ChatReport[]             @relation("ChatReportCreator")
+  targetedChatReports     ChatReport[]             @relation("ChatReportTarget")
+  assignedChatReports     ChatReport[]             @relation("ChatReportAssignee")
+  createdChatRoomFeeds    ChatRoomFeed[]           @relation("ChatRoomFeedCreator")
+  chatAuditActions        ChatAuditLog[]           @relation("ChatAuditActor")
+  chatAuditTargets        ChatAuditLog[]           @relation("ChatAuditTarget")
+  externalIrcIdentities   ExternalIrcIdentity[]
 }
 
 model UserPlanQuota {
@@ -331,6 +441,7 @@ model Feed {
 
   subscriptions FeedSubscription[]
   articles      Article[]
+  chatRoomFeeds ChatRoomFeed[]
 
   @@index([nextFetchAt, id])
 }
@@ -466,12 +577,14 @@ model Article {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  feed             Feed                    @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  states           ArticleState[]
-  collectionItems  ArticleCollectionItem[]
-  aiSummaries      ArticleAiSummary[]
-  aiDigestItems    AiDigestItem[]
-  smartDigestItems SmartDigestItem[]
+  feed              Feed                    @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  states            ArticleState[]
+  collectionItems   ArticleCollectionItem[]
+  aiSummaries       ArticleAiSummary[]
+  aiDigestItems     AiDigestItem[]
+  smartDigestItems  SmartDigestItem[]
+  chatMessages      ChatMessage[]
+  chatBotDeliveries ChatBotDelivery[]
 
   @@unique([feedId, externalId])
   @@index([feedId, publishedAt])
@@ -955,4 +1068,352 @@ model AdminAuditLog {
   adminUser User? @relation("AdminAuditActor", fields: [adminUserId], references: [id], onDelete: SetNull, onUpdate: Restrict)
 
   @@index([adminUserId, createdAt])
+}
+
+model ChatProfile {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  handle                String
+  handleNormalized      String    @unique
+  displayName           String?
+  bio                   String?
+  statusText            String?
+  allowDirectMessages   Boolean   @default(false)
+  personalizedDiscovery Boolean   @default(true)
+  handleChangedAt       DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// A minimal, versioned record proving the one-time ArcticIRC activation
+// attestation. It deliberately stores no date of birth or extra age data.
+model ChatPolicyAcceptance {
+  userId              String   @id
+  policyVersion       String
+  acceptedAt          DateTime @default(now())
+  ageAttestedAt       DateTime
+  termsAcceptedAt     DateTime
+  communityAcceptedAt DateTime
+  privacyAcceptedAt   DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([policyVersion, acceptedAt])
+}
+
+// A revocable, operator-managed private-beta invitation. It is deliberately
+// separate from a user's global role and plan so disabling the allowlist flag
+// restores normal native-chat eligibility without changing account records.
+model ChatBetaAccess {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  grantedByUserId String?
+  note            String?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user      User  @relation("ChatBetaAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("ChatBetaAccessGrantor", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([revokedAt, createdAt])
+}
+
+// External-network records are deliberately separate from ChatProfile and
+// ChatMessage. No credentials, remote message bodies, or native-room links
+// belong in this model family.
+model ExternalIrcIdentity {
+  id                 String                     @id @default(cuid())
+  userId             String
+  networkId          String
+  nickname           String
+  nicknameNormalized String
+  connectionState    ExternalIrcConnectionState @default(DISCONNECTED)
+  lastConnectedAt    DateTime?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  favorites ExternalIrcFavorite[]
+
+  @@unique([userId, networkId])
+  @@index([networkId, connectionState])
+}
+
+model ExternalIrcFavorite {
+  id         String   @id @default(cuid())
+  identityId String
+  channel    String
+  normalized String
+  createdAt  DateTime @default(now())
+
+  identity ExternalIrcIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@unique([identityId, normalized])
+  @@index([normalized])
+}
+
+model ChatRoom {
+  id                     String                    @id @default(cuid())
+  slug                   String                    @unique
+  name                   String
+  description            String
+  topicLine              String?
+  languageCode           String                    @default("en")
+  visibility             ChatRoomVisibility        @default(PUBLIC)
+  joinPolicy             ChatRoomJoinPolicy        @default(OPEN)
+  historyVisibility      ChatRoomHistoryVisibility @default(MEMBERS)
+  state                  ChatRoomState             @default(ACTIVE)
+  isOfficial             Boolean                   @default(false)
+  createdByUserId        String?
+  slowModeSeconds        Int                       @default(0)
+  messageRetentionDays   Int?
+  joinPartNoticesEnabled Boolean                   @default(true)
+  botLastPostedAt        DateTime?
+  lastActivityAt         DateTime?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  createdBy     User?              @relation("ChatRoomCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  interests     ChatRoomInterest[]
+  feeds         ChatRoomFeed[]
+  members       ChatRoomMember[]
+  messages      ChatMessage[]
+  bans          ChatRoomBan[]
+  reports       ChatReport[]
+  auditLogs     ChatAuditLog[]
+  botDeliveries ChatBotDelivery[]
+
+  @@index([state, isOfficial, lastActivityAt])
+  @@index([visibility, joinPolicy])
+}
+
+model ChatRoomInterest {
+  roomId     String
+  interestId String
+  weight     Int      @default(1)
+  createdAt  DateTime @default(now())
+
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, interestId])
+  @@index([interestId])
+}
+
+model ChatRoomFeed {
+  roomId                 String
+  feedId                 String
+  postingMode            ChatRoomFeedPostingMode @default(OFF)
+  minimumIntervalMinutes Int                     @default(60)
+  createdByUserId        String?
+  createdAt              DateTime                @default(now())
+
+  room          ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  feed          Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  createdByUser User?    @relation("ChatRoomFeedCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@id([roomId, feedId])
+  @@index([feedId])
+}
+
+model ChatRoomMember {
+  id                      String               @id @default(cuid())
+  roomId                  String
+  userId                  String
+  role                    ChatRoomMemberRole   @default(MEMBER)
+  status                  ChatRoomMemberStatus @default(ACTIVE)
+  joinedAt                DateTime             @default(now())
+  leftAt                  DateTime?
+  lastReadMessageSequence BigInt?
+  notificationMode        ChatNotificationMode @default(MENTIONS)
+  roomMutedUntil          DateTime?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId, status])
+  @@index([roomId, status, role])
+}
+
+model ChatMessage {
+  id               String          @id @default(cuid())
+  sequence         BigInt          @unique @default(autoincrement())
+  roomId           String
+  senderUserId     String?
+  clientMessageId  String
+  kind             ChatMessageKind @default(TEXT)
+  body             String          @db.VarChar(2000)
+  metadata         Json?
+  articleId        String?
+  replyToMessageId String?
+  createdAt        DateTime        @default(now())
+  editedAt         DateTime?
+  deletedAt        DateTime?
+  deletedByUserId  String?
+  deletionReason   String?
+
+  room          ChatRoom          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender        User?             @relation("ChatMessageSender", fields: [senderUserId], references: [id], onDelete: SetNull)
+  article       Article?          @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  deletedBy     User?             @relation("ChatMessageDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  replyTo       ChatMessage?      @relation("ChatMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies       ChatMessage[]     @relation("ChatMessageReply")
+  reports       ChatReport[]
+  auditLogs     ChatAuditLog[]
+  botDeliveries ChatBotDelivery[] @relation("ChatBotDeliveryMessage")
+
+  @@unique([senderUserId, clientMessageId])
+  @@index([roomId, sequence])
+  @@index([senderUserId, createdAt])
+}
+
+model ChatBotDelivery {
+  roomId    String
+  articleId String
+  feedId    String
+  status    ChatBotDeliveryStatus @default(PENDING)
+  messageId String?
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  room    ChatRoom     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  article Article      @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  message ChatMessage? @relation("ChatBotDeliveryMessage", fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@id([roomId, articleId])
+  @@index([roomId, feedId, status, createdAt])
+  @@index([feedId, status, createdAt])
+}
+
+model ChatBlock {
+  blockerUserId String
+  blockedUserId String
+  createdAt     DateTime @default(now())
+
+  blocker User @relation("ChatBlockCreator", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blocked User @relation("ChatBlockTarget", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@id([blockerUserId, blockedUserId])
+  @@index([blockedUserId])
+}
+
+model ChatRoomBan {
+  id              String    @id @default(cuid())
+  roomId          String
+  targetUserId    String
+  createdByUserId String?
+  reason          String
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  target    User     @relation("ChatRoomBanTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("ChatRoomBanCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([roomId, targetUserId, revokedAt])
+  @@index([targetUserId, expiresAt])
+}
+
+model ChatReport {
+  id                      String                   @id @default(cuid())
+  reporterUserId          String?
+  targetUserId            String?
+  roomId                  String?
+  messageId               String?
+  category                String
+  details                 String?
+  status                  ChatReportStatus         @default(OPEN)
+  retentionClass          ChatReportRetentionClass @default(ORDINARY)
+  closedAt                DateTime?
+  assignedModeratorUserId String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+
+  reporter          User?               @relation("ChatReportCreator", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  target            User?               @relation("ChatReportTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  room              ChatRoom?           @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  message           ChatMessage?        @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  assignedModerator User?               @relation("ChatReportAssignee", fields: [assignedModeratorUserId], references: [id], onDelete: SetNull)
+  evidence          ChatReportEvidence?
+
+  @@index([status, createdAt])
+  @@index([closedAt, retentionClass])
+  @@index([roomId, createdAt])
+  @@index([targetUserId, createdAt])
+}
+
+// Evidence is kept out of the ordinary report row. Restricted moderation
+// operations may select it; it is removed with the report unless the report is
+// under an active scoped legal hold.
+model ChatReportEvidence {
+  id        String   @id @default(cuid())
+  reportId  String   @unique
+  snapshot  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  report ChatReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+model ChatAuditLog {
+  id           String   @id @default(cuid())
+  actorUserId  String?
+  targetUserId String?
+  roomId       String?
+  messageId    String?
+  action       String
+  reason       String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  actor   User?        @relation("ChatAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  target  User?        @relation("ChatAuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  room    ChatRoom?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  message ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([roomId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
+}
+
+// Holds are scoped to a single retained record. They carry the authorized
+// decision and review date without copying the protected record's contents.
+model ChatLegalHold {
+  id                 String               @id @default(cuid())
+  subjectType        ChatLegalHoldSubject
+  subjectId          String
+  reason             String
+  authorizedByUserId String?
+  startedAt          DateTime             @default(now())
+  reviewAt           DateTime
+  releasedAt         DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([subjectType, subjectId, releasedAt])
+  @@index([releasedAt, reviewAt])
+}
+
+// Kept without an account foreign key so that it remains only as minimal proof
+// after the account itself is removed. The reference is a one-way digest.
+model AccountDeletionRecord {
+  id               String   @id @default(cuid())
+  subjectReference String   @unique
+  requestedAt      DateTime
+  completedAt      DateTime
+  policyVersion    String
+  createdAt        DateTime @default(now())
+
+  @@index([completedAt])
 }

@@ -36,6 +36,7 @@ describe("admin queue inspection", () => {
     expect(Object.values(ADMIN_QUEUE_LABELS)).toEqual([
       "AI digest",
       "Bulk mark read",
+      "Chat article integration",
       "Feed refresh",
       "OPML import",
       "Podcast refresh",
@@ -234,6 +235,7 @@ describe("admin queue inspection", () => {
         { name: "Podcast refresh", reader: emptyQueue },
         { name: "AI digest", reader: emptyQueue },
         { name: "Bulk mark read", reader: emptyQueue },
+        { name: "Chat article integration", reader: emptyQueue },
         { name: "Smart Digest", reader: emptyQueue },
         { name: "Smart Digest email", reader: emptyQueue },
         { name: "OPML import", reader: emptyQueue },
@@ -247,6 +249,7 @@ describe("admin queue inspection", () => {
         { name: "Podcast refresh" },
         { name: "AI digest" },
         { name: "Bulk mark read" },
+        { name: "Chat article integration" },
         { name: "Smart Digest" },
         { name: "Smart Digest email" },
         { name: "OPML import" },
