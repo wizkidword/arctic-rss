@@ -81,6 +81,7 @@ services:
       context: .
       target: runner
       args:
+        APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
         NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
     init: true
     restart: unless-stopped
