@@ -21,6 +21,9 @@ export const metadata: Metadata = {
   title: "Arctic RSS",
   description: "A calm, browser-based RSS reader for following the open web.",
   metadataBase: getAppOrigin(),
+  alternates: {
+    canonical: "/",
+  },
 };
 
 export default function RootLayout({

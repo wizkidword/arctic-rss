@@ -29,6 +29,7 @@ describe("RootLayout", () => {
 
   it("uses the configured canonical origin and a launch-accurate public description", () => {
     expect(String(metadata.metadataBase)).toBe(String(getAppOrigin()))
+    expect(metadata.alternates?.canonical).toBe("/")
     expect(metadata.description).toBe(
       "A calm, browser-based RSS reader for following the open web.",
     )
