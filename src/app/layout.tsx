@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Arctic RSS",
-  description: "A calm, private RSS reader inspired by Google Reader.",
+  description: "A calm, browser-based RSS reader for following the open web.",
   metadataBase: getAppOrigin(),
 };
 

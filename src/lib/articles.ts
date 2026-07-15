@@ -370,10 +370,13 @@ export async function listPublicReaderArticlesWithClient({
   publicFeedUrls: readonly string[]
   store: PublicReaderArticleStore
 }): Promise<ReaderArticle[]> {
+  const boundedLimit = pageSize(limit)
   const articles = await store.article.findMany({
     include: readerArticleInclude(PUBLIC_GUEST_PREVIEW_USER_ID),
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-    take: limit,
+    // A publisher can appear in more than one Discover entry. Fetch a small
+    // buffer so deduplication still leaves a useful guest preview.
+    take: boundedLimit * 3,
     where: {
       feed: {
         feedUrl: {
@@ -383,7 +386,19 @@ export async function listPublicReaderArticlesWithClient({
     },
   })
 
-  return articles.map((article) => mapReaderArticle(article))
+  const seenUrls = new Set<string>()
+
+  return articles
+    .map((article) => mapReaderArticle(article))
+    .filter((article) => {
+      if (seenUrls.has(article.url)) {
+        return false
+      }
+
+      seenUrls.add(article.url)
+      return true
+    })
+    .slice(0, boundedLimit)
 }
 
 export async function getReaderArticleForUser({

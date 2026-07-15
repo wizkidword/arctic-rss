@@ -103,27 +103,27 @@ export default function Home() {
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <AnalyticsLink
-                analyticsEvent="create_account_click"
+                analyticsEvent="guest_browse_start"
                 analyticsParams={{ link_location: "landing_hero" }}
                 className={cn(
                   buttonVariants({ size: "lg" }),
                   "gap-2 bg-slate-950 text-white shadow-lg shadow-sky-950/10 hover:bg-slate-800 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-sky-100",
                 )}
-                href="/signup"
+                href="/guest"
               >
-                Create account
+                Browse as Guest
                 <ArrowRightIcon data-icon="inline-end" />
               </AnalyticsLink>
               <AnalyticsLink
-                analyticsEvent="guest_browse_start"
+                analyticsEvent="create_account_click"
                 analyticsParams={{ link_location: "landing_hero" }}
                 className={cn(
                   buttonVariants({ variant: "secondary", size: "lg" }),
                   "border border-sky-100 bg-white/80 text-slate-800 shadow-sm shadow-sky-950/5 hover:bg-white dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:hover:bg-slate-800",
                 )}
-                href="/guest"
+                href="/signup"
               >
-                Browse as Guest
+                Create account
               </AnalyticsLink>
               <Link
                 className={cn(

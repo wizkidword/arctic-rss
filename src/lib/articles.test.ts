@@ -140,7 +140,7 @@ describe("public article previews", () => {
         }),
       }),
       orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-      take: 12,
+      take: 36,
       where: {
         feed: {
           feedUrl: {
@@ -159,6 +159,44 @@ describe("public article previews", () => {
       isStarred: false,
       title: "Public preview",
     })
+  })
+
+  it("removes duplicate public-preview URLs while retaining the next unique article", async () => {
+    const store = {
+      article: {
+        findMany: vi.fn().mockResolvedValue([
+          createArticleRecord({
+            id: "article-first",
+            title: "First copy",
+            url: "https://example.com/shared-article",
+          }),
+          createArticleRecord({
+            id: "article-duplicate",
+            title: "Second copy",
+            url: "https://example.com/shared-article",
+          }),
+          createArticleRecord({
+            id: "article-unique",
+            title: "Unique article",
+            url: "https://example.com/unique-article",
+          }),
+        ]),
+      },
+    }
+
+    const articles = await listPublicReaderArticlesWithClient({
+      limit: 2,
+      publicFeedUrls: ["https://feeds.example.com/public.xml"],
+      store,
+    })
+
+    expect(store.article.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 6 })
+    )
+    expect(articles.map((article) => article.id)).toEqual([
+      "article-first",
+      "article-unique",
+    ])
   })
 })
 
@@ -419,9 +457,11 @@ describe("article state mutations", () => {
 function createArticleRecord({
   id,
   title,
+  url = "https://example.com/public-preview",
 }: {
   id: string
   title: string
+  url?: string
 }) {
   return {
     aiSummaries: [],
@@ -440,6 +480,6 @@ function createArticleRecord({
     states: [],
     summary: "Public summary",
     title,
-    url: "https://example.com/public-preview",
+    url,
   }
 }
