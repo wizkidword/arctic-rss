@@ -1,0 +1,32 @@
+{
+  "name": "Arctic RSS",
+  "directUrl": "https://arcticrss.com",
+  "tagline": "Follow the open web without the noise.",
+  "description260": "Arctic RSS is a calm, browser-based reader for feeds and podcasts. Browse as a guest, discover sources by topic, choose a layout, and create an account to follow, save, organize folders, import OPML, or use optional AI summaries.",
+  "description500Fallback": "Arctic RSS is a calm, browser-based reader for the open web. Browse public feeds and podcasts as a guest, discover sources by topic, and choose the layout that feels right. Create an account when you want to follow sources, save articles, organize folders, import or export OPML, and use optional on-demand AI summaries.",
+  "recommendedTags": [
+    "News",
+    "Productivity",
+    "Podcasting Tools"
+  ],
+  "pricing": "HUMAN_CONFIRMATION_REQUIRED",
+  "thumbnail": "marketing/product-hunt/thumbnail/arctic-rss-product-hunt.png",
+  "gallery": [
+    "marketing/product-hunt/gallery/01-calm-open-web.png",
+    "marketing/product-hunt/gallery/02-browse-without-account.png",
+    "marketing/product-hunt/gallery/03-discover-your-sources.png",
+    "marketing/product-hunt/gallery/04-read-your-way.png",
+    "marketing/product-hunt/gallery/05-discover-podcasts.png"
+  ],
+  "youtubeUrl": "HUMAN_UPLOAD_REQUIRED",
+  "makers": [],
+  "toolShoutouts": [
+    "HUMAN_REVIEW_REQUIRED"
+  ],
+  "productSocialHandle": "HUMAN_CONFIRMATION_REQUIRED",
+  "makerCommentWorkbook": "docs/marketing/product-hunt/maker-comment-workbook.md",
+  "finalPreviewChecklist": "docs/marketing/product-hunt/08-submission-checklist.md",
+  "launchDate": "HUMAN_CONFIRMATION_REQUIRED",
+  "launchTimePacific": "HUMAN_CONFIRMATION_REQUIRED",
+  "humanApprover": "HUMAN_CONFIRMATION_REQUIRED"
+}

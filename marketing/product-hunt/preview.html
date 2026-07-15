@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arctic RSS — Product Hunt draft preview</title>
+    <style>
+      :root { color: #172033; background: #f4f7fb; font-family: Arial, sans-serif; }
+      body { margin: 0; }
+      main { margin: 0 auto; max-width: 1080px; padding: 40px 20px 72px; }
+      .notice { border: 1px solid #f2b84b; background: #fff8e6; border-radius: 12px; padding: 14px 16px; line-height: 1.45; }
+      .card { margin-top: 24px; padding: 28px; border: 1px solid #dce5ef; border-radius: 18px; background: white; box-shadow: 0 12px 40px #17203310; }
+      .hero { display: grid; grid-template-columns: 96px 1fr auto; gap: 20px; align-items: center; }
+      .brand { width: 96px; height: 96px; border-radius: 20px; background: #e0f2fe; object-fit: contain; }
+      h1 { margin: 0; font-size: clamp(30px, 6vw, 50px); letter-spacing: -.04em; }
+      h2 { margin: 0 0 12px; font-size: 22px; }
+      p { line-height: 1.55; }
+      .tag { display: inline-block; padding: 7px 10px; margin: 0 7px 7px 0; border-radius: 999px; background: #edf3fa; font-size: 14px; }
+      .button { padding: 12px 16px; border-radius: 10px; background: #172033; color: white; font-weight: bold; text-decoration: none; white-space: nowrap; }
+      .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      figure { margin: 0; overflow: hidden; border: 1px solid #dce5ef; border-radius: 12px; background: #edf3fa; }
+      figure img { width: 100%; display: block; aspect-ratio: 1270 / 760; object-fit: cover; }
+      figcaption { padding: 10px 12px; font-size: 14px; font-weight: bold; }
+      code { padding: 2px 5px; background: #edf3fa; border-radius: 4px; }
+      @media (max-width: 680px) { .hero { grid-template-columns: 72px 1fr; } .hero .button { grid-column: 1 / -1; } .brand { width: 72px; height: 72px; } .gallery { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <aside class="notice">
+        <strong>Draft / NO-GO:</strong> This local review page intentionally references pending final assets. Do not submit, schedule, or publish until <code>00-status.md</code> is GO and the asset validator passes.
+      </aside>
+      <section class="card hero">
+        <img class="brand" src="thumbnail/arctic-rss-product-hunt.png" alt="Arctic RSS logo (pending final asset)" />
+        <div>
+          <h1>Arctic RSS</h1>
+          <p><strong>Follow the open web without the noise.</strong></p>
+          <span class="tag">News</span><span class="tag">Productivity</span><span class="tag">Podcasting Tools</span>
+        </div>
+        <a class="button" href="https://arcticrss.com">Visit product</a>
+      </section>
+      <section class="card">
+        <h2>Draft description</h2>
+        <p>Arctic RSS is a calm, browser-based reader for feeds and podcasts. Browse as a guest, discover sources by topic, choose a layout, and create an account to follow, save, organize folders, import OPML, or use optional AI summaries.</p>
+      </section>
+      <section class="card">
+        <h2>Gallery narrative</h2>
+        <div class="gallery">
+          <figure><img src="gallery/01-calm-open-web.png" alt="Calm open-web landing experience (pending final asset)" /><figcaption>Follow the open web without the noise</figcaption></figure>
+          <figure><img src="gallery/02-browse-without-account.png" alt="Guest browsing (pending final asset)" /><figcaption>Browse before creating an account</figcaption></figure>
+          <figure><img src="gallery/03-discover-your-sources.png" alt="Discover sources by topic (pending final asset)" /><figcaption>Discover your sources</figcaption></figure>
+          <figure><img src="gallery/04-read-your-way.png" alt="Reader layouts (pending final asset)" /><figcaption>Read your way</figcaption></figure>
+          <figure><img src="gallery/05-discover-podcasts.png" alt="Podcast discovery (pending final asset)" /><figcaption>Discover podcasts</figcaption></figure>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
