@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "product": "Arctic RSS",
+  "captureStatus": "gated_not_captured",
+  "captureRequirements": {
+    "launchGate": "PH_LAUNCH_GATE=GO",
+    "authorization": "PH_ASSET_CAPTURE_AUTHORIZATION=PUBLIC_AND_DEMO_DATA_ONLY",
+    "source": "PH_ASSET_SOURCE_URL=https://arcticrss.com"
+  },
+  "assets": [
+    {
+      "path": "marketing/product-hunt/thumbnail/arctic-rss-product-hunt.png",
+      "width": 240,
+      "height": 240,
+      "byteSize": null,
+      "checksumSha256": null
+    },
+    {
+      "path": "marketing/product-hunt/gallery/01-calm-open-web.png",
+      "width": 1270,
+      "height": 760,
+      "byteSize": null,
+      "checksumSha256": null
+    },
+    {
+      "path": "marketing/product-hunt/gallery/02-browse-without-account.png",
+      "width": 1270,
+      "height": 760,
+      "byteSize": null,
+      "checksumSha256": null
+    },
+    {
+      "path": "marketing/product-hunt/gallery/03-discover-your-sources.png",
+      "width": 1270,
+      "height": 760,
+      "byteSize": null,
+      "checksumSha256": null
+    },
+    {
+      "path": "marketing/product-hunt/gallery/04-read-your-way.png",
+      "width": 1270,
+      "height": 760,
+      "byteSize": null,
+      "checksumSha256": null
+    },
+    {
+      "path": "marketing/product-hunt/gallery/05-discover-podcasts.png",
+      "width": 1270,
+      "height": 760,
+      "byteSize": null,
+      "checksumSha256": null
+    },
+    {
+      "path": "marketing/product-hunt/social/arctic-rss-open-graph.png",
+      "width": 1200,
+      "height": 630,
+      "byteSize": null,
+      "checksumSha256": null
+    }
+  ]
+}

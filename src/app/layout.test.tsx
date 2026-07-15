@@ -27,9 +27,11 @@ describe("RootLayout", () => {
     expect(element.props.suppressHydrationWarning).toBe(true)
   })
 
-  it("uses the configured canonical origin and does not describe the private app as open-source", () => {
+  it("uses the configured canonical origin and a launch-accurate public description", () => {
     expect(String(metadata.metadataBase)).toBe(String(getAppOrigin()))
-    expect(metadata.description).toBe("A calm, private RSS reader inspired by Google Reader.")
+    expect(metadata.description).toBe(
+      "A calm, browser-based RSS reader for following the open web.",
+    )
     expect(metadata.description).not.toContain("open-source")
   })
 })

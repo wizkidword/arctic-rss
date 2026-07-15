@@ -1,0 +1,31 @@
+1
+00:00:00,000 --> 00:00:04,000
+Arctic RSS. Follow the open web without the noise.
+
+2
+00:00:04,000 --> 00:00:12,000
+Start with public sources. No account needed to look around.
+
+3
+00:00:12,000 --> 00:00:22,000
+Browse a calm reader, then discover feeds and podcasts by topic.
+
+4
+00:00:22,000 --> 00:00:32,000
+Pick sources you actually want to follow.
+
+5
+00:00:32,000 --> 00:00:42,000
+Read in the layout that works for you.
+
+6
+00:00:42,000 --> 00:00:52,000
+Keep articles and podcasts in one focused reading space.
+
+7
+00:00:52,000 --> 00:01:02,000
+Create an account when you want to follow, save, organize, or import OPML.
+
+8
+00:01:02,000 --> 00:01:08,000
+Build your own calm reading space. arcticrss.com

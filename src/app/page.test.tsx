@@ -46,6 +46,9 @@ describe("Home", () => {
     expect(markup.match(/href="\/login"/g)).toHaveLength(1)
     expect(markup.match(/href="\/guest"/g)).toHaveLength(1)
     expect(markup).toContain(">Browse as Guest<")
+    expect(markup.indexOf('href="/guest"')).toBeLessThan(
+      markup.indexOf('href="/signup"'),
+    )
     expect(markup).not.toContain("<header")
     expect(markup).not.toContain(">Article Stream<")
   })

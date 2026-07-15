@@ -14,6 +14,8 @@
 /coverage
 /playwright-report
 /test-results
+/output/playwright/
+/.playwright-cli/
 
 # generated
 /src/generated/prisma
@@ -25,6 +27,8 @@
 # production
 /build
 /.worktrees
+/marketing/product-hunt/raw/*
+!/marketing/product-hunt/raw/README.md
 
 # local agent workspace state
 /.agents/
