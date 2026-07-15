@@ -15,6 +15,10 @@ PRODUCTION_SCREENSHOT_AUTHORIZATION=PUBLIC_AND_DEMO_DATA_ONLY
 MARKETING_EMAIL_CONSENT_POLICY=DISCOVER_OR_MARK_UNKNOWN
 ```
 
+## Recorded account status
+
+On 2026-07-14, the maker reported that a personal Product Hunt account had been created and that they had begun naturally browsing, upvoting, and commenting on products they genuinely liked. Record the exact account creation date and username above before scheduling; do not turn this activity into a quota or coordinated launch tactic.
+
 ## Required human actions
 
 1. Create or complete a **personal** Product Hunt account using the maker’s real full name and a personal photo; complete onboarding and record its creation date.
