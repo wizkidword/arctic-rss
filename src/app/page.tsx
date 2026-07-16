@@ -72,6 +72,9 @@ const systemThemeScript = `
 })();
 `
 
+const productHuntEmbedUrl = "https://www.producthunt.com/posts/arctic-rss/embed"
+const productHuntPostUrl = "https://www.producthunt.com/posts/arctic-rss"
+
 export default function Home() {
   return (
     <>
@@ -211,8 +214,26 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <footer className="relative flex flex-col gap-3 border-t border-sky-100 py-5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
-          <p>Arctic RSS keeps the open web readable.</p>
+        <footer className="relative flex flex-col gap-4 border-t border-sky-100 py-5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <p>Arctic RSS keeps the open web readable.</p>
+            <a
+              aria-label="View Arctic RSS on Product Hunt"
+              className="inline-flex w-fit rounded-md transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-300"
+              href={productHuntPostUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <iframe
+                className="h-[54px] w-[250px] border-0"
+                height="54"
+                loading="lazy"
+                src={productHuntEmbedUrl}
+                title="Arctic RSS on Product Hunt"
+                width="250"
+              />
+            </a>
+          </div>
           <nav aria-label="Legal links" className="flex flex-wrap gap-x-4 gap-y-2">
             {legalLinks.map((item) => (
               <Link
