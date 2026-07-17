@@ -1,7 +1,7 @@
 {
   "version": 1,
   "product": "Arctic RSS",
-  "captureStatus": "gated_not_captured",
+  "captureStatus": "captured_pending_validation",
   "captureRequirements": {
     "launchGate": "PH_LAUNCH_GATE=GO",
     "authorization": "PH_ASSET_CAPTURE_AUTHORIZATION=PUBLIC_AND_DEMO_DATA_ONLY",
@@ -12,50 +12,50 @@
       "path": "marketing/product-hunt/thumbnail/arctic-rss-product-hunt.png",
       "width": 240,
       "height": 240,
-      "byteSize": null,
-      "checksumSha256": null
+      "byteSize": 30822,
+      "checksumSha256": "f3d2f71cf060a087da6a2d0cb9b0fce183ae9523af859328b66339a29b950423"
     },
     {
       "path": "marketing/product-hunt/gallery/01-calm-open-web.png",
       "width": 1270,
       "height": 760,
-      "byteSize": null,
-      "checksumSha256": null
+      "byteSize": 123522,
+      "checksumSha256": "dfb6a5596a670efaccd12861ec8c1fa3e61153a14ffa81c4db20a3b28e3c5136"
     },
     {
       "path": "marketing/product-hunt/gallery/02-browse-without-account.png",
       "width": 1270,
       "height": 760,
-      "byteSize": null,
-      "checksumSha256": null
+      "byteSize": 131284,
+      "checksumSha256": "c57a0f283e17d4323de3cc8c1a1a5b763c6b555ea6eabc9214fc8f0ba63215bf"
     },
     {
       "path": "marketing/product-hunt/gallery/03-discover-your-sources.png",
       "width": 1270,
       "height": 760,
-      "byteSize": null,
-      "checksumSha256": null
+      "byteSize": 102116,
+      "checksumSha256": "fe918cbe306c8bd4b719c97c5c86d628f797c2d71b01cba666bc0644bc8ddf12"
     },
     {
       "path": "marketing/product-hunt/gallery/04-read-your-way.png",
       "width": 1270,
       "height": 760,
-      "byteSize": null,
-      "checksumSha256": null
+      "byteSize": 658001,
+      "checksumSha256": "9d28b30e2451c1fd9e91831376f6e5a23750764ebfd8ab877d6f9d0b106a0d8e"
     },
     {
       "path": "marketing/product-hunt/gallery/05-discover-podcasts.png",
       "width": 1270,
       "height": 760,
-      "byteSize": null,
-      "checksumSha256": null
+      "byteSize": 146747,
+      "checksumSha256": "bc0f484ff65d7ac4b55c9c32992fd86e6c95648c1ed58ee383e600713777a0e8"
     },
     {
       "path": "marketing/product-hunt/social/arctic-rss-open-graph.png",
       "width": 1200,
       "height": 630,
-      "byteSize": null,
-      "checksumSha256": null
+      "byteSize": 317766,
+      "checksumSha256": "56c7c106873704a4abcb8dc4761ff2d3f4bfcc58ff677748b0b759d08a9f737a"
     }
   ]
 }
