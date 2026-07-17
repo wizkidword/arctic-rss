@@ -94,12 +94,13 @@ describe("Home", () => {
     expect(markup).toContain(">Security<")
   })
 
-  it("shows the Product Hunt badge with a direct link to the launch", () => {
+  it("shows a visible Product Hunt launch badge without relying on an iframe", () => {
     const markup = renderToStaticMarkup(<Home />)
 
     expect(markup).toContain('href="https://www.producthunt.com/posts/arctic-rss"')
-    expect(markup).toContain('src="https://www.producthunt.com/posts/arctic-rss/embed"')
-    expect(markup).toContain('title="Arctic RSS on Product Hunt"')
-    expect(markup).toContain('loading="lazy"')
+    expect(markup).toContain('aria-label="View Arctic RSS&#x27;s upcoming Product Hunt launch"')
+    expect(markup).toContain(">Upcoming on<")
+    expect(markup).toContain(">Product Hunt<")
+    expect(markup).not.toContain("<iframe")
   })
 })

@@ -72,7 +72,6 @@ const systemThemeScript = `
 })();
 `
 
-const productHuntEmbedUrl = "https://www.producthunt.com/posts/arctic-rss/embed"
 const productHuntPostUrl = "https://www.producthunt.com/posts/arctic-rss"
 
 export default function Home() {
@@ -218,20 +217,22 @@ export default function Home() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <p>Arctic RSS keeps the open web readable.</p>
             <a
-              aria-label="View Arctic RSS on Product Hunt"
-              className="inline-flex w-fit rounded-md transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-300"
+              aria-label="View Arctic RSS's upcoming Product Hunt launch"
+              className="inline-flex w-fit items-center gap-2 rounded-md bg-[#da552f] px-3 py-2 text-white shadow-sm transition hover:bg-[#c84928] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-300"
               href={productHuntPostUrl}
-              rel="noreferrer"
+              rel="noopener noreferrer"
               target="_blank"
             >
-              <iframe
-                className="h-[54px] w-[250px] border-0"
-                height="54"
-                loading="lazy"
-                src={productHuntEmbedUrl}
-                title="Arctic RSS on Product Hunt"
-                width="250"
-              />
+              <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full bg-white text-sm font-black text-[#da552f]">
+                P
+              </span>
+              <span className="flex flex-col leading-tight">
+                <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/80">Upcoming on</span>
+                <span className="text-sm font-semibold">Product Hunt</span>
+              </span>
+              <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 16 16">
+                <path d="M3.25 8h9.5m-3.5-3.5L12.75 8l-3.5 3.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+              </svg>
             </a>
           </div>
           <nav aria-label="Legal links" className="flex flex-wrap gap-x-4 gap-y-2">
