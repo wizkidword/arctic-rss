@@ -132,12 +132,15 @@ services:
     cap_drop:
       - ALL
     cpus: 0.75
-    mem_limit: 512m
+    mem_limit: 1g
     pids_limit: 256
     security_opt:
       - no-new-privileges:true
     env_file:
       - .env
+    environment:
+      # Reserve room for native allocations below the container limit.
+      NODE_OPTIONS: "--max-old-space-size=640"
     depends_on:
       migrate:
         condition: service_completed_successfully

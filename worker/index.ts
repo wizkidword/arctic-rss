@@ -1,5 +1,6 @@
 import "dotenv/config"
 
+import { getHeapStatistics } from "node:v8"
 import { Worker } from "bullmq"
 
 import { cleanupExpiredAuthTokens } from "../src/lib/auth-token-maintenance"
@@ -93,11 +94,40 @@ const {
 const { intervalMs: chatRetentionIntervalMs } = getChatRetentionSettings()
 const prisma = getPrisma()
 const WORKER_HEARTBEAT_INTERVAL_MS = 30_000
+const WORKER_MEMORY_LOG_INTERVAL_MS = 5 * 60_000
+
+type WorkerMemoryLogContext = {
+  jobId?: string
+  outcome?: string
+  trigger: "startup" | "interval" | "opml_import"
+}
+
+function megabytes(bytes: number) {
+  return Math.round((bytes / 1024 / 1024) * 10) / 10
+}
+
+function logWorkerMemory(context: WorkerMemoryLogContext) {
+  const memory = process.memoryUsage()
+
+  console.log(
+    JSON.stringify({
+      event: "worker_memory",
+      ...context,
+      arrayBuffersMb: megabytes(memory.arrayBuffers),
+      externalMb: megabytes(memory.external),
+      heapLimitMb: megabytes(getHeapStatistics().heap_size_limit),
+      heapTotalMb: megabytes(memory.heapTotal),
+      heapUsedMb: megabytes(memory.heapUsed),
+      rssMb: megabytes(memory.rss),
+    })
+  )
+}
 
 console.log("Arctic RSS worker online")
 console.log(
   `Redis queue endpoint: ${redisConnectionOptions().url.replace(/\/\/.*@/, "//***@")}`
 )
+logWorkerMemory({ trigger: "startup" })
 
 const worker = new Worker<FeedRefreshJobData>(
   FEED_REFRESH_QUEUE_NAME,
@@ -196,6 +226,11 @@ const opmlImportWorker = new Worker<OpmlImportQueueData>(
         outcome: result.status.toLowerCase(),
       })
     )
+    logWorkerMemory({
+      jobId: job.data.jobId,
+      outcome: result.status.toLowerCase(),
+      trigger: "opml_import",
+    })
 
     return result
   },
@@ -704,6 +739,10 @@ function recordWorkerHeartbeat() {
 
 const heartbeat = setInterval(recordWorkerHeartbeat, WORKER_HEARTBEAT_INTERVAL_MS)
 recordWorkerHeartbeat()
+const memoryTelemetry = setInterval(
+  () => logWorkerMemory({ trigger: "interval" }),
+  WORKER_MEMORY_LOG_INTERVAL_MS
+)
 
 let shuttingDown = false
 
@@ -726,6 +765,7 @@ async function shutdown() {
     ])
   } finally {
     clearInterval(heartbeat)
+    clearInterval(memoryTelemetry)
     await clearWorkerHeartbeat().catch((error) => {
       console.error(
         `[worker] could not clear health heartbeat: ${schedulerErrorMessage(error)}`

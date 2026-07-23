@@ -1,10 +1,9 @@
 [Unit]
-Description=Weekly Arctic RSS Docker build-cache cleanup
+Description=Prune unused Arctic RSS Docker build cache every 72 hours
 
 [Timer]
-OnCalendar=Sun *-*-* 04:00:00 UTC
+OnUnitActiveSec=72h
 Persistent=true
-RandomizedDelaySec=30m
 Unit=arctic-rss-build-cache-prune.service
 
 [Install]

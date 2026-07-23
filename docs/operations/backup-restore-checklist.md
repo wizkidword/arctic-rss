@@ -30,9 +30,9 @@ systemctl start arctic-rss-backup.service
 systemctl show arctic-rss-backup.service -p Result -p ExecMainStatus
 ```
 
-The separate build-cache timer removes only unused Docker build cache older
-than seven days. It does not remove running containers, images, volumes, or
-database backups.
+The separate build-cache timer removes all unused Docker build cache every 72
+hours. It does not remove running containers, images, volumes, or database
+backups.
 
 Local backups are not a disaster-recovery solution by themselves. Copy them
 to encrypted off-host storage and perform regular restore drills.

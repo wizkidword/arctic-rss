@@ -19,4 +19,19 @@ describe("docker public build environment", () => {
     )
     expect(compose).toContain("NEXT_PUBLIC_GA_MEASUREMENT_ID")
   })
+
+  it("gives the worker heap headroom while retaining native memory capacity", () => {
+    const compose = readFileSync(
+      path.join(process.cwd(), "docker-compose.yml"),
+      "utf8"
+    )
+
+    const workerBlock = compose.match(
+      /^  worker:\r?\n([\s\S]*?)(?=^  [a-z][\w-]*:)/m
+    )?.[1]
+
+    expect(workerBlock).toBeDefined()
+    expect(workerBlock).toContain("mem_limit: 1g")
+    expect(workerBlock).toContain('NODE_OPTIONS: "--max-old-space-size=640"')
+  })
 })
