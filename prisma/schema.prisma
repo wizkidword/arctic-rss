@@ -1246,6 +1246,7 @@ model ChatRoomMember {
   joinedAt                DateTime             @default(now())
   leftAt                  DateTime?
   lastReadMessageSequence BigInt?
+  nextMessageAllowedAt    DateTime?
   notificationMode        ChatNotificationMode @default(MENTIONS)
   roomMutedUntil          DateTime?
   createdAt               DateTime             @default(now())

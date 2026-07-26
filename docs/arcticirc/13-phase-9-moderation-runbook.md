@@ -13,7 +13,7 @@ user-scoped blocks; they do not affect other members or moderation records.
 | Kick | `/kick`; `POST .../moderation/kick` | Operator or higher, hierarchy checked | Target membership leaves; target socket leaves the room |
 | Ban / unban | `/ban`, `/unban`; `POST .../moderation/ban` or `unban` | Operator or higher, hierarchy checked | Durable ban / revocation; banned target loses live room subscription |
 | Mute | `/mute`; `POST .../moderation/mute` | Operator or higher, hierarchy checked | Future sends and article shares reject until `roomMutedUntil` |
-| Slow mode | `PATCH .../moderation/settings` with `slow-mode` | Operator or higher | Bounded 0–3600 second durable setting, enforced on sends and article shares |
+| Slow mode | `PATCH .../moderation/settings` with `slow-mode` | Operator or higher | Bounded 0–3600 second durable setting. Each non-application-admin send or article share conditionally claims a durable per-room/per-user cooldown in the same database transaction as the message and room activity update; room operators are still subject to the cooldown. |
 | Lock / read-only | `PATCH .../moderation/settings` with `lock` or `state` | Operator or higher | New joins require invite; or non-admin posting stops |
 | Suspend room | `PATCH .../moderation/settings` state `SUSPENDED` | Application admin only | REST permission checks fail for ordinary members and all subscribed sockets leave the room |
 

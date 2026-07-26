@@ -50,7 +50,12 @@ const messageSelect = {
 
 export type ChatRoomStore = Pick<
   PrismaClient,
-  "article" | "chatMessage" | "chatRoom" | "chatRoomBan" | "chatRoomMember"
+  | "$transaction"
+  | "article"
+  | "chatMessage"
+  | "chatRoom"
+  | "chatRoomBan"
+  | "chatRoomMember"
 >
 
 export type ChatIdentity = {
@@ -368,82 +373,19 @@ export async function sendChatRoomMessage({
   store?: ChatRoomStore
 }): Promise<{ created: boolean; message: ChatMessageWire }> {
   const input = parseChatMessageInput({ body, clientMessageId, kind })
-  const existing = await store.chatMessage.findUnique({
-    select: messageSelect,
-    where: {
-      senderUserId_clientMessageId: {
-        clientMessageId: input.clientMessageId,
-        senderUserId: identity.userId,
-      },
-    },
+  return persistChatRoomMessage({
+    clientMessageId: input.clientMessageId,
+    createData: () => ({
+      body: input.body,
+      clientMessageId: input.clientMessageId,
+      kind: input.kind,
+      roomId,
+      senderUserId: identity.userId,
+    }),
+    identity,
+    roomId,
+    store,
   })
-
-  if (existing) {
-    if (existing.roomId !== roomId) {
-      throw new ChatRoomServiceError(
-        "Message ID cannot be reused for another room.",
-        "idempotency-conflict"
-      )
-    }
-
-    return { created: false, message: serializeMessage(existing) }
-  }
-
-  const room = await store.chatRoom.findUnique({
-    select: roomSummarySelect,
-    where: { id: roomId },
-  })
-
-  if (!room) {
-    throw new ChatRoomServiceError("Room was not found.", "not-found")
-  }
-
-  const membership = await store.chatRoomMember.findUnique({
-    select: memberSelect,
-    where: { roomId_userId: { roomId, userId: identity.userId } },
-  })
-
-  if (!canPostInRoom(room, membership, identity)) {
-    throw new ChatRoomServiceError("You cannot post in this room.", "forbidden")
-  }
-
-  await enforceRoomPostLimits({ identity, membership, room, store })
-
-  try {
-    const message = await store.chatMessage.create({
-      data: {
-        body: input.body,
-        clientMessageId: input.clientMessageId,
-        kind: input.kind,
-        roomId,
-        senderUserId: identity.userId,
-      },
-      select: messageSelect,
-    })
-
-    await store.chatRoom.update({
-      data: { lastActivityAt: message.createdAt },
-      where: { id: roomId },
-    })
-
-    return { created: true, message: serializeMessage(message) }
-  } catch (error) {
-    const duplicate = await store.chatMessage.findUnique({
-      select: messageSelect,
-      where: {
-        senderUserId_clientMessageId: {
-          clientMessageId: input.clientMessageId,
-          senderUserId: identity.userId,
-        },
-      },
-    })
-
-    if (duplicate?.roomId === roomId) {
-      return { created: false, message: serializeMessage(duplicate) }
-    }
-
-    throw error
-  }
 }
 
 export async function shareChatRoomArticle({
@@ -460,98 +402,58 @@ export async function shareChatRoomArticle({
   store?: ChatRoomStore
 }): Promise<{ created: boolean; message: ChatMessageWire }> {
   const input = parseChatArticleShareInput({ articleId, clientMessageId })
-  const existing = await store.chatMessage.findUnique({
-    select: messageSelect,
-    where: {
-      senderUserId_clientMessageId: {
+  return persistChatRoomMessage({
+    clientMessageId: input.clientMessageId,
+    createData: async (transaction) => {
+      const article = await transaction.article.findFirst({
+        select: {
+          feed: { select: { title: true } },
+          id: true,
+          title: true,
+        },
+        where: {
+          id: input.articleId,
+          feed: { subscriptions: { some: { userId: identity.userId } } },
+        },
+      })
+
+      if (!article) {
+        throw new ChatRoomServiceError("That article is not available to share.", "not-found")
+      }
+
+      const duplicate = await transaction.chatMessage.findFirst({
+        select: { id: true },
+        where: {
+          articleId: article.id,
+          createdAt: { gt: new Date(Date.now() - 60 * 60_000) },
+          kind: "ARTICLE",
+          roomId,
+          senderUserId: identity.userId,
+        },
+      })
+
+      if (duplicate) {
+        throw new ChatRoomServiceError(
+          "You already shared that article in this room recently.",
+          "duplicate-article"
+        )
+      }
+
+      return {
+        articleId: article.id,
+        body: article.title.trim().slice(0, 2_000) || "Shared an article",
         clientMessageId: input.clientMessageId,
+        kind: "ARTICLE" as const,
+        metadata: { v: 1 },
+        roomId,
         senderUserId: identity.userId,
-      },
+      }
     },
+    identity,
+    expectedKind: "ARTICLE",
+    roomId,
+    store,
   })
-
-  if (existing) {
-    if (existing.roomId !== roomId || existing.kind !== "ARTICLE") {
-      throw new ChatRoomServiceError(
-        "Message ID cannot be reused for another chat action.",
-        "idempotency-conflict"
-      )
-    }
-    return { created: false, message: serializeMessage(existing) }
-  }
-
-  const room = await store.chatRoom.findUnique({
-    select: roomSummarySelect,
-    where: { id: roomId },
-  })
-  const membership = await store.chatRoomMember.findUnique({
-    select: memberSelect,
-    where: { roomId_userId: { roomId, userId: identity.userId } },
-  })
-
-  if (!room) {
-    throw new ChatRoomServiceError("Room was not found.", "not-found")
-  }
-
-  if (!canPostInRoom(room, membership, identity)) {
-    throw new ChatRoomServiceError("You cannot post in this room.", "forbidden")
-  }
-
-  await enforceRoomPostLimits({ identity, membership, room, store })
-
-  const article = await store.article.findFirst({
-    select: {
-      feed: { select: { title: true } },
-      id: true,
-      title: true,
-    },
-    where: {
-      id: input.articleId,
-      feed: { subscriptions: { some: { userId: identity.userId } } },
-    },
-  })
-
-  if (!article) {
-    throw new ChatRoomServiceError("That article is not available to share.", "not-found")
-  }
-
-  const duplicate = await store.chatMessage.findFirst({
-    select: { id: true },
-    where: {
-      articleId: article.id,
-      createdAt: { gt: new Date(Date.now() - 60 * 60_000) },
-      kind: "ARTICLE",
-      roomId,
-      senderUserId: identity.userId,
-    },
-  })
-
-  if (duplicate) {
-    throw new ChatRoomServiceError(
-      "You already shared that article in this room recently.",
-      "duplicate-article"
-    )
-  }
-
-  const message = await store.chatMessage.create({
-    data: {
-      articleId: article.id,
-      body: article.title.trim().slice(0, 2_000) || "Shared an article",
-      clientMessageId: input.clientMessageId,
-      kind: "ARTICLE",
-      metadata: { v: 1 },
-      roomId,
-      senderUserId: identity.userId,
-    },
-    select: messageSelect,
-  })
-
-  await store.chatRoom.update({
-    data: { lastActivityAt: message.createdAt },
-    where: { id: roomId },
-  })
-
-  return { created: true, message: serializeMessage(message) }
 }
 
 export async function updateChatRoomTopic({
@@ -717,6 +619,7 @@ export async function updateChatReadMarker({
 const memberSelect = {
   joinedAt: true,
   lastReadMessageSequence: true,
+  nextMessageAllowedAt: true,
   role: true,
   roomId: true,
   roomMutedUntil: true,
@@ -808,6 +711,114 @@ function canPostInRoom(
   })
 }
 
+type ChatMessageCreateData = {
+  articleId?: string
+  body: string
+  clientMessageId: string
+  kind: "ACTION" | "ARTICLE" | "TEXT"
+  metadata?: { v: number }
+  roomId: string
+  senderUserId: string
+}
+
+async function persistChatRoomMessage({
+  clientMessageId,
+  createData,
+  expectedKind,
+  identity,
+  roomId,
+  store,
+}: {
+  clientMessageId: string
+  createData: (transaction: ChatRoomStore) => Promise<ChatMessageCreateData> | ChatMessageCreateData
+  expectedKind?: "ARTICLE"
+  identity: ChatIdentity
+  roomId: string
+  store: ChatRoomStore
+}): Promise<{ created: boolean; message: ChatMessageWire }> {
+  const writeMessage = async (transaction: ChatRoomStore) => {
+    const existing = await transaction.chatMessage.findUnique({
+      select: messageSelect,
+      where: {
+        senderUserId_clientMessageId: {
+          clientMessageId,
+          senderUserId: identity.userId,
+        },
+      },
+    })
+
+    if (existing) {
+      if (existing.roomId !== roomId || (expectedKind && existing.kind !== expectedKind)) {
+        throw new ChatRoomServiceError(
+          "Message ID cannot be reused for another chat action.",
+          "idempotency-conflict"
+        )
+      }
+
+      return { created: false, message: serializeMessage(existing) }
+    }
+
+    const [room, membership] = await Promise.all([
+      transaction.chatRoom.findUnique({
+        select: roomSummarySelect,
+        where: { id: roomId },
+      }),
+      transaction.chatRoomMember.findUnique({
+        select: memberSelect,
+        where: { roomId_userId: { roomId, userId: identity.userId } },
+      }),
+    ])
+
+    if (!room) {
+      throw new ChatRoomServiceError("Room was not found.", "not-found")
+    }
+
+    if (!canPostInRoom(room, membership, identity)) {
+      throw new ChatRoomServiceError("You cannot post in this room.", "forbidden")
+    }
+
+    const data = await createData(transaction)
+    await enforceRoomPostLimits({ identity, membership, room, store: transaction })
+
+    const message = await transaction.chatMessage.create({
+      data,
+      select: messageSelect,
+    })
+
+    await transaction.chatRoom.update({
+      data: { lastActivityAt: message.createdAt },
+      where: { id: roomId },
+    })
+
+    return { created: true, message: serializeMessage(message) }
+  }
+
+  try {
+    return typeof store.$transaction === "function"
+      ? await store.$transaction(writeMessage)
+      : await writeMessage(store)
+  } catch (error) {
+    const duplicate = await store.chatMessage.findUnique({
+      select: messageSelect,
+      where: {
+        senderUserId_clientMessageId: {
+          clientMessageId,
+          senderUserId: identity.userId,
+        },
+      },
+    })
+
+    if (
+      duplicate?.roomId === roomId &&
+      (!expectedKind || duplicate.kind === expectedKind)
+    ) {
+      return { created: false, message: serializeMessage(duplicate) }
+    }
+
+    throw error
+  }
+}
+
 async function enforceRoomPostLimits({
   identity,
   membership,
@@ -831,20 +842,22 @@ async function enforceRoomPostLimits({
     return
   }
 
-  const previous = await store.chatMessage.findFirst({
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true },
+  const now = new Date()
+  const nextMessageAllowedAt = new Date(now.getTime() + room.slowModeSeconds * 1_000)
+  const claimed = await store.chatRoomMember.updateMany({
+    data: { nextMessageAllowedAt },
     where: {
-      deletedAt: null,
       roomId: room.id,
-      senderUserId: identity.userId,
+      status: "ACTIVE",
+      userId: identity.userId,
+      OR: [
+        { nextMessageAllowedAt: null },
+        { nextMessageAllowedAt: { lte: now } },
+      ],
     },
   })
 
-  if (
-    previous &&
-    previous.createdAt.getTime() + room.slowModeSeconds * 1_000 > Date.now()
-  ) {
+  if (claimed.count !== 1) {
     throw new ChatRoomServiceError(
       "Slow mode is active in this room.",
       "slow-mode"

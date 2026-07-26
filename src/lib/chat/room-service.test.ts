@@ -27,6 +27,7 @@ function room() {
     languageCode: "en",
     name: "AI",
     slug: "ai",
+    slowModeSeconds: 0,
     state: "ACTIVE" as const,
     topicLine: "Test topic",
     visibility: "PUBLIC" as const,
@@ -202,12 +203,14 @@ describe("chat room service", () => {
 
     const slowStore = {
       chatMessage: {
-        findFirst: vi.fn().mockResolvedValue({ createdAt: new Date() }),
         findUnique: vi.fn().mockResolvedValue(null),
       },
       chatRoom: { findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }) },
       chatRoomBan: {},
-      chatRoomMember: { findUnique: vi.fn().mockResolvedValue(activeMembership()) },
+      chatRoomMember: {
+        findUnique: vi.fn().mockResolvedValue(activeMembership()),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
     } as unknown as ChatRoomStore
 
     await expect(
@@ -219,6 +222,142 @@ describe("chat room service", () => {
         store: slowStore,
       })
     ).rejects.toMatchObject({ code: "slow-mode" } satisfies Partial<ChatRoomServiceError>)
+  })
+
+  it("atomically gives simultaneous sends across gateway replicas one slow-mode slot", async () => {
+    const create = vi.fn().mockResolvedValue(message())
+    const updateMany = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 })
+    const transactionStore = {
+      chatMessage: { create, findUnique: vi.fn().mockResolvedValue(null) },
+      chatRoom: {
+        findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      chatRoomBan: {},
+      chatRoomMember: {
+        findUnique: vi.fn().mockResolvedValue(activeMembership()),
+        updateMany,
+      },
+    }
+    const transaction = vi.fn(async (work) => work(transactionStore))
+    const store = { ...transactionStore, $transaction: transaction } as unknown as ChatRoomStore
+
+    const results = await Promise.allSettled([
+      sendChatRoomMessage({
+        body: "first message",
+        clientMessageId: "message-0001",
+        identity,
+        roomId: "room-1",
+        store,
+      }),
+      sendChatRoomMessage({
+        body: "second message",
+        clientMessageId: "message-0002",
+        identity,
+        roomId: "room-1",
+        store,
+      }),
+    ])
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1)
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(updateMany).toHaveBeenCalledTimes(2)
+    expect(transaction).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not permanently claim a slow-mode slot when the message transaction rolls back", async () => {
+    let nextMessageAllowedAt: Date | null = null
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("insertion failed"))
+      .mockResolvedValueOnce(message())
+    const store = {
+      chatMessage: { create, findUnique: vi.fn().mockResolvedValue(null) },
+      chatRoom: {
+        findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      chatRoomBan: {},
+      chatRoomMember: {
+        findUnique: vi.fn().mockResolvedValue(activeMembership()),
+        updateMany: vi.fn(),
+      },
+      $transaction: async (work: (transaction: unknown) => Promise<unknown>) => {
+        let stagedNextMessageAllowedAt = nextMessageAllowedAt
+        const transactionStore = {
+          chatMessage: { create, findUnique: vi.fn().mockResolvedValue(null) },
+          chatRoom: {
+            findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }),
+            update: vi.fn().mockResolvedValue({}),
+          },
+          chatRoomBan: {},
+          chatRoomMember: {
+            findUnique: vi.fn().mockResolvedValue(activeMembership()),
+            updateMany: vi.fn(({ data }) => {
+              if (stagedNextMessageAllowedAt) {
+                return { count: 0 }
+              }
+              stagedNextMessageAllowedAt = data.nextMessageAllowedAt
+              return { count: 1 }
+            }),
+          },
+        }
+
+        const result = await work(transactionStore)
+        nextMessageAllowedAt = stagedNextMessageAllowedAt
+        return result
+      },
+    } as unknown as ChatRoomStore
+
+    await expect(
+      sendChatRoomMessage({
+        body: "will fail",
+        clientMessageId: "message-0001",
+        identity,
+        roomId: "room-1",
+        store,
+      })
+    ).rejects.toThrow("insertion failed")
+    expect(nextMessageAllowedAt).toBeNull()
+
+    await expect(
+      sendChatRoomMessage({
+        body: "retry succeeds",
+        clientMessageId: "message-0002",
+        identity,
+        roomId: "room-1",
+        store,
+      })
+    ).resolves.toMatchObject({ created: true })
+    expect(nextMessageAllowedAt).toBeInstanceOf(Date)
+  })
+
+  it("exempts only application administrators from the durable slow-mode claim", async () => {
+    const updateMany = vi.fn()
+    const store = {
+      chatMessage: { create: vi.fn().mockResolvedValue(message()), findUnique: vi.fn().mockResolvedValue(null) },
+      chatRoom: {
+        findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      chatRoomBan: {},
+      chatRoomMember: { findUnique: vi.fn().mockResolvedValue(activeMembership()), updateMany },
+    } as unknown as ChatRoomStore
+
+    await expect(
+      sendChatRoomMessage({
+        body: "administrator announcement",
+        clientMessageId: "message-0001",
+        identity: { role: "ADMIN", userId: "admin-1" },
+        roomId: "room-1",
+        store,
+      })
+    ).resolves.toMatchObject({ created: true })
+    expect(updateMany).not.toHaveBeenCalled()
   })
 
   it("shares an owned article as a compact ARTICLE message without its body", async () => {
