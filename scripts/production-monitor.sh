@@ -85,6 +85,19 @@ check_healthy_container app-postgres-1
 check_healthy_container app-redis-1
 check_healthy_container app-redis-ephemeral-1
 
+# Split workers are opt-in during capacity rollout. Once present, each has an
+# independent heartbeat health check and must participate in host monitoring.
+for split_worker in \
+  app-worker-ingestion-1 \
+  app-worker-ai-mail-1 \
+  app-worker-imports-1 \
+  app-worker-maintenance-1 \
+  app-worker-chat-events-1; do
+  if docker inspect "$split_worker" >/dev/null 2>&1; then
+    check_healthy_container "$split_worker"
+  fi
+done
+
 # The gateway is an opt-in profile. When it is running, its Compose healthcheck
 # probes /ready, and this explicit probe makes a lost Redis subscription visible
 # to the existing host alert flow without exposing gateway traffic publicly.

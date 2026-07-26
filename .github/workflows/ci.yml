@@ -181,6 +181,7 @@ jobs:
             .env
           docker compose config -q
           docker compose --profile chat config -q
+          docker compose --profile split-workers config -q
           docker info --format '{{range .Plugins.Log}}{{println .}}{{end}}' | grep -qx journald
           rm .env
       - name: Build production web image

@@ -64,6 +64,53 @@ To roll back the application release, retain the durable volume and the
 previous `.env`. It is safe to stop and recreate `redis-ephemeral`; never
 delete `redis-data` as part of a code rollback.
 
+## WORKER-ARCH-001 split-worker rollout
+
+The default `worker` remains `WORKER_MODE=all` for a compatibility-first
+release. The reviewed `split-workers` Compose profile adds five isolated
+services, each with its own CPU/memory cap, heartbeat, restart policy, and
+graceful shutdown:
+
+- `worker-ingestion`: feed and podcast refreshes plus article extraction.
+- `worker-ai-mail`: AI/smart digest processing and email delivery.
+- `worker-imports`: OPML and bulk-read work.
+- `worker-maintenance`: schedulers, cleanup, reconciliation, retention, and
+  source-health maintenance. A durable Redis lease permits only one scheduler
+  holder at a time.
+- `worker-chat-events`: chat article integration, bot scheduling, and the
+  transactional outbox publisher.
+
+Do not enable the profile in the same step as the code deployment. First
+observe the existing `worker` memory and queue backlog after the code release.
+At a separately approved cutover, stop the all-in-one worker before starting
+the profile so no queue has two intentional owners:
+
+```bash
+cd "$APP_DIR"
+docker compose stop worker
+docker compose rm -f worker
+docker compose --profile split-workers up -d \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-chat-events
+docker compose ps
+```
+
+Verify the five independent Docker health checks, the administrator queue
+backlog, worker-mode startup logs, and the host monitor. If any capacity or
+queue-ownership concern appears, stop the split services and recreate the
+safe compatibility worker:
+
+```bash
+docker compose --profile split-workers stop \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-chat-events
+docker compose --profile split-workers rm -f \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-chat-events
+docker compose up -d --no-deps --force-recreate worker
+```
+
+Do not activate both forms as a steady state. BullMQ may safely coordinate
+job claims during the brief cutover, but a single clear ownership model is
+required for predictable capacity monitoring.
+
 ## Pre-deployment checklist
 
 1. Complete [backup-restore-checklist.md](backup-restore-checklist.md).

@@ -21,4 +21,14 @@ describe("production monitor", () => {
     expect(script).toContain("errorstat_OOM")
     expect(script).toContain("mem_fragmentation_ratio")
   })
+
+  it("checks each enabled split worker independently", async () => {
+    const script = await readFile("scripts/production-monitor.sh", "utf8")
+
+    expect(script).toContain("app-worker-ingestion-1")
+    expect(script).toContain("app-worker-ai-mail-1")
+    expect(script).toContain("app-worker-imports-1")
+    expect(script).toContain("app-worker-maintenance-1")
+    expect(script).toContain("app-worker-chat-events-1")
+  })
 })

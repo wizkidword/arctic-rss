@@ -167,6 +167,9 @@ services:
     environment:
       # Reserve room for native allocations below the container limit.
       NODE_OPTIONS: "--max-old-space-size=640"
+      # The legacy all-in-one worker remains the default until an operator
+      # explicitly activates the split-workers profile after capacity review.
+      WORKER_MODE: "all"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -190,6 +193,91 @@ services:
     command: ["./node_modules/.bin/tsx", "worker/index.ts"]
     logging:
       driver: journald
+
+  worker-ingestion:
+    extends:
+      service: worker
+    profiles: ["split-workers"]
+    cpus: 0.5
+    mem_limit: 640m
+    pids_limit: 192
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=384"
+      WORKER_MODE: "ingestion"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-ingestion').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+
+  worker-ai-mail:
+    extends:
+      service: worker
+    profiles: ["split-workers"]
+    cpus: 0.75
+    mem_limit: 768m
+    pids_limit: 192
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=512"
+      WORKER_MODE: "ai-mail"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-ai-mail').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+
+  worker-imports:
+    extends:
+      service: worker
+    profiles: ["split-workers"]
+    cpus: 0.5
+    mem_limit: 768m
+    pids_limit: 192
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=512"
+      WORKER_MODE: "imports"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-imports').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+
+  worker-maintenance:
+    extends:
+      service: worker
+    profiles: ["split-workers"]
+    cpus: 0.35
+    mem_limit: 384m
+    pids_limit: 128
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=256"
+      WORKER_MODE: "maintenance"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-maintenance').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+
+  worker-chat-events:
+    extends:
+      service: worker
+    profiles: ["split-workers"]
+    cpus: 0.35
+    mem_limit: 384m
+    pids_limit: 128
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=256"
+      WORKER_MODE: "chat-events"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-chat-events').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
 
   chat-gateway:
     build:

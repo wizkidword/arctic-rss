@@ -99,6 +99,8 @@ Services:
 
 - `web`: Next.js app on port `3000`
 - `worker`: background feed refresh worker
+- `worker-*`: optional `split-workers` profile for isolated ingestion,
+  AI/mail, imports, maintenance, and chat-event responsibilities
 - `postgres`: PostgreSQL database
 - `redis`: durable BullMQ queue Redis with AOF and `noeviction`
 - `redis-ephemeral`: disposable Redis for rate limits, chat presence, replay,

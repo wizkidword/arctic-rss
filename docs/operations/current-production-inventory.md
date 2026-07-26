@@ -86,6 +86,12 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
   active chat gateway, and finally web/worker containers. The monitor verifies
   each health check, AOF where required, policy, error/OOM counters, and
   fragmentation without printing secrets.
+- The reviewed WORKER-ARCH-001 target keeps the all-in-one worker as a safe
+  default while offering an opt-in `split-workers` profile for ingestion,
+  AI/mail, imports, maintenance, and chat events. Each split service has an
+  isolated heartbeat and resource limit; the maintenance scheduler owns a
+  durable Redis lease so duplicate scheduler instances skip rather than
+  overlap.
 
 ## Remaining operator follow-ups
 

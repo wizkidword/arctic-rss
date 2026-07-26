@@ -93,8 +93,20 @@ import {
   installWorkerSignalHandlers,
   shutdownWorkerRuntime,
 } from "./shutdown"
+import {
+  getWorkerMode,
+  runsWorkerResponsibility,
+  workerHeartbeatPath,
+} from "./mode"
+import { createMaintenanceLock } from "./maintenance-lock"
 
 assertSecureProductionConfiguration()
+
+const workerMode = getWorkerMode()
+const heartbeatPath = workerHeartbeatPath(workerMode)
+const maintenanceLock = runsWorkerResponsibility(workerMode, "maintenance")
+  ? createMaintenanceLock()
+  : undefined
 
 const {
   aiDigestConcurrency,
@@ -148,13 +160,14 @@ function logWorkerMemory(context: WorkerMemoryLogContext) {
   )
 }
 
-console.log("Arctic RSS worker online")
+console.log(`Arctic RSS ${workerMode} worker online`)
 console.log(
   `Redis queue endpoint: ${durableRedisConnectionOptions().url.replace(/\/\/.*@/, "//***@")}`
 )
 logWorkerMemory({ trigger: "startup" })
 
-const worker = new Worker<FeedRefreshJobData>(
+const worker = runsWorkerResponsibility(workerMode, "ingestion")
+  ? new Worker<FeedRefreshJobData>(
   FEED_REFRESH_QUEUE_NAME,
   async (job) => {
     return runTrackedRefresh({
@@ -167,9 +180,11 @@ const worker = new Worker<FeedRefreshJobData>(
     connection: durableRedisConnectionOptions(),
     concurrency: feedRefreshConcurrency,
   }
-)
+  )
+  : undefined
 
-const aiDigestWorker = new Worker<AiDigestJobData>(
+const aiDigestWorker = runsWorkerResponsibility(workerMode, "ai-mail")
+  ? new Worker<AiDigestJobData>(
   AI_DIGEST_QUEUE_NAME,
   async (job) => {
     const result = await processAiDigest({
@@ -185,9 +200,11 @@ const aiDigestWorker = new Worker<AiDigestJobData>(
     connection: durableRedisConnectionOptions(),
     concurrency: aiDigestConcurrency,
   }
-)
+  )
+  : undefined
 
-const smartDigestWorker = new Worker<SmartDigestJobData>(
+const smartDigestWorker = runsWorkerResponsibility(workerMode, "ai-mail")
+  ? new Worker<SmartDigestJobData>(
   SMART_DIGEST_QUEUE_NAME,
   async (job) => {
     const result = await processSmartDigestRule({
@@ -204,9 +221,11 @@ const smartDigestWorker = new Worker<SmartDigestJobData>(
     connection: durableRedisConnectionOptions(),
     concurrency: smartDigestConcurrency,
   }
-)
+  )
+  : undefined
 
-const chatArticleIntegrationWorker = new Worker<ChatArticleIntegrationJobData>(
+const chatArticleIntegrationWorker = runsWorkerResponsibility(workerMode, "chat-events")
+  ? new Worker<ChatArticleIntegrationJobData>(
   CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
   async (job) => {
     return processChatArticleIntegration({
@@ -217,9 +236,11 @@ const chatArticleIntegrationWorker = new Worker<ChatArticleIntegrationJobData>(
     connection: durableRedisConnectionOptions(),
     concurrency: 1,
   }
-)
+  )
+  : undefined
 
-const bulkReadWorker = new Worker<BulkReadJobData>(
+const bulkReadWorker = runsWorkerResponsibility(workerMode, "imports")
+  ? new Worker<BulkReadJobData>(
   BULK_READ_QUEUE_NAME,
   async (job) => {
     return processBulkReadJob({
@@ -231,9 +252,11 @@ const bulkReadWorker = new Worker<BulkReadJobData>(
     connection: durableRedisConnectionOptions(),
     concurrency: 1,
   }
-)
+  )
+  : undefined
 
-const opmlImportWorker = new Worker<OpmlImportQueueData>(
+const opmlImportWorker = runsWorkerResponsibility(workerMode, "imports")
+  ? new Worker<OpmlImportQueueData>(
   OPML_IMPORT_QUEUE_NAME,
   async (job) => {
     const result = await processOpmlImportJob({ jobId: job.data.jobId })
@@ -261,9 +284,11 @@ const opmlImportWorker = new Worker<OpmlImportQueueData>(
     connection: durableRedisConnectionOptions(),
     concurrency: 1,
   }
-)
+  )
+  : undefined
 
-const smartDigestEmailWorker = new Worker<SmartDigestEmailJobData>(
+const smartDigestEmailWorker = runsWorkerResponsibility(workerMode, "ai-mail")
+  ? new Worker<SmartDigestEmailJobData>(
   SMART_DIGEST_EMAIL_QUEUE_NAME,
   async (job) => {
     const result = await processSmartDigestEmailDelivery({
@@ -279,9 +304,11 @@ const smartDigestEmailWorker = new Worker<SmartDigestEmailJobData>(
     connection: durableRedisConnectionOptions(),
     concurrency: smartDigestEmailConcurrency,
   }
-)
+  )
+  : undefined
 
-const podcastWorker = new Worker<PodcastRefreshJobData>(
+const podcastWorker = runsWorkerResponsibility(workerMode, "ingestion")
+  ? new Worker<PodcastRefreshJobData>(
   PODCAST_REFRESH_QUEUE_NAME,
   async (job) => {
     return runTrackedRefresh({
@@ -294,7 +321,8 @@ const podcastWorker = new Worker<PodcastRefreshJobData>(
     connection: durableRedisConnectionOptions(),
     concurrency: podcastRefreshConcurrency,
   }
-)
+  )
+  : undefined
 
 function trackActiveJobs(target: Worker) {
   const activeJobIds = new Set<string>()
@@ -319,49 +347,69 @@ function trackActiveJobs(target: Worker) {
 }
 
 const managedWorkers = [
-  { activeJobs: trackActiveJobs(worker), name: "feed-refresh", worker },
-  { activeJobs: trackActiveJobs(podcastWorker), name: "podcast-refresh", worker: podcastWorker },
-  { activeJobs: trackActiveJobs(aiDigestWorker), name: "ai-digest", worker: aiDigestWorker },
-  { activeJobs: trackActiveJobs(smartDigestWorker), name: "smart-digest", worker: smartDigestWorker },
-  {
+  worker && { activeJobs: trackActiveJobs(worker), name: "feed-refresh", worker },
+  podcastWorker && {
+    activeJobs: trackActiveJobs(podcastWorker),
+    name: "podcast-refresh",
+    worker: podcastWorker,
+  },
+  aiDigestWorker && {
+    activeJobs: trackActiveJobs(aiDigestWorker),
+    name: "ai-digest",
+    worker: aiDigestWorker,
+  },
+  smartDigestWorker && {
+    activeJobs: trackActiveJobs(smartDigestWorker),
+    name: "smart-digest",
+    worker: smartDigestWorker,
+  },
+  smartDigestEmailWorker && {
     activeJobs: trackActiveJobs(smartDigestEmailWorker),
     name: "smart-digest-email",
     worker: smartDigestEmailWorker,
   },
-  { activeJobs: trackActiveJobs(opmlImportWorker), name: "opml-import", worker: opmlImportWorker },
-  { activeJobs: trackActiveJobs(bulkReadWorker), name: "bulk-read", worker: bulkReadWorker },
-  {
+  opmlImportWorker && {
+    activeJobs: trackActiveJobs(opmlImportWorker),
+    name: "opml-import",
+    worker: opmlImportWorker,
+  },
+  bulkReadWorker && {
+    activeJobs: trackActiveJobs(bulkReadWorker),
+    name: "bulk-read",
+    worker: bulkReadWorker,
+  },
+  chatArticleIntegrationWorker && {
     activeJobs: trackActiveJobs(chatArticleIntegrationWorker),
     name: "chat-article-integration",
     worker: chatArticleIntegrationWorker,
   },
-]
+].filter((target): target is NonNullable<typeof target> => Boolean(target))
 
-worker.on("failed", (job, error) => {
+worker?.on("failed", (job, error) => {
   console.error(
     `[worker] refresh failed for ${job?.data.feedId ?? "unknown feed"}: ${error.message}`
   )
 })
 
-aiDigestWorker.on("failed", (job, error) => {
+aiDigestWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] digest failed for ${job?.data.digestId ?? "unknown digest"}: ${error.message}`
   )
 })
 
-smartDigestWorker.on("failed", (job, error) => {
+smartDigestWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] smart digest failed for ${job?.data.ruleId ?? "unknown rule"}: ${error.message}`
   )
 })
 
-chatArticleIntegrationWorker.on("failed", (job, error) => {
+chatArticleIntegrationWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] chat article integration failed for ${job?.data.articleId ?? "unknown article"}: ${error.message}`
   )
 })
 
-bulkReadWorker.on("failed", (job, error) => {
+bulkReadWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] bulk read failed for ${job?.data.jobId ?? "unknown job"}: ${error.message}`
   )
@@ -378,7 +426,7 @@ bulkReadWorker.on("failed", (job, error) => {
   }
 })
 
-opmlImportWorker.on("failed", (job, error) => {
+opmlImportWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] OPML import failed for ${job?.data.jobId ?? "unknown job"}: ${error.message}`
   )
@@ -395,13 +443,13 @@ opmlImportWorker.on("failed", (job, error) => {
   }
 })
 
-smartDigestEmailWorker.on("failed", (job, error) => {
+smartDigestEmailWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] smart digest email failed for ${job?.data.runId ?? "unknown run"}: ${error.message}`
   )
 })
 
-podcastWorker.on("failed", (job, error) => {
+podcastWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] podcast refresh failed for ${job?.data.podcastId ?? "unknown podcast"}: ${error.message}`
   )
@@ -728,7 +776,18 @@ function runSchedulerTick() {
     return schedulerTickPromise
   }
 
-  schedulerTickPromise = schedulerTick()
+  schedulerTickPromise = (maintenanceLock
+    ? maintenanceLock.run(schedulerTick).then((result) => {
+        if (!result.acquired) {
+          console.warn(
+            JSON.stringify({
+              event: "worker_maintenance_lock",
+              outcome: "skipped",
+            })
+          )
+        }
+      })
+    : schedulerTick())
     .catch((error) => {
       console.error(`[worker] scheduler tick failed: ${schedulerErrorMessage(error)}`)
     })
@@ -868,18 +927,26 @@ function publishPendingChatEvents() {
   return chatOutboxPublishPromise
 }
 
-const scheduler = setInterval(() => {
-  void runSchedulerTick()
-}, schedulerIntervalMs)
-const chatOutboxPublisher = setInterval(() => {
-  void publishPendingChatEvents()
-}, chatEventOutboxIntervalMs)
+const scheduler = runsWorkerResponsibility(workerMode, "maintenance")
+  ? setInterval(() => {
+      void runSchedulerTick()
+    }, schedulerIntervalMs)
+  : undefined
+const chatOutboxPublisher = runsWorkerResponsibility(workerMode, "chat-events")
+  ? setInterval(() => {
+      void publishPendingChatEvents()
+    }, chatEventOutboxIntervalMs)
+  : undefined
 
-void runSchedulerTick()
-void publishPendingChatEvents()
+if (scheduler) {
+  void runSchedulerTick()
+}
+if (chatOutboxPublisher) {
+  void publishPendingChatEvents()
+}
 
 function recordWorkerHeartbeat() {
-  writeWorkerHeartbeat().catch((error) => {
+  writeWorkerHeartbeat({ path: heartbeatPath }).catch((error) => {
     console.error(
       `[worker] could not update health heartbeat: ${schedulerErrorMessage(error)}`
     )
@@ -907,8 +974,9 @@ function shutdown() {
           closeOpmlImportQueue(),
           closeChatArticleIntegrationQueue(),
           closeChatRoomEventPublisher(),
+          maintenanceLock?.close() ?? Promise.resolve(),
         ])
-        await clearWorkerHeartbeat().catch((error) => {
+        await clearWorkerHeartbeat({ path: heartbeatPath }).catch((error) => {
           console.error(
             `[worker] could not clear health heartbeat: ${schedulerErrorMessage(error)}`
           )
@@ -920,8 +988,12 @@ function shutdown() {
           (work): work is Promise<void> => Boolean(work)
         ),
       stopScheduling: () => {
-        clearInterval(scheduler)
-        clearInterval(chatOutboxPublisher)
+        if (scheduler) {
+          clearInterval(scheduler)
+        }
+        if (chatOutboxPublisher) {
+          clearInterval(chatOutboxPublisher)
+        }
         clearInterval(heartbeat)
         clearInterval(memoryTelemetry)
       },
