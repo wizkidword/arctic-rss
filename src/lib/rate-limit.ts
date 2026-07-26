@@ -2,7 +2,9 @@ import { createHash } from "node:crypto"
 import { isIP } from "node:net"
 
 import Redis from "ioredis"
-import { headers } from "next/headers"
+// This module is also used by the standalone chat gateway. Node ESM requires
+// the extension for package subpath imports outside Next's bundler.
+import { headers } from "next/headers.js"
 
 import { ephemeralRedisConnectionOptions } from "./redis-config"
 
