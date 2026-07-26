@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import type { Prisma, PrismaClient } from "@/generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
@@ -30,6 +32,7 @@ const MEMBER_ROLE_RANK: Record<ChatRoomMemberRole, number> = {
 const roomSelect = {
   id: true,
   joinPolicy: true,
+  name: true,
   slug: true,
   slowModeSeconds: true,
   state: true,
@@ -44,6 +47,34 @@ const memberSelect = {
 } as const
 
 const profileSelect = { handle: true, userId: true } as const
+
+export const CHAT_REPORT_EVIDENCE_SCHEMA_VERSION = 2
+
+type ChatReportEvidenceMessage = {
+  article: { feed: { title: string }; id: string; title: string } | null
+  body: string
+  createdAt: Date
+  deletedAt: Date | null
+  editedAt: Date | null
+  id: string
+  kind: string
+  replyTo: {
+    body: string
+    createdAt: Date
+    id: string
+    kind: string
+    senderUserId: string | null
+    sequence: bigint
+    version: number
+  } | null
+  sender: { chatProfile: { handle: string } | null } | null
+  senderUserId: string | null
+  sequence: bigint
+  version: number
+}
+
+type ChatReportEvidenceRoom = { id: string; name: string; slug: string }
+type ChatReportEvidenceTarget = { handle: string; userId: string }
 
 export type ChatModerationStore = Pick<
   PrismaClient,
@@ -241,11 +272,29 @@ export async function createChatReport({
     const message = input.messageId
       ? await transaction.chatMessage.findUnique({
           select: {
+            article: { select: { feed: { select: { title: true } }, id: true, title: true } },
+            body: true,
             createdAt: true,
+            deletedAt: true,
+            editedAt: true,
             id: true,
+            kind: true,
+            replyTo: {
+              select: {
+                body: true,
+                createdAt: true,
+                id: true,
+                kind: true,
+                senderUserId: true,
+                sequence: true,
+                version: true,
+              },
+            },
             roomId: true,
+            sender: { select: { chatProfile: { select: { handle: true } } } },
             senderUserId: true,
             sequence: true,
+            version: true,
           },
           where: { id: input.messageId },
         })
@@ -284,21 +333,13 @@ export async function createChatReport({
     }
 
     const targetUserId = message?.senderUserId ?? target?.userId ?? null
+    const capturedAt = new Date()
     const report = await transaction.chatReport.create({
       data: {
         category: input.category,
         details: input.details,
         evidence: {
-          create: {
-            snapshot: message
-              ? {
-                  createdAt: message.createdAt.toISOString(),
-                  messageId: message.id,
-                  sequence: message.sequence.toString(),
-                  v: 1,
-                }
-              : { v: 1 },
-          },
+          create: buildChatReportEvidence({ capturedAt, message, room, target }),
         },
         messageId: message?.id ?? null,
         reporterUserId: identity.userId,
@@ -332,13 +373,21 @@ export async function listChatReports({
     throw new ChatModerationError("Moderator access is required.", "forbidden")
   }
 
-  return store.chatReport.findMany({
+  const reports = await store.chatReport.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "asc" }],
     select: {
       category: true,
       createdAt: true,
       details: true,
-      evidence: { select: { createdAt: true, snapshot: true } },
+      evidence: {
+        select: {
+          captureState: true,
+          capturedAt: true,
+          contentHash: true,
+          schemaVersion: true,
+          snapshot: true,
+        },
+      },
       id: true,
       messageId: true,
       room: { select: { name: true, slug: true } },
@@ -348,6 +397,16 @@ export async function listChatReports({
     take: 100,
     where: { status: { in: ["OPEN", "REVIEWING"] } },
   })
+
+  if (reports.length) {
+    await writeAudit(store, {
+      action: "REPORT_EVIDENCE_VIEWED",
+      actorUserId: identity.userId,
+      metadata: { reportIds: reports.map((report) => report.id) },
+    })
+  }
+
+  return reports
 }
 
 export async function resolveChatReport({
@@ -815,6 +874,91 @@ async function writeAudit(
     },
     select: { id: true },
   })
+}
+
+function buildChatReportEvidence({
+  capturedAt,
+  message,
+  room,
+  target,
+}: {
+  capturedAt: Date
+  message: ChatReportEvidenceMessage | null
+  room: ChatReportEvidenceRoom | null
+  target: ChatReportEvidenceTarget | null
+}) {
+  const snapshot = {
+    message: message
+      ? {
+          article: message.article
+            ? {
+                feedTitle: sanitizeEvidenceText(message.article.feed.title, 160),
+                id: message.article.id,
+                title: sanitizeEvidenceText(message.article.title, 240),
+              }
+            : null,
+          body: sanitizeEvidenceText(message.body, 2_000),
+          createdAt: message.createdAt.toISOString(),
+          deletedAt: message.deletedAt?.toISOString() ?? null,
+          editedAt: message.editedAt?.toISOString() ?? null,
+          id: message.id,
+          kind: message.kind,
+          replyTo: message.replyTo
+            ? {
+                bodyExcerpt: sanitizeEvidenceText(message.replyTo.body, 280),
+                contentHash: hashEvidenceContent(message.replyTo.body),
+                createdAt: message.replyTo.createdAt.toISOString(),
+                id: message.replyTo.id,
+                kind: message.replyTo.kind,
+                senderUserId: message.replyTo.senderUserId,
+                sequence: message.replyTo.sequence.toString(),
+                version: message.replyTo.version,
+              }
+            : null,
+          senderHandle: message.sender?.chatProfile?.handle ?? null,
+          senderUserId: message.senderUserId,
+          sequence: message.sequence.toString(),
+          version: message.version,
+        }
+      : null,
+    room: room
+      ? {
+          id: room.id,
+          name: sanitizeEvidenceText(room.name, 160),
+          slug: room.slug,
+        }
+      : null,
+    target: target
+      ? {
+          handle: target.handle,
+          userId: target.userId,
+        }
+      : null,
+    v: CHAT_REPORT_EVIDENCE_SCHEMA_VERSION,
+  }
+
+  return {
+    captureState: message ? ("CAPTURED" as const) : ("NOT_APPLICABLE" as const),
+    capturedAt,
+    contentHash: hashEvidenceContent(JSON.stringify(snapshot)),
+    schemaVersion: CHAT_REPORT_EVIDENCE_SCHEMA_VERSION,
+    snapshot: snapshot as Prisma.InputJsonValue,
+  }
+}
+
+function hashEvidenceContent(value: string) {
+  return createHash("sha256").update(value, "utf8").digest("hex")
+}
+
+function sanitizeEvidenceText(value: string, maximumLength: number) {
+  return value
+    .normalize("NFC")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .trim()
+    .slice(0, maximumLength)
 }
 
 function inTransaction<T>(

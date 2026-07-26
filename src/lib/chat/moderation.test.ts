@@ -16,6 +16,7 @@ function room() {
   return {
     id: "room-1234",
     joinPolicy: "OPEN" as const,
+    name: "AI \u202e Research",
     slug: "ai",
     slowModeSeconds: 0,
     state: "ACTIVE" as const,
@@ -43,11 +44,31 @@ function createStore() {
     chatAuditLog: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
     chatMessage: {
       findUnique: vi.fn().mockResolvedValue({
+        article: {
+          feed: { title: "Northern \u202e Feed" },
+          id: "article-1234",
+          title: "A relevant story",
+        },
+        body: "  Targeted\u0000 abuse\r\nin the room.\u202e  ",
         createdAt: new Date("2026-07-14T12:00:00.000Z"),
+        deletedAt: null,
+        editedAt: null,
         id: "message-1234",
+        kind: "TEXT",
+        replyTo: {
+          body: "Prior\u0000 context",
+          createdAt: new Date("2026-07-14T11:59:00.000Z"),
+          id: "message-1233",
+          kind: "TEXT",
+          senderUserId: "user-3",
+          sequence: BigInt(8),
+          version: 1,
+        },
         roomId: "room-1234",
+        sender: { chatProfile: { handle: "northernlights" } },
         senderUserId: "user-2",
         sequence: BigInt(9),
+        version: 1,
       }),
     },
     chatProfile: {
@@ -71,7 +92,7 @@ function createStore() {
 }
 
 describe("chat moderation", () => {
-  it("records a bounded report without copying the reported message body", async () => {
+  it("captures complete, sanitized immutable evidence in the report transaction", async () => {
     const store = createStore()
 
     await expect(
@@ -91,11 +112,37 @@ describe("chat moderation", () => {
         data: expect.objectContaining({
           evidence: {
             create: {
+              captureState: "CAPTURED",
+              capturedAt: expect.any(Date),
+              contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+              schemaVersion: 2,
               snapshot: {
-                createdAt: "2026-07-14T12:00:00.000Z",
-                messageId: "message-1234",
-                sequence: "9",
-                v: 1,
+                message: {
+                  article: {
+                    feedTitle: "Northern Feed",
+                    id: "article-1234",
+                    title: "A relevant story",
+                  },
+                  body: "Targeted abuse\nin the room.",
+                  createdAt: "2026-07-14T12:00:00.000Z",
+                  deletedAt: null,
+                  editedAt: null,
+                  id: "message-1234",
+                  kind: "TEXT",
+                  replyTo: expect.objectContaining({
+                    bodyExcerpt: "Prior context",
+                    id: "message-1233",
+                    sequence: "8",
+                    version: 1,
+                  }),
+                  senderHandle: "northernlights",
+                  senderUserId: "user-2",
+                  sequence: "9",
+                  version: 1,
+                },
+                room: { id: "room-1234", name: "AI Research", slug: "ai" },
+                target: null,
+                v: 2,
               },
             },
           },
@@ -140,10 +187,67 @@ describe("chat moderation", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         select: expect.objectContaining({
-          evidence: { select: { createdAt: true, snapshot: true } },
+          evidence: {
+            select: {
+              captureState: true,
+              capturedAt: true,
+              contentHash: true,
+              schemaVersion: true,
+              snapshot: true,
+            },
+          },
         }),
       })
     )
+  })
+
+  it("keeps captured evidence available to an administrator after a message is gone", async () => {
+    const store = createStore()
+    const evidence = {
+      captureState: "CAPTURED",
+      capturedAt: new Date("2026-07-14T12:00:00.000Z"),
+      contentHash: "a".repeat(64),
+      schemaVersion: 2,
+      snapshot: { message: { body: "Preserved evidence" }, v: 2 },
+    }
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        category: "HARASSMENT",
+        createdAt: new Date("2026-07-14T12:00:00.000Z"),
+        details: null,
+        evidence,
+        id: "report-1",
+        messageId: null,
+        room: null,
+        status: "OPEN",
+        target: null,
+      },
+    ])
+    ;(store.chatReport as unknown as { findMany: typeof findMany }).findMany = findMany
+
+    await expect(
+      listChatReports({ identity: { role: "ADMIN", userId: "admin-1" }, store })
+    ).resolves.toEqual([
+      expect.objectContaining({ evidence, id: "report-1", messageId: null }),
+    ])
+    expect(store.chatAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "REPORT_EVIDENCE_VIEWED",
+          actorUserId: "admin-1",
+          metadata: { reportIds: ["report-1"] },
+        }),
+      })
+    )
+  })
+
+  it("does not return evidence to a non-administrator", async () => {
+    const store = createStore()
+
+    await expect(listChatReports({ identity, store })).rejects.toMatchObject({
+      code: "forbidden",
+    } satisfies Partial<ChatModerationError>)
+    expect(store.chatReport.findMany).toBeUndefined()
   })
 
   it("bans a lower-role member, leaves the room, and writes an audit row", async () => {

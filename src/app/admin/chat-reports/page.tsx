@@ -47,8 +47,8 @@ export default async function ChatReportsAdminPage() {
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{report.details || "No reporter details provided."}</p>
                   {report.evidence ? (
                     <details className="mt-3 max-w-xl rounded border bg-muted/30 p-2 text-xs">
-                      <summary className="cursor-pointer font-medium">Restricted evidence metadata</summary>
-                      <p className="mt-2 text-muted-foreground">Captured {report.evidence.createdAt.toLocaleString()}. Message bodies are never copied into this record.</p>
+                      <summary className="cursor-pointer font-medium">Restricted immutable evidence</summary>
+                      <p className="mt-2 text-muted-foreground">Captured {report.evidence.capturedAt.toLocaleString()} · schema v{report.evidence.schemaVersion} · {report.evidence.captureState.replaceAll("_", " ").toLowerCase()}</p>
                       <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5">{JSON.stringify(report.evidence.snapshot, null, 2)}</pre>
                     </details>
                   ) : null}

@@ -1,5 +1,7 @@
-import { requireChatEligibleUser } from "@/lib/chat/access"
+import { AuthorizationError, requireFreshAdmin } from "@/lib/authorization"
+import { ChatAccessError, requireChatEligibleUser } from "@/lib/chat/access"
 import {
+  ChatModerationError,
   createChatReport,
   listChatReports,
   parseChatReportInput,
@@ -12,7 +14,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
-    const user = await requireChatEligibleUser()
+    const user = await requireFreshAdmin()
     const reports = await listChatReports({
       identity: { role: user.role, userId: user.id },
     })
@@ -45,6 +47,14 @@ export async function POST(request: Request) {
 
     return chatNoStoreResponse({ report }, 201)
   } catch (error) {
+    if (
+      !(error instanceof AuthorizationError) &&
+      !(error instanceof ChatAccessError) &&
+      !(error instanceof ChatModerationError) &&
+      !(error instanceof SyntaxError)
+    ) {
+      console.error(JSON.stringify({ event: "chat_report_evidence_capture_failed" }))
+    }
     return chatRouteErrorResponse(error)
   }
 }

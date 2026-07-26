@@ -1,4 +1,5 @@
-import { requireChatEligibleUser } from "@/lib/chat/access"
+import { requireFreshAdmin } from "@/lib/authorization"
+import { assertChatMutationOrigin } from "@/lib/chat/access"
 import {
   parseChatReportResolutionInput,
   resolveChatReport,
@@ -13,8 +14,9 @@ export async function PATCH(
   context: { params: Promise<{ reportId: string }> }
 ) {
   try {
+    assertChatMutationOrigin(request)
     const [user, body, { reportId }] = await Promise.all([
-      requireChatEligibleUser({ mutationRequest: request }),
+      requireFreshAdmin(),
       request.json(),
       context.params,
     ])

@@ -227,6 +227,15 @@ enum ChatReportRetentionClass {
   SERIOUS
 }
 
+// Evidence records created before CHAT-MOD-001 remain readable but are
+// explicitly identified as partial rather than being reconstructed from data
+// that may no longer be available.
+enum ChatReportEvidenceCaptureState {
+  LEGACY_PARTIAL
+  CAPTURED
+  NOT_APPLICABLE
+}
+
 enum ChatLegalHoldSubject {
   CHAT_AUDIT_LOG
   CHAT_MESSAGE
@@ -1246,6 +1255,8 @@ model ChatRoomMember {
 model ChatMessage {
   id               String          @id @default(cuid())
   sequence         BigInt          @unique @default(autoincrement())
+  // Increment this revision with any future message-content edit operation.
+  version          Int             @default(1)
   roomId           String
   senderUserId     String?
   clientMessageId  String
@@ -1352,19 +1363,21 @@ model ChatReport {
   @@index([targetUserId, createdAt])
 }
 
-// Evidence is kept out of the ordinary report row. Restricted moderation
-// operations may select it; it is removed with the report unless the report is
-// under an active scoped legal hold.
+// Evidence is kept out of the ordinary report row. It is created once with
+// the report, never updated by application policy, and is removed with the
+// report unless the report is under an active scoped legal hold.
 model ChatReportEvidence {
-  id        String   @id @default(cuid())
-  reportId  String   @unique
-  snapshot  Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String                         @id @default(cuid())
+  reportId     String                         @unique
+  schemaVersion Int                           @default(1)
+  captureState ChatReportEvidenceCaptureState @default(LEGACY_PARTIAL)
+  contentHash  String?
+  snapshot     Json
+  capturedAt   DateTime                       @default(now())
 
   report ChatReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
-  @@index([createdAt])
+  @@index([captureState, capturedAt])
 }
 
 model ChatAuditLog {
