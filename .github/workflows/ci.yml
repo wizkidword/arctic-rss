@@ -119,20 +119,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Fail on high or critical production dependency vulnerabilities
-        shell: bash
-        run: |
-          for attempt in 1 2 3; do
-            if npm audit --omit=dev --audit-level=high; then
-              exit 0
-            fi
-
-            if [ "$attempt" -eq 3 ]; then
-              exit 1
-            fi
-
-            echo "npm audit failed; retrying in $((attempt * 5)) seconds..."
-            sleep $((attempt * 5))
-          done
+        run: node scripts/security/audit-production-dependencies.mjs
 
   secret-scan:
     name: Secret scan
