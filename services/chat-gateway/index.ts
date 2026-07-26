@@ -56,6 +56,21 @@ const DEFAULT_CHAT_GATEWAY_PORT = 3001
 const DEFAULT_AUTHORIZATION_MAX_AGE_SECONDS = 60
 const DEFAULT_REDIS_DEGRADED_GRACE_SECONDS = 90
 
+type ChatGatewayStartupStage = "attach-native-chat" | "connect-redis" | "create-gateway"
+
+class ChatGatewayStartupError extends Error {
+  readonly errorClass: string
+
+  constructor(
+    readonly stage: ChatGatewayStartupStage,
+    error: unknown
+  ) {
+    super("Chat gateway startup failed.")
+    this.name = "ChatGatewayStartupError"
+    this.errorClass = error instanceof Error ? error.name : "UnknownError"
+  }
+}
+
 export async function createProductionChatGateway(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   { exit = (code: number) => process.exit(code) }: { exit?: (code: number) => never | void } = {}
@@ -92,6 +107,7 @@ export async function createProductionChatGateway(
   const securityEventSubscriber = redis.duplicate()
   let gateway: ChatGateway | undefined
   let terminating = false
+  let startupStage: ChatGatewayStartupStage = "connect-redis"
 
   const recovery = createRedisRecoverySupervisor({
     clients: {
@@ -160,6 +176,7 @@ export async function createProductionChatGateway(
     // connections before constructing the adapter.
     await recovery.start()
 
+    startupStage = "create-gateway"
     gateway = createChatGateway({
       authenticateConnection: (input) =>
         authenticateChatGatewayConnection({
@@ -192,6 +209,7 @@ export async function createProductionChatGateway(
         }),
     })
 
+    startupStage = "attach-native-chat"
     attachNativeChatGateway(
       gateway.io,
       {
@@ -232,7 +250,7 @@ export async function createProductionChatGateway(
   } catch (error) {
     terminating = true
     await Promise.allSettled([gateway?.close() ?? Promise.resolve(), recovery.close()])
-    throw error
+    throw new ChatGatewayStartupError(startupStage, error)
   }
 }
 
@@ -453,8 +471,11 @@ async function start() {
     process.once("SIGINT", () => void shutdown())
     process.once("SIGTERM", () => void shutdown())
   } catch (error) {
+    const failure = error instanceof ChatGatewayStartupError ? error : undefined
+
     logger.warn("startup_failed", {
-      errorClass: error instanceof Error ? error.name : "UnknownError",
+      errorClass: failure?.errorClass ?? (error instanceof Error ? error.name : "UnknownError"),
+      stage: failure?.stage ?? "configuration",
     })
     process.exitCode = 1
   }
