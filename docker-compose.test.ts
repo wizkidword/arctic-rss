@@ -15,7 +15,7 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     );
   });
 
-  it("runs migrations and the worker from local project executables", async () => {
+  it("runs migrations and the worker from the minimized production image", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
 
     expect(compose).toContain("target: migrate");
@@ -23,8 +23,15 @@ describe("Cloudflare Tunnel Compose configuration", () => {
       'command: ["./node_modules/.bin/prisma", "migrate", "deploy"]',
     );
     expect(compose).toContain(
-      'command: ["./node_modules/.bin/tsx", "worker/index.ts"]',
+      'command: ["node", "worker.mjs"]',
     );
+  });
+
+  it("pins the reviewed PostgreSQL and Redis base images", async () => {
+    const compose = await readFile("docker-compose.yml", "utf8");
+
+    expect(compose).toContain("image: postgres:17.10-alpine3.23");
+    expect(compose).toContain("image: redis:7.4.9-alpine3.21");
   });
 
   it("refuses to interpolate production data-service credentials from unsafe defaults", async () => {

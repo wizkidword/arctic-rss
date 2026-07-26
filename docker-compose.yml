@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17.10-alpine3.23
     restart: unless-stopped
     cpus: 0.75
     mem_limit: 512m
@@ -26,7 +26,7 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.9-alpine3.21
     restart: unless-stopped
     cpus: 0.25
     mem_limit: 320m
@@ -49,7 +49,7 @@ services:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
 
   redis-ephemeral:
-    image: redis:7-alpine
+    image: redis:7.4.9-alpine3.21
     restart: unless-stopped
     cpus: 0.25
     mem_limit: 192m
@@ -190,7 +190,7 @@ services:
       retries: 3
       start_period: 45s
     stop_grace_period: 60s
-    command: ["./node_modules/.bin/tsx", "worker/index.ts"]
+    command: ["node", "worker.mjs"]
     logging:
       driver: journald
 

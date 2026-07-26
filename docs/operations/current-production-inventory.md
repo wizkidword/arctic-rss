@@ -1,24 +1,24 @@
 # Current production inventory
 
-**Captured:** 2026-07-13
+**Captured:** 2026-07-26
 **Scope:** non-secret verification after the latest reviewed release.
 
 This document intentionally excludes host addresses, account names, release
 paths, tunnel identifiers, environment values, and backup locations. Keep
 those details in the private operator inventory.
 
-> The durable/ephemeral Redis split is implemented in the reviewed source but
-> has not been deployed as of this inventory capture. The verified statements
-> below describe the existing single-Redis release; apply the dedicated
-> REDIS-ARCH-001 deployment gate before representing the split as live.
+> Durable and ephemeral Redis are verified live as of 2026-07-26. The
+> reviewed worker-isolation and compiled-image changes below remain source
+> targets until their own exact-commit release gates are approved.
 
 ## Verified runtime state
 
-- The Compose project runs `web`, `worker`, `postgres`, `redis`, and the
-  one-shot `migrate` service.
-- PostgreSQL and Redis are loopback-bound. Redis has append-only persistence,
-  a deliberate memory ceiling, and a `noeviction` policy so queue jobs are not
-  silently discarded.
+- The Compose project runs `web`, `worker`, `postgres`, durable `redis`,
+  disposable `redis-ephemeral`, and the one-shot `migrate` service.
+- PostgreSQL and both Redis services are loopback-bound. Durable Redis has
+  append-only persistence, a deliberate memory ceiling, and a `noeviction`
+  policy so queue jobs are not silently discarded. Ephemeral Redis has no
+  volume and uses the separate short-lived-state policy.
 - The web process and the worker run as unprivileged users. Both report healthy
   Docker status; the worker updates an internal heartbeat file for its health
   check.
@@ -92,6 +92,18 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
   isolated heartbeat and resource limit; the maintenance scheduler owns a
   durable Redis lease so duplicate scheduler instances skip rather than
   overlap.
+
+## Reviewed IMAGE-001 target state
+
+- The worker and chat gateway are compiled to compact Node 24 ESM bundles at
+  build time. Their final images copy only those bundles and pruned production
+  dependencies: no source tree, tests, documentation, TypeScript compiler, or
+  `tsx` runtime is retained.
+- Node, PostgreSQL, and Redis base tags are pinned to reviewed versioned
+  Alpine variants. Existing non-root users, read-only filesystems, dropped
+  capabilities, no-new-privileges policy, and health checks remain in force.
+- CI records byte-accurate image sizes with separate SBOMs, so the approved
+  rollout can compare the compiled images against the previous image set.
 
 ## Remaining operator follow-ups
 

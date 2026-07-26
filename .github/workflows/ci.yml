@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:17.10-alpine3.23
         env:
           POSTGRES_DB: arctic_rss
           POSTGRES_PASSWORD: ci-postgres-password
@@ -192,6 +192,21 @@ jobs:
         run: docker build --target chat-gateway --tag arctic-rss-chat-gateway:ci .
       - name: Build production migration image
         run: docker build --target migrate --tag arctic-rss-migrate:ci .
+      - name: Record production image sizes
+        run: |
+          docker image inspect \
+            --format '{{range .RepoTags}}{{.}} {{end}}{{.Size}} bytes' \
+            arctic-rss-web:ci \
+            arctic-rss-worker:ci \
+            arctic-rss-chat-gateway:ci \
+            arctic-rss-migrate:ci | tee image-sizes.txt
+      - name: Upload production image sizes
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: arctic-rss-image-sizes
+          path: image-sizes.txt
+          if-no-files-found: error
+          retention-days: 30
       - name: Scan web image for high and critical vulnerabilities
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:

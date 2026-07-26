@@ -3,9 +3,13 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("production Docker images", () => {
-  it("removes npm and npx after build-time tooling has finished", async () => {
+  it("keeps build tools out of the compiled worker and gateway images", async () => {
     const dockerfile = await readFile("Dockerfile", "utf8");
 
+    expect(dockerfile).toContain("ARG NODE_IMAGE=node:24.17.0-alpine3.23");
+    expect(dockerfile).toContain("FROM deps AS production-deps");
+    expect(dockerfile).toContain("RUN npm prune --omit=dev");
+    expect(dockerfile).toContain("npm run runtime:build");
     expect(dockerfile).toContain("FROM deps AS migrate");
     expect(dockerfile).toContain(
       "rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx",
@@ -14,13 +18,24 @@ describe("production Docker images", () => {
       'CMD ["./node_modules/.bin/prisma", "migrate", "deploy"]',
     );
     expect(dockerfile).toContain("USER migrate");
-    expect(dockerfile).toContain(
-      'CMD ["./node_modules/.bin/tsx", "worker/index.ts"]',
-    );
-    expect(dockerfile).toContain("FROM deps AS chat-gateway");
-    expect(dockerfile).toContain(
-      'CMD ["./node_modules/.bin/tsx", "services/chat-gateway/index.ts"]',
-    );
+    expect(dockerfile).toContain("FROM ${NODE_IMAGE} AS worker");
+    expect(dockerfile).toContain('COPY --from=builder --chown=worker:nodejs /app/build/runtime/worker.mjs ./worker.mjs');
+    expect(dockerfile).toContain('COPY --from=builder --chown=worker:nodejs /app/build/runtime/bootstrap-admin.mjs ./bootstrap-admin.mjs');
+    expect(dockerfile).toContain('COPY --from=builder --chown=worker:nodejs /app/build/runtime/repair-chat-read-markers.mjs ./repair-chat-read-markers.mjs');
+    expect(dockerfile).toContain('CMD ["node", "worker.mjs"]');
+    expect(dockerfile).toContain("FROM ${NODE_IMAGE} AS chat-gateway");
+    expect(dockerfile).toContain('COPY --from=builder --chown=chatgateway:nodejs /app/build/runtime/chat-gateway.mjs ./chat-gateway.mjs');
+    expect(dockerfile).toContain('CMD ["node", "chat-gateway.mjs"]');
     expect(dockerfile).toContain("USER chatgateway");
+
+    const workerStage = dockerfile
+      .split("FROM ${NODE_IMAGE} AS worker")[1]
+      .split("FROM ${NODE_IMAGE} AS chat-gateway")[0];
+    const gatewayStage = dockerfile.split("FROM ${NODE_IMAGE} AS chat-gateway")[1];
+
+    expect(workerStage).not.toContain("COPY . .");
+    expect(workerStage).not.toContain("tsx");
+    expect(gatewayStage).not.toContain("COPY . .");
+    expect(gatewayStage).not.toContain("tsx");
   });
 });

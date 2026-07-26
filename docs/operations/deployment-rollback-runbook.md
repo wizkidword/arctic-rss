@@ -217,7 +217,7 @@ server after the web and worker health checks pass:
 
 ```bash
 docker compose run --rm --no-deps worker \
-  npm run admin:bootstrap -- --email admin@example.com
+  node bootstrap-admin.mjs --email admin@example.com
 ```
 
 Verify that public signup creates a standard user, an unverified account cannot

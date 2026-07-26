@@ -23,7 +23,7 @@ release without printing `.env` values:
 ```bash
 cd "$APP_DIR"
 docker compose run --rm --no-deps worker \
-  ./node_modules/.bin/tsx scripts/repair-chat-read-markers.ts --dry-run
+  node repair-chat-read-markers.mjs --dry-run
 ```
 
 After reviewing the sanitized count and confirming a PostgreSQL backup, run the
@@ -32,7 +32,7 @@ repair with its deliberate literal confirmation:
 ```bash
 docker compose run --rm --no-deps \
   -e ARCTIC_IRC_REPAIR_READ_MARKERS_CONFIRM=REPAIR \
-  worker ./node_modules/.bin/tsx scripts/repair-chat-read-markers.ts
+  worker node repair-chat-read-markers.mjs
 ```
 
 The repair clamps a marker above the latest visible message in its room. If no
