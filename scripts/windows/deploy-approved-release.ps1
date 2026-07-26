@@ -329,7 +329,10 @@ sudo -n systemctl restart systemd-journald
 sudo -n systemd-analyze cat-config systemd/journald.conf | grep -qx 'MaxRetentionSec=30day'
 sudo -n journalctl --rotate
 sudo -n journalctl --vacuum-time=30d
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" build migrate web worker chat-gateway
+# chat-gateway is deliberately opt-in behind the "chat" Compose profile.
+# Include that profile while building so the explicitly named service is
+# available without changing whether the release starts it.
+sudo -n docker compose -p "$compose_project" --project-directory "$stage" --profile chat build migrate web worker chat-gateway
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate </dev/null
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
 sudo -n mv "$live" "$previous"
