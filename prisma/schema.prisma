@@ -1373,11 +1373,17 @@ model ChatReportEvidence {
   captureState  ChatReportEvidenceCaptureState @default(LEGACY_PARTIAL)
   contentHash   String?
   snapshot      Json
+  // These legacy timestamps predate immutable evidence capture. They remain
+  // database-defaulted rather than @updatedAt because evidence rows cannot be
+  // modified after creation.
+  createdAt     DateTime                       @default(now())
+  updatedAt     DateTime                       @default(now())
   capturedAt    DateTime                       @default(now())
 
   report ChatReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([captureState, capturedAt])
+  @@index([createdAt])
 }
 
 model ChatAuditLog {
