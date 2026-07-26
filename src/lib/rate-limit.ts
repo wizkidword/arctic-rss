@@ -4,7 +4,7 @@ import { isIP } from "node:net"
 import Redis from "ioredis"
 import { headers } from "next/headers"
 
-import { redisConnectionOptions } from "./feed-refresh-queue"
+import { ephemeralRedisConnectionOptions } from "./redis-config"
 
 const RATE_LIMIT_NAMESPACE = "arctic-rss:rate-limit:v1"
 
@@ -232,7 +232,7 @@ function makeRateLimitKey(
 
 function getRateLimitStore() {
   if (!redis || redis.status === "end") {
-    redis = new Redis(redisConnectionOptions().url, {
+    redis = new Redis(ephemeralRedisConnectionOptions().url, {
       connectTimeout: 1_000,
       maxRetriesPerRequest: 0,
       retryStrategy: () => null,

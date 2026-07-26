@@ -88,6 +88,16 @@ function assertCredentialedUrl(
   { requireUsername = true }: { requireUsername?: boolean } = {}
 ) {
   const value = assertRequiredValue(environment, variable)
+
+  return assertCredentialedUrlValue(value, variable, protocols, { requireUsername })
+}
+
+function assertCredentialedUrlValue(
+  value: string,
+  variable: string,
+  protocols: ReadonlySet<string>,
+  { requireUsername = true }: { requireUsername?: boolean } = {}
+) {
   let url: URL
 
   try {
@@ -113,6 +123,32 @@ function assertCredentialedUrl(
   assertNonPlaceholderSecret(variable, decodeUrlCredential(url, variable))
 
   return url
+}
+
+function assertRedisUrl(
+  environment: NodeJS.ProcessEnv,
+  workloadVariable: "DURABLE_REDIS_URL" | "EPHEMERAL_REDIS_URL"
+) {
+  const workloadUrl = environment[workloadVariable]?.trim()
+  const legacyUrl = environment.REDIS_URL?.trim()
+  const variable = workloadUrl ? workloadVariable : "REDIS_URL"
+  const value = workloadUrl || legacyUrl
+
+  if (!value) {
+    throw new UnsafeProductionConfigurationError(
+      `${workloadVariable} or REDIS_URL must be configured in production.`
+    )
+  }
+
+  return {
+    url: assertCredentialedUrlValue(
+      value,
+      variable,
+      new Set(["redis:", "rediss:"]),
+      { requireUsername: false }
+    ),
+    variable,
+  }
 }
 
 function databaseTarget(url: URL) {
@@ -159,17 +195,17 @@ function assertProductionServiceSecrets(environment: NodeJS.ProcessEnv) {
   assertCompatibleDatabaseUrls(runtimeDatabaseUrl, migrationDatabaseUrl)
 
   const redisPassword = assertRequiredSecret(environment, "REDIS_PASSWORD")
-  const redisUrl = assertCredentialedUrl(
-    environment,
-    "REDIS_URL",
-    new Set(["redis:", "rediss:"]),
-    { requireUsername: false }
-  )
+  const redisUrls = [
+    assertRedisUrl(environment, "DURABLE_REDIS_URL"),
+    assertRedisUrl(environment, "EPHEMERAL_REDIS_URL"),
+  ]
 
-  if (decodeUrlCredential(redisUrl, "REDIS_URL") !== redisPassword) {
-    throw new UnsafeProductionConfigurationError(
-      "REDIS_URL password must match REDIS_PASSWORD in production."
-    )
+  for (const { url, variable } of redisUrls) {
+    if (decodeUrlCredential(url, variable) !== redisPassword) {
+      throw new UnsafeProductionConfigurationError(
+        `${variable} password must match REDIS_PASSWORD in production.`
+      )
+    }
   }
 
   assertRequiredSecret(environment, "AUTH_SECRET", 32)

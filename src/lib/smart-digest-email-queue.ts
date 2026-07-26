@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq"
 
-import { redisConnectionOptions } from "./feed-refresh-queue"
+import { durableRedisConnectionOptions } from "./redis-config"
 
 export const SMART_DIGEST_EMAIL_QUEUE_NAME = "smart-digest-email"
 
@@ -15,7 +15,7 @@ export function getSmartDigestEmailQueue() {
     smartDigestEmailQueue = new Queue<SmartDigestEmailJobData>(
       SMART_DIGEST_EMAIL_QUEUE_NAME,
       {
-        connection: redisConnectionOptions(),
+        connection: durableRedisConnectionOptions(),
       }
     )
   }

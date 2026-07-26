@@ -127,6 +127,26 @@ describe("production security configuration", () => {
     ).toThrow("REDIS_URL password must match REDIS_PASSWORD")
   })
 
+  it("validates each workload-specific Redis URL when configured", () => {
+    expect(() =>
+      assertSecureProductionConfiguration({
+        ...secureProductionEnvironment,
+        DURABLE_REDIS_URL: "redis://:redis-container-password@redis:6379",
+        EPHEMERAL_REDIS_URL:
+          "redis://:different-ephemeral-password@redis-ephemeral:6379",
+      })
+    ).toThrow("EPHEMERAL_REDIS_URL password must match REDIS_PASSWORD")
+
+    expect(() =>
+      assertSecureProductionConfiguration({
+        ...secureProductionEnvironment,
+        DURABLE_REDIS_URL: "redis://:redis-container-password@redis:6379",
+        EPHEMERAL_REDIS_URL:
+          "redis://:redis-container-password@redis-ephemeral:6379",
+      })
+    ).not.toThrow()
+  })
+
   it("allows a non-production test configuration", () => {
     expect(() =>
       assertSecureProductionConfiguration({

@@ -7,6 +7,11 @@ This document intentionally excludes host addresses, account names, release
 paths, tunnel identifiers, environment values, and backup locations. Keep
 those details in the private operator inventory.
 
+> The durable/ephemeral Redis split is implemented in the reviewed source but
+> has not been deployed as of this inventory capture. The verified statements
+> below describe the existing single-Redis release; apply the dedicated
+> REDIS-ARCH-001 deployment gate before representing the split as live.
+
 ## Verified runtime state
 
 - The Compose project runs `web`, `worker`, `postgres`, `redis`, and the
@@ -64,7 +69,23 @@ those details in the private operator inventory.
   drift checks against PostgreSQL, then tests, type checking, linting, and the
   production build.
 - Transactional email uses bounded connection, greeting, socket, and total-send
-  deadlines. A small SMTP connection pool is reused for matching configuration.
+deadlines. A small SMTP connection pool is reused for matching configuration.
+
+## Reviewed REDIS-ARCH-001 target state
+
+- `redis` remains the durable queue service: AOF is enabled, `noeviction`
+  protects BullMQ data, and only this service has a Redis volume.
+- `redis-ephemeral` has no volume and serves Socket.IO pub/sub, chat presence,
+  connection-token replay protection, rate limits, and security-event fan-out.
+  It uses a separate memory ceiling and `volatile-ttl` policy.
+- Queue producers, workers, queue inspection, and schedulers use
+  `DURABLE_REDIS_URL`; rate limits and all chat gateway/event Redis clients use
+  `EPHEMERAL_REDIS_URL`. `REDIS_URL` remains a compatibility fallback only for
+  a staged one-Redis rollout.
+- The deployment command starts durable Redis, then ephemeral Redis, then an
+  active chat gateway, and finally web/worker containers. The monitor verifies
+  each health check, AOF where required, policy, error/OOM counters, and
+  fragmentation without printing secrets.
 
 ## Remaining operator follow-ups
 
@@ -75,7 +96,8 @@ those details in the private operator inventory.
 - Monitor queue backlog and failed email delivery in the application admin
   surfaces. Host disk, inode, backup freshness, Redis persistence, container
   health, internal and public readiness, and HTTPS certificate expiry are
-  covered by the production monitor service.
+  covered by the production monitor service. After REDIS-ARCH-001 is deployed,
+  include both Redis workloads' policy and pressure alerts in that review.
 - Periodically review managed-edge firewall, rate-limit, and access policies in
   the provider dashboard; those provider-side settings are intentionally not
   stored in this repository.

@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq"
 
-import { redisConnectionOptions } from "./feed-refresh-queue"
+import { durableRedisConnectionOptions } from "./redis-config"
 
 export const AI_DIGEST_QUEUE_NAME = "ai-digest"
 
@@ -13,7 +13,7 @@ let aiDigestQueue: Queue<AiDigestJobData> | undefined
 export function getAiDigestQueue() {
   if (!aiDigestQueue) {
     aiDigestQueue = new Queue<AiDigestJobData>(AI_DIGEST_QUEUE_NAME, {
-      connection: redisConnectionOptions(),
+      connection: durableRedisConnectionOptions(),
     })
   }
 

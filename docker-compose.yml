@@ -33,9 +33,9 @@ services:
     pids_limit: 64
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-    # Queue data and limiter counters share Redis. noeviction preserves queue
-    # integrity; a full Redis fails protected actions closed instead of evicting jobs.
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    # Durable BullMQ data must never be evicted. Keep a memory margin below the
+    # container limit so Redis can safely rewrite AOF files under load.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--auto-aof-rewrite-min-size", "64mb", "--auto-aof-rewrite-percentage", "100", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
       interval: 10s
@@ -47,6 +47,30 @@ services:
       driver: journald
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+
+  redis-ephemeral:
+    image: redis:7-alpine
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 192m
+    pids_limit: 64
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    # Socket.IO, presence, replay, rate-limit, and security-event state is
+    # intentionally disposable. Every application key has a bounded TTL, so
+    # volatile-ttl can reclaim the shortest-lived state under memory pressure.
+    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-ttl", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: journald
+    # Loopback only preserves direct-host development and operator diagnostics;
+    # no Redis service is reachable from the public network.
+    ports:
+      - "127.0.0.1:${EPHEMERAL_REDIS_PORT:-6380}:6379"
 
   migrate:
     build:
@@ -103,6 +127,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      redis-ephemeral:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -146,6 +172,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      redis-ephemeral:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -188,7 +216,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      redis:
+      redis-ephemeral:
         condition: service_healthy
     healthcheck:
       test:

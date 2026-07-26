@@ -20,22 +20,36 @@ is permanently locked out by a limiter key.
 
 ## Redis safety policy
 
-Redis is loopback-bound on the VPS and is not publicly exposed. The Compose
-configuration sets a 256 MB ceiling with `noeviction`. Queue jobs therefore
-cannot be evicted by high-volume limiter keys. If the ceiling is reached,
-protected actions fail closed and the deployment should be investigated rather
-than changing the eviction policy casually.
+Both Redis containers are loopback-bound on the VPS and are not publicly
+exposed. Their workloads are intentionally separate:
+
+- `redis` is durable: it stores BullMQ queues and scheduled-job state on the
+  `redis-data` volume, uses AOF, has a 256 MB ceiling, and uses `noeviction`.
+  A full durable store must fail safely rather than discard jobs.
+- `redis-ephemeral` is disposable: it stores only Socket.IO pub/sub, presence,
+  replay protection, rate-limit keys, and security-event fan-out. It has no
+  volume, a separate 128 MB ceiling, and `volatile-ttl`; every application key
+  written there must have a bounded TTL.
+
+The transactional chat outbox remains in PostgreSQL, so losing the ephemeral
+publisher transport cannot lose the durable event record. A gateway or web
+restart reconnects and reauthorizes against the authoritative database state.
 
 Inspect this safely on the VPS without printing runtime secrets:
 
 ```bash
 cd /opt/arctic-rss/app
-docker compose exec -T redis redis-cli INFO memory | grep -E '^(used_memory_human|maxmemory_human):'
-docker compose exec -T redis redis-cli CONFIG GET maxmemory maxmemory-policy
+docker compose exec -T redis sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO memory | grep -E "^(used_memory_human|maxmemory_human|mem_fragmentation_ratio):"'
+docker compose exec -T redis sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" CONFIG GET appendonly maxmemory maxmemory-policy'
+docker compose exec -T redis-ephemeral sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO memory | grep -E "^(used_memory_human|maxmemory_human|mem_fragmentation_ratio):"'
+docker compose exec -T redis-ephemeral sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" CONFIG GET appendonly maxmemory maxmemory-policy'
 ```
 
-Do not use a volatile-LRU or allkeys-LRU policy while worker queues and limiter
-keys share this Redis instance.
+The production monitor checks both containers, durable AOF health, configured
+policies, fragmentation, and increasing Redis command-error, OOM, and rejected
+connection counters. Treat an alert as a capacity incident: identify the
+workload first, preserve durable queue data, and do not move any BullMQ queue
+to `redis-ephemeral` to silence it.
 
 ## Client IP source
 

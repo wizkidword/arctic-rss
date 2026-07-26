@@ -20,6 +20,50 @@ reviewed target commit are mandatory first.
 - In shell examples, replace `CANONICAL_HOST` with the reviewed public host
   name. Do not read it by printing the production `.env`.
 
+## REDIS-ARCH-001 durable/ephemeral Redis deployment
+
+This change adds a second, internal-only Redis container. It has no schema
+change, but it does change the runtime topology. Do not run it until the
+normal backup gate and a typed deployment approval have been recorded.
+
+1. Preserve the existing `redis-data` volume and do not create a backup policy
+   for `redis-ephemeral`: only the durable Redis has recoverable state.
+2. Without printing values, add `DURABLE_REDIS_URL` and
+   `EPHEMERAL_REDIS_URL` to the root-only production `.env`. Both URLs must
+   use the existing `REDIS_PASSWORD`; they target `redis` and
+   `redis-ephemeral` respectively. `REDIS_URL` remains as a temporary
+   one-Redis fallback so a rollback retains a safe connection target.
+3. Confirm the new keys exist, render the staged Compose file, then start the
+   data services in order. Do not start the application containers until both
+   Redis health checks pass:
+
+   ```bash
+   cd "$APP_DIR"
+   for key in DURABLE_REDIS_URL EPHEMERAL_REDIS_URL; do
+     grep -q "^${key}=." .env || {
+       echo "missing required Redis migration key: ${key}" >&2
+       exit 1
+     }
+   done
+   docker compose config -q
+   docker compose up -d --no-deps --force-recreate redis redis-ephemeral
+   docker compose ps redis redis-ephemeral
+   ```
+
+4. If the opt-in chat gateway is active, recreate it next. Then recreate web
+   and worker. Verify local/public health and the monitor service. Use the
+   Redis checks in [rate-limit-turnstile-runbook.md](rate-limit-turnstile-runbook.md)
+   to confirm AOF/`noeviction` on durable Redis and no AOF/`volatile-ttl` on
+   ephemeral Redis.
+5. Verify queue backlogs from the administrator surface and exercise a
+   non-production rate-limit flow. Do not treat a healthy ephemeral container
+   as proof that queue persistence works; only durable Redis may carry BullMQ
+   jobs.
+
+To roll back the application release, retain the durable volume and the
+previous `.env`. It is safe to stop and recreate `redis-ephemeral`; never
+delete `redis-data` as part of a code rollback.
+
 ## Pre-deployment checklist
 
 1. Complete [backup-restore-checklist.md](backup-restore-checklist.md).
@@ -197,10 +241,10 @@ ticket.
 
 ## SEC-005 rate limiting and Turnstile deployment
 
-This release has no schema change. It adds Redis-backed protected-action limits
-and a 256 MB Redis ceiling with `noeviction`, so queued worker jobs cannot be
-evicted by limiter keys. Check current Redis memory before deployment with the
-safe commands in [rate-limit-turnstile-runbook.md](rate-limit-turnstile-runbook.md).
+This release has no schema change. The current architecture separates
+Redis-backed protected-action limits from durable queue jobs; see the
+REDIS-ARCH-001 deployment section and the safe commands in
+[rate-limit-turnstile-runbook.md](rate-limit-turnstile-runbook.md).
 
 Turnstile remains optional until the Cloudflare widget keys are configured. Do
 not set `TURNSTILE_REQUIRED=true` until both keys have been placed in the VPS
@@ -222,12 +266,17 @@ without displaying their values:
 
 ```bash
 cd "$APP_DIR"
-for key in POSTGRES_PASSWORD DATABASE_URL MIGRATE_DATABASE_URL REDIS_PASSWORD REDIS_URL AUTH_SECRET; do
+for key in POSTGRES_PASSWORD DATABASE_URL MIGRATE_DATABASE_URL REDIS_PASSWORD AUTH_SECRET; do
   if ! grep -q "^${key}=." .env; then
     echo "missing required environment key: ${key}" >&2
     exit 1
   fi
 done
+if ! grep -q '^REDIS_URL=.' .env && \
+  ! { grep -q '^DURABLE_REDIS_URL=.' .env && grep -q '^EPHEMERAL_REDIS_URL=.' .env; }; then
+  echo 'missing Redis connection URL configuration' >&2
+  exit 1
+fi
 ```
 
 Determine whether the retired fallback was ever used without printing a

@@ -52,9 +52,9 @@ import {
   closeFeedRefreshQueue,
   enqueueFeedRefresh,
   FEED_REFRESH_QUEUE_NAME,
-  redisConnectionOptions,
   type FeedRefreshJobData,
 } from "../src/lib/feed-refresh-queue"
+import { durableRedisConnectionOptions } from "../src/lib/redis-config"
 import { refreshPodcast } from "../src/lib/podcast-refresh"
 import {
   closePodcastRefreshQueue,
@@ -150,7 +150,7 @@ function logWorkerMemory(context: WorkerMemoryLogContext) {
 
 console.log("Arctic RSS worker online")
 console.log(
-  `Redis queue endpoint: ${redisConnectionOptions().url.replace(/\/\/.*@/, "//***@")}`
+  `Redis queue endpoint: ${durableRedisConnectionOptions().url.replace(/\/\/.*@/, "//***@")}`
 )
 logWorkerMemory({ trigger: "startup" })
 
@@ -164,7 +164,7 @@ const worker = new Worker<FeedRefreshJobData>(
     })
   },
   {
-    connection: redisConnectionOptions(),
+    connection: durableRedisConnectionOptions(),
     concurrency: feedRefreshConcurrency,
   }
 )
@@ -182,7 +182,7 @@ const aiDigestWorker = new Worker<AiDigestJobData>(
     return result
   },
   {
-    connection: redisConnectionOptions(),
+    connection: durableRedisConnectionOptions(),
     concurrency: aiDigestConcurrency,
   }
 )
@@ -201,7 +201,7 @@ const smartDigestWorker = new Worker<SmartDigestJobData>(
     return result
   },
   {
-    connection: redisConnectionOptions(),
+    connection: durableRedisConnectionOptions(),
     concurrency: smartDigestConcurrency,
   }
 )
@@ -214,7 +214,7 @@ const chatArticleIntegrationWorker = new Worker<ChatArticleIntegrationJobData>(
     })
   },
   {
-    connection: redisConnectionOptions(),
+    connection: durableRedisConnectionOptions(),
     concurrency: 1,
   }
 )
@@ -228,7 +228,7 @@ const bulkReadWorker = new Worker<BulkReadJobData>(
     })
   },
   {
-    connection: redisConnectionOptions(),
+    connection: durableRedisConnectionOptions(),
     concurrency: 1,
   }
 )
@@ -258,7 +258,7 @@ const opmlImportWorker = new Worker<OpmlImportQueueData>(
     return result
   },
   {
-    connection: redisConnectionOptions(),
+    connection: durableRedisConnectionOptions(),
     concurrency: 1,
   }
 )
@@ -276,7 +276,7 @@ const smartDigestEmailWorker = new Worker<SmartDigestEmailJobData>(
     return result
   },
   {
-    connection: redisConnectionOptions(),
+    connection: durableRedisConnectionOptions(),
     concurrency: smartDigestEmailConcurrency,
   }
 )
@@ -291,7 +291,7 @@ const podcastWorker = new Worker<PodcastRefreshJobData>(
     })
   },
   {
-    connection: redisConnectionOptions(),
+    connection: durableRedisConnectionOptions(),
     concurrency: podcastRefreshConcurrency,
   }
 )

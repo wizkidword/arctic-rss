@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq"
 
-import { redisConnectionOptions } from "@/lib/feed-refresh-queue"
+import { durableRedisConnectionOptions } from "@/lib/redis-config"
 
 export const CHAT_ARTICLE_INTEGRATION_QUEUE_NAME = "chat-article-integration"
 
@@ -14,7 +14,7 @@ export function getChatArticleIntegrationQueue() {
   if (!chatArticleIntegrationQueue) {
     chatArticleIntegrationQueue = new Queue<ChatArticleIntegrationJobData>(
       CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
-      { connection: redisConnectionOptions() }
+      { connection: durableRedisConnectionOptions() }
     )
   }
 

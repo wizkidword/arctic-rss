@@ -1,6 +1,6 @@
 import Redis from "ioredis"
 
-import { redisConnectionOptions } from "@/lib/feed-refresh-queue"
+import { ephemeralRedisConnectionOptions } from "@/lib/redis-config"
 
 import type { ChatMessageWire } from "./room-service"
 
@@ -128,7 +128,7 @@ function isRoomEventIdentifier(value: unknown): value is string {
 
 function getChatRoomEventPublisher() {
   if (!publisher || publisher.status === "end") {
-    publisher = new Redis(redisConnectionOptions().url, {
+    publisher = new Redis(ephemeralRedisConnectionOptions().url, {
       connectTimeout: 1_000,
       maxRetriesPerRequest: 0,
       retryStrategy: () => null,

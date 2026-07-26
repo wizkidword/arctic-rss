@@ -100,7 +100,9 @@ Services:
 - `web`: Next.js app on port `3000`
 - `worker`: background feed refresh worker
 - `postgres`: PostgreSQL database
-- `redis`: Redis queue/cache dependency
+- `redis`: durable BullMQ queue Redis with AOF and `noeviction`
+- `redis-ephemeral`: disposable Redis for rate limits, chat presence, replay,
+  and pub/sub; it has no volume and uses a TTL-oriented eviction policy
 - `migrate`: one-shot Prisma `migrate deploy` for committed migrations
 - `cloudflared`: optional tunnel service behind the `tunnel` profile
 

@@ -1,5 +1,7 @@
 import { Queue, type JobsOptions } from "bullmq"
 
+import { durableRedisConnectionOptions } from "./redis-config"
+
 export const FEED_REFRESH_QUEUE_NAME = "feed-refresh"
 
 export type FeedRefreshJobData = {
@@ -8,16 +10,10 @@ export type FeedRefreshJobData = {
 
 let feedRefreshQueue: Queue<FeedRefreshJobData> | undefined
 
-export function redisConnectionOptions() {
-  return {
-    url: process.env.REDIS_URL ?? "redis://localhost:6379",
-  }
-}
-
 export function getFeedRefreshQueue() {
   if (!feedRefreshQueue) {
     feedRefreshQueue = new Queue<FeedRefreshJobData>(FEED_REFRESH_QUEUE_NAME, {
-      connection: redisConnectionOptions(),
+      connection: durableRedisConnectionOptions(),
     })
   }
 

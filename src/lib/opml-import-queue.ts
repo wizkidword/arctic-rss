@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq"
 
-import { redisConnectionOptions } from "./feed-refresh-queue"
+import { durableRedisConnectionOptions } from "./redis-config"
 
 export const OPML_IMPORT_QUEUE_NAME = "opml-import"
 
@@ -14,7 +14,7 @@ let opmlImportQueue: Queue<OpmlImportQueueData> | undefined
 export function getOpmlImportQueue() {
   if (!opmlImportQueue) {
     opmlImportQueue = new Queue<OpmlImportQueueData>(OPML_IMPORT_QUEUE_NAME, {
-      connection: redisConnectionOptions(),
+      connection: durableRedisConnectionOptions(),
     })
   }
 

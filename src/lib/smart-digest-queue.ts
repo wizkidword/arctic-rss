@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq"
 
-import { redisConnectionOptions } from "./feed-refresh-queue"
+import { durableRedisConnectionOptions } from "./redis-config"
 
 export const SMART_DIGEST_QUEUE_NAME = "smart-digest"
 
@@ -14,7 +14,7 @@ let smartDigestQueue: Queue<SmartDigestJobData> | undefined
 export function getSmartDigestQueue() {
   if (!smartDigestQueue) {
     smartDigestQueue = new Queue<SmartDigestJobData>(SMART_DIGEST_QUEUE_NAME, {
-      connection: redisConnectionOptions(),
+      connection: durableRedisConnectionOptions(),
     })
   }
 

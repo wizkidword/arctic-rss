@@ -31,13 +31,15 @@ private operator inventory outside the repository.
 
 1. Copy `.env.example` to `.env` and use only local development credentials.
 2. Run `npm install` and `npm run prisma:generate`.
-3. Start PostgreSQL and Redis through Docker Compose, then run `npm run dev`,
-   or run the full stack with `docker compose up --build`.
+3. Start PostgreSQL plus durable and ephemeral Redis through Docker Compose,
+   then run `npm run dev`, or run the full stack with `docker compose up --build`.
 4. Before committing, run `npm test`, `npm run typecheck`, and `npm run build`.
 
 The example environment uses Docker service hostnames. For `npm run dev` on a
-host machine, change `DATABASE_URL` and `REDIS_URL` from `postgres` and `redis`
-to `localhost`.
+host machine, change `DATABASE_URL`, `DURABLE_REDIS_URL`, and
+`EPHEMERAL_REDIS_URL` to `localhost`; use the PostgreSQL, durable-Redis, and
+ephemeral-Redis loopback ports from `.env.example`. `REDIS_URL` is retained
+only as a compatibility fallback for a staged one-Redis rollout.
 
 ## Deployment guardrails
 

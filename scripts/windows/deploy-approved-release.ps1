@@ -337,12 +337,13 @@ sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
 sudo -n mv "$live" "$previous"
 sudo -n mv "$stage" "$live"
-sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate postgres redis
+sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate postgres redis redis-ephemeral
 
 for attempt in $(seq 1 18); do
   postgres_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-postgres-1)"
   redis_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-redis-1)"
-  if [ "$postgres_health" = healthy ] && [ "$redis_health" = healthy ]; then
+  redis_ephemeral_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-redis-ephemeral-1)"
+  if [ "$postgres_health" = healthy ] && [ "$redis_health" = healthy ] && [ "$redis_ephemeral_health" = healthy ]; then
     break
   fi
   sleep 5
@@ -350,6 +351,7 @@ done
 
 test "$postgres_health" = healthy
 test "$redis_health" = healthy
+test "$redis_ephemeral_health" = healthy
 
 # A running chat gateway holds its own fail-closed Redis clients for token
 # replay protection. Recreate it after Redis so fresh browser sessions do not
@@ -385,7 +387,7 @@ done
 test "$web_health" = healthy
 test "$worker_health" = healthy
 
-for container in app-postgres-1 app-redis-1 app-web-1 app-worker-1; do
+for container in app-postgres-1 app-redis-1 app-redis-ephemeral-1 app-web-1 app-worker-1; do
   test "$(sudo -n docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$container")" = journald
 done
 
@@ -403,6 +405,7 @@ test "$monitor_status" = 0
 printf 'PREVIOUS_RELEASE=%s\n' "$previous"
 printf 'WEB_HEALTH=%s\n' "$web_health"
 printf 'WORKER_HEALTH=%s\n' "$worker_health"
+printf 'REDIS_EPHEMERAL_HEALTH=%s\n' "$redis_ephemeral_health"
 printf 'CHAT_GATEWAY_HEALTH=%s\n' "$chat_gateway_health"
 '@
   $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost)

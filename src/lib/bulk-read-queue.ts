@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq"
 
-import { redisConnectionOptions } from "./feed-refresh-queue"
+import { durableRedisConnectionOptions } from "./redis-config"
 
 export const BULK_READ_QUEUE_NAME = "bulk-read"
 
@@ -13,7 +13,7 @@ let bulkReadQueue: Queue<BulkReadJobData> | undefined
 export function getBulkReadQueue() {
   if (!bulkReadQueue) {
     bulkReadQueue = new Queue<BulkReadJobData>(BULK_READ_QUEUE_NAME, {
-      connection: redisConnectionOptions(),
+      connection: durableRedisConnectionOptions(),
     })
   }
 

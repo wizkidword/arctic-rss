@@ -1,6 +1,6 @@
 import Redis from "ioredis"
 
-import { redisConnectionOptions } from "@/lib/feed-refresh-queue"
+import { ephemeralRedisConnectionOptions } from "@/lib/redis-config"
 
 export const CHAT_BLOCK_EVENT_CHANNEL = "arctic-rss:chat:block-events:v1"
 
@@ -58,7 +58,7 @@ function isChatIdentifier(value: unknown): value is string {
 
 function getChatBlockEventPublisher() {
   if (!publisher || publisher.status === "end") {
-    publisher = new Redis(redisConnectionOptions().url, {
+    publisher = new Redis(ephemeralRedisConnectionOptions().url, {
       connectTimeout: 1_000,
       maxRetriesPerRequest: 0,
       retryStrategy: () => null,

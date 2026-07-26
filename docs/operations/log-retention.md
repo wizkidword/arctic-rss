@@ -27,6 +27,7 @@ sudo docker inspect -f '{{.HostConfig.LogConfig.Type}}' app-web-1
 sudo docker inspect -f '{{.HostConfig.LogConfig.Type}}' app-worker-1
 sudo docker inspect -f '{{.HostConfig.LogConfig.Type}}' app-postgres-1
 sudo docker inspect -f '{{.HostConfig.LogConfig.Type}}' app-redis-1
+sudo docker inspect -f '{{.HostConfig.LogConfig.Type}}' app-redis-ephemeral-1
 ```
 
 Each Docker command must return `journald`. Do not publish the 30-day policy

@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq"
 
-import { redisConnectionOptions } from "./feed-refresh-queue"
+import { durableRedisConnectionOptions } from "./redis-config"
 
 export const PODCAST_REFRESH_QUEUE_NAME = "podcast-refresh"
 
@@ -15,7 +15,7 @@ export function getPodcastRefreshQueue() {
     podcastRefreshQueue = new Queue<PodcastRefreshJobData>(
       PODCAST_REFRESH_QUEUE_NAME,
       {
-        connection: redisConnectionOptions(),
+        connection: durableRedisConnectionOptions(),
       }
     )
   }

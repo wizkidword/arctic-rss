@@ -31,7 +31,7 @@ import {
   refreshChatPresence,
 } from "../../src/lib/chat/presence"
 import { getPrisma } from "../../src/lib/db"
-import { redisConnectionOptions } from "../../src/lib/feed-refresh-queue"
+import { ephemeralRedisConnectionOptions } from "../../src/lib/redis-config"
 import { enforceRateLimit } from "../../src/lib/rate-limit"
 
 import { createChatGateway, type ChatGateway } from "./gateway"
@@ -325,7 +325,7 @@ export function getChatGatewayAbuseSettings(
 }
 
 function createGatewayRedisClient() {
-  const redis = new Redis(redisConnectionOptions().url, {
+  const redis = new Redis(ephemeralRedisConnectionOptions().url, {
     connectTimeout: 1_000,
     enableOfflineQueue: false,
     lazyConnect: true,

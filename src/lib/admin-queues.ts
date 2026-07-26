@@ -10,9 +10,9 @@ import {
 } from "./bulk-read-queue"
 import {
   FEED_REFRESH_QUEUE_NAME,
-  redisConnectionOptions,
   type FeedRefreshJobData,
 } from "./feed-refresh-queue"
+import { durableRedisConnectionOptions } from "./redis-config"
 import {
   CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
   type ChatArticleIntegrationJobData,
@@ -105,7 +105,7 @@ export type AdminQueueSnapshot =
 
 export async function inspectAdminQueues(): Promise<AdminQueueSnapshot> {
   const connection = {
-    ...redisConnectionOptions(),
+    ...durableRedisConnectionOptions(),
     connectTimeout: 2_000,
     enableOfflineQueue: false,
     maxRetriesPerRequest: 1,
