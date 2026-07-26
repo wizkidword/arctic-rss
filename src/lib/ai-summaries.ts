@@ -8,10 +8,11 @@ import {
 import { getPrisma } from "./db"
 import {
   type AiUsageLedgerStore,
+  claimAiUsageOperation,
   completeAiUsageOperation,
   failAiUsageOperation,
-  markAiUsageOperationProcessing,
   reserveAiUsageOperation,
+  runWithAiOperationLeaseHeartbeat,
 } from "./ai-usage"
 
 const DEFAULT_LOCAL_MODEL = "local-extractive-v1"
@@ -270,7 +271,7 @@ export async function generateArticleSummaryWithClient({
     throw new AiSummaryError("AI summary could not be started safely.")
   }
 
-  if (!reservation.created) {
+  if (reservation.operation.status === "COMPLETED") {
     const completedSummary = await store.articleAiSummary.findUnique({
       where: summaryKey,
     })
@@ -282,17 +283,35 @@ export async function generateArticleSummaryWithClient({
     throw new AiSummaryError("AI summary generation is already in progress.")
   }
 
-  await markAiUsageOperationProcessing({
+  const claimed = await claimAiUsageOperation({
     operationId: reservation.operation.id,
     store,
   })
 
+  if (!claimed) {
+    const completedSummary = await store.articleAiSummary.findUnique({
+      where: summaryKey,
+    })
+
+    if (completedSummary) {
+      return mapStoredSummary(completedSummary, true)
+    }
+
+    throw new AiSummaryError("AI summary generation is already in progress.")
+  }
+
   try {
     const generated = normalizeProviderResult(
-      await provider.summarize({
-        content: formatArticleForSummary(article),
-        title: article.title,
-        url: article.url,
+      await runWithAiOperationLeaseHeartbeat({
+        lease: claimed.lease,
+        operationId: reservation.operation.id,
+        store,
+        work: () =>
+          provider.summarize({
+            content: formatArticleForSummary(article),
+            title: article.title,
+            url: article.url,
+          }),
       }),
     )
     const tokenCount = generated.inputTokens + generated.outputTokens
@@ -339,6 +358,7 @@ export async function generateArticleSummaryWithClient({
         },
       })
       await completeAiUsageOperation({
+        lease: claimed.lease,
         operationId: reservation.operation.id,
         providerRequestId: generated.providerRequestId,
         store: transaction,
@@ -364,6 +384,7 @@ export async function generateArticleSummaryWithClient({
   } catch (error) {
     await failAiUsageOperation({
       errorCode: "PROVIDER_REQUEST_FAILED",
+      lease: claimed.lease,
       operationId: reservation.operation.id,
       store,
     })

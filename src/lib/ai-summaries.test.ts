@@ -73,7 +73,9 @@ function createSummaryStore({
         }
 
         if (query.includes("operation_to_release")) {
-          const operation = operations.get(values[0] as string)
+          const operation = Array.from(operations.values()).find(
+            (candidate) => candidate.id === values[0],
+          )
 
           if (
             !operation ||
@@ -138,12 +140,17 @@ function createSummaryStore({
 
         const operation = {
           ...data,
+          attempt: 0,
           completedAt: null,
           consumedUnits: 0,
           errorCode: null,
           id: `operation-${operations.size + 1}`,
+          lastHeartbeatAt: null,
+          leaseExpiresAt: null,
+          leaseOwner: null,
           periodId: null,
           providerRequestId: null,
+          retryableAt: null,
         }
         operations.set(data.idempotencyKey, operation)
         return operation
@@ -169,6 +176,18 @@ function createSummaryStore({
         Object.assign(operation, data)
         return operation
       }),
+      updateMany: vi.fn(async ({ data, where }) => {
+        const operation = Array.from(operations.values()).find(
+          (candidate) => candidate.id === where.id,
+        )
+
+        if (!operation || !matchesOperation(operation, where)) {
+          return { count: 0 }
+        }
+
+        applyOperationData(operation, data)
+        return { count: 1 }
+      }),
     },
     user: {
       findUnique: vi.fn().mockResolvedValue(user),
@@ -177,6 +196,54 @@ function createSummaryStore({
   }
 
   return store as unknown as AiSummaryStore
+}
+
+function matchesOperation(
+  operation: Record<string, unknown>,
+  where: Record<string, unknown>,
+): boolean {
+  if (where.leaseOwner && operation.leaseOwner !== where.leaseOwner) {
+    return false
+  }
+
+  if (typeof where.attempt === "number" && operation.attempt !== where.attempt) {
+    return false
+  }
+
+  if (typeof where.status === "string" && operation.status !== where.status) {
+    return false
+  }
+
+  if (
+    where.leaseExpiresAt &&
+    typeof where.leaseExpiresAt === "object" &&
+    "gt" in where.leaseExpiresAt
+  ) {
+    const expected = where.leaseExpiresAt.gt
+    return operation.leaseExpiresAt instanceof Date &&
+      expected instanceof Date &&
+      operation.leaseExpiresAt > expected
+  }
+
+  return true
+}
+
+function applyOperationData(
+  operation: Record<string, unknown>,
+  data: Record<string, unknown>,
+) {
+  for (const [key, value] of Object.entries(data)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      "increment" in value &&
+      typeof value.increment === "number"
+    ) {
+      operation[key] = ((operation[key] as number) ?? 0) + value.increment
+    } else {
+      operation[key] = value
+    }
+  }
 }
 
 function createProvider(

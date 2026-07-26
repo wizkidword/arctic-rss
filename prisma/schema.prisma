@@ -743,6 +743,11 @@ model AiOperation {
   model             String?
   providerRequestId String?
   errorCode         String?
+  leaseOwner        String?
+  leaseExpiresAt    DateTime?
+  attempt           Int               @default(0)
+  lastHeartbeatAt   DateTime?
+  retryableAt       DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   completedAt       DateTime?
@@ -752,6 +757,8 @@ model AiOperation {
 
   @@index([userId, createdAt])
   @@index([periodId, status])
+  @@index([status, leaseExpiresAt])
+  @@index([retryableAt])
 }
 
 model AiDigest {

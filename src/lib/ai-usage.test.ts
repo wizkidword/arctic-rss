@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  claimAiUsageOperation,
   completeAiUsageOperation,
   failAiUsageOperation,
   getAiUsagePeriodStart,
   markAiUsageOperationProcessing,
+  reconcileExpiredAiUsageOperations,
+  renewAiUsageOperationLease,
   reserveAiUsageOperation,
   type AiOperationRecord,
   type AiUsageLedgerStore,
@@ -27,6 +30,10 @@ function createLedgerStore(limit = 2) {
   const store = {
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const query = strings.join("?")
+
+      if (query.includes("pg_try_advisory_xact_lock")) {
+        return [{ locked: true }]
+      }
 
       if (query.includes('INSERT INTO "AiUsagePeriod"')) {
         const [periodId, userId, periodStart, periodLimit] = values as [
@@ -124,13 +131,18 @@ function createLedgerStore(limit = 2) {
 
         const operation: AiOperationRecord = {
           ...data,
+          attempt: 0,
           completedAt: null,
           consumedUnits: 0,
           errorCode: null,
           id: `operation-${nextOperation++}`,
+          lastHeartbeatAt: null,
+          leaseExpiresAt: null,
+          leaseOwner: null,
           periodId: null,
           providerRequestId: null,
           reservedUnits: 0,
+          retryableAt: null,
         }
         operationsById.set(operation.id, operation)
         operationsByKey.set(operation.idempotencyKey, operation)
@@ -146,6 +158,7 @@ function createLedgerStore(limit = 2) {
           ? operationsByKey.get(where.idempotencyKey)
           : undefined) ??
         null,
+      findMany: async () => Array.from(operationsById.values()),
       update: async ({
         data,
         where,
@@ -162,6 +175,36 @@ function createLedgerStore(limit = 2) {
         Object.assign(operation, data)
         return operation
       },
+      updateMany: async ({
+        data,
+        where,
+      }: {
+        data: Record<string, unknown>
+        where: Record<string, unknown>
+      }) => {
+        const operation = operationsById.get(where.id as string)
+
+        if (!operation || !matchesOperation(operation, where)) {
+          return { count: 0 }
+        }
+
+        for (const [key, value] of Object.entries(data)) {
+          if (
+            value &&
+            typeof value === "object" &&
+            "increment" in value &&
+            typeof value.increment === "number"
+          ) {
+            operation[key as keyof AiOperationRecord] =
+              ((operation[key as keyof AiOperationRecord] as number) ?? 0) +
+              value.increment as never
+          } else {
+            operation[key as keyof AiOperationRecord] = value as never
+          }
+        }
+
+        return { count: 1 }
+      },
     },
     user: {
       findUnique: async () => ({
@@ -175,6 +218,50 @@ function createLedgerStore(limit = 2) {
     periods,
     store: store as unknown as AiUsageLedgerStore,
   }
+}
+
+function matchesOperation(
+  operation: AiOperationRecord,
+  where: Record<string, unknown>,
+): boolean {
+  return Object.entries(where).every(([field, expected]) => {
+    if (field === "AND") {
+      return (expected as Record<string, unknown>[]).every((condition) =>
+        matchesOperation(operation, condition),
+      )
+    }
+
+    if (field === "OR") {
+      return (expected as Record<string, unknown>[]).some((condition) =>
+        matchesOperation(operation, condition),
+      )
+    }
+
+    const actual = operation[field as keyof AiOperationRecord]
+    if (!expected || typeof expected !== "object" || expected instanceof Date) {
+      return actual === expected
+    }
+
+    const condition = expected as {
+      gt?: Date
+      in?: unknown[]
+      lte?: Date
+    }
+
+    if (condition.in) {
+      return condition.in.includes(actual)
+    }
+
+    if (condition.gt) {
+      return actual instanceof Date && actual > condition.gt
+    }
+
+    if (condition.lte) {
+      return actual instanceof Date && actual <= condition.lte
+    }
+
+    return actual === expected
+  })
 }
 
 function reserve(
@@ -312,5 +399,111 @@ describe("AI usage reservations", () => {
     expect(getAiUsagePeriodStart(new Date("2026-07-31T23:59:00.000Z"))).toEqual(
       new Date("2026-07-01T00:00:00.000Z"),
     )
+  })
+
+  it("lets a later worker reclaim an expired operation with a new fencing attempt", async () => {
+    const { store } = createLedgerStore(1)
+    const reservation = await reserve(store, "summary:user-1:article-lease:v1")
+    const startedAt = new Date("2026-06-23T12:00:00.000Z")
+    const first = await claimAiUsageOperation({
+      leaseDurationMs: 1_000,
+      leaseOwner: "worker-a",
+      now: startedAt,
+      operationId: reservation.operation.id,
+      store,
+    })
+
+    expect(first?.lease).toEqual({ attempt: 1, owner: "worker-a" })
+    await expect(
+      claimAiUsageOperation({
+        leaseOwner: "worker-b",
+        now: new Date("2026-06-23T12:00:00.500Z"),
+        operationId: reservation.operation.id,
+        store,
+      }),
+    ).resolves.toBeNull()
+
+    const reclaimed = await claimAiUsageOperation({
+      leaseOwner: "worker-b",
+      now: new Date("2026-06-23T12:00:01.001Z"),
+      operationId: reservation.operation.id,
+      store,
+    })
+
+    expect(reclaimed?.lease).toEqual({ attempt: 2, owner: "worker-b" })
+    expect(
+      await renewAiUsageOperationLease({
+        lease: first!.lease,
+        now: new Date("2026-06-23T12:00:01.002Z"),
+        operationId: reservation.operation.id,
+        store,
+      }),
+    ).toBe(false)
+  })
+
+  it("prevents a superseded worker from consuming the reservation", async () => {
+    const { periods, store } = createLedgerStore(1)
+    const reservation = await reserve(store, "summary:user-1:article-fence:v1")
+    const first = await claimAiUsageOperation({
+      leaseDurationMs: 1,
+      leaseOwner: "worker-a",
+      now: new Date("2026-06-23T12:00:00.000Z"),
+      operationId: reservation.operation.id,
+      store,
+    })
+    const second = await claimAiUsageOperation({
+      leaseOwner: "worker-b",
+      now: new Date("2026-06-23T12:00:00.002Z"),
+      operationId: reservation.operation.id,
+      store,
+    })
+
+    await expect(
+      completeAiUsageOperation({
+        lease: first!.lease,
+        now: new Date("2026-06-23T12:00:00.003Z"),
+        operationId: reservation.operation.id,
+        store,
+      }),
+    ).rejects.toThrow("lease is no longer owned")
+
+    await completeAiUsageOperation({
+      lease: second!.lease,
+      now: new Date("2026-06-23T12:00:00.004Z"),
+      operationId: reservation.operation.id,
+      store,
+    })
+
+    expect(Array.from(periods.values())[0]).toMatchObject({
+      consumedUnits: 1,
+      reservedUnits: 0,
+    })
+  })
+
+  it("reconciles a stranded reservation once and makes it retryable", async () => {
+    const { periods, store } = createLedgerStore(1)
+    const reservation = await reserve(store, "summary:user-1:article-stale:v1")
+
+    await claimAiUsageOperation({
+      leaseDurationMs: 1,
+      leaseOwner: "worker-a",
+      now: new Date("2026-06-23T12:00:00.000Z"),
+      operationId: reservation.operation.id,
+      store,
+    })
+
+    await expect(
+      reconcileExpiredAiUsageOperations({
+        now: new Date("2026-06-23T12:00:00.002Z"),
+        store,
+      }),
+    ).resolves.toMatchObject({ expired: 1, released: 1 })
+    expect(Array.from(periods.values())[0].reservedUnits).toBe(0)
+    await expect(
+      reconcileExpiredAiUsageOperations({
+        now: new Date("2026-06-23T12:00:00.003Z"),
+        store,
+      }),
+    ).resolves.toMatchObject({ released: 0 })
   })
 })

@@ -5,11 +5,13 @@ import {
 } from "./ai-costs"
 import { getPrisma } from "./db"
 import {
+  type AiOperationLease,
   type AiUsageLedgerStore,
+  claimAiUsageOperation,
   completeAiUsageOperation,
   failAiUsageOperation,
-  markAiUsageOperationProcessing,
   reserveAiUsageOperation,
+  runWithAiOperationLeaseHeartbeat,
 } from "./ai-usage"
 
 const DEFAULT_LOCAL_DIGEST_MODEL = "local-digest-v1"
@@ -279,6 +281,7 @@ export async function processAiDigestWithClient({
 
   const generatedAt = now()
   let operationId: string | null = null
+  let operationLease: AiOperationLease | null = null
 
   try {
     try {
@@ -321,15 +324,20 @@ export async function processAiDigestWithClient({
       throw new AiDigestError("AI digest could not be started safely.")
     }
 
-    if (!reservation.created) {
-      if (reservation.operation.status === "COMPLETED") {
-        return {
-          articleCount: digest.articleCount ?? 0,
-          digestId,
-          status: "COMPLETED" as const,
-        }
+    if (reservation.operation.status === "COMPLETED") {
+      return {
+        articleCount: digest.articleCount ?? 0,
+        digestId,
+        status: "COMPLETED" as const,
       }
+    }
 
+    const claimed = await claimAiUsageOperation({
+      operationId: reservationId,
+      store,
+    })
+
+    if (!claimed) {
       return {
         articleCount: digest.articleCount ?? 0,
         digestId,
@@ -337,10 +345,8 @@ export async function processAiDigestWithClient({
       }
     }
 
-    await markAiUsageOperationProcessing({
-      operationId: reservationId,
-      store,
-    })
+    const claimedLease = claimed.lease
+    operationLease = claimedLease
 
     await store.aiDigest.update({
       data: {
@@ -402,9 +408,15 @@ export async function processAiDigestWithClient({
 
     const providerArticles = articles.map(mapProviderArticle)
     const generated = normalizeDigestResult(
-      await provider.generate({
-        articles: providerArticles,
-        generatedAt,
+      await runWithAiOperationLeaseHeartbeat({
+        lease: claimedLease,
+        operationId: reservationId,
+        store,
+        work: () =>
+          provider.generate({
+            articles: providerArticles,
+            generatedAt,
+          }),
       }),
       providerArticles,
     )
@@ -482,6 +494,7 @@ export async function processAiDigestWithClient({
         },
       })
       await completeAiUsageOperation({
+        lease: claimedLease,
         operationId: reservationId,
         providerRequestId: generated.providerRequestId,
         store: transaction,
@@ -498,11 +511,20 @@ export async function processAiDigestWithClient({
     const message = digestFailureMessage(error)
 
     if (operationId) {
-      await failAiUsageOperation({
+      const recordedFailure = await failAiUsageOperation({
         errorCode: "PROVIDER_REQUEST_FAILED",
+        lease: operationLease ?? undefined,
         operationId,
         store,
       })
+
+      if (operationLease && !recordedFailure) {
+        return {
+          articleCount: digest.articleCount ?? 0,
+          digestId,
+          status: "PROCESSING" as const,
+        }
+      }
     }
 
     await store.aiDigest.update({

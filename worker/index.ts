@@ -26,6 +26,7 @@ import {
   type AiDigestJobData,
 } from "../src/lib/ai-digest-queue"
 import { processAiDigest } from "../src/lib/ai-digests"
+import { reconcileExpiredAiUsageOperations } from "../src/lib/ai-usage"
 import { getPrisma } from "../src/lib/db"
 import { refreshFeed } from "../src/lib/feed-refresh"
 import {
@@ -512,6 +513,7 @@ async function schedulerTick() {
       chatRetentionResult,
       maintenanceResult,
       securityEventMaintenanceResult,
+      aiOperationReconciliationResult,
     ] = await Promise.allSettled([
       enqueueDueFeeds(),
       enqueueDuePodcasts(),
@@ -521,6 +523,7 @@ async function schedulerTick() {
       runChatRetention(),
       runAuthTokenMaintenance(),
       runSecurityEventMaintenance(),
+      runAiOperationReconciliation(),
     ])
 
     if (feedResult.status === "fulfilled") {
@@ -640,6 +643,24 @@ async function schedulerTick() {
         )}`
       )
     }
+
+    if (aiOperationReconciliationResult.status === "fulfilled") {
+      console.log(
+        JSON.stringify({
+          event: "ai_operation_reconciliation",
+          outcome: "success",
+          ...aiOperationReconciliationResult.value,
+        })
+      )
+    }
+
+    if (aiOperationReconciliationResult.status === "rejected") {
+      console.error(
+        `[worker] AI operation reconciliation failed: ${schedulerErrorMessage(
+          aiOperationReconciliationResult.reason
+        )}`
+      )
+    }
   } finally {
     schedulerRunning = false
   }
@@ -720,6 +741,13 @@ async function runSecurityEventMaintenance() {
   return cleanupExpiredSecurityEvents({
     batchSize: securityEventMaintenanceBatchSize,
     store: prisma,
+  })
+}
+
+async function runAiOperationReconciliation() {
+  return reconcileExpiredAiUsageOperations({
+    batchSize: schedulerBatchSize,
+    store: prisma as unknown as Parameters<typeof reconcileExpiredAiUsageOperations>[0]["store"],
   })
 }
 
