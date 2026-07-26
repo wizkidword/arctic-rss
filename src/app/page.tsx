@@ -1,5 +1,6 @@
 import Link from "next/link"
 import Image from "next/image"
+import { headers } from "next/headers"
 import {
   ArrowRightIcon,
   CompassIcon,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react"
 
 import { AnalyticsLink } from "@/components/analytics-link"
+import { CSP_NONCE_HEADER } from "@/lib/content-security-policy"
 import { buttonVariants } from "@/components/ui/button"
 import { legalLinks } from "@/lib/legal-links"
 import { cn } from "@/lib/utils"
@@ -74,10 +76,12 @@ const systemThemeScript = `
 
 const productHuntPostUrl = "https://www.producthunt.com/posts/arctic-rss"
 
-export default function Home() {
+export default async function Home() {
+  const nonce = (await headers()).get(CSP_NONCE_HEADER) ?? undefined
+
   return (
     <>
-      <script dangerouslySetInnerHTML={{ __html: systemThemeScript }} />
+      <script nonce={nonce} dangerouslySetInnerHTML={{ __html: systemThemeScript }} />
       <main className="min-h-screen overflow-hidden bg-[#f3fbff] text-slate-950 dark:bg-slate-950 dark:text-slate-50">
       <section className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8">
         <div className="pointer-events-none absolute inset-x-4 top-6 h-px bg-gradient-to-r from-transparent via-sky-200/80 to-transparent dark:via-slate-800" />

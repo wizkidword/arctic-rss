@@ -35,11 +35,19 @@ vi.mock("next/image", () => ({
   },
 }))
 
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "x-nonce": "test-nonce" }),
+}))
+
 import Home from "@/app/page"
 
+async function renderHome() {
+  return renderToStaticMarkup(await Home())
+}
+
 describe("Home", () => {
-  it("uses the wordmark as the hero brand without a duplicate top nav", () => {
-    const markup = renderToStaticMarkup(<Home />)
+  it("uses the wordmark as the hero brand without a duplicate top nav", async () => {
+    const markup = await renderHome()
 
     expect(markup).toContain('alt="Arctic RSS"')
     expect(markup.match(/src="\/brand\/arctic-rss-wordmark\.png"/g)).toHaveLength(1)
@@ -53,8 +61,8 @@ describe("Home", () => {
     expect(markup).not.toContain(">Article Stream<")
   })
 
-  it("respects system dark mode on the public landing page", () => {
-    const markup = renderToStaticMarkup(<Home />)
+  it("respects system dark mode on the public landing page", async () => {
+    const markup = await renderHome()
 
     expect(markup).toContain("prefers-color-scheme: dark")
     expect(markup).toContain("dark:bg-slate-950")
@@ -62,8 +70,8 @@ describe("Home", () => {
     expect(markup).toContain("dark:border-slate-800")
   })
 
-  it("shows a Discover-style product preview on the landing page", () => {
-    const markup = renderToStaticMarkup(<Home />)
+  it("shows a Discover-style product preview on the landing page", async () => {
+    const markup = await renderHome()
 
     expect(markup).toContain(">Discover<")
     expect(markup).toContain(">AI<")
@@ -71,16 +79,16 @@ describe("Home", () => {
     expect(markup).toContain(">Follow<")
   })
 
-  it("constrains long Discover topic names inside their preview cards", () => {
-    const markup = renderToStaticMarkup(<Home />)
+  it("constrains long Discover topic names inside their preview cards", async () => {
+    const markup = await renderHome()
 
     expect(markup).toContain(
       'class="truncate text-xs font-semibold leading-5 text-slate-950 dark:text-slate-50"',
     )
   })
 
-  it("links to public legal policies from the landing footer", () => {
-    const markup = renderToStaticMarkup(<Home />)
+  it("links to public legal policies from the landing footer", async () => {
+    const markup = await renderHome()
 
     expect(markup).toContain('href="/legal"')
     expect(markup).toContain('href="/privacy"')
@@ -94,8 +102,8 @@ describe("Home", () => {
     expect(markup).toContain(">Security<")
   })
 
-  it("shows a visible Product Hunt launch badge without relying on an iframe", () => {
-    const markup = renderToStaticMarkup(<Home />)
+  it("shows a visible Product Hunt launch badge without relying on an iframe", async () => {
+    const markup = await renderHome()
 
     expect(markup).toContain('href="https://www.producthunt.com/posts/arctic-rss"')
     expect(markup).toContain('aria-label="View Arctic RSS&#x27;s upcoming Product Hunt launch"')

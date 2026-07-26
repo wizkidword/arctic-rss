@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Script from "next/script"
 
+import { useCspNonce } from "@/components/csp-nonce-provider"
+
 type TurnstileWidgetProps = {
   action: string
   siteKey: string
@@ -30,6 +32,7 @@ declare global {
 }
 
 export function TurnstileWidget({ action, siteKey }: TurnstileWidgetProps) {
+  const nonce = useCspNonce()
   const containerRef = useRef<HTMLDivElement>(null)
   const widgetIdRef = useRef<string | null>(null)
   const [token, setToken] = useState("")
@@ -85,6 +88,7 @@ export function TurnstileWidget({ action, siteKey }: TurnstileWidgetProps) {
   return (
     <div className="min-h-16">
       <Script
+        nonce={nonce}
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
         strategy="afterInteractive"
         onLoad={renderWidget}

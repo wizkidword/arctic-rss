@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-import { contentSecurityPolicyReportOnly } from "./src/lib/content-security-policy";
-
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
@@ -39,10 +37,6 @@ const nextConfig: NextConfig = {
           {
             key: "X-DNS-Prefetch-Control",
             value: "off",
-          },
-          {
-            key: "Content-Security-Policy-Report-Only",
-            value: contentSecurityPolicyReportOnly,
           },
         ],
         source: "/:path*",

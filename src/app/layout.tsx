@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { AnalyticsConsent } from "@/components/analytics-consent";
+import { CspNonceProvider } from "@/components/csp-nonce-provider";
+import { CSP_NONCE_HEADER } from "@/lib/content-security-policy";
 import { getAppOrigin } from "@/lib/app-origin";
 import { getGoogleAnalyticsMeasurementId } from "@/lib/google-analytics";
 
@@ -26,12 +29,16 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const googleAnalyticsMeasurementId = getGoogleAnalyticsMeasurementId();
+  const [googleAnalyticsMeasurementId, requestHeaders] = await Promise.all([
+    Promise.resolve(getGoogleAnalyticsMeasurementId()),
+    headers(),
+  ]);
+  const nonce = requestHeaders.get(CSP_NONCE_HEADER) ?? undefined;
 
   return (
     <html
@@ -40,8 +47,10 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        {children}
-        <AnalyticsConsent measurementId={googleAnalyticsMeasurementId} />
+        <CspNonceProvider nonce={nonce}>
+          {children}
+          <AnalyticsConsent measurementId={googleAnalyticsMeasurementId} />
+        </CspNonceProvider>
       </body>
     </html>
   );

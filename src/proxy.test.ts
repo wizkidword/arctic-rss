@@ -60,6 +60,18 @@ describe("proxy host validation", () => {
     )
   })
 
+  it("enforces a nonce-bound CSP on browser documents but not API responses", () => {
+    const pageResponse = proxy(request("/login", { host: "arcticrss.com" }))
+    const policy = pageResponse.headers.get("content-security-policy")
+
+    expect(policy).toContain("'nonce-")
+    expect(policy).toContain("'strict-dynamic'")
+    expect(policy).toContain("report-uri /api/csp-report")
+    expect(proxy(request("/api/csp-report", { host: "arcticrss.com" })).headers.get(
+      "content-security-policy"
+    )).toBeNull()
+  })
+
   it("rejects unexpected ports and Unicode/punycode host lookalikes", () => {
     expect(
       proxy(request("/login", { host: "arcticrss.com:444" })).status

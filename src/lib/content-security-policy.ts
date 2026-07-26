@@ -2,27 +2,39 @@ const MAX_CSP_REPORTS_PER_REQUEST = 10
 const MAX_CSP_REPORT_VALUE_LENGTH = 160
 
 export const CSP_REPORT_MAX_BYTES = 8 * 1024
+export const CSP_NONCE_HEADER = "x-nonce"
 
-// This starts as report-only so production traffic can reveal the exact nonce
-// or hash work needed for Next.js and the existing trusted integrations.
-export const contentSecurityPolicyReportOnly = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "frame-ancestors 'self'",
-  "form-action 'self'",
-  "script-src 'self' https://www.googletagmanager.com https://challenges.cloudflare.com",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://www.google-analytics.com",
-  "font-src 'self'",
-  "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com",
-  "media-src 'self' https:",
-  "frame-src https://www.youtube-nocookie.com",
-  "manifest-src 'self'",
-  "worker-src 'self' blob:",
-  "upgrade-insecure-requests",
-  "report-uri /api/csp-report",
-].join("; ")
+export function buildContentSecurityPolicy(
+  nonce: string,
+  isDevelopment = process.env.NODE_ENV !== "production"
+) {
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    [
+      "script-src 'self'",
+      `'nonce-${nonce}'`,
+      "'strict-dynamic'",
+      "https://www.googletagmanager.com",
+      "https://challenges.cloudflare.com",
+      ...(isDevelopment ? ["'unsafe-eval'"] : []),
+    ].join(" "),
+    `style-src 'self' 'nonce-${nonce}'`,
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' data: blob: https://www.google-analytics.com",
+    "font-src 'self'",
+    "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com",
+    "media-src 'self' https:",
+    "frame-src https://www.youtube-nocookie.com",
+    "manifest-src 'self'",
+    "worker-src 'self' blob:",
+    "upgrade-insecure-requests",
+    "report-uri /api/csp-report",
+  ].join("; ")
+}
 
 type CspReportBody = Record<string, unknown>
 
@@ -38,13 +50,14 @@ export function parseCspViolationReports(payload: unknown) {
   const bodies = reportBodies(payload)
 
   return bodies
+    .filter((body) => !isBrowserExtensionNoise(body["blocked-uri"]))
     .map((body) => ({
-      blockedUri: reportUrlValue(body["blocked-uri"]),
-      disposition: reportTextValue(body.disposition),
-      documentUri: reportUrlValue(body["document-uri"]),
-      effectiveDirective: reportTextValue(body["effective-directive"]),
-      violatedDirective: reportTextValue(body["violated-directive"]),
-    }))
+        blockedUri: reportUrlValue(body["blocked-uri"]),
+        disposition: reportTextValue(body.disposition),
+        documentUri: reportUrlValue(body["document-uri"]),
+        effectiveDirective: reportTextValue(body["effective-directive"]),
+        violatedDirective: reportTextValue(body["violated-directive"]),
+      }))
     .filter((report) =>
       Object.values(report).some((value) => value !== null)
     )
@@ -99,6 +112,13 @@ function reportUrlValue(value: unknown) {
   } catch {
     return null
   }
+}
+
+function isBrowserExtensionNoise(value: unknown) {
+  return (
+    typeof value === "string" &&
+    /^(?:chrome|moz|ms-browser|safari)-extension:/i.test(value.trim())
+  )
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -37,5 +37,9 @@ describe("nextConfig security headers", () => {
       ]),
       source: "/:path*",
     })
+
+    expect(configuredHeaders?.[0]?.headers).not.toContainEqual(
+      expect.objectContaining({ key: "Content-Security-Policy-Report-Only" })
+    )
   })
 })

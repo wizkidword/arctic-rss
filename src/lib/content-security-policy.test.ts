@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  contentSecurityPolicyReportOnly,
+  buildContentSecurityPolicy,
   parseCspViolationReports,
 } from "./content-security-policy"
 
 describe("content security policy", () => {
-  it("starts with an observing-only policy and a local report collector", () => {
-    expect(contentSecurityPolicyReportOnly).toContain("default-src 'self'")
-    expect(contentSecurityPolicyReportOnly).toContain("object-src 'none'")
-    expect(contentSecurityPolicyReportOnly).toContain(
+  it("enforces a nonce-bound policy with a local report collector", () => {
+    const policy = buildContentSecurityPolicy("nonce-value", false)
+
+    expect(policy).toContain("default-src 'self'")
+    expect(policy).toContain("object-src 'none'")
+    expect(policy).toContain("'nonce-nonce-value'")
+    expect(policy).toContain("'strict-dynamic'")
+    expect(policy).toContain(
       "report-uri /api/csp-report"
     )
-    expect(contentSecurityPolicyReportOnly).not.toContain("unsafe-eval")
+    expect(policy).not.toContain("unsafe-eval")
+    expect(policy).not.toContain("script-src 'self' 'unsafe-inline'")
+    expect(policy).not.toContain("style-src 'self' 'nonce-nonce-value' 'unsafe-inline'")
   })
 
   it("keeps CSP report values useful without retaining full URLs", () => {
@@ -58,5 +64,16 @@ describe("content security policy", () => {
         violatedDirective: null,
       },
     ])
+  })
+
+  it("filters browser extension noise before it reaches the collector", () => {
+    expect(
+      parseCspViolationReports({
+        "csp-report": {
+          "blocked-uri": "chrome-extension://random-id/injected.js",
+          "effective-directive": "script-src-elem",
+        },
+      })
+    ).toEqual([])
   })
 })

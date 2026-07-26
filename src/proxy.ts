@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import {
+  buildContentSecurityPolicy,
+  CSP_NONCE_HEADER,
+} from "@/lib/content-security-policy"
+import {
   buildAppUrl,
   getAppOrigin,
   isAllowedAppHost,
@@ -46,10 +50,25 @@ export function proxy(request: NextRequest) {
     )
   }
 
-  const response = NextResponse.next()
+  const requestHeaders = new Headers(request.headers)
+  const nonce = request.nextUrl.pathname.startsWith("/api/")
+    ? null
+    : Buffer.from(crypto.randomUUID()).toString("base64")
+  const policy = nonce ? buildContentSecurityPolicy(nonce) : null
+
+  if (policy && nonce) {
+    requestHeaders.set(CSP_NONCE_HEADER, nonce)
+    requestHeaders.set("Content-Security-Policy", policy)
+  }
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } })
 
   if (!isInternalHealthProbe && canonicalOrigin.protocol === "https:") {
     response.headers.set("Strict-Transport-Security", HSTS_HEADER)
+  }
+
+  if (policy) {
+    response.headers.set("Content-Security-Policy", policy)
   }
 
   return response

@@ -5,6 +5,7 @@ import { render } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { GoogleAnalytics } from "./google-analytics"
+import { CspNonceProvider } from "./csp-nonce-provider"
 
 const navigation = vi.hoisted(() => ({
   pathname: "/",
@@ -128,5 +129,17 @@ describe("GoogleAnalytics", () => {
         },
       ],
     ])
+  })
+
+  it("adds the request nonce to the consent-gated analytics loader", () => {
+    render(
+      <CspNonceProvider nonce="analytics-nonce">
+        <GoogleAnalytics measurementId="G-NONCE123" />
+      </CspNonceProvider>
+    )
+
+    expect(document.getElementById("arctic-rss-google-analytics")?.nonce).toBe(
+      "analytics-nonce"
+    )
   })
 })

@@ -7,6 +7,10 @@ vi.mock("next/font/google", () => ({
   Geist_Mono: () => ({ variable: "font-geist-mono" }),
 }))
 
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "x-nonce": "test-nonce" }),
+}))
+
 vi.mock("@/components/google-analytics", () => ({
   GoogleAnalytics: ({ measurementId }: { measurementId: string | undefined }) => (
     <div data-google-analytics={measurementId ?? ""} />
@@ -20,8 +24,8 @@ vi.mock("@/lib/google-analytics", () => ({
 import RootLayout, { metadata } from "./layout"
 
 describe("RootLayout", () => {
-  it("allows the public theme script to update html before hydration", () => {
-    const element = RootLayout({ children: <main>Landing</main> })
+  it("allows the public theme script to update html before hydration", async () => {
+    const element = await RootLayout({ children: <main>Landing</main> })
 
     expect(element.type).toBe("html")
     expect(element.props.suppressHydrationWarning).toBe(true)

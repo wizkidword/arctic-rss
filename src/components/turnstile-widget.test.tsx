@@ -5,10 +5,11 @@ import { cleanup, render } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { TurnstileWidget } from "./turnstile-widget"
+import { CspNonceProvider } from "./csp-nonce-provider"
 
 vi.mock("next/script", () => ({
-  default: function MockScript({ src }: { src: string }) {
-    return <script data-testid="turnstile-script" data-src={src} />
+  default: function MockScript({ nonce, src }: { nonce?: string; src: string }) {
+    return <script data-nonce={nonce} data-src={src} data-testid="turnstile-script" />
   },
 }))
 
@@ -42,6 +43,18 @@ describe("TurnstileWidget", () => {
         action: "signup",
         sitekey: "site-key",
       })
+    )
+  })
+
+  it("passes the request nonce to the Turnstile script", () => {
+    const { getByTestId } = render(
+      <CspNonceProvider nonce="turnstile-nonce">
+        <TurnstileWidget action="signup" siteKey="site-key" />
+      </CspNonceProvider>
+    )
+
+    expect(getByTestId("turnstile-script").getAttribute("data-nonce")).toBe(
+      "turnstile-nonce"
     )
   })
 })

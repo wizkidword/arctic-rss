@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 
 import { hasAnalyticsConsent } from "@/lib/analytics-consent"
+import { useCspNonce } from "@/components/csp-nonce-provider"
 
 type GoogleAnalyticsProps = {
   measurementId: string
@@ -35,7 +36,7 @@ function ensureGtag() {
   window.gtag = window.gtag ?? (queueGtagCommand as Gtag)
 }
 
-function loadGoogleAnalyticsScript(measurementId: string) {
+function loadGoogleAnalyticsScript(measurementId: string, nonce: string | undefined) {
   if (document.getElementById(GOOGLE_ANALYTICS_SCRIPT_ID)) {
     return
   }
@@ -43,6 +44,7 @@ function loadGoogleAnalyticsScript(measurementId: string) {
   const script = document.createElement("script")
   script.async = true
   script.id = GOOGLE_ANALYTICS_SCRIPT_ID
+  script.nonce = nonce ?? ""
   script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(
     measurementId
   )}`
@@ -66,6 +68,7 @@ function pageViewConfig(pagePath: string) {
 }
 
 export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
+  const nonce = useCspNonce()
   const normalizedMeasurementId = measurementId.trim()
   const initialPageViewTrackedRef = useRef(false)
   const lastTrackedPagePathRef = useRef<string | null>(null)
@@ -89,7 +92,7 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
     if (!initialPageViewTrackedRef.current) {
       initialPageViewTrackedRef.current = true
       gtag("js", new Date())
-      loadGoogleAnalyticsScript(normalizedMeasurementId)
+      loadGoogleAnalyticsScript(normalizedMeasurementId, nonce)
     }
 
     if (lastTrackedPagePathRef.current === pagePath) {
@@ -103,7 +106,7 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
       normalizedMeasurementId,
       pageViewConfig(pagePath)
     )
-  }, [normalizedMeasurementId, pathname, searchParams])
+  }, [nonce, normalizedMeasurementId, pathname, searchParams])
 
   if (!normalizedMeasurementId) {
     return null

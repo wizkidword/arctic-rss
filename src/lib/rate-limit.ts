@@ -38,6 +38,8 @@ export type RateLimitAction =
   | "chat_room_subscribe"
   | "chat_room_unsubscribe"
   | "chat_session_token"
+  | "csp_report"
+  | "csp_report_log"
   | "feed_discovery"
   | "feedback"
   | "image_proxy"
@@ -75,6 +77,7 @@ export type RateLimitStore = {
 }
 
 export type RateLimitDependencies = {
+  logRejections?: boolean
   store?: RateLimitStore
 }
 
@@ -158,6 +161,12 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
   chat_session_token: [
     { limit: 20, scope: "user", subject: inputSubject("userId"), windowMs: 5 * 60_000 },
     { limit: 60, scope: "ip", subject: inputSubject("ip"), windowMs: 5 * 60_000 },
+  ],
+  csp_report: [
+    { limit: 30, scope: "ip", subject: inputSubject("ip"), windowMs: 60_000 },
+  ],
+  csp_report_log: [
+    { limit: 60, scope: "global", subject: () => "csp-report", windowMs: 60_000 },
   ],
   feed_discovery: [
     { limit: 20, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
@@ -314,7 +323,9 @@ export async function enforceRateLimit(
       allowed: false,
       reason: "identifier-unavailable",
     }
-    logRateLimitRejection(input, result)
+    if (dependencies.logRejections !== false) {
+      logRateLimitRejection(input, result)
+    }
     return result
   }
 
@@ -338,7 +349,9 @@ export async function enforceRateLimit(
           retryAfterSeconds: Math.max(1, Math.ceil(counter.ttlMs / 1_000)),
           scope: rule.scope,
         }
-        logRateLimitRejection(input, result)
+        if (dependencies.logRejections !== false) {
+          logRateLimitRejection(input, result)
+        }
         return result
       }
     }
@@ -347,7 +360,9 @@ export async function enforceRateLimit(
       allowed: false,
       reason: "unavailable",
     }
-    logRateLimitRejection(input, result)
+    if (dependencies.logRejections !== false) {
+      logRateLimitRejection(input, result)
+    }
     return result
   }
 
