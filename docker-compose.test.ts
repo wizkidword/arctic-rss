@@ -27,6 +27,21 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     );
   });
 
+  it("refuses to interpolate production data-service credentials from unsafe defaults", async () => {
+    const compose = await readFile("docker-compose.yml", "utf8");
+
+    expect(compose).toContain(
+      "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}",
+    );
+    expect(compose).toContain(
+      "REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}",
+    );
+    expect(compose).toContain(
+      "DATABASE_URL: ${MIGRATE_DATABASE_URL:?MIGRATE_DATABASE_URL is required}",
+    );
+    expect(compose).not.toContain("POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}");
+  });
+
   it("keeps the chat gateway internal, opt-in, and readiness-checked", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
     const gateway = compose.split("  chat-gateway:")[1].split("  cloudflared:")[0];

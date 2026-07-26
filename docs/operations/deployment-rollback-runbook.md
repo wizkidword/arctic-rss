@@ -209,6 +209,57 @@ web service at startup. Follow the secret-safe configuration steps in the
 rate-limit and Turnstile runbook, then smoke-test login, signup, and password
 reset with a real challenge.
 
+## INFRA-SEC-001 database and runtime-secret deployment
+
+This release removes the PostgreSQL `postgres` fallback and makes Compose
+refuse to render when PostgreSQL, Redis, or the migration URL is missing. The
+web and worker also refuse production startup if their database URLs, Redis
+credentials, or `AUTH_SECRET` are blank, template values, or incompatible.
+
+Before deployment, make a root-only copy of the current `.env` in the retained
+rollback release. Do not print either copy. Confirm the required entries exist
+without displaying their values:
+
+```bash
+cd "$APP_DIR"
+for key in POSTGRES_PASSWORD DATABASE_URL MIGRATE_DATABASE_URL REDIS_PASSWORD REDIS_URL AUTH_SECRET; do
+  if ! grep -q "^${key}=." .env; then
+    echo "missing required environment key: ${key}" >&2
+    exit 1
+  fi
+done
+```
+
+Determine whether the retired fallback was ever used without printing a
+password. If the result is uncertain, rotate the PostgreSQL password and the
+runtime and migration role passwords together, then update both connection
+URLs in the production `.env`. Preserve the updated `.env` with the rollback
+release so it can still connect after a rollback.
+
+```bash
+if grep -qx 'POSTGRES_PASSWORD=postgres' .env; then
+  echo 'retired PostgreSQL fallback detected; rotate before deployment' >&2
+  exit 1
+fi
+docker compose config -q
+docker compose build migrate web worker
+docker compose run --rm --no-deps migrate
+docker compose up -d --no-deps --force-recreate web worker
+docker compose ps
+```
+
+After the normal health, login, worker, and backup checks, confirm the
+database remains loopback-only:
+
+```bash
+docker compose port postgres 5432
+ss -ltn '( sport = :5432 )'
+```
+
+The published address must be `127.0.0.1` (or no host-published address). Do
+not rotate `AUTH_SECRET` as part of this release; doing so globally invalidates
+sessions and has its own runbook.
+
 ## Rollback
 
 1. Keep the currently running failed release and its logs for diagnosis.

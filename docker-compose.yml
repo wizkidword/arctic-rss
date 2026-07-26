@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-arctic_rss}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     healthcheck:
       test:
         [
@@ -32,10 +32,10 @@ services:
     mem_limit: 320m
     pids_limit: 64
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     # Queue data and limiter counters share Redis. noeviction preserves queue
     # integrity; a full Redis fails protected actions closed instead of evicting jobs.
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD}"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
       interval: 10s
@@ -57,7 +57,7 @@ services:
     environment:
       # Production migrations use a distinct role that owns the schema. The
       # web and worker containers retain the lower-privilege DATABASE_URL.
-      DATABASE_URL: ${MIGRATE_DATABASE_URL}
+      DATABASE_URL: ${MIGRATE_DATABASE_URL:?MIGRATE_DATABASE_URL is required}
     depends_on:
       postgres:
         condition: service_healthy

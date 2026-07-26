@@ -24,7 +24,7 @@ jobs:
         image: postgres:17-alpine
         env:
           POSTGRES_DB: arctic_rss
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: ci-postgres-password
           POSTGRES_USER: postgres
         options: >-
           --health-cmd "pg_isready -U postgres -d arctic_rss"
@@ -34,7 +34,7 @@ jobs:
         ports:
           - 5432:5432
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arctic_rss?schema=public
+      DATABASE_URL: postgresql://postgres:ci-postgres-password@localhost:5432/arctic_rss?schema=public
     steps:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -172,6 +172,13 @@ jobs:
       - name: Validate production Compose topology and logging driver
         run: |
           cp .env.example .env
+          sed -i \
+            -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
+            -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
+            -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
+            -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
+            -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
+            .env
           docker compose config -q
           docker compose --profile chat config -q
           docker info --format '{{range .Plugins.Log}}{{println .}}{{end}}' | grep -qx journald
