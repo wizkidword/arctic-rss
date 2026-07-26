@@ -17,15 +17,20 @@ Every pull request and update to `main` runs the following checks:
   and the production Next.js build;
 - a Chromium smoke test of the public landing page and loopback-only liveness
   route;
+- a Compose-backed chat release gate that starts PostgreSQL, durable and
+  ephemeral Redis, web, every worker mode, and the chat gateway; verifies
+  enforced CSP and gateway readiness; restarts ephemeral Redis to prove
+  recovery; then runs the authentication, real-time, retention, worker, AI,
+  and client-gap regression cases;
 - dependency review on pull requests and a production dependency audit;
 - full-history secret detection and JavaScript/TypeScript static analysis;
 - production web, worker, chat-gateway, and migration Docker builds,
   high/critical vulnerability scans, separate SBOM artifacts, and a
   byte-accurate production image-size artifact retained for 30 days.
 
-The security checks also run weekly. Third-party actions are pinned to reviewed
-commit SHAs where available; Dependabot opens controlled update pull requests
-for npm packages and workflow actions.
+The security checks also run weekly. Every third-party action is pinned to a
+reviewed commit SHA; Dependabot opens controlled update pull requests for npm
+packages and workflow actions.
 
 ## Manual production approval and release record
 

@@ -101,9 +101,58 @@ jobs:
       pull-requests: write
     steps:
       - name: Review introduced dependency vulnerabilities
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@56339e523c0409420f6c2c9a2f4292bbb3c07dd3 # v4.8.0
         with:
           fail-on-severity: high
+
+  chat-release-gates:
+    name: Compose-backed chat release gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Configure isolated production-like Compose environment
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
+            -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
+            -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
+            -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
+            -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
+            -e 's/CHANGE_ME_GENERATE_A_SEPARATE_32_BYTE_SECRET/ci-chat-token-secret-that-is-at-least-32-bytes/g' \
+            -e 's#APP_ORIGIN=http://localhost:3000#APP_ORIGIN=https://arcticrss.test#' \
+            -e 's#AUTH_URL=http://localhost:3000#AUTH_URL=https://arcticrss.test#' \
+            -e 's/ARCTIC_IRC_ENABLED=false/ARCTIC_IRC_ENABLED=true/' \
+            .env
+      - name: Start the full web, worker, Redis, database, and chat topology
+        run: >-
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml
+          --profile chat --profile split-workers up --build --detach --wait --wait-timeout 300
+      - name: Verify live Compose CSP and chat readiness
+        run: node scripts/ci/assert-compose-chat-release-gates.mjs
+      - name: Verify chat gateway recovery after ephemeral Redis restart
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers restart redis-ephemeral
+          node scripts/ci/assert-compose-chat-release-gates.mjs --after-redis-restart
+      - name: Run authenticated, real-time, worker, retention, and CSP release gates
+        run: npm run test:chat:release-gates
+      - name: Capture Compose status on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers ps
+      - name: Stop Compose topology
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers down --volumes --remove-orphans
 
   dependency-audit:
     name: Installed dependency audit

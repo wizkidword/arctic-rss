@@ -1,0 +1,7 @@
+# CI-only Compose additions. Production keeps the gateway internal to the
+# tunnel/reverse-proxy path; this loopback mapping exists solely for the
+# GitHub Actions release gate to exercise its readiness and Redis recovery.
+services:
+  chat-gateway:
+    ports:
+      - "127.0.0.1:${CHAT_GATEWAY_PORT:-3001}:3001"
