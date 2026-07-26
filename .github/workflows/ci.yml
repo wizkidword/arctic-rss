@@ -131,6 +131,8 @@ jobs:
             -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
             -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
             -e 's/CHANGE_ME_GENERATE_A_SEPARATE_32_BYTE_SECRET/ci-chat-token-secret-that-is-at-least-32-bytes/g' \
+            -e 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
+            -e 's#^MIGRATE_DATABASE_URL=.*#MIGRATE_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
             -e 's#APP_ORIGIN=http://localhost:3000#APP_ORIGIN=https://arcticrss.test#' \
             -e 's#AUTH_URL=http://localhost:3000#AUTH_URL=https://arcticrss.test#' \
             -e 's/ARCTIC_IRC_ENABLED=false/ARCTIC_IRC_ENABLED=true/' \
