@@ -34,6 +34,7 @@ describe("native chat gateway events", () => {
       logger,
     })
     const service = {
+      getBlockedUserIds: vi.fn().mockResolvedValue([]),
       getSnapshot: vi.fn().mockResolvedValue({
         member: { role: "MEMBER", status: "ACTIVE" },
         messages: [],
@@ -176,6 +177,41 @@ describe("native chat gateway events", () => {
     })
   })
 
+  it("does not deliver live messages from an immutable blocked user", async () => {
+    const service = createService({
+      getBlockedUserIds: vi.fn(async ({ userId }: { userId: string }) =>
+        userId === "user-2" ? ["user-1"] : []
+      ),
+    })
+    gateway = createChatGateway({
+      authenticateConnection: async ({ token }) =>
+        token === "blocked-recipient"
+          ? { ...testIdentity(), handle: "aurora", profileId: "profile-2", userId: "user-2" }
+          : testIdentity(),
+      logger,
+    })
+    attachNativeChatGateway(gateway.io, service, async () => true)
+    const port = await gateway.start(0)
+    const sender = connect(port)
+    const recipient = connect(port, "blocked-recipient")
+    await Promise.all([waitForConnect(sender), waitForConnect(recipient)])
+    await Promise.all([
+      sender.emitWithAck("room:subscribe", { slug: "ai" }),
+      recipient.emitWithAck("room:subscribe", { slug: "ai" }),
+    ])
+
+    const received = vi.fn()
+    recipient.on("room:message", received)
+    await expect(sender.emitWithAck("room:message", {
+      body: "This must stay hidden",
+      clientMessageId: "message-0001",
+      roomId: "room-ai",
+    })).resolves.toMatchObject({ ok: true })
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    expect(received).not.toHaveBeenCalled()
+  })
+
   it("accepts a concrete read-marker message ID and rejects the retired sequence payload", async () => {
     const updateReadMarker = vi.fn().mockResolvedValue(undefined)
     const service = createService({ updateReadMarker })
@@ -259,6 +295,7 @@ describe("native chat gateway events", () => {
 
 function createService(overrides: Partial<NativeChatGatewayService> = {}) {
   return {
+    getBlockedUserIds: vi.fn().mockResolvedValue([]),
     getSnapshot: vi.fn().mockResolvedValue({
       member: { role: "MEMBER", status: "ACTIVE" },
       messages: [],
@@ -297,8 +334,9 @@ function testIdentity() {
   }
 }
 
-function connect(port: number) {
+function connect(port: number, token?: string) {
   return createSocketClient(`ws://127.0.0.1:${port}`, {
+    auth: token ? { token } : undefined,
     forceNew: true,
     transports: ["websocket"],
   })

@@ -224,6 +224,25 @@ describe("chat room service", () => {
     ).rejects.toMatchObject({ code: "slow-mode" } satisfies Partial<ChatRoomServiceError>)
   })
 
+  it("filters durable room history by immutable blocked user IDs", async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    const store = {
+      chatBlock: { findMany: vi.fn().mockResolvedValue([{ blockedUserId: "user-2" }]) },
+      chatMessage: { findMany },
+      chatRoom: { findUnique: vi.fn().mockResolvedValue(room()) },
+      chatRoomBan: {},
+      chatRoomMember: { findUnique: vi.fn().mockResolvedValue(activeMembership()) },
+    } as unknown as ChatRoomStore
+
+    await getChatRoomSnapshot({ identity, slug: "ai", store })
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: [{ senderUserId: null }, { senderUserId: { notIn: ["user-2"] } }],
+      }),
+    }))
+  })
+
   it("atomically gives simultaneous sends across gateway replicas one slow-mode slot", async () => {
     const create = vi.fn().mockResolvedValue(message())
     const updateMany = vi

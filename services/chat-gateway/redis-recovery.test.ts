@@ -20,6 +20,7 @@ function clients() {
   return {
     adapterPublisher: new FakeRedisClient(),
     adapterSubscriber: new FakeRedisClient(),
+    blockEvents: new FakeRedisClient(),
     command: new FakeRedisClient(),
     roomEvents: new FakeRedisClient(),
     securityEvents: new FakeRedisClient(),

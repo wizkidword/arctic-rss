@@ -18,6 +18,11 @@ import {
   CHAT_ACCOUNT_SECURITY_EVENT_CHANNEL,
   parseAccountSecurityEvent,
 } from "../../src/lib/chat/security-events"
+import {
+  CHAT_BLOCK_EVENT_CHANNEL,
+  parseChatBlockEvent,
+} from "../../src/lib/chat/block-events"
+import { listChatBlockedUserIds } from "../../src/lib/chat/blocks"
 import { getChatConnectionTokenSettings } from "../../src/lib/chat/session-token"
 import {
   clearChatPresence,
@@ -35,7 +40,11 @@ import {
   DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS,
   type ChatGatewayAbuseSettings,
 } from "./abuse"
-import { attachNativeChatGateway, nativeChatRoomEventName } from "./native-chat"
+import {
+  attachNativeChatGateway,
+  nativeChatRoomEventName,
+  nativeChatUserEventName,
+} from "./native-chat"
 import {
   getChatRoomSnapshot,
   sendChatRoomMessage,
@@ -78,6 +87,7 @@ export async function createProductionChatGateway(
   const redis = createGatewayRedisClient()
   const redisPublisher = redis.duplicate()
   const redisSubscriber = redis.duplicate()
+  const blockEventSubscriber = redis.duplicate()
   const roomEventSubscriber = redis.duplicate()
   const securityEventSubscriber = redis.duplicate()
   let gateway: ChatGateway | undefined
@@ -87,6 +97,7 @@ export async function createProductionChatGateway(
     clients: {
       adapterPublisher: asGatewayRedisClient(redisPublisher),
       adapterSubscriber: asGatewayRedisClient(redisSubscriber),
+      blockEvents: asGatewayRedisClient(blockEventSubscriber),
       command: asGatewayRedisClient(redis),
       roomEvents: asGatewayRedisClient(roomEventSubscriber),
       securityEvents: asGatewayRedisClient(securityEventSubscriber),
@@ -107,7 +118,7 @@ export async function createProductionChatGateway(
       if (state.ready) {
         logger.info("redis_ready", {
           reconnectCount: String(state.reconnectCount),
-          subscriberChannelCount: "2",
+          subscriberChannelCount: "3",
         })
       } else {
         logger.warn("redis_degraded", { reconnectCount: String(state.reconnectCount) })
@@ -115,6 +126,7 @@ export async function createProductionChatGateway(
     },
     resubscribe: async () => {
       await Promise.all([
+        blockEventSubscriber.subscribe(CHAT_BLOCK_EVENT_CHANNEL),
         roomEventSubscriber.subscribe(CHAT_ROOM_EVENT_CHANNEL),
         securityEventSubscriber.subscribe(CHAT_ACCOUNT_SECURITY_EVENT_CHANNEL),
       ])
@@ -124,6 +136,11 @@ export async function createProductionChatGateway(
   roomEventSubscriber.on("message", (channel, payload) => {
     if (channel === CHAT_ROOM_EVENT_CHANNEL && gateway) {
       void fanOutChatRoomEvent(gateway, parseChatRoomEvent(payload))
+    }
+  })
+  blockEventSubscriber.on("message", (channel, payload) => {
+    if (channel === CHAT_BLOCK_EVENT_CHANNEL && gateway) {
+      void fanOutChatBlockEvent(gateway, parseChatBlockEvent(payload))
     }
   })
   securityEventSubscriber.on("message", (channel, payload) => {
@@ -178,6 +195,7 @@ export async function createProductionChatGateway(
     attachNativeChatGateway(
       gateway.io,
       {
+        getBlockedUserIds: (input) => listChatBlockedUserIds({ ...input, store: prisma }),
         getSnapshot: (input) => getChatRoomSnapshot({ ...input, store: prisma }),
         sendMessage: (input) => sendChatRoomMessage({ ...input, store: prisma }),
         updateReadMarker: (input) => updateChatReadMarker({ ...input, store: prisma }),
@@ -355,9 +373,14 @@ async function fanOutChatRoomEvent(gateway: ChatGateway, event: ReturnType<typeo
   }
 
   if (event.type === "room-message") {
-    gateway.io
-      .to(nativeChatRoomEventName(event.message.roomId))
-      .emit("room:message", event.message)
+    const sockets = await gateway.io
+      .in(nativeChatRoomEventName(event.message.roomId))
+      .fetchSockets()
+    await Promise.all(
+      sockets
+        .filter((socket) => !isBlockedChatMessage(socket.data.chatBlockedUserIds, event.message.senderUserId))
+        .map((socket) => socket.emit("room:message", event.message))
+    )
     return
   }
 
@@ -373,6 +396,44 @@ async function fanOutChatRoomEvent(gateway: ChatGateway, event: ReturnType<typeo
       .filter((socket) => socket.data.chat?.userId === event.targetUserId)
       .map((socket) => socket.leave(roomName))
   )
+}
+
+async function fanOutChatBlockEvent(
+  gateway: ChatGateway,
+  event: ReturnType<typeof parseChatBlockEvent>
+) {
+  if (!event) {
+    return
+  }
+
+  const sockets = await gateway.io.in(nativeChatUserEventName(event.blockerUserId)).fetchSockets()
+  await Promise.all(
+    sockets.map(async (socket) => {
+      const current = Array.isArray(socket.data.chatBlockedUserIds)
+        ? socket.data.chatBlockedUserIds.filter((value: unknown): value is string => typeof value === "string")
+        : []
+      const blockedUserIds = new Set(current)
+      if (event.action === "blocked") {
+        blockedUserIds.add(event.blockedUserId)
+      } else {
+        blockedUserIds.delete(event.blockedUserId)
+      }
+
+      socket.data.chatBlockedUserIds = [...blockedUserIds]
+      socket.emit("chat:block-update", {
+        action: event.action,
+        blockedUserId: event.blockedUserId,
+      })
+    })
+  )
+}
+
+function isBlockedChatMessage(blockedUserIds: unknown, senderUserId: string | null) {
+  if (!senderUserId) {
+    return false
+  }
+
+  return !Array.isArray(blockedUserIds) || blockedUserIds.includes(senderUserId)
 }
 
 async function start() {

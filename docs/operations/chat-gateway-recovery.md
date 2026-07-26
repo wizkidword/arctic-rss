@@ -67,6 +67,18 @@ failures. A failed renewal additionally emits `presence_refresh_failed`. Log
 aggregation must sum these per-replica counts; no message bodies, room names,
 user IDs, tokens, or Redis URLs are logged.
 
+## Ignored-user synchronization
+
+Ignore records are keyed by immutable user IDs. Room-history queries exclude
+blocked senders on the server, and each gateway socket loads the same ID set
+before it subscribes to a room. Live room broadcasts are filtered per
+recipient, so blocked content is not sent to that recipient's socket. A
+versioned block-event channel updates every connected socket for the blocker;
+reconnect always reloads the durable preference if a notification was missed.
+
+Unblocking restores future content only. Previously filtered history and live
+messages are not replayed automatically.
+
 ## Required release procedure
 
 1. Use the normal approved-release procedure: clean reviewed commit, successful

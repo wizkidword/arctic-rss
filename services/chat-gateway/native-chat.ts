@@ -1,6 +1,7 @@
 import type { Server, Socket } from "socket.io"
 
 import type { ChatGatewayIdentity } from "../../src/lib/chat/gateway-auth"
+import { listChatBlockedUserIds } from "../../src/lib/chat/blocks"
 import {
   createChatPresenceHeartbeat,
   type ChatPresenceEntry,
@@ -21,6 +22,7 @@ import {
 const ROOM_EVENT_PREFIX = "native-room:"
 
 export type NativeChatGatewayService = {
+  getBlockedUserIds: typeof listChatBlockedUserIds
   getSnapshot: typeof getChatRoomSnapshot
   sendMessage: typeof sendChatRoomMessage
   updateReadMarker: typeof updateChatReadMarker
@@ -59,6 +61,14 @@ async function attachSocketHandlers(
   const identity = socket.data.chat as ChatGatewayIdentity
   const abuse = getChatSocketAbuseControls(socket)
   const subscribedRoomIds = new Set<string>()
+  let blockedUserIdsPromise: Promise<string[]> | undefined
+  const ensureBlockedUserIds = async () => {
+    blockedUserIdsPromise ??= service.getBlockedUserIds({ userId: identity.userId })
+    const blockedUserIds = await blockedUserIdsPromise
+    socket.data.chatBlockedUserIds = blockedUserIds
+    return blockedUserIds
+  }
+  void Promise.resolve(socket.join(nativeChatUserEventName(identity.userId))).catch(() => socket.disconnect(true))
   const presenceHeartbeat = presence
     ? createChatPresenceHeartbeat({
         connectionId: socket.id,
@@ -82,6 +92,7 @@ async function attachSocketHandlers(
       service,
       presence,
       presenceHeartbeat,
+      ensureBlockedUserIds,
       subscribedRoomIds,
       payload,
       acknowledge,
@@ -161,6 +172,7 @@ async function handleSubscribe(
   service: NativeChatGatewayService,
   presence: NativeChatPresence | undefined,
   presenceHeartbeat: ReturnType<typeof createChatPresenceHeartbeat> | undefined,
+  ensureBlockedUserIds: () => Promise<string[]>,
   subscribedRoomIds: Set<string>,
   payload: unknown,
   acknowledge: Ack,
@@ -184,6 +196,7 @@ async function handleSubscribe(
         return
       }
 
+      await ensureBlockedUserIds()
       const snapshot = await service.getSnapshot({ identity, slug })
       if (abuse.isRoomLimitReached(snapshot.room.id, subscribedRoomIds)) {
         safeAck(acknowledge, { ok: false, error: "room-limit" })
@@ -251,7 +264,7 @@ async function handleMessage(
       })
 
       if (result.created) {
-        io.to(nativeChatRoomEventName(roomId)).emit("room:message", result.message)
+        await emitChatRoomMessage(io, roomId, result.message)
       }
 
       safeAck(acknowledge, { ok: true, created: result.created, message: result.message })
@@ -388,6 +401,32 @@ function isSocketInRoom(socket: Socket, roomId: string) {
 
 export function nativeChatRoomEventName(roomId: string) {
   return `${ROOM_EVENT_PREFIX}${roomId}`
+}
+
+export function nativeChatUserEventName(userId: string) {
+  return `${ROOM_EVENT_PREFIX}user:${userId}`
+}
+
+async function emitChatRoomMessage(
+  io: Server,
+  roomId: string,
+  message: Awaited<ReturnType<NativeChatGatewayService["sendMessage"]>>["message"]
+) {
+  const sockets = await io.in(nativeChatRoomEventName(roomId)).fetchSockets()
+  await Promise.all(
+    sockets
+      .filter((socket) => !isBlockedChatMessage(socket, message.senderUserId))
+      .map((socket) => socket.emit("room:message", message))
+  )
+}
+
+function isBlockedChatMessage(socket: { data: Record<string, unknown> }, senderUserId: string | null) {
+  if (!senderUserId) {
+    return false
+  }
+
+  const blockedUserIds = socket.data.chatBlockedUserIds
+  return !Array.isArray(blockedUserIds) || blockedUserIds.includes(senderUserId)
 }
 
 const NATIVE_CHAT_EVENTS = new Set([

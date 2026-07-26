@@ -50,7 +50,7 @@ export async function ignoreChatHandle({
     },
   })
 
-  return { handle: target.handle }
+  return { blockedUserId: target.userId, handle: target.handle }
 }
 
 export async function unignoreChatHandle({
@@ -76,5 +76,26 @@ export async function unignoreChatHandle({
     where: { blockedUserId: target.userId, blockerUserId: userId },
   })
 
-  return { handle: target.handle }
+  return { blockedUserId: target.userId, handle: target.handle }
+}
+
+export async function listChatBlockedUserIds({
+  store = getPrisma(),
+  userId,
+}: {
+  store?: Pick<PrismaClient, "chatBlock">
+  userId: string
+}) {
+  const findMany = store.chatBlock?.findMany
+  if (!findMany) {
+    return []
+  }
+
+  const blocks = await findMany.call(store.chatBlock, {
+    orderBy: { blockedUserId: "asc" },
+    select: { blockedUserId: true },
+    where: { blockerUserId: userId },
+  })
+
+  return blocks.map((block) => block.blockedUserId)
 }

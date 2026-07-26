@@ -16,6 +16,7 @@ const CLIENT_NAMES = [
   "command",
   "adapterPublisher",
   "adapterSubscriber",
+  "blockEvents",
   "roomEvents",
   "securityEvents",
 ] as const

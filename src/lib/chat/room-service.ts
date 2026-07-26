@@ -2,6 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
 
+import { listChatBlockedUserIds } from "./blocks"
 import { normalizeChatHandle, normalizeChatRoomSlug } from "./normalization"
 import { canPerformChatAction, type ChatRoomMemberRole } from "./permissions"
 
@@ -52,6 +53,7 @@ export type ChatRoomStore = Pick<
   PrismaClient,
   | "$transaction"
   | "article"
+  | "chatBlock"
   | "chatMessage"
   | "chatRoom"
   | "chatRoomBan"
@@ -336,6 +338,7 @@ export async function getChatRoomSnapshot({
     throw new ChatRoomServiceError("You cannot view this room.", "forbidden")
   }
 
+  const blockedUserIds = await listChatBlockedUserIds({ store, userId: identity.userId })
   const messages = await store.chatMessage.findMany({
     orderBy: { sequence: "desc" },
     select: messageSelect,
@@ -347,6 +350,14 @@ export async function getChatRoomSnapshot({
         ? { createdAt: { gte: membership.joinedAt } }
         : {}),
       ...(beforeSequence ? { sequence: { lt: beforeSequence } } : {}),
+      ...(blockedUserIds.length > 0
+        ? {
+            OR: [
+              { senderUserId: null },
+              { senderUserId: { notIn: blockedUserIds } },
+            ],
+          }
+        : {}),
     },
   })
 

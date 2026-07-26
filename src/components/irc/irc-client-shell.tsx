@@ -120,10 +120,12 @@ const localStatusMessages = [
 ]
 
 export function IrcClientShell({
+  initialBlockedUserIds = [],
   initialProfile,
   initialRoomSlug,
   rooms,
 }: {
+  initialBlockedUserIds?: string[]
   initialProfile: ChatProfile | null
   initialRoomSlug?: string
   rooms: ChatRoom[]
@@ -134,7 +136,7 @@ export function IrcClientShell({
     return <ChatProfileOnboarding onCreated={setProfile} />
   }
 
-  return <ConnectedIrcClient initialRoomSlug={initialRoomSlug} profile={profile} rooms={rooms} />
+  return <ConnectedIrcClient initialBlockedUserIds={initialBlockedUserIds} initialRoomSlug={initialRoomSlug} profile={profile} rooms={rooms} />
 }
 
 function ChatProfileOnboarding({ onCreated }: { onCreated: (profile: ChatProfile) => void }) {
@@ -214,13 +216,13 @@ function ChatProfileOnboarding({ onCreated }: { onCreated: (profile: ChatProfile
   )
 }
 
-function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }: { initialRoomSlug?: string; profile: ChatProfile; rooms: ChatRoom[] }) {
+function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: initialProfile, rooms }: { initialBlockedUserIds: string[]; initialRoomSlug?: string; profile: ChatProfile; rooms: ChatRoom[] }) {
   const [profile, setProfile] = useState(initialProfile)
   const [connectionState, setConnectionState] = useState<ConnectionState>("offline")
   const [activeTab, setActiveTab] = useState<string>("status")
   const [joinedRooms, setJoinedRooms] = useState<Record<string, ChatRoomSnapshot>>({})
   const [clearedRoomIds, setClearedRoomIds] = useState<Set<string>>(() => new Set())
-  const [ignoredHandles, setIgnoredHandles] = useState<Set<string>>(() => new Set())
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(() => new Set(initialBlockedUserIds))
   const [composerHistory, setComposerHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [notice, setNotice] = useState("Gateway is offline. You can still browse room descriptions.")
@@ -230,6 +232,7 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
   const autoConnectAttempted = useRef(false)
   const initialRoomJoinAttempted = useRef(false)
   const socketRef = useRef<Socket | null>(null)
+  const blockedUserIdsRef = useRef(blockedUserIds)
   const hideArcticBotMessages = useSyncExternalStore(
     subscribeToArcticBotVisibility,
     readArcticBotVisibility,
@@ -243,7 +246,7 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
     : activeMessages.filter(
         (message) =>
           (message.kind !== "BOT" || !hideArcticBotMessages) &&
-          (!message.senderHandle || !ignoredHandles.has(message.senderHandle))
+          (!message.senderUserId || !blockedUserIds.has(message.senderUserId))
       )
   const commandSuggestions = listChatCommandSuggestions(composer)
 
@@ -263,6 +266,19 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
     return () => {
       socketRef.current?.disconnect()
     }
+  }, [])
+
+  const applyBlockUpdate = useCallback((action: "blocked" | "unblocked", blockedUserId: string) => {
+    setBlockedUserIds((current) => {
+      const next = new Set(current)
+      if (action === "blocked") {
+        next.add(blockedUserId)
+      } else {
+        next.delete(blockedUserId)
+      }
+      blockedUserIdsRef.current = next
+      return next
+    })
   }, [])
 
   const connect = useCallback(async () => {
@@ -305,6 +321,9 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
         setNotice("Connection closed. Reconnect to request a fresh session token.")
       })
       socket.on("room:message", (message: ChatMessage) => {
+        if (message.senderUserId && blockedUserIdsRef.current.has(message.senderUserId)) {
+          return
+        }
         setJoinedRooms((current) => {
           const snapshot = current[message.roomId]
 
@@ -327,12 +346,17 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
           return next
         })
       })
+      socket.on("chat:block-update", (event: unknown) => {
+        if (isChatBlockUpdate(event)) {
+          applyBlockUpdate(event.action, event.blockedUserId)
+        }
+      })
       socket.connect()
     } catch (reason) {
       setConnectionState("offline")
       setNotice(reason instanceof Error ? reason.message : "Unable to connect to chat.")
     }
-  }, [connectionState, joinedRooms])
+  }, [applyBlockUpdate, connectionState, joinedRooms])
 
   useEffect(() => {
     if (autoConnectAttempted.current) {
@@ -672,19 +696,11 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
           const response = await fetch(`/api/chat/blocks/${encodeURIComponent(command.handle)}`, {
             method: command.type === "ignore" ? "POST" : "DELETE",
           })
-          const payload = await response.json() as { error?: string; handle?: string }
-          if (!response.ok || !payload.handle) {
+          const payload = await response.json() as { blockedUserId?: string; error?: string; handle?: string }
+          if (!response.ok || !payload.handle || !payload.blockedUserId) {
             throw new Error(payload.error || "Unable to update your ignored handles.")
           }
-          setIgnoredHandles((current) => {
-            const next = new Set(current)
-            if (command.type === "ignore") {
-              next.add(payload.handle!)
-            } else {
-              next.delete(payload.handle!)
-            }
-            return next
-          })
+          applyBlockUpdate(command.type === "ignore" ? "blocked" : "unblocked", payload.blockedUserId)
           setNotice(command.type === "ignore" ? `Ignoring ${payload.handle}.` : `Stopped ignoring ${payload.handle}.`)
         } catch (error) {
           setNotice(error instanceof Error ? error.message : "Unable to update your ignored handles.")
@@ -803,6 +819,19 @@ function ConnectedIrcClient({ initialRoomSlug, profile: initialProfile, rooms }:
   )
 }
 
+function isChatBlockUpdate(value: unknown): value is { action: "blocked" | "unblocked"; blockedUserId: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false
+  }
+
+  const event = value as { action?: unknown; blockedUserId?: unknown }
+  return (
+    (event.action === "blocked" || event.action === "unblocked") &&
+    typeof event.blockedUserId === "string" &&
+    /^[A-Za-z0-9_-]{8,128}$/.test(event.blockedUserId)
+  )
+}
+
 function IrcToolbar({ connectionState, notice, onConnect, onThemeChange, theme }: {
   connectionState: ConnectionState
   notice: string
@@ -916,7 +945,7 @@ function commandHelp(command?: string) {
   const commands: Record<string, string> = {
     ban: "/ban handle [duration] [reason] bans an active member when permitted.",
     clear: "/clear clears only the local transcript; retained history is unchanged.",
-    ignore: "/ignore handle hides that handle in this shell and stores your preference.",
+    ignore: "/ignore handle hides that account in every connected chat session and stores your preference.",
     join: "/join #room opens a public room from the directory.",
     kick: "/kick handle [reason] removes a lower-role member when permitted.",
     me: "/me action text sends a typed action message.",
@@ -926,7 +955,7 @@ function commandHelp(command?: string) {
     rooms: "/rooms [search] lists public rooms from the current directory.",
     topic: "/topic [new topic] shows or updates the current room topic when permitted.",
     unban: "/unban handle revokes an active room ban when permitted.",
-    unignore: "/unignore handle restores that handle in this shell.",
+    unignore: "/unignore handle restores future messages from that account.",
     whois: "/whois handle shows the role of an active member in the current room.",
   }
 

@@ -4,6 +4,7 @@ import { auth } from "@/auth"
 import { IrcClientShell } from "@/components/irc/irc-client-shell"
 import { ChatActivation } from "@/components/irc/chat-activation"
 import { ChatAccessError, requireChatEligibleUser } from "@/lib/chat/access"
+import { listChatBlockedUserIds } from "@/lib/chat/blocks"
 import { isChatEnabled } from "@/lib/chat/feature-flags"
 import { getChatProfileForUser } from "@/lib/chat/profiles"
 import { listChatRooms } from "@/lib/chat/room-service"
@@ -56,14 +57,16 @@ export default async function IrcPage({
 
     throw error
   }
-  const [{ room }, profile, rooms] = await Promise.all([
+  const [{ room }, blockedUserIds, profile, rooms] = await Promise.all([
     searchParams,
+    listChatBlockedUserIds({ userId: user.id }),
     getChatProfileForUser(user.id),
     listChatRooms(),
   ])
 
   return (
     <IrcClientShell
+      initialBlockedUserIds={blockedUserIds}
       initialProfile={profile}
       initialRoomSlug={typeof room === "string" ? room : undefined}
       rooms={rooms}
