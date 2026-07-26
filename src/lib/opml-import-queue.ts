@@ -21,6 +21,12 @@ export function getOpmlImportQueue() {
   return opmlImportQueue
 }
 
+export async function closeOpmlImportQueue() {
+  const queue = opmlImportQueue
+  opmlImportQueue = undefined
+  await queue?.close()
+}
+
 export async function enqueueOpmlImportJob(
   jobId: string,
   run = Date.now(),

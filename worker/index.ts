@@ -18,6 +18,7 @@ import {
 } from "../src/lib/opml-import-jobs"
 import {
   enqueueOpmlImportJob,
+  closeOpmlImportQueue,
   OPML_IMPORT_QUEUE_NAME,
   type OpmlImportQueueData,
 } from "../src/lib/opml-import-queue"
@@ -35,6 +36,7 @@ import {
 } from "../src/lib/chat/bot"
 import {
   CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
+  closeChatArticleIntegrationQueue,
   enqueueChatArticleIntegration,
   type ChatArticleIntegrationJobData,
 } from "../src/lib/chat/bot-queue"
@@ -45,7 +47,9 @@ import {
   type ChatRetentionContinuation,
 } from "../src/lib/chat/retention"
 import { processChatEventOutbox } from "../src/lib/chat/event-outbox"
+import { closeChatRoomEventPublisher } from "../src/lib/chat/room-events"
 import {
+  closeFeedRefreshQueue,
   enqueueFeedRefresh,
   FEED_REFRESH_QUEUE_NAME,
   redisConnectionOptions,
@@ -53,6 +57,7 @@ import {
 } from "../src/lib/feed-refresh-queue"
 import { refreshPodcast } from "../src/lib/podcast-refresh"
 import {
+  closePodcastRefreshQueue,
   enqueuePodcastRefresh,
   PODCAST_REFRESH_QUEUE_NAME,
   type PodcastRefreshJobData,
@@ -67,11 +72,13 @@ import { assertSecureProductionConfiguration } from "../src/lib/production-secur
 import { cleanupExpiredSecurityEvents } from "../src/lib/security-event-maintenance"
 import { processSmartDigestEmailDelivery } from "../src/lib/smart-digest-delivery"
 import {
+  closeSmartDigestEmailQueue,
   enqueueSmartDigestEmail,
   SMART_DIGEST_EMAIL_QUEUE_NAME,
   type SmartDigestEmailJobData,
 } from "../src/lib/smart-digest-email-queue"
 import {
+  closeSmartDigestQueue,
   enqueueSmartDigestRule,
   SMART_DIGEST_QUEUE_NAME,
   type SmartDigestJobData,
@@ -81,6 +88,11 @@ import {
   clearWorkerHeartbeat,
   writeWorkerHeartbeat,
 } from "../src/lib/worker-health"
+import {
+  getWorkerShutdownTimeoutMs,
+  installWorkerSignalHandlers,
+  shutdownWorkerRuntime,
+} from "./shutdown"
 
 assertSecureProductionConfiguration()
 
@@ -284,6 +296,47 @@ const podcastWorker = new Worker<PodcastRefreshJobData>(
   }
 )
 
+function trackActiveJobs(target: Worker) {
+  const activeJobIds = new Set<string>()
+
+  target.on("active", (job) => {
+    if (job.id) {
+      activeJobIds.add(job.id)
+    }
+  })
+  target.on("completed", (job) => {
+    if (job.id) {
+      activeJobIds.delete(job.id)
+    }
+  })
+  target.on("failed", (job) => {
+    if (job?.id) {
+      activeJobIds.delete(job.id)
+    }
+  })
+
+  return () => [...activeJobIds]
+}
+
+const managedWorkers = [
+  { activeJobs: trackActiveJobs(worker), name: "feed-refresh", worker },
+  { activeJobs: trackActiveJobs(podcastWorker), name: "podcast-refresh", worker: podcastWorker },
+  { activeJobs: trackActiveJobs(aiDigestWorker), name: "ai-digest", worker: aiDigestWorker },
+  { activeJobs: trackActiveJobs(smartDigestWorker), name: "smart-digest", worker: smartDigestWorker },
+  {
+    activeJobs: trackActiveJobs(smartDigestEmailWorker),
+    name: "smart-digest-email",
+    worker: smartDigestEmailWorker,
+  },
+  { activeJobs: trackActiveJobs(opmlImportWorker), name: "opml-import", worker: opmlImportWorker },
+  { activeJobs: trackActiveJobs(bulkReadWorker), name: "bulk-read", worker: bulkReadWorker },
+  {
+    activeJobs: trackActiveJobs(chatArticleIntegrationWorker),
+    name: "chat-article-integration",
+    worker: chatArticleIntegrationWorker,
+  },
+]
+
 worker.on("failed", (job, error) => {
   console.error(
     `[worker] refresh failed for ${job?.data.feedId ?? "unknown feed"}: ${error.message}`
@@ -434,6 +487,7 @@ async function enqueueDueSmartDigests() {
 }
 
 let schedulerRunning = false
+let schedulerTickPromise: Promise<void> | undefined
 let nextAuthTokenMaintenanceAt = 0
 let nextChatRetentionAt = 0
 let nextSecurityEventMaintenanceAt = 0
@@ -669,6 +723,22 @@ async function schedulerTick() {
   }
 }
 
+function runSchedulerTick() {
+  if (schedulerTickPromise) {
+    return schedulerTickPromise
+  }
+
+  schedulerTickPromise = schedulerTick()
+    .catch((error) => {
+      console.error(`[worker] scheduler tick failed: ${schedulerErrorMessage(error)}`)
+    })
+    .finally(() => {
+      schedulerTickPromise = undefined
+    })
+
+  return schedulerTickPromise
+}
+
 async function runChatRetention() {
   if (!getChatFeatureFlags().enabled) {
     return { disabled: true }
@@ -799,13 +869,13 @@ function publishPendingChatEvents() {
 }
 
 const scheduler = setInterval(() => {
-  schedulerTick().catch(() => undefined)
+  void runSchedulerTick()
 }, schedulerIntervalMs)
 const chatOutboxPublisher = setInterval(() => {
   void publishPendingChatEvents()
 }, chatEventOutboxIntervalMs)
 
-schedulerTick().catch(() => undefined)
+void runSchedulerTick()
 void publishPendingChatEvents()
 
 function recordWorkerHeartbeat() {
@@ -823,49 +893,48 @@ const memoryTelemetry = setInterval(
   WORKER_MEMORY_LOG_INTERVAL_MS
 )
 
-let shuttingDown = false
+let shutdownPromise: ReturnType<typeof shutdownWorkerRuntime> | undefined
 
-async function shutdown() {
-  if (shuttingDown) {
-    return
-  }
-
-  shuttingDown = true
-  clearInterval(scheduler)
-  clearInterval(chatOutboxPublisher)
-  try {
-    await chatOutboxPublishPromise
-    await Promise.all([
-      worker.close(),
-      chatArticleIntegrationWorker.close(),
-      podcastWorker.close(),
-      aiDigestWorker.close(),
-      smartDigestWorker.close(),
-      smartDigestEmailWorker.close(),
-      opmlImportWorker.close(),
-    ])
-  } finally {
-    clearInterval(heartbeat)
-    clearInterval(memoryTelemetry)
-    await clearWorkerHeartbeat().catch((error) => {
-      console.error(
-        `[worker] could not clear health heartbeat: ${schedulerErrorMessage(error)}`
-      )
+function shutdown() {
+  if (!shutdownPromise) {
+    shutdownPromise = shutdownWorkerRuntime({
+      closeResources: async () => {
+        await Promise.all([
+          closeFeedRefreshQueue(),
+          closePodcastRefreshQueue(),
+          closeSmartDigestQueue(),
+          closeSmartDigestEmailQueue(),
+          closeOpmlImportQueue(),
+          closeChatArticleIntegrationQueue(),
+          closeChatRoomEventPublisher(),
+        ])
+        await clearWorkerHeartbeat().catch((error) => {
+          console.error(
+            `[worker] could not clear health heartbeat: ${schedulerErrorMessage(error)}`
+          )
+        })
+      },
+      disconnectDatabase: () => prisma.$disconnect(),
+      getPendingWork: () =>
+        [schedulerTickPromise, chatOutboxPublishPromise].filter(
+          (work): work is Promise<void> => Boolean(work)
+        ),
+      stopScheduling: () => {
+        clearInterval(scheduler)
+        clearInterval(chatOutboxPublisher)
+        clearInterval(heartbeat)
+        clearInterval(memoryTelemetry)
+      },
+      timeoutMs: getWorkerShutdownTimeoutMs(),
+      workers: managedWorkers,
     })
-    await prisma.$disconnect()
   }
-  process.exit(0)
+
+  return shutdownPromise
 }
 
-process.on("SIGINT", () => {
-  shutdown().catch((error) => {
-    console.error(error)
-    process.exit(1)
-  })
-})
-process.on("SIGTERM", () => {
-  shutdown().catch((error) => {
-    console.error(error)
-    process.exit(1)
-  })
+installWorkerSignalHandlers({
+  exit: (code) => process.exit(code),
+  onError: (error) => console.error(error),
+  shutdown,
 })

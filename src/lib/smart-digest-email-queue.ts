@@ -23,6 +23,12 @@ export function getSmartDigestEmailQueue() {
   return smartDigestEmailQueue
 }
 
+export async function closeSmartDigestEmailQueue() {
+  const queue = smartDigestEmailQueue
+  smartDigestEmailQueue = undefined
+  await queue?.close()
+}
+
 /**
  * A delivery has a fixed job ID, so a scheduler and the digest worker may both
  * request it without creating parallel sends. Failed jobs remain inspectable

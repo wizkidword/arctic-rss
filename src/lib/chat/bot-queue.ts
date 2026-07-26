@@ -21,6 +21,12 @@ export function getChatArticleIntegrationQueue() {
   return chatArticleIntegrationQueue
 }
 
+export async function closeChatArticleIntegrationQueue() {
+  const queue = chatArticleIntegrationQueue
+  chatArticleIntegrationQueue = undefined
+  await queue?.close()
+}
+
 export async function enqueueChatArticleIntegration(
   articleId: string,
   options: JobsOptions = {}

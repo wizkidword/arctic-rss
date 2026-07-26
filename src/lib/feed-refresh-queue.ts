@@ -24,6 +24,12 @@ export function getFeedRefreshQueue() {
   return feedRefreshQueue
 }
 
+export async function closeFeedRefreshQueue() {
+  const queue = feedRefreshQueue
+  feedRefreshQueue = undefined
+  await queue?.close()
+}
+
 export async function enqueueFeedRefresh(
   feedId: string,
   options: JobsOptions = {}

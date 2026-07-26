@@ -21,6 +21,12 @@ export function getSmartDigestQueue() {
   return smartDigestQueue
 }
 
+export async function closeSmartDigestQueue() {
+  const queue = smartDigestQueue
+  smartDigestQueue = undefined
+  await queue?.close()
+}
+
 export async function enqueueSmartDigestRule(
   data: SmartDigestJobData,
   options: JobsOptions = {}

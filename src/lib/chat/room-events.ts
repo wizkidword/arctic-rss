@@ -64,6 +64,21 @@ export async function publishChatRoomEvent(
   )
 }
 
+export async function closeChatRoomEventPublisher() {
+  const client = publisher
+  publisher = undefined
+
+  if (!client || client.status === "end") {
+    return
+  }
+
+  try {
+    await client.quit()
+  } catch {
+    client.disconnect()
+  }
+}
+
 export function parseChatRoomEvent(value: string): ChatRoomEvent | null {
   try {
     const event = JSON.parse(value) as unknown

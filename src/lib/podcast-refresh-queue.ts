@@ -23,6 +23,12 @@ export function getPodcastRefreshQueue() {
   return podcastRefreshQueue
 }
 
+export async function closePodcastRefreshQueue() {
+  const queue = podcastRefreshQueue
+  podcastRefreshQueue = undefined
+  await queue?.close()
+}
+
 export async function enqueuePodcastRefresh(
   podcastId: string,
   options: JobsOptions = {}
