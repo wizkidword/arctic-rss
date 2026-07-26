@@ -2,8 +2,13 @@ export type ChatGatewayLogEvent =
   | "connection_accepted"
   | "connection_rejected"
   | "connection_closed"
+  | "redis_degraded"
+  | "redis_ready"
+  | "redis_recovery_exhausted"
+  | "security_disconnect"
   | "startup"
   | "startup_failed"
+  | "stale_authorization_rejected"
   | "shutdown"
 
 export type ChatGatewayLogger = {

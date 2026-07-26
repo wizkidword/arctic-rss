@@ -306,6 +306,7 @@ describe("revokeUserSessionsAction", () => {
       },
       user: {
         update: vi.fn().mockResolvedValue({
+          authVersion: 1,
           email: "reader@example.com",
           id: "user-1",
         }),
@@ -321,7 +322,7 @@ describe("revokeUserSessionsAction", () => {
 
     expect(transaction.user.update).toHaveBeenCalledWith({
       data: { authVersion: { increment: 1 } },
-      select: { email: true, id: true },
+      select: { authVersion: true, email: true, id: true },
       where: { id: "user-1" },
     })
     expect(transaction.adminAuditLog.create).toHaveBeenCalledWith({

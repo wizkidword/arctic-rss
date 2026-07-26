@@ -79,6 +79,7 @@ started.
    second user.
 
 See [the existing deployment and rollback runbook](../operations/deployment-rollback-runbook.md),
+[the gateway authorization and recovery runbook](../operations/chat-gateway-recovery.md),
 [the backup checklist](../operations/backup-restore-checklist.md), and
 [the CSP runbook](../operations/browser-content-security-runbook.md) for the
 existing production controls.

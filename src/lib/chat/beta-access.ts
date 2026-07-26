@@ -2,6 +2,8 @@ import type { PrismaClient } from "@/generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
 
+import { notifyAccountSecurityChange } from "./security-events"
+
 export type ChatBetaAccessStore = Pick<
   PrismaClient,
   "chatAuditLog" | "chatBetaAccess" | "user"
@@ -125,6 +127,10 @@ export async function revokeChatBetaAccess({
       metadata: { source: "operator-cli" },
       targetUserId: user.id,
     },
+  })
+  await notifyAccountSecurityChange({
+    reason: "chat_access_revoked",
+    userId: user.id,
   })
 
   return { status: "revoked" as const }

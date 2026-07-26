@@ -3,6 +3,7 @@
 import { refresh, revalidatePath, revalidateTag } from "next/cache"
 
 import { getPrisma } from "@/lib/db"
+import { notifyAccountSecurityChange } from "@/lib/chat/security-events"
 import { ADMIN_DASHBOARD_OVERVIEW_CACHE_TAG } from "@/lib/admin-dashboard"
 import { requireFreshAdmin } from "@/lib/authorization"
 import {
@@ -261,6 +262,7 @@ export async function revokeUserSessionsAction(
           authVersion: { increment: 1 },
         },
         select: {
+          authVersion: true,
           email: true,
           id: true,
         },
@@ -279,6 +281,12 @@ export async function revokeUserSessionsAction(
       })
 
       return user
+    })
+
+    await notifyAccountSecurityChange({
+      authVersion: target.authVersion,
+      reason: "auth_version_changed",
+      userId: target.id,
     })
 
     revalidatePath("/admin")
