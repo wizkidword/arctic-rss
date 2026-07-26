@@ -42,12 +42,15 @@ export function createRedisRecoverySupervisor({
   let reconnectCount = 0
   let watchdog: ReturnType<typeof setTimeout> | undefined
   let resubscribePromise: Promise<void> | undefined
+  let acceptsReadyEvents = false
   const connected = new Set<ClientName>()
 
   for (const name of CLIENT_NAMES) {
     const client = clients[name]
     client.on("ready", () => {
-      void markClientReady(name)
+      if (acceptsReadyEvents) {
+        void markClientReady(name)
+      }
     })
     client.on("close", () => markClientUnavailable())
     client.on("end", () => markClientUnavailable())
@@ -63,6 +66,7 @@ export function createRedisRecoverySupervisor({
     await Promise.all(CLIENT_NAMES.map((name) => clients[name].ping()))
     CLIENT_NAMES.forEach((name) => connected.add(name))
     await resubscribeClients()
+    acceptsReadyEvents = true
     updateState()
   }
 
