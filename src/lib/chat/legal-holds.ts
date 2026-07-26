@@ -2,6 +2,8 @@ import type { PrismaClient } from "@/generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
 
+import { withChatRecordLock } from "./record-lock"
+
 export const CHAT_LEGAL_HOLD_SUBJECT_TYPES = [
   "CHAT_AUDIT_LOG",
   "CHAT_MESSAGE",
@@ -15,7 +17,10 @@ export const DEFAULT_CHAT_LEGAL_HOLD_REVIEW_WINDOW_MS = 89 * 24 * 60 * 60 * 1_00
 
 export type ChatLegalHoldSubjectType = (typeof CHAT_LEGAL_HOLD_SUBJECT_TYPES)[number]
 
-export type ChatLegalHoldStore = Pick<PrismaClient, "chatAuditLog" | "chatLegalHold">
+export type ChatLegalHoldStore = Pick<
+  PrismaClient,
+  "$executeRaw" | "$transaction" | "chatAuditLog" | "chatLegalHold"
+>
 
 export type ChatLegalHoldIdentity = {
   role: "ADMIN" | "USER"
@@ -117,37 +122,39 @@ export async function createChatLegalHold({
 }) {
   assertAdmin(identity)
 
-  const activeHold = await store.chatLegalHold.findFirst({
-    select: { id: true },
-    where: {
-      releasedAt: null,
-      subjectId: input.subjectId,
-      subjectType: input.subjectType,
+  return withChatRecordLock({
+    recordId: input.subjectId,
+    scope: input.subjectType,
+    store,
+    work: async (transaction) => {
+      try {
+        const hold = await transaction.chatLegalHold.create({
+          data: {
+            authorizedByUserId: identity.userId,
+            reason: input.reason,
+            reviewAt: input.reviewAt,
+            subjectId: input.subjectId,
+            subjectType: input.subjectType,
+          },
+          select: legalHoldSelect,
+        })
+
+        await writeLegalHoldAudit(transaction, {
+          action: "CHAT_LEGAL_HOLD_CREATED",
+          actorUserId: identity.userId,
+          hold,
+        })
+
+        return hold
+      } catch (error) {
+        if (isActiveHoldConflict(error)) {
+          throw new ChatLegalHoldError("That record already has an active legal hold.", "active")
+        }
+
+        throw error
+      }
     },
   })
-
-  if (activeHold) {
-    throw new ChatLegalHoldError("That record already has an active legal hold.", "active")
-  }
-
-  const hold = await store.chatLegalHold.create({
-    data: {
-      authorizedByUserId: identity.userId,
-      reason: input.reason,
-      reviewAt: input.reviewAt,
-      subjectId: input.subjectId,
-      subjectType: input.subjectType,
-    },
-    select: legalHoldSelect,
-  })
-
-  await writeLegalHoldAudit(store, {
-    action: "CHAT_LEGAL_HOLD_CREATED",
-    actorUserId: identity.userId,
-    hold,
-  })
-
-  return hold
 }
 
 export async function listActiveChatLegalHolds({
@@ -191,27 +198,46 @@ export async function updateChatLegalHold({
     throw new ChatLegalHoldError("That legal hold was not found.", "not-found")
   }
 
-  const hold = await store.chatLegalHold.update({
-    data:
-      input.action === "release"
-        ? { releasedAt: now }
-        : {
-            reviewAt:
-              "reviewAt" in input
-                ? input.reviewAt
-                : new Date(now.getTime() + DEFAULT_CHAT_LEGAL_HOLD_REVIEW_WINDOW_MS),
-          },
-    select: legalHoldSelect,
-    where: { id: existing.id },
-  })
+  return withChatRecordLock({
+    recordId: existing.subjectId,
+    scope: existing.subjectType,
+    store,
+    work: async (transaction) => {
+      const updated = await transaction.chatLegalHold.updateMany({
+        data:
+          input.action === "release"
+            ? { releasedAt: now }
+            : {
+                reviewAt:
+                  "reviewAt" in input
+                    ? input.reviewAt
+                    : new Date(now.getTime() + DEFAULT_CHAT_LEGAL_HOLD_REVIEW_WINDOW_MS),
+              },
+        where: { id: existing.id, releasedAt: null },
+      })
 
-  await writeLegalHoldAudit(store, {
-    action: input.action === "release" ? "CHAT_LEGAL_HOLD_RELEASED" : "CHAT_LEGAL_HOLD_REVIEWED",
-    actorUserId: identity.userId,
-    hold,
-  })
+      if (!updated.count) {
+        throw new ChatLegalHoldError("That legal hold was not found.", "not-found")
+      }
 
-  return hold
+      const hold = await transaction.chatLegalHold.findUnique({
+        select: legalHoldSelect,
+        where: { id: existing.id },
+      })
+
+      if (!hold) {
+        throw new ChatLegalHoldError("That legal hold was not found.", "not-found")
+      }
+
+      await writeLegalHoldAudit(transaction, {
+        action: input.action === "release" ? "CHAT_LEGAL_HOLD_RELEASED" : "CHAT_LEGAL_HOLD_REVIEWED",
+        actorUserId: identity.userId,
+        hold,
+      })
+
+      return hold
+    },
+  })
 }
 
 const legalHoldSelect = {
@@ -274,4 +300,13 @@ async function writeLegalHoldAudit(
       },
     },
   })
+}
+
+function isActiveHoldConflict(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2002"
+  )
 }

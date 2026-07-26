@@ -1,5 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client"
 
+import { withChatRecordLock } from "./record-lock"
+
 export const CHAT_MESSAGE_RETENTION_DAYS = 90
 export const CHAT_DELETED_MESSAGE_PURGE_HOURS = 24
 export const CHAT_ORDINARY_REPORT_RETENTION_DAYS = 365
@@ -16,6 +18,8 @@ const MAX_INTERVAL_MS = 24 * 60 * 60 * 1_000
 
 export type ChatRetentionStore = Pick<
   PrismaClient,
+  | "$executeRaw"
+  | "$transaction"
   | "accountDeletionRecord"
   | "chatAuditLog"
   | "chatLegalHold"
@@ -128,19 +132,19 @@ export async function purgeExpiredChatRecords({
   const [purgedMessages, purgedReports, purgedAuditLogs, purgedDeletionRecords, purgedMemberships] = await Promise.all([
     deleteUnheldRecords({
       ids: messageIds.map((record) => record.id),
-      model: store.chatMessage,
+      model: (transaction) => transaction.chatMessage,
       store,
       subjectType: "CHAT_MESSAGE",
     }),
     deleteUnheldRecords({
       ids: reportIds.map((record) => record.id),
-      model: store.chatReport,
+      model: (transaction) => transaction.chatReport,
       store,
       subjectType: "CHAT_REPORT",
     }),
     deleteUnheldRecords({
       ids: auditIds.map((record) => record.id),
-      model: store.chatAuditLog,
+      model: (transaction) => transaction.chatAuditLog,
       store,
       subjectType: "CHAT_AUDIT_LOG",
     }),
@@ -226,33 +230,39 @@ async function deleteUnheldRecords({
   subjectType,
 }: {
   ids: string[]
-  model: {
-    deleteMany: (args: { where: { id: { in: string[] } } }) => Promise<{ count: number }>
+  model: (transaction: ChatRetentionStore) => {
+    deleteMany: (args: { where: { id: string } }) => Promise<{ count: number }>
   }
-  store: Pick<ChatRetentionStore, "chatLegalHold">
+  store: ChatRetentionStore
   subjectType: "CHAT_AUDIT_LOG" | "CHAT_MESSAGE" | "CHAT_REPORT"
 }) {
   if (!ids.length) {
     return 0
   }
 
-  const holds = await store.chatLegalHold.findMany({
-    select: { subjectId: true },
-    where: {
-      releasedAt: null,
-      subjectId: { in: ids },
-      subjectType,
-    },
-  })
-  const heldIds = new Set(holds.map((hold) => hold.subjectId))
-  const deletableIds = ids.filter((id) => !heldIds.has(id))
+  const results = await Promise.all(
+    ids.map((id) =>
+      withChatRecordLock({
+        recordId: id,
+        scope: subjectType,
+        store,
+        work: async (transaction) => {
+          const activeHold = await transaction.chatLegalHold.findFirst({
+            select: { id: true },
+            where: { releasedAt: null, subjectId: id, subjectType },
+          })
 
-  if (!deletableIds.length) {
-    return 0
-  }
+          if (activeHold) {
+            return 0
+          }
 
-  const result = await model.deleteMany({ where: { id: { in: deletableIds } } })
-  return result.count
+          return model(transaction).deleteMany({ where: { id } }).then((result) => result.count)
+        },
+      })
+    )
+  )
+
+  return results.reduce((total, count) => total + count, 0)
 }
 
 function parseBoundedInteger(

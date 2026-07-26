@@ -7,6 +7,7 @@ import {
   createChatReport,
   listChatReports,
   parseChatReportInput,
+  resolveChatReport,
   updateChatRoomModerationSettings,
 } from "./moderation"
 
@@ -74,7 +75,16 @@ function createStore() {
     chatProfile: {
       findUnique: vi.fn().mockResolvedValue({ handle: "northernlights", userId: "user-2" }),
     },
-    chatReport: { create: vi.fn().mockResolvedValue({ id: "report-1", status: "OPEN" }) },
+    chatReport: {
+      create: vi.fn().mockResolvedValue({ id: "report-1", status: "OPEN" }),
+      findUnique: vi.fn().mockResolvedValue({
+        id: "report-1",
+        messageId: "message-1234",
+        roomId: "room-1234",
+        targetUserId: "user-2",
+      }),
+      update: vi.fn().mockResolvedValue({ id: "report-1" }),
+    },
     chatRoom: {
       findUnique: vi.fn().mockResolvedValue(room()),
       update: vi.fn().mockResolvedValue(room()),
@@ -279,6 +289,65 @@ describe("chat moderation", () => {
     )
     expect(store.chatAuditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ action: "MEMBER_BANNED" }) })
+    )
+  })
+
+  it("serializes concurrent ban attempts so only one current ban is created", async () => {
+    const store = createStore()
+    vi.mocked(store.chatRoomBan.findFirst)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "ban-1" } as never)
+    const executeRaw = vi.fn().mockResolvedValue(0)
+    const transaction = vi.fn(async (work) => work({ ...store, $executeRaw: executeRaw }))
+    const transactionalStore = { ...store, $executeRaw: executeRaw, $transaction: transaction }
+
+    const results = await Promise.all([
+      banChatRoomMember({
+        durationSeconds: null,
+        identity,
+        reason: "Repeated spam after warnings.",
+        roomSlug: "ai",
+        store: transactionalStore as never,
+        targetHandle: "northernlights",
+      }),
+      banChatRoomMember({
+        durationSeconds: null,
+        identity,
+        reason: "Repeated spam after warnings.",
+        roomSlug: "ai",
+        store: transactionalStore as never,
+        targetHandle: "northernlights",
+      }),
+    ])
+
+    expect(store.chatRoomBan.create).toHaveBeenCalledTimes(1)
+    expect(results.map((result) => result.alreadyBanned).sort()).toEqual([false, true])
+    expect(transaction).toHaveBeenCalledTimes(2)
+    expect(executeRaw).toHaveBeenCalledTimes(4)
+  })
+
+  it("resolves a report and writes its audit record in one transaction", async () => {
+    const store = createStore()
+    const transaction = vi.fn(async (work) => work(store))
+    const transactionalStore = { ...store, $transaction: transaction }
+
+    await expect(
+      resolveChatReport({
+        identity: { role: "ADMIN", userId: "admin-1" },
+        input: { retentionClass: "SERIOUS", status: "ACTIONED" },
+        reportId: "report-1",
+        store: transactionalStore as never,
+      })
+    ).resolves.toMatchObject({ id: "report-1", retentionClass: "SERIOUS" })
+
+    expect(transaction).toHaveBeenCalledTimes(1)
+    expect(store.chatReport.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ retentionClass: "SERIOUS", status: "ACTIONED" }),
+      })
+    )
+    expect(store.chatAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ action: "REPORT_RESOLVED" }) })
     )
   })
 

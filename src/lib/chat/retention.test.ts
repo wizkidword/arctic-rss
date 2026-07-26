@@ -23,6 +23,7 @@ function createStore() {
     },
     chatLegalHold: {
       count: vi.fn().mockResolvedValue(1),
+      findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
     },
     chatMessage: {
@@ -91,5 +92,31 @@ describe("chat retention", () => {
         status: "LEFT",
       },
     })
+    expect(store.chatMessage.deleteMany).toHaveBeenCalledWith({ where: { id: "message-1" } })
+  })
+
+  it("rechecks a matching hold inside the advisory-lock transaction before deleting", async () => {
+    const store = createStore()
+    const findFirst = store.chatLegalHold.findFirst as unknown as {
+      mockImplementation: (
+        implementation: (args: { where: { subjectType: string } }) => Promise<{ id: string } | null>
+      ) => void
+    }
+    findFirst.mockImplementation(({ where }) =>
+      Promise.resolve(where.subjectType === "CHAT_MESSAGE" ? { id: "hold-1" } : null)
+    )
+    const executeRaw = vi.fn().mockResolvedValue(0)
+    const transaction = vi.fn(async (work) => work({ ...store, $executeRaw: executeRaw }))
+    const transactionalStore = { ...store, $executeRaw: executeRaw, $transaction: transaction }
+
+    await purgeExpiredChatRecords({ batchSize: 25, now, store: transactionalStore as never })
+
+    expect(store.chatMessage.deleteMany).not.toHaveBeenCalled()
+    expect(store.chatLegalHold.findFirst).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { releasedAt: null, subjectId: "message-1", subjectType: "CHAT_MESSAGE" },
+    })
+    expect(transaction).toHaveBeenCalled()
+    expect(executeRaw).toHaveBeenCalled()
   })
 })

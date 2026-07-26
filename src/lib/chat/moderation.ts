@@ -6,6 +6,7 @@ import { getPrisma } from "@/lib/db"
 
 import { normalizeChatHandle, normalizeChatRoomSlug } from "./normalization"
 import { canPerformChatAction, type ChatAction, type ChatRoomMemberRole } from "./permissions"
+import { withChatRecordLock } from "./record-lock"
 import type { ChatIdentity } from "./room-service"
 
 const REPORT_CATEGORIES = [
@@ -78,6 +79,8 @@ type ChatReportEvidenceTarget = { handle: string; userId: string }
 
 export type ChatModerationStore = Pick<
   PrismaClient,
+  | "$executeRaw"
+  | "$transaction"
   | "chatAuditLog"
   | "chatMessage"
   | "chatProfile"
@@ -424,34 +427,36 @@ export async function resolveChatReport({
     throw new ChatModerationError("Moderator access is required.", "forbidden")
   }
 
-  const report = await store.chatReport.findUnique({
-    select: { id: true, messageId: true, roomId: true, targetUserId: true },
-    where: { id: reportId },
-  })
+  return inTransaction(store, async (transaction) => {
+    const report = await transaction.chatReport.findUnique({
+      select: { id: true, messageId: true, roomId: true, targetUserId: true },
+      where: { id: reportId },
+    })
 
-  if (!report) {
-    throw new ChatModerationError("That report was not found.", "not-found")
-  }
+    if (!report) {
+      throw new ChatModerationError("That report was not found.", "not-found")
+    }
 
-  const closedAt = new Date()
-  await store.chatReport.update({
-    data: {
-      closedAt,
-      retentionClass: input.retentionClass,
-      status: input.status,
-    },
-    where: { id: report.id },
-  })
-  await writeAudit(store, {
-    action: "REPORT_RESOLVED",
-    actorUserId: identity.userId,
-    messageId: report.messageId,
-    metadata: { retentionClass: input.retentionClass, status: input.status },
-    roomId: report.roomId,
-    targetUserId: report.targetUserId,
-  })
+    const closedAt = new Date()
+    await transaction.chatReport.update({
+      data: {
+        closedAt,
+        retentionClass: input.retentionClass,
+        status: input.status,
+      },
+      where: { id: report.id },
+    })
+    await writeAudit(transaction, {
+      action: "REPORT_RESOLVED",
+      actorUserId: identity.userId,
+      messageId: report.messageId,
+      metadata: { retentionClass: input.retentionClass, status: input.status },
+      roomId: report.roomId,
+      targetUserId: report.targetUserId,
+    })
 
-  return { closedAt, id: report.id, retentionClass: input.retentionClass, status: input.status }
+    return { closedAt, id: report.id, retentionClass: input.retentionClass, status: input.status }
+  })
 }
 
 export async function kickChatRoomMember({
@@ -499,64 +504,76 @@ export async function banChatRoomMember({
   store?: ChatModerationStore
   targetHandle: string
 }) {
-  return inTransaction(store, async (transaction) => {
-    const context = await resolveModerationTarget({
-      action: "BAN_MEMBER",
-      identity,
-      roomSlug,
-      store: transaction,
-      targetHandle,
-    })
-    const activeBan = await transaction.chatRoomBan.findFirst({
-      select: { id: true },
-      where: {
-        roomId: context.room.id,
-        revokedAt: null,
-        targetUserId: context.target.profile.userId,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      },
-    })
+  const target = await resolveModerationTarget({
+    action: "BAN_MEMBER",
+    identity,
+    roomSlug,
+    store,
+    targetHandle,
+  })
 
-    if (!activeBan) {
-      await transaction.chatRoomBan.create({
-        data: {
-          createdByUserId: identity.userId,
-          expiresAt: durationSeconds
-            ? new Date(Date.now() + durationSeconds * 1_000)
-            : null,
-          reason,
-          roomId: context.room.id,
-          targetUserId: context.target.profile.userId,
-        },
-        select: { id: true },
+  return withChatRecordLock({
+    recordId: `${target.room.id}:${target.target.profile.userId}`,
+    scope: "CHAT_ROOM_BAN",
+    store,
+    work: async (transaction) => {
+      const context = await resolveModerationTarget({
+        action: "BAN_MEMBER",
+        identity,
+        roomSlug,
+        store: transaction,
+        targetHandle,
       })
-    }
-
-    await transaction.chatRoomMember.update({
-      data: { leftAt: new Date(), status: "LEFT" },
-      select: { userId: true },
-      where: {
-        roomId_userId: {
+      const now = new Date()
+      const activeBan = await transaction.chatRoomBan.findFirst({
+        select: { id: true },
+        where: {
           roomId: context.room.id,
-          userId: context.target.profile.userId,
+          revokedAt: null,
+          targetUserId: context.target.profile.userId,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
         },
-      },
-    })
-    await writeAudit(transaction, {
-      action: "MEMBER_BANNED",
-      actorUserId: identity.userId,
-      metadata: { durationSeconds, existing: Boolean(activeBan) },
-      reason,
-      roomId: context.room.id,
-      targetUserId: context.target.profile.userId,
-    })
+      })
 
-    return {
-      alreadyBanned: Boolean(activeBan),
-      roomId: context.room.id,
-      targetHandle: context.target.profile.handle,
-      targetUserId: context.target.profile.userId,
-    }
+      if (!activeBan) {
+        await transaction.chatRoomBan.create({
+          data: {
+            createdByUserId: identity.userId,
+            expiresAt: durationSeconds ? new Date(now.getTime() + durationSeconds * 1_000) : null,
+            reason,
+            roomId: context.room.id,
+            targetUserId: context.target.profile.userId,
+          },
+          select: { id: true },
+        })
+      }
+
+      await transaction.chatRoomMember.update({
+        data: { leftAt: now, status: "LEFT" },
+        select: { userId: true },
+        where: {
+          roomId_userId: {
+            roomId: context.room.id,
+            userId: context.target.profile.userId,
+          },
+        },
+      })
+      await writeAudit(transaction, {
+        action: "MEMBER_BANNED",
+        actorUserId: identity.userId,
+        metadata: { durationSeconds, existing: Boolean(activeBan) },
+        reason,
+        roomId: context.room.id,
+        targetUserId: context.target.profile.userId,
+      })
+
+      return {
+        alreadyBanned: Boolean(activeBan),
+        roomId: context.room.id,
+        targetHandle: context.target.profile.handle,
+        targetUserId: context.target.profile.userId,
+      }
+    },
   })
 }
 

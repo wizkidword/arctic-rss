@@ -40,6 +40,35 @@ message without removing its report evidence; evidence follows the report's
 existing retention class and any scoped legal hold. This operational control
 does not publish a new public retention promise.
 
+## Atomic-moderation deployment preflight
+
+`CHAT-MOD-002` uses a PostgreSQL transaction advisory lock for each held
+record and each current room ban. The same record lock is acquired before a
+legal hold is created or released and immediately before retention deletes the
+record. A five-second database lock timeout fails the operation closed rather
+than allowing an unbounded worker stall.
+
+Before applying the partial unique index, take the normal PostgreSQL backup
+and run this read-only query through the controlled database access path:
+
+```sql
+SELECT "subjectType", "subjectId", COUNT(*) AS active_hold_count
+FROM "ChatLegalHold"
+WHERE "releasedAt" IS NULL
+GROUP BY "subjectType", "subjectId"
+HAVING COUNT(*) > 1;
+```
+
+It must return no rows. Do not automatically delete or release a duplicate;
+reconcile it with the authorized case owner, retain the decision in the audit
+trail, and rerun the query. The migration intentionally stops rather than
+choosing a winning hold.
+
+After deployment, confirm the worker remains healthy and monitor its journald
+output for lock-timeout failures. Keep the new index on rollback: use a forward
+application repair rather than rolling the schema back while legal holds or
+moderation records exist.
+
 ## Delivery and enforcement
 
 Kick, ban, and room-suspension changes publish small internal Redis events.
