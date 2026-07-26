@@ -76,6 +76,10 @@ export function createRedisRecoverySupervisor({
     }
 
     connected.add(name)
+    if (connected.size !== CLIENT_NAMES.length) {
+      return
+    }
+
     try {
       await resubscribeClients()
     } catch {

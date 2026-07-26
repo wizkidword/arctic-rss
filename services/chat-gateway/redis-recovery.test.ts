@@ -123,6 +123,32 @@ describe("chat gateway Redis recovery", () => {
     expect(supervisor.isReady()).toBe(true)
   })
 
+  it("waits for every Redis client before resubscribing after a restart", async () => {
+    const redis = clients()
+    const resubscribe = vi.fn().mockResolvedValue(undefined)
+    const supervisor = createRedisRecoverySupervisor({
+      clients: redis,
+      gracePeriodMs: 1_000,
+      onDegradedTimeout: vi.fn(),
+      resubscribe,
+    })
+    await supervisor.start()
+    redis.command.emit("close")
+    redis.command.emit("ready")
+
+    await Promise.resolve()
+
+    expect(resubscribe).toHaveBeenCalledOnce()
+    expect(supervisor.isReady()).toBe(false)
+
+    Object.entries(redis)
+      .filter(([name]) => name !== "command")
+      .forEach(([, client]) => client.emit("ready"))
+
+    await vi.waitFor(() => expect(supervisor.isReady()).toBe(true))
+    expect(resubscribe).toHaveBeenCalledTimes(2)
+  })
+
   it("requests a controlled restart when Redis stays unavailable beyond its grace period", async () => {
     vi.useFakeTimers()
     const restart = vi.fn()
