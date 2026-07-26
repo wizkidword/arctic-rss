@@ -452,8 +452,10 @@ async function start() {
 
     process.once("SIGINT", () => void shutdown())
     process.once("SIGTERM", () => void shutdown())
-  } catch {
-    logger.warn("startup_failed")
+  } catch (error) {
+    logger.warn("startup_failed", {
+      errorClass: error instanceof Error ? error.name : "UnknownError",
+    })
     process.exitCode = 1
   }
 }

@@ -151,7 +151,9 @@ jobs:
         run: npm run test:chat:release-gates
       - name: Capture Compose status on failure
         if: failure()
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers ps
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers ps
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers logs --no-color chat-gateway
       - name: Stop Compose topology
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers down --volumes --remove-orphans
