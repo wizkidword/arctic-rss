@@ -2,15 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
-  getPrisma: vi.fn(),
+  getFreshUserState: vi.fn(),
 }))
 
 vi.mock("@/auth", () => ({
   auth: mocks.auth,
 }))
 
-vi.mock("@/lib/db", () => ({
-  getPrisma: mocks.getPrisma,
+vi.mock("@/lib/fresh-user", () => ({
+  getFreshUserState: mocks.getFreshUserState,
 }))
 
 import {
@@ -74,11 +74,7 @@ describe("fresh authorization", () => {
 
   it("rejects a stale token after sessions are revoked", async () => {
     mocks.auth.mockResolvedValue(session({ authVersion: 0 }))
-    mocks.getPrisma.mockReturnValue({
-      user: {
-        findUnique: vi.fn().mockResolvedValue(currentUser({ authVersion: 1 })),
-      },
-    })
+    mocks.getFreshUserState.mockResolvedValue(currentUser({ authVersion: 1 }))
 
     await expect(requireFreshUser()).rejects.toThrow(
       "Your session is no longer valid."
@@ -87,13 +83,7 @@ describe("fresh authorization", () => {
 
   it("rejects a token after an administrator has been demoted", async () => {
     mocks.auth.mockResolvedValue(session({ plan: "ADMIN", role: "ADMIN" }))
-    mocks.getPrisma.mockReturnValue({
-      user: {
-        findUnique: vi
-          .fn()
-          .mockResolvedValue(currentUser({ plan: "FREE", role: "USER" })),
-      },
-    })
+    mocks.getFreshUserState.mockResolvedValue(currentUser({ plan: "FREE", role: "USER" }))
 
     await expect(requireFreshAdmin()).rejects.toThrow(
       "Your session is no longer valid."
@@ -102,13 +92,7 @@ describe("fresh authorization", () => {
 
   it("rejects a suspended account even when the token otherwise matches", async () => {
     mocks.auth.mockResolvedValue(session())
-    mocks.getPrisma.mockReturnValue({
-      user: {
-        findUnique: vi
-          .fn()
-          .mockResolvedValue(currentUser({ disabledAt: new Date() })),
-      },
-    })
+    mocks.getFreshUserState.mockResolvedValue(currentUser({ disabledAt: new Date() }))
 
     await expect(requireFreshUser()).rejects.toThrow(
       "Your session is no longer valid."
@@ -117,13 +101,7 @@ describe("fresh authorization", () => {
 
   it("allows a current administrator token", async () => {
     mocks.auth.mockResolvedValue(session({ plan: "ADMIN", role: "ADMIN" }))
-    mocks.getPrisma.mockReturnValue({
-      user: {
-        findUnique: vi
-          .fn()
-          .mockResolvedValue(currentUser({ plan: "ADMIN", role: "ADMIN" })),
-      },
-    })
+    mocks.getFreshUserState.mockResolvedValue(currentUser({ plan: "ADMIN", role: "ADMIN" }))
 
     await expect(requireFreshAdmin()).resolves.toEqual(
       currentUser({ plan: "ADMIN", role: "ADMIN" })

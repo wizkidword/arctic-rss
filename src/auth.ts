@@ -4,6 +4,7 @@ import Google, { type GoogleProfile } from "next-auth/providers/google"
 import { z } from "zod"
 
 import { getPrisma } from "@/lib/db"
+import { getFreshUserState } from "@/lib/fresh-user"
 import { shouldBlockLoginForUnverifiedEmail } from "@/lib/email-verification-policy"
 import { isGoogleAuthConfigured } from "@/lib/google-auth"
 import { recordSuccessfulLoginSafely } from "@/lib/last-login"
@@ -205,15 +206,7 @@ function createAuthConfig(): NextAuthConfig {
         }
 
         if (token.id) {
-          const dbUser = await getPrisma().user.findUnique({
-            where: { id: String(token.id) },
-            select: {
-              authVersion: true,
-              disabledAt: true,
-              role: true,
-              plan: true,
-            },
-          })
+          const dbUser = await getFreshUserState(String(token.id))
 
           if (
             !dbUser ||

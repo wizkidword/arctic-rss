@@ -1,22 +1,13 @@
 import type { Session } from "next-auth"
 
 import { auth } from "@/auth"
-import { getPrisma } from "@/lib/db"
+import { getFreshUserState, type FreshUser } from "@/lib/fresh-user"
 
 export class AuthorizationError extends Error {
   constructor(message: string) {
     super(message)
     this.name = "AuthorizationError"
   }
-}
-
-type CurrentUser = {
-  authVersion: number
-  disabledAt: Date | null
-  emailVerified: Date | null
-  id: string
-  plan: "FREE" | "PRO" | "ADMIN"
-  role: "USER" | "ADMIN"
 }
 
 export async function requireAuthenticatedUser(): Promise<Session> {
@@ -31,20 +22,10 @@ export async function requireAuthenticatedUser(): Promise<Session> {
 
 export async function requireFreshUser(
   session?: Session
-): Promise<CurrentUser> {
+): Promise<FreshUser> {
   const authenticatedSession = session ?? (await requireAuthenticatedUser())
 
-  const user = await getPrisma().user.findUnique({
-    where: { id: authenticatedSession.user.id },
-    select: {
-      authVersion: true,
-      disabledAt: true,
-      emailVerified: true,
-      id: true,
-      plan: true,
-      role: true,
-    },
-  })
+  const user = await getFreshUserState(authenticatedSession.user.id)
 
   if (
     !user ||
@@ -61,7 +42,7 @@ export async function requireFreshUser(
 
 export async function requireFreshAdmin(
   session?: Session
-): Promise<CurrentUser> {
+): Promise<FreshUser> {
   const user = await requireFreshUser(session)
 
   if (user.role !== "ADMIN") {
