@@ -128,6 +128,27 @@ describe("native chat gateway events", () => {
     expect(service.getSnapshot).not.toHaveBeenCalled()
   })
 
+  it("accepts a concrete read-marker message ID and rejects the retired sequence payload", async () => {
+    const updateReadMarker = vi.fn().mockResolvedValue(undefined)
+    const service = createService({ updateReadMarker })
+    gateway = createChatGateway({ authenticateConnection: async () => testIdentity(), logger })
+    attachNativeChatGateway(gateway.io, service, async () => true)
+    const port = await gateway.start(0)
+    const client = connect(port)
+    await waitForConnect(client)
+
+    await expect(
+      client.emitWithAck("room:read", { messageId: "message-0001", roomId: "room-1" })
+    ).resolves.toEqual({ ok: true })
+    expect(updateReadMarker).toHaveBeenCalledWith(
+      expect.objectContaining({ messageId: "message-0001", roomId: "room-1" })
+    )
+
+    await expect(
+      client.emitWithAck("room:read", { roomId: "room-1", sequence: "999999" })
+    ).resolves.toEqual({ error: "request-rejected", ok: false })
+  })
+
   it("enforces room, rate, and outstanding-operation boundaries", async () => {
     let resolveFirstSnapshot: (() => void) | undefined
     const firstSnapshot = new Promise<void>((resolve) => {
@@ -183,7 +204,7 @@ describe("native chat gateway events", () => {
       ok: false,
     })
     await expect(
-      client.emitWithAck("room:read", { roomId: "room-first", sequence: "1" })
+      client.emitWithAck("room:read", { messageId: "message-first", roomId: "room-first" })
     ).resolves.toEqual({ error: "rate-limited", ok: false })
   })
 })

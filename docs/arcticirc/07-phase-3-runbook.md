@@ -18,9 +18,10 @@ After the Phase 2 authenticated handshake, the native gateway supports these int
 - `room:subscribe { slug }` returns a room snapshot and joins the socket to a server-owned room channel.
 - `room:unsubscribe { roomId }` removes that socket from the live room channel.
 - `room:message { roomId, clientMessageId, body }` persists a plain-text message, emits it only to authorized subscribers, and acknowledges whether the write was new or an idempotent retry.
-- `room:read { roomId, sequence }` advances the durable read marker only.
+- `room:read { roomId, messageId }` advances the durable read marker only after
+  the server confirms that the named visible message belongs to the room.
 
-`clientMessageId` is unique per sender. Retrying the same ID in the same room returns the original message; using it for another room is rejected. Sequence values are represented as strings over JSON so no JavaScript `BigInt` is serialized directly.
+`clientMessageId` is unique per sender. Retrying the same ID in the same room returns the original message; using it for another room is rejected. Message sequences are represented as strings over JSON so no JavaScript `BigInt` is serialized directly.
 
 ## Redis use
 

@@ -12,6 +12,7 @@
     "chat:bootstrap": "tsx scripts/bootstrap-chat-rooms.ts",
     "chat:beta": "tsx scripts/manage-chat-beta-access.ts",
     "chat:load-test": "tsx scripts/load-test-chat-gateway.ts",
+    "chat:repair-read-markers": "tsx scripts/repair-chat-read-markers.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

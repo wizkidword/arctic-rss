@@ -338,6 +338,9 @@ export async function getChatRoomSnapshot({
     where: {
       deletedAt: null,
       roomId: room.id,
+      ...(room.historyVisibility === "AFTER_JOIN" && membership
+        ? { createdAt: { gte: membership.joinedAt } }
+        : {}),
       ...(beforeSequence ? { sequence: { lt: beforeSequence } } : {}),
     },
   })
@@ -641,38 +644,78 @@ export async function getChatRoomMemberWhois({
 
 export async function updateChatReadMarker({
   identity,
+  messageId,
   roomId,
-  sequence,
   store = getPrisma(),
 }: {
   identity: ChatIdentity
+  messageId: string
   roomId: string
-  sequence: bigint
   store?: ChatRoomStore
 }) {
-  const membership = await store.chatRoomMember.findUnique({
-    select: memberSelect,
-    where: { roomId_userId: { roomId, userId: identity.userId } },
-  })
+  const [membership, room] = await Promise.all([
+    store.chatRoomMember.findUnique({
+      select: memberSelect,
+      where: { roomId_userId: { roomId, userId: identity.userId } },
+    }),
+    store.chatRoom.findUnique({
+      select: { historyVisibility: true, state: true },
+      where: { id: roomId },
+    }),
+  ])
 
   if (membership?.status !== "ACTIVE") {
     throw new ChatRoomServiceError("You cannot update this room.", "forbidden")
   }
 
+  if (!room) {
+    throw new ChatRoomServiceError("Room was not found.", "not-found")
+  }
+
+  if (
+    !canPerformChatAction("READ_MEMBER_HISTORY", {
+      chatEnabled: true,
+      emailVerified: true,
+      globalRole: identity.role,
+      roomMemberStatus: membership.status,
+      roomRole: membership.role,
+      roomState: room.state,
+    })
+  ) {
+    throw new ChatRoomServiceError("You cannot update this room.", "forbidden")
+  }
+
+  const message = await store.chatMessage.findFirst({
+    select: { sequence: true },
+    where: {
+      ...(room.historyVisibility === "AFTER_JOIN"
+        ? { createdAt: { gte: membership.joinedAt } }
+        : {}),
+      deletedAt: null,
+      id: messageId,
+      roomId,
+    },
+  })
+
+  if (!message) {
+    throw new ChatRoomServiceError("That message is not available in this room.", "invalid-request")
+  }
+
   await store.chatRoomMember.updateMany({
-    data: { lastReadMessageSequence: sequence },
+    data: { lastReadMessageSequence: message.sequence },
     where: {
       roomId,
       userId: identity.userId,
       OR: [
         { lastReadMessageSequence: null },
-        { lastReadMessageSequence: { lt: sequence } },
+        { lastReadMessageSequence: { lt: message.sequence } },
       ],
     },
   })
 }
 
 const memberSelect = {
+  joinedAt: true,
   lastReadMessageSequence: true,
   role: true,
   roomId: true,

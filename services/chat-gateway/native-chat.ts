@@ -277,9 +277,9 @@ async function handleReadMarker(
   abuse: ChatSocketAbuseControls
 ) {
   const roomId = parseRoomId(payload)
-  const sequence = parseSequence(payload)
+  const messageId = parseMessageId(payload)
 
-  if (!roomId || sequence === undefined) {
+  if (!roomId || !messageId) {
     rejectMalformedEvent(abuse, acknowledge)
     return
   }
@@ -290,7 +290,7 @@ async function handleReadMarker(
     action: "chat_read_marker",
     roomId,
     run: async () => {
-      await service.updateReadMarker({ identity, roomId, sequence })
+      await service.updateReadMarker({ identity, messageId, roomId })
       safeAck(acknowledge, { ok: true })
     },
   })
@@ -334,18 +334,23 @@ function parseChatMessagePayload(value: unknown) {
   })
 }
 
-function parseSequence(value: unknown) {
+function parseMessageId(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined
+    return null
   }
 
-  const sequence = (value as { sequence?: unknown }).sequence
+  const messageId = (value as { messageId?: unknown }).messageId
 
-  if (typeof sequence !== "string" || !/^\d+$/.test(sequence)) {
-    return undefined
+  if (
+    typeof messageId !== "string" ||
+    messageId.length < 8 ||
+    messageId.length > 128 ||
+    !/^[A-Za-z0-9_-]+$/.test(messageId)
+  ) {
+    return null
   }
 
-  return BigInt(sequence)
+  return messageId
 }
 
 function isSocketInRoom(socket: Socket, roomId: string) {

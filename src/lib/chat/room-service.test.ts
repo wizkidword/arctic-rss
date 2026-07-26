@@ -35,6 +35,7 @@ function room() {
 
 function activeMembership() {
   return {
+    joinedAt: new Date("2026-07-14T11:00:00.000Z"),
     lastReadMessageSequence: null,
     role: "MEMBER" as const,
     roomId: "room-1",
@@ -325,9 +326,10 @@ describe("chat room service", () => {
 
   it("only advances a member read marker", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 })
+    const findFirst = vi.fn().mockResolvedValue({ sequence: BigInt(12) })
     const store = {
-      chatMessage: {},
-      chatRoom: {},
+      chatMessage: { findFirst },
+      chatRoom: { findUnique: vi.fn().mockResolvedValue({ historyVisibility: "MEMBERS" }) },
       chatRoomBan: {},
       chatRoomMember: {
         findUnique: vi.fn().mockResolvedValue(activeMembership()),
@@ -337,8 +339,8 @@ describe("chat room service", () => {
 
     await updateChatReadMarker({
       identity,
+      messageId: "message-0001",
       roomId: "room-1",
-      sequence: BigInt(12),
       store,
     })
 
@@ -352,5 +354,92 @@ describe("chat room service", () => {
         }),
       })
     )
+    expect(findFirst).toHaveBeenCalledWith({
+      select: { sequence: true },
+      where: {
+        deletedAt: null,
+        id: "message-0001",
+        roomId: "room-1",
+      },
+    })
+  })
+
+  it("does not expose pre-join history from AFTER_JOIN rooms", async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    const store = {
+      chatMessage: { findMany },
+      chatRoom: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...room(),
+          historyVisibility: "AFTER_JOIN" as const,
+        }),
+      },
+      chatRoomBan: {},
+      chatRoomMember: { findUnique: vi.fn().mockResolvedValue(activeMembership()) },
+    } as unknown as ChatRoomStore
+
+    await getChatRoomSnapshot({ identity, slug: "ai", store })
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: { gte: new Date("2026-07-14T11:00:00.000Z") },
+        }),
+      })
+    )
+  })
+
+  it("rejects an unreadable or cross-room message without moving the marker", async () => {
+    const updateMany = vi.fn()
+    const store = {
+      chatMessage: { findFirst: vi.fn().mockResolvedValue(null) },
+      chatRoom: { findUnique: vi.fn().mockResolvedValue({ historyVisibility: "MEMBERS" }) },
+      chatRoomBan: {},
+      chatRoomMember: {
+        findUnique: vi.fn().mockResolvedValue(activeMembership()),
+        updateMany,
+      },
+    } as unknown as ChatRoomStore
+
+    await expect(
+      updateChatReadMarker({
+        identity,
+        messageId: "message-from-another-room",
+        roomId: "room-1",
+        store,
+      })
+    ).rejects.toMatchObject({ code: "invalid-request" } satisfies Partial<ChatRoomServiceError>)
+    expect(updateMany).not.toHaveBeenCalled()
+  })
+
+  it("does not allow an AFTER_JOIN marker to point at pre-join history", async () => {
+    const findFirst = vi.fn().mockResolvedValue(null)
+    const store = {
+      chatMessage: { findFirst },
+      chatRoom: { findUnique: vi.fn().mockResolvedValue({ historyVisibility: "AFTER_JOIN" }) },
+      chatRoomBan: {},
+      chatRoomMember: {
+        findUnique: vi.fn().mockResolvedValue(activeMembership()),
+        updateMany: vi.fn(),
+      },
+    } as unknown as ChatRoomStore
+
+    await expect(
+      updateChatReadMarker({
+        identity,
+        messageId: "message-before-join",
+        roomId: "room-1",
+        store,
+      })
+    ).rejects.toMatchObject({ code: "invalid-request" } satisfies Partial<ChatRoomServiceError>)
+    expect(findFirst).toHaveBeenCalledWith({
+      select: { sequence: true },
+      where: {
+        createdAt: { gte: new Date("2026-07-14T11:00:00.000Z") },
+        deletedAt: null,
+        id: "message-before-join",
+        roomId: "room-1",
+      },
+    })
   })
 })
