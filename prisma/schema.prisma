@@ -1448,8 +1448,8 @@ model ChatEventOutbox {
   deadLetteredAt DateTime?
   lastError      String?
 
-  @@index([deliveredAt, deadLetteredAt, availableAt, leaseExpiresAt, createdAt])
-  @@index([aggregateType, aggregateId, id])
+  @@index([deliveredAt, deadLetteredAt, availableAt, leaseExpiresAt, createdAt], map: "ChatEventOutbox_delivery_idx")
+  @@index([aggregateType, aggregateId, id], map: "ChatEventOutbox_aggregate_idx")
 }
 
 // Holds are scoped to a single retained record. They carry the authorized
