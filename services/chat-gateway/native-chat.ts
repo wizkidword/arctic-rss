@@ -2,6 +2,11 @@ import type { Server, Socket } from "socket.io"
 
 import type { ChatGatewayIdentity } from "../../src/lib/chat/gateway-auth"
 import {
+  createChatPresenceHeartbeat,
+  type ChatPresenceEntry,
+  type ChatPresenceTelemetry,
+} from "../../src/lib/chat/presence"
+import {
   getChatSocketAbuseControls,
   safeAck,
   type ChatSocketAbuseControls,
@@ -27,16 +32,10 @@ export type NativeChatRateLimiter = (
 ) => Promise<boolean>
 
 export type NativeChatPresence = {
-  clear: (input: {
-    connectionId: string
-    roomId: string
-    userId: string
-  }) => Promise<void>
-  mark: (input: {
-    connectionId: string
-    roomId: string
-    userId: string
-  }) => Promise<void>
+  clear: (input: ChatPresenceEntry) => Promise<void>
+  mark: (input: ChatPresenceEntry) => Promise<void>
+  refresh: (entries: readonly ChatPresenceEntry[]) => Promise<void>
+  telemetry?: ChatPresenceTelemetry
 }
 
 export function attachNativeChatGateway(
@@ -60,6 +59,15 @@ async function attachSocketHandlers(
   const identity = socket.data.chat as ChatGatewayIdentity
   const abuse = getChatSocketAbuseControls(socket)
   const subscribedRoomIds = new Set<string>()
+  const presenceHeartbeat = presence
+    ? createChatPresenceHeartbeat({
+        connectionId: socket.id,
+        getRoomIds: () => subscribedRoomIds,
+        onRefreshFailure: () => presence.telemetry?.recordRefreshFailure(),
+        refresh: (entries) => presence.refresh(entries),
+        userId: identity.userId,
+      })
+    : undefined
 
   socket.onAny((eventName) => {
     if (!NATIVE_CHAT_EVENTS.has(eventName)) {
@@ -73,6 +81,7 @@ async function attachSocketHandlers(
       identity,
       service,
       presence,
+      presenceHeartbeat,
       subscribedRoomIds,
       payload,
       acknowledge,
@@ -94,7 +103,14 @@ async function attachSocketHandlers(
       roomId,
       run: async () => {
         await socket.leave(nativeChatRoomEventName(roomId))
-        subscribedRoomIds.delete(roomId)
+        const wasSubscribed = subscribedRoomIds.delete(roomId)
+        if (wasSubscribed) {
+          presence?.telemetry?.recordSubscriptionRemoved()
+          presence?.telemetry?.recordCleanup(1)
+          if (subscribedRoomIds.size === 0) {
+            presenceHeartbeat?.stop()
+          }
+        }
         await presence?.clear({
           connectionId: socket.id,
           roomId,
@@ -120,8 +136,15 @@ async function attachSocketHandlers(
     void handleReadMarker(identity, service, payload, acknowledge, abuse)
   })
   socket.on("disconnect", () => {
+    presenceHeartbeat?.stop()
+    const roomIds = [...subscribedRoomIds]
+    subscribedRoomIds.clear()
+    if (roomIds.length > 0) {
+      presence?.telemetry?.recordSubscriptionRemoved(roomIds.length)
+      presence?.telemetry?.recordCleanup(roomIds.length)
+    }
     void Promise.all(
-      [...subscribedRoomIds].map((roomId) =>
+      roomIds.map((roomId) =>
         presence?.clear({
           connectionId: socket.id,
           roomId,
@@ -137,6 +160,7 @@ async function handleSubscribe(
   identity: ChatGatewayIdentity,
   service: NativeChatGatewayService,
   presence: NativeChatPresence | undefined,
+  presenceHeartbeat: ReturnType<typeof createChatPresenceHeartbeat> | undefined,
   subscribedRoomIds: Set<string>,
   payload: unknown,
   acknowledge: Ack,
@@ -172,7 +196,12 @@ async function handleSubscribe(
         userId: identity.userId,
       })
       await socket.join(nativeChatRoomEventName(snapshot.room.id))
+      const wasSubscribed = subscribedRoomIds.has(snapshot.room.id)
       subscribedRoomIds.add(snapshot.room.id)
+      if (!wasSubscribed) {
+        presence?.telemetry?.recordSubscriptionAdded()
+        presenceHeartbeat?.start()
+      }
       safeAck(acknowledge, { ok: true, snapshot })
     },
   })

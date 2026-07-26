@@ -5,6 +5,8 @@ export type ChatGatewayLogEvent =
   | "malformed_event"
   | "malformed_event_disconnect"
   | "operation_limit_rejected"
+  | "presence_metrics"
+  | "presence_refresh_failed"
   | "redis_degraded"
   | "redis_ready"
   | "redis_recovery_exhausted"

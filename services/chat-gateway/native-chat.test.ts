@@ -5,6 +5,7 @@ import type { ChatGateway } from "./gateway"
 import { createChatGateway } from "./gateway"
 import { DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS } from "./abuse"
 import { attachNativeChatGateway, type NativeChatGatewayService } from "./native-chat"
+import { createChatPresenceTelemetry } from "../../src/lib/chat/presence"
 
 const logger = { info: vi.fn(), warn: vi.fn() }
 
@@ -126,6 +127,53 @@ describe("native chat gateway events", () => {
       ok: false,
     })
     expect(service.getSnapshot).not.toHaveBeenCalled()
+  })
+
+  it("marks subscriptions, removes them on unsubscribe, and clears them on disconnect", async () => {
+    const clear = vi.fn().mockResolvedValue(undefined)
+    const mark = vi.fn().mockResolvedValue(undefined)
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    const telemetry = createChatPresenceTelemetry()
+    const service = createService()
+    gateway = createChatGateway({ authenticateConnection: async () => testIdentity(), logger })
+    attachNativeChatGateway(gateway.io, service, async () => true, {
+      clear,
+      mark,
+      refresh,
+      telemetry,
+    })
+    const port = await gateway.start(0)
+    const client = connect(port)
+    await waitForConnect(client)
+
+    await expect(client.emitWithAck("room:subscribe", { slug: "ai" })).resolves.toMatchObject({
+      ok: true,
+    })
+    expect(mark).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: "room-ai", userId: "user-1" })
+    )
+    expect(telemetry.snapshot()).toMatchObject({ activePresenceEntries: 1, activeSubscriptions: 1 })
+
+    await expect(client.emitWithAck("room:unsubscribe", { roomId: "room-ai" })).resolves.toEqual({
+      ok: true,
+    })
+    expect(clear).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: "room-ai", userId: "user-1" })
+    )
+    expect(telemetry.snapshot()).toMatchObject({
+      activePresenceEntries: 0,
+      activeSubscriptions: 0,
+      stalePresenceCleanup: 1,
+    })
+
+    await client.emitWithAck("room:subscribe", { slug: "ai" })
+    client.disconnect()
+    await vi.waitFor(() => expect(clear).toHaveBeenCalledTimes(2))
+    expect(telemetry.snapshot()).toMatchObject({
+      activePresenceEntries: 0,
+      activeSubscriptions: 0,
+      stalePresenceCleanup: 2,
+    })
   })
 
   it("accepts a concrete read-marker message ID and rejects the retired sequence payload", async () => {

@@ -51,6 +51,22 @@ or failing callback cannot crash the gateway. Structured logs record counts
 only, under `connection_rejected`, `malformed_event`,
 `malformed_event_disconnect`, and `operation_limit_rejected`.
 
+## Presence heartbeats
+
+Each subscribed socket refreshes all of its current room-presence keys in one
+batch every 37.5 seconds. The Redis key TTL remains 75 seconds, so a connected
+user stays present through several TTL periods without creating a timer for
+each room. Unsubscribe and disconnect stop or shrink the single heartbeat and
+remove the relevant keys; if cleanup cannot reach Redis, the TTL is the
+bounded fallback. After a gateway or Redis restart, reconnected sockets mark
+their rooms and existing active sockets renew them on the next heartbeat.
+
+The `presence_metrics` structured log has local gateway counts for active
+subscriptions, active presence entries, stale-cleanup requests, and refresh
+failures. A failed renewal additionally emits `presence_refresh_failed`. Log
+aggregation must sum these per-replica counts; no message bodies, room names,
+user IDs, tokens, or Redis URLs are logged.
+
 ## Required release procedure
 
 1. Use the normal approved-release procedure: clean reviewed commit, successful
@@ -101,6 +117,9 @@ Then use two controlled beta accounts through the canonical WSS route:
    configured socket cap rejects the next connection, then close a tab and
    confirm a new connection succeeds. Run any connection-flood or oversized
    payload exercise only against an approved non-production gateway.
+7. Keep a controlled socket subscribed for more than 75 seconds and confirm it
+   remains present. Then unsubscribe and disconnect it separately; verify the
+   `presence_metrics` count returns to baseline and no further refresh occurs.
 
 Relevant structured log event names are `redis_degraded`, `redis_ready`,
 `redis_recovery_exhausted`, `security_disconnect`,

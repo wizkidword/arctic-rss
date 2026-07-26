@@ -21,7 +21,9 @@ import {
 import { getChatConnectionTokenSettings } from "../../src/lib/chat/session-token"
 import {
   clearChatPresence,
+  createChatPresenceTelemetry,
   markChatPresence,
+  refreshChatPresence,
 } from "../../src/lib/chat/presence"
 import { getPrisma } from "../../src/lib/db"
 import { redisConnectionOptions } from "../../src/lib/feed-refresh-queue"
@@ -50,6 +52,18 @@ export async function createProductionChatGateway(
   { exit = (code: number) => process.exit(code) }: { exit?: (code: number) => never | void } = {}
 ): Promise<{ close: () => Promise<void>; gateway: ChatGateway; port: number }> {
   const logger = createChatGatewayLogger()
+  const presenceTelemetry = createChatPresenceTelemetry((event, metrics) => {
+    const fields = Object.fromEntries(
+      Object.entries(metrics).map(([key, value]) => [key, String(value)])
+    )
+
+    if (event === "refresh-failure") {
+      logger.warn("presence_refresh_failed", fields)
+      return
+    }
+
+    logger.info("presence_metrics", fields)
+  })
 
   if (!isChatEnabled(environment)) {
     throw new Error("Arctic IRC is disabled.")
@@ -179,6 +193,8 @@ export async function createProductionChatGateway(
       {
         clear: (input) => clearChatPresence(input, redis),
         mark: (input) => markChatPresence(input, redis),
+        refresh: (entries) => refreshChatPresence(entries, redis),
+        telemetry: presenceTelemetry,
       }
     )
 
