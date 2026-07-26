@@ -649,7 +649,10 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
             `/api/chat/rooms/${encodeURIComponent(activeRoom.slug)}/moderation/${command.type}`,
             {
               body: JSON.stringify(body),
-              headers: { "content-type": "application/json" },
+              headers: {
+                "content-type": "application/json",
+                "Idempotency-Key": crypto.randomUUID(),
+              },
               method: "POST",
             }
           )

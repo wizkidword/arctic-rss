@@ -23,7 +23,10 @@ export function AdminChatReportResolution({ reportId }: { reportId: string }) {
     try {
       const response = await fetch(`/api/chat/reports/${encodeURIComponent(reportId)}`, {
         body: JSON.stringify({ retentionClass, status }),
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
         method: "PATCH",
       })
       const payload = (await response.json()) as { error?: string }

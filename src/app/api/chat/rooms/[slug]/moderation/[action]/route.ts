@@ -9,6 +9,7 @@ import {
   unbanChatRoomMember,
   updateChatRoomModerationSettings,
 } from "@/lib/chat/moderation"
+import { createChatModerationIdempotency, parseChatModerationIdempotencyKey } from "@/lib/chat/moderation-idempotency"
 import {
   publishChatRoomClosed,
   publishChatRoomMembershipRemoved,
@@ -39,11 +40,18 @@ export async function POST(
     }
 
     const identity = { role: user.role, userId: user.id } as const
+    const idempotency = createChatModerationIdempotency({
+      action: `room:${action}`,
+      actorUserId: user.id,
+      key: parseChatModerationIdempotencyKey(request.headers.get("Idempotency-Key")),
+      request: { body, roomSlug: slug },
+    })
 
     if (action === "kick") {
       const input = parseChatModerationTargetInput(body)
       const result = await kickChatRoomMember({
         identity,
+        idempotency,
         reason: input.reason,
         roomSlug: slug,
         targetHandle: input.targetHandle,
@@ -57,6 +65,7 @@ export async function POST(
       const result = await banChatRoomMember({
         durationSeconds: input.durationSeconds,
         identity,
+        idempotency,
         reason: input.reason,
         roomSlug: slug,
         targetHandle: input.targetHandle,
@@ -68,7 +77,7 @@ export async function POST(
     if (action === "unban") {
       const input = parseChatModerationUnbanInput(body)
       return chatNoStoreResponse(
-        await unbanChatRoomMember({ identity, roomSlug: slug, targetHandle: input.targetHandle })
+        await unbanChatRoomMember({ idempotency, identity, roomSlug: slug, targetHandle: input.targetHandle })
       )
     }
 
@@ -81,6 +90,7 @@ export async function POST(
         await muteChatRoomMember({
           durationSeconds: input.durationSeconds,
           identity,
+          idempotency,
           reason: input.reason,
           roomSlug: slug,
           targetHandle: input.targetHandle,
@@ -116,8 +126,16 @@ export async function PATCH(
       return chatNoStoreResponse({ error: getRateLimitErrorMessage() }, 429)
     }
 
+    const idempotency = createChatModerationIdempotency({
+      action: `room:${action}`,
+      actorUserId: user.id,
+      key: parseChatModerationIdempotencyKey(request.headers.get("Idempotency-Key")),
+      request: { body, roomSlug: slug },
+    })
+
     const updated = await updateChatRoomModerationSettings({
       identity: { role: user.role, userId: user.id },
+      idempotency,
       roomSlug: slug,
       settings: parseChatRoomModerationSettingsInput(body),
     })

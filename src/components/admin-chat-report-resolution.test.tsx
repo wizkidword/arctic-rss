@@ -30,7 +30,10 @@ describe("AdminChatReportResolution", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/api/chat/reports/report-1234", {
       body: JSON.stringify({ retentionClass: "SERIOUS", status: "ACTIONED" }),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": expect.any(String),
+      },
       method: "PATCH",
     })
     expect(refresh).toHaveBeenCalledOnce()

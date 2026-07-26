@@ -1415,6 +1415,21 @@ model ChatAuditLog {
   @@index([targetUserId, createdAt])
 }
 
+// Durable receipts make moderator retries safe. The result is intentionally a
+// compact API response only; audit records remain the authoritative history.
+model ChatModerationAction {
+  id             String   @id @default(cuid())
+  actorUserId    String
+  idempotencyKey String
+  action         String
+  requestHash    String
+  result         Json
+  createdAt      DateTime @default(now())
+
+  @@unique([actorUserId, idempotencyKey])
+  @@index([createdAt])
+}
+
 // Holds are scoped to a single retained record. They carry the authorized
 // decision and review date without copying the protected record's contents.
 model ChatLegalHold {

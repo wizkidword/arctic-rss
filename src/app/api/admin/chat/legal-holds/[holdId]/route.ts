@@ -3,6 +3,7 @@ import {
   parseChatLegalHoldUpdateInput,
   updateChatLegalHold,
 } from "@/lib/chat/legal-holds"
+import { createChatModerationIdempotency, parseChatModerationIdempotencyKey } from "@/lib/chat/moderation-idempotency"
 
 import { assertSameOrigin, legalHoldErrorResponse, noStore } from "../route"
 
@@ -28,6 +29,12 @@ export async function PATCH(
       hold: await updateChatLegalHold({
         holdId,
         identity: { role: admin.role, userId: admin.id },
+        idempotency: createChatModerationIdempotency({
+          action: "legal-hold:update",
+          actorUserId: admin.id,
+          key: parseChatModerationIdempotencyKey(request.headers.get("Idempotency-Key")),
+          request: { body, holdId },
+        }),
         input: parseChatLegalHoldUpdateInput(body),
       }),
     })

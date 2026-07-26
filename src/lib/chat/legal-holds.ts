@@ -2,6 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
 
+import { type ChatModerationIdempotency, withChatModerationIdempotency } from "./moderation-idempotency"
 import { withChatRecordLock } from "./record-lock"
 
 export const CHAT_LEGAL_HOLD_SUBJECT_TYPES = [
@@ -19,7 +20,7 @@ export type ChatLegalHoldSubjectType = (typeof CHAT_LEGAL_HOLD_SUBJECT_TYPES)[nu
 
 export type ChatLegalHoldStore = Pick<
   PrismaClient,
-  "$executeRaw" | "$transaction" | "chatAuditLog" | "chatLegalHold"
+  "$executeRaw" | "$transaction" | "chatAuditLog" | "chatLegalHold" | "chatModerationAction"
 >
 
 export type ChatLegalHoldIdentity = {
@@ -113,20 +114,25 @@ export function parseChatLegalHoldUpdateInput(value: unknown, now = new Date()) 
 
 export async function createChatLegalHold({
   identity,
+  idempotency,
   input,
   store = getPrisma(),
 }: {
   identity: ChatLegalHoldIdentity
+  idempotency?: ChatModerationIdempotency
   input: CreateChatLegalHoldInput
   store?: ChatLegalHoldStore
 }) {
   assertAdmin(identity)
 
-  return withChatRecordLock({
-    recordId: input.subjectId,
-    scope: input.subjectType,
+  return withChatModerationIdempotency({
+    idempotency,
     store,
-    work: async (transaction) => {
+    work: (transaction) => withChatRecordLock({
+      recordId: input.subjectId,
+      scope: input.subjectType,
+      store: transaction,
+      work: async (transaction) => {
       try {
         const hold = await transaction.chatLegalHold.create({
           data: {
@@ -153,7 +159,8 @@ export async function createChatLegalHold({
 
         throw error
       }
-    },
+      },
+    }),
   })
 }
 
@@ -178,31 +185,38 @@ export async function listActiveChatLegalHolds({
 export async function updateChatLegalHold({
   holdId,
   identity,
+  idempotency,
   input,
   now = new Date(),
   store = getPrisma(),
 }: {
   holdId: string
   identity: ChatLegalHoldIdentity
+  idempotency?: ChatModerationIdempotency
   input: ReturnType<typeof parseChatLegalHoldUpdateInput>
   now?: Date
   store?: ChatLegalHoldStore
 }) {
   assertAdmin(identity)
-  const existing = await store.chatLegalHold.findUnique({
-    select: legalHoldSelect,
-    where: { id: holdId },
-  })
 
-  if (!existing || existing.releasedAt) {
-    throw new ChatLegalHoldError("That legal hold was not found.", "not-found")
-  }
-
-  return withChatRecordLock({
-    recordId: existing.subjectId,
-    scope: existing.subjectType,
+  return withChatModerationIdempotency({
+    idempotency,
     store,
     work: async (transaction) => {
+      const existing = await transaction.chatLegalHold.findUnique({
+        select: legalHoldSelect,
+        where: { id: holdId },
+      })
+
+      if (!existing || existing.releasedAt) {
+        throw new ChatLegalHoldError("That legal hold was not found.", "not-found")
+      }
+
+      return withChatRecordLock({
+        recordId: existing.subjectId,
+        scope: existing.subjectType,
+        store: transaction,
+        work: async (transaction) => {
       const updated = await transaction.chatLegalHold.updateMany({
         data:
           input.action === "release"
@@ -236,6 +250,8 @@ export async function updateChatLegalHold({
       })
 
       return hold
+        },
+      })
     },
   })
 }

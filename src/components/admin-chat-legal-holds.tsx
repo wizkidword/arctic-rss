@@ -66,7 +66,10 @@ export function AdminChatLegalHolds({ holds }: AdminChatLegalHoldsProps) {
     try {
       const response = await fetch(url, {
         body: JSON.stringify(body),
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
         method,
       })
       const payload = (await response.json()) as { error?: string }

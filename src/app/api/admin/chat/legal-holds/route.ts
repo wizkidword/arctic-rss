@@ -6,6 +6,7 @@ import {
   listActiveChatLegalHolds,
   parseCreateChatLegalHoldInput,
 } from "@/lib/chat/legal-holds"
+import { createChatModerationIdempotency, ChatModerationIdempotencyError, parseChatModerationIdempotencyKey } from "@/lib/chat/moderation-idempotency"
 
 export const dynamic = "force-dynamic"
 
@@ -28,6 +29,12 @@ export async function POST(request: Request) {
     const [admin, body] = await Promise.all([requireFreshAdmin(), request.json()])
     const hold = await createChatLegalHold({
       identity: { role: admin.role, userId: admin.id },
+      idempotency: createChatModerationIdempotency({
+        action: "legal-hold:create",
+        actorUserId: admin.id,
+        key: parseChatModerationIdempotencyKey(request.headers.get("Idempotency-Key")),
+        request: body,
+      }),
       input: parseCreateChatLegalHoldInput(body),
     })
 
@@ -60,6 +67,10 @@ export function legalHoldErrorResponse(error: unknown) {
       { error: error.message },
       error.code === "not-found" ? 404 : error.code === "invalid-request" ? 400 : 403
     )
+  }
+
+  if (error instanceof ChatModerationIdempotencyError) {
+    return noStore({ error: error.message }, error.code === "conflict" ? 409 : 400)
   }
 
   if (error instanceof SyntaxError) {

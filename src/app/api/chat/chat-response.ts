@@ -4,6 +4,7 @@ import { ChatBlockError } from "@/lib/chat/blocks"
 import { ChatBotError } from "@/lib/chat/bot"
 import { ChatNormalizationError } from "@/lib/chat/normalization"
 import { ChatModerationError } from "@/lib/chat/moderation"
+import { ChatModerationIdempotencyError } from "@/lib/chat/moderation-idempotency"
 import { ChatRoomServiceError } from "@/lib/chat/room-service"
 
 export function chatNoStoreResponse(body: unknown, status = 200) {
@@ -47,6 +48,10 @@ export function chatRouteErrorResponse(error: unknown) {
           : 403
 
     return chatNoStoreResponse({ error: error.message }, status)
+  }
+
+  if (error instanceof ChatModerationIdempotencyError) {
+    return chatNoStoreResponse({ error: error.message }, error.code === "conflict" ? 409 : 400)
   }
 
   if (error instanceof ChatBlockError) {

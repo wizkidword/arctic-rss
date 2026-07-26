@@ -6,6 +6,7 @@ import { getPrisma } from "@/lib/db"
 
 import { normalizeChatHandle, normalizeChatRoomSlug } from "./normalization"
 import { canPerformChatAction, type ChatAction, type ChatRoomMemberRole } from "./permissions"
+import { type ChatModerationIdempotency, withChatModerationIdempotency } from "./moderation-idempotency"
 import { withChatRecordLock } from "./record-lock"
 import type { ChatIdentity } from "./room-service"
 
@@ -82,6 +83,7 @@ export type ChatModerationStore = Pick<
   | "$executeRaw"
   | "$transaction"
   | "chatAuditLog"
+  | "chatModerationAction"
   | "chatMessage"
   | "chatProfile"
   | "chatReport"
@@ -414,11 +416,13 @@ export async function listChatReports({
 
 export async function resolveChatReport({
   identity,
+  idempotency,
   input,
   reportId,
   store = getPrisma(),
 }: {
   identity: ChatIdentity
+  idempotency?: ChatModerationIdempotency
   input: ChatReportResolutionInput
   reportId: string
   store?: ChatModerationStore
@@ -427,7 +431,10 @@ export async function resolveChatReport({
     throw new ChatModerationError("Moderator access is required.", "forbidden")
   }
 
-  return inTransaction(store, async (transaction) => {
+  return inModerationTransaction({
+    idempotency,
+    store,
+    work: async (transaction) => {
     const report = await transaction.chatReport.findUnique({
       select: { id: true, messageId: true, roomId: true, targetUserId: true },
       where: { id: reportId },
@@ -455,18 +462,21 @@ export async function resolveChatReport({
       targetUserId: report.targetUserId,
     })
 
-    return { closedAt, id: report.id, retentionClass: input.retentionClass, status: input.status }
+      return { closedAt, id: report.id, retentionClass: input.retentionClass, status: input.status }
+    },
   })
 }
 
 export async function kickChatRoomMember({
   identity,
+  idempotency,
   reason,
   roomSlug,
   store = getPrisma(),
   targetHandle,
 }: {
   identity: ChatIdentity
+  idempotency?: ChatModerationIdempotency
   reason: string
   roomSlug: string
   store?: ChatModerationStore
@@ -476,6 +486,7 @@ export async function kickChatRoomMember({
     action: "KICK_MEMBER",
     auditAction: "MEMBER_KICKED",
     identity,
+    idempotency,
     reason,
     roomSlug,
     store,
@@ -492,6 +503,7 @@ export async function kickChatRoomMember({
 export async function banChatRoomMember({
   durationSeconds,
   identity,
+  idempotency,
   reason,
   roomSlug,
   store = getPrisma(),
@@ -499,24 +511,21 @@ export async function banChatRoomMember({
 }: {
   durationSeconds: number | null
   identity: ChatIdentity
+  idempotency?: ChatModerationIdempotency
   reason: string
   roomSlug: string
   store?: ChatModerationStore
   targetHandle: string
 }) {
-  const target = await resolveModerationTarget({
-    action: "BAN_MEMBER",
-    identity,
-    roomSlug,
+  return inModerationTransaction({
+    idempotency,
     store,
-    targetHandle,
-  })
-
-  return withChatRecordLock({
-    recordId: `${target.room.id}:${target.target.profile.userId}`,
-    scope: "CHAT_ROOM_BAN",
-    store,
-    work: async (transaction) => {
+    work: async (transaction) =>
+      withChatRecordLock({
+        recordId: `${normalizeChatRoomSlug(roomSlug)}:${normalizeChatHandle(targetHandle)}`,
+        scope: "CHAT_ROOM_BAN",
+        store: transaction,
+        work: async (transaction) => {
       const context = await resolveModerationTarget({
         action: "BAN_MEMBER",
         identity,
@@ -567,28 +576,34 @@ export async function banChatRoomMember({
         targetUserId: context.target.profile.userId,
       })
 
-      return {
-        alreadyBanned: Boolean(activeBan),
-        roomId: context.room.id,
-        targetHandle: context.target.profile.handle,
-        targetUserId: context.target.profile.userId,
-      }
-    },
+          return {
+            alreadyBanned: Boolean(activeBan),
+            roomId: context.room.id,
+            targetHandle: context.target.profile.handle,
+            targetUserId: context.target.profile.userId,
+          }
+        },
+      }),
   })
 }
 
 export async function unbanChatRoomMember({
   identity,
+  idempotency,
   roomSlug,
   store = getPrisma(),
   targetHandle,
 }: {
   identity: ChatIdentity
+  idempotency?: ChatModerationIdempotency
   roomSlug: string
   store?: ChatModerationStore
   targetHandle: string
 }) {
-  return inTransaction(store, async (transaction) => {
+  return inModerationTransaction({
+    idempotency,
+    store,
+    work: async (transaction) => {
     const room = await findRoomBySlug(roomSlug, transaction)
     const actorMembership = await transaction.chatRoomMember.findUnique({
       select: memberSelect,
@@ -616,13 +631,15 @@ export async function unbanChatRoomMember({
       targetUserId: target.userId,
     })
 
-    return { roomId: room.id, targetHandle: target.handle, targetUserId: target.userId }
+      return { roomId: room.id, targetHandle: target.handle, targetUserId: target.userId }
+    },
   })
 }
 
 export async function muteChatRoomMember({
   durationSeconds,
   identity,
+  idempotency,
   reason,
   roomSlug,
   store = getPrisma(),
@@ -630,6 +647,7 @@ export async function muteChatRoomMember({
 }: {
   durationSeconds: number
   identity: ChatIdentity
+  idempotency?: ChatModerationIdempotency
   reason: string
   roomSlug: string
   store?: ChatModerationStore
@@ -639,6 +657,7 @@ export async function muteChatRoomMember({
     action: "MUTE_MEMBER",
     auditAction: "MEMBER_MUTED",
     identity,
+    idempotency,
     metadata: { durationSeconds },
     reason,
     roomSlug,
@@ -655,16 +674,21 @@ export async function muteChatRoomMember({
 
 export async function updateChatRoomModerationSettings({
   identity,
+  idempotency,
   roomSlug,
   settings,
   store = getPrisma(),
 }: {
   identity: ChatIdentity
+  idempotency?: ChatModerationIdempotency
   roomSlug: string
   settings: ReturnType<typeof parseChatRoomModerationSettingsInput>
   store?: ChatModerationStore
 }) {
-  return inTransaction(store, async (transaction) => {
+  return inModerationTransaction({
+    idempotency,
+    store,
+    work: async (transaction) => {
     const room = await findRoomBySlug(roomSlug, transaction)
     const actorMembership = await transaction.chatRoomMember.findUnique({
       select: memberSelect,
@@ -708,7 +732,8 @@ export async function updateChatRoomModerationSettings({
       roomId: room.id,
     })
 
-    return updated
+      return updated
+    },
   })
 }
 
@@ -716,6 +741,7 @@ async function changeRoomMember({
   action,
   auditAction,
   identity,
+  idempotency,
   metadata,
   reason,
   roomSlug,
@@ -726,6 +752,7 @@ async function changeRoomMember({
   action: "KICK_MEMBER" | "MUTE_MEMBER"
   auditAction: string
   identity: ChatIdentity
+  idempotency?: ChatModerationIdempotency
   metadata?: Record<string, unknown>
   reason: string
   roomSlug: string
@@ -736,7 +763,10 @@ async function changeRoomMember({
     target: { roomId: string; userId: string }
   ) => Promise<unknown>
 }) {
-  return inTransaction(store, async (transaction) => {
+  return inModerationTransaction({
+    idempotency,
+    store,
+    work: async (transaction) => {
     const context = await resolveModerationTarget({
       action,
       identity,
@@ -757,11 +787,12 @@ async function changeRoomMember({
       targetUserId: context.target.profile.userId,
     })
 
-    return {
+      return {
       roomId: context.room.id,
       targetHandle: context.target.profile.handle,
       targetUserId: context.target.profile.userId,
-    }
+      }
+    },
   })
 }
 
@@ -989,6 +1020,22 @@ function inTransaction<T>(
   ).$transaction
 
   return transaction ? transaction(work) : work(store)
+}
+
+function inModerationTransaction<T>({
+  idempotency,
+  store,
+  work,
+}: {
+  idempotency?: ChatModerationIdempotency
+  store: ChatModerationStore
+  work: (transaction: ChatModerationStore) => Promise<T>
+}) {
+  return withChatModerationIdempotency({
+    idempotency,
+    store,
+    work: (transaction) => inTransaction(transaction, work),
+  })
 }
 
 function optionalIdentifier(value: unknown) {

@@ -4,6 +4,7 @@ import {
   parseChatReportResolutionInput,
   resolveChatReport,
 } from "@/lib/chat/moderation"
+import { createChatModerationIdempotency, parseChatModerationIdempotencyKey } from "@/lib/chat/moderation-idempotency"
 
 import { chatNoStoreResponse, chatRouteErrorResponse } from "../../chat-response"
 
@@ -28,6 +29,12 @@ export async function PATCH(
     return chatNoStoreResponse(
       await resolveChatReport({
         identity: { role: user.role, userId: user.id },
+        idempotency: createChatModerationIdempotency({
+          action: "report:resolve",
+          actorUserId: user.id,
+          key: parseChatModerationIdempotencyKey(request.headers.get("Idempotency-Key")),
+          request: { body, reportId },
+        }),
         input: parseChatReportResolutionInput(body),
         reportId,
       })
