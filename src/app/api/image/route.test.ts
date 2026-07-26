@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   enforceRateLimit: vi.fn(),
   getTrustedClientIp: vi.fn(),
+  ImageProxyCapacityError: class ImageProxyCapacityError extends Error {},
+  ImageProxyValidationError: class ImageProxyValidationError extends Error {},
   normalizeHttpUrl: vi.fn((value: string) => new URL(value)),
+  reencodeProxiedImage: vi.fn(),
   safeFetchBytes: vi.fn(),
 }))
 
@@ -17,6 +20,18 @@ vi.mock("@/lib/url-safety", () => ({
   UnsafeUrlError: class UnsafeUrlError extends Error {},
   normalizeHttpUrl: mocks.normalizeHttpUrl,
   safeFetchBytes: mocks.safeFetchBytes,
+}))
+
+vi.mock("@/lib/image-proxy", () => ({
+  ImageProxyCapacityError: mocks.ImageProxyCapacityError,
+  ImageProxyValidationError: mocks.ImageProxyValidationError,
+  IMAGE_PROXY_ACCEPT:
+    "image/avif,image/webp,image/apng,image/png,image/jpeg,image/gif,image/x-icon;q=0.9,*/*;q=0.1",
+  IMAGE_PROXY_CACHE_CONTROL:
+    "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
+  IMAGE_PROXY_MAX_BYTES: 5 * 1024 * 1024,
+  IMAGE_PROXY_USER_AGENT: "ArcticRSS Image Proxy/0.1",
+  reencodeProxiedImage: mocks.reencodeProxiedImage,
 }))
 
 import { NextRequest } from "next/server"
@@ -33,9 +48,13 @@ describe("image proxy endpoint", () => {
       contentType: "image/png; charset=binary",
       url: new URL("https://images.example/photo.png"),
     })
+    mocks.reencodeProxiedImage.mockResolvedValue({
+      bytes: new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]),
+      contentType: "image/webp",
+    })
   })
 
-  it("serves validated image bytes with scoped caching and privacy headers", async () => {
+  it("serves re-encoded image bytes with scoped caching and privacy headers", async () => {
     const response = await GET(
       new NextRequest(
         "https://arcticrss.com/api/image?url=https%3A%2F%2Fimages.example%2Fphoto.png"
@@ -43,15 +62,21 @@ describe("image proxy endpoint", () => {
     )
 
     expect(response.status).toBe(200)
-    expect(response.headers.get("content-type")).toBe("image/png")
+    expect(response.headers.get("content-type")).toBe("image/webp")
     expect(response.headers.get("cache-control")).toContain("s-maxage=604800")
+    expect(response.headers.get("content-disposition")).toBe(
+      'inline; filename="image.webp"'
+    )
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; sandbox"
+    )
     expect(response.headers.get("cross-origin-resource-policy")).toBe(
       "same-origin"
     )
     expect(response.headers.get("referrer-policy")).toBe("no-referrer")
     expect(response.headers.get("x-content-type-options")).toBe("nosniff")
     expect(Array.from(new Uint8Array(await response.arrayBuffer()))).toEqual([
-      137, 80, 78, 71,
+      82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80,
     ])
     expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
       action: "image_proxy",
@@ -65,14 +90,15 @@ describe("image proxy endpoint", () => {
         userAgent: "ArcticRSS Image Proxy/0.1",
       })
     )
+    expect(mocks.reencodeProxiedImage).toHaveBeenCalledWith(
+      new Uint8Array([137, 80, 78, 71])
+    )
   })
 
-  it("rejects non-image responses and requests without a source URL", async () => {
-    mocks.safeFetchBytes.mockResolvedValue({
-      bytes: new Uint8Array([60, 104, 116, 109, 108, 62]),
-      contentType: "text/html",
-      url: new URL("https://images.example/not-an-image"),
-    })
+  it("rejects invalid image data and requests without a source URL", async () => {
+    mocks.reencodeProxiedImage.mockRejectedValue(
+      new mocks.ImageProxyValidationError("invalid image")
+    )
 
     await expect(
       GET(
@@ -101,5 +127,18 @@ describe("image proxy endpoint", () => {
       )
     ).resolves.toMatchObject({ status: 503 })
     expect(mocks.safeFetchBytes).not.toHaveBeenCalled()
+  })
+
+  it("returns a temporary failure when decode capacity is exhausted", async () => {
+    mocks.reencodeProxiedImage.mockRejectedValue(new mocks.ImageProxyCapacityError())
+
+    const response = await GET(
+      new NextRequest(
+        "https://arcticrss.com/api/image?url=https%3A%2F%2Fimages.example%2Fphoto.png"
+      )
+    )
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get("cache-control")).toBe("no-store")
   })
 })
