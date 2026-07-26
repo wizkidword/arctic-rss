@@ -17,7 +17,7 @@ describe("native chat gateway events", () => {
     gateway = undefined
   })
 
-  it("subscribes two authorized clients and isolates room message broadcasts", async () => {
+  it("accepts a durable message without bypassing the outbox with a direct broadcast", async () => {
     gateway = createChatGateway({
       authenticateConnection: async () => ({
         authVersion: 0,
@@ -71,7 +71,6 @@ describe("native chat gateway events", () => {
       first.emitWithAck("room:subscribe", { slug: "ai" }),
       second.emitWithAck("room:subscribe", { slug: "ai" }),
     ])
-    const received = once(second, "room:message")
     const acknowledgement = await first.emitWithAck("room:message", {
       body: "Hello Arctic",
       clientMessageId: "message-0001",
@@ -79,7 +78,9 @@ describe("native chat gateway events", () => {
     })
 
     expect(acknowledgement).toMatchObject({ created: true, ok: true })
-    await expect(received).resolves.toMatchObject({ id: "message-1", sequence: "1" })
+    expect(service.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: "room-1" })
+    )
     first.disconnect()
     second.disconnect()
   })

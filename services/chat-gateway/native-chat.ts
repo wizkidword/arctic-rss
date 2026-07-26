@@ -134,7 +134,6 @@ async function attachSocketHandlers(
   socket.on("room:message", (payload: unknown, acknowledge: Ack) => {
     void handleMessage(
       socket,
-      io,
       identity,
       service,
       isMessageAllowed,
@@ -222,7 +221,6 @@ async function handleSubscribe(
 
 async function handleMessage(
   socket: Socket,
-  io: Server,
   identity: ChatGatewayIdentity,
   service: NativeChatGatewayService,
   isMessageAllowed: NativeChatRateLimiter,
@@ -262,10 +260,6 @@ async function handleMessage(
         identity,
         roomId,
       })
-
-      if (result.created) {
-        await emitChatRoomMessage(io, roomId, result.message)
-      }
 
       safeAck(acknowledge, { ok: true, created: result.created, message: result.message })
     },
@@ -405,28 +399,6 @@ export function nativeChatRoomEventName(roomId: string) {
 
 export function nativeChatUserEventName(userId: string) {
   return `${ROOM_EVENT_PREFIX}user:${userId}`
-}
-
-async function emitChatRoomMessage(
-  io: Server,
-  roomId: string,
-  message: Awaited<ReturnType<NativeChatGatewayService["sendMessage"]>>["message"]
-) {
-  const sockets = await io.in(nativeChatRoomEventName(roomId)).fetchSockets()
-  await Promise.all(
-    sockets
-      .filter((socket) => !isBlockedChatMessage(socket, message.senderUserId))
-      .map((socket) => socket.emit("room:message", message))
-  )
-}
-
-function isBlockedChatMessage(socket: { data: Record<string, unknown> }, senderUserId: string | null) {
-  if (!senderUserId) {
-    return false
-  }
-
-  const blockedUserIds = socket.data.chatBlockedUserIds
-  return !Array.isArray(blockedUserIds) || blockedUserIds.includes(senderUserId)
 }
 
 const NATIVE_CHAT_EVENTS = new Set([

@@ -40,7 +40,7 @@ import {
 } from "../src/lib/chat/bot-queue"
 import { getChatFeatureFlags } from "../src/lib/chat/feature-flags"
 import { getChatRetentionSettings, purgeExpiredChatRecords } from "../src/lib/chat/retention"
-import { publishChatRoomMessage } from "../src/lib/chat/room-events"
+import { processChatEventOutbox } from "../src/lib/chat/event-outbox"
 import {
   enqueueFeedRefresh,
   FEED_REFRESH_QUEUE_NAME,
@@ -58,6 +58,7 @@ import {
   enqueueDuePodcastRefreshes,
   schedulerSettings,
 } from "../src/lib/refresh-scheduler"
+import { readClampedPositiveInteger } from "../src/lib/refresh-schedule"
 import { assertSecureProductionConfiguration } from "../src/lib/production-security"
 import { cleanupExpiredSecurityEvents } from "../src/lib/security-event-maintenance"
 import { processSmartDigestEmailDelivery } from "../src/lib/smart-digest-delivery"
@@ -94,6 +95,12 @@ const {
 } = schedulerSettings()
 const { intervalMs: chatRetentionIntervalMs } = getChatRetentionSettings()
 const prisma = getPrisma()
+const chatEventOutboxIntervalMs = readClampedPositiveInteger({
+  fallback: 1_000,
+  maximum: 10_000,
+  minimum: 250,
+  value: process.env.CHAT_EVENT_OUTBOX_PUBLISH_INTERVAL_MS,
+})
 const WORKER_HEARTBEAT_INTERVAL_MS = 30_000
 const WORKER_MEMORY_LOG_INTERVAL_MS = 5 * 60_000
 
@@ -185,11 +192,9 @@ const smartDigestWorker = new Worker<SmartDigestJobData>(
 const chatArticleIntegrationWorker = new Worker<ChatArticleIntegrationJobData>(
   CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
   async (job) => {
-    const result = await processChatArticleIntegration({
+    return processChatArticleIntegration({
       articleId: job.data.articleId,
     })
-    await publishChatMessagesSafely(result.messages)
-    return result
   },
   {
     connection: redisConnectionOptions(),
@@ -377,25 +382,9 @@ async function refreshFeedAndQueueChatIntegration(feedId: string) {
 }
 
 async function processPendingChatBotMessages() {
-  const result = await processPendingChatBotDeliveries({
+  return processPendingChatBotDeliveries({
     limit: schedulerBatchSize,
   })
-  await publishChatMessagesSafely(result.messages)
-  return result
-}
-
-async function publishChatMessagesSafely(
-  messages: Awaited<ReturnType<typeof processChatArticleIntegration>>["messages"]
-) {
-  const results = await Promise.allSettled(
-    messages.map((message) => publishChatRoomMessage(message))
-  )
-  const failed = results.filter((entry) => entry.status === "rejected").length
-  if (failed) {
-    console.error(
-      JSON.stringify({ event: "chat_room_event_publish", failed, outcome: "deferred" })
-    )
-  }
 }
 
 async function enqueueDuePodcasts() {
@@ -751,11 +740,48 @@ async function runAiOperationReconciliation() {
   })
 }
 
+let chatOutboxPublishPromise: Promise<void> | undefined
+
+function publishPendingChatEvents() {
+  if (chatOutboxPublishPromise) {
+    return chatOutboxPublishPromise
+  }
+
+  chatOutboxPublishPromise = processChatEventOutbox({
+    owner: `chat-outbox:worker:${process.pid}`,
+  })
+    .then((result) => {
+      if (result.claimed) {
+        console.log(
+          JSON.stringify({
+            event: "chat_event_outbox",
+            outcome: "success",
+            ...result,
+          })
+        )
+      }
+    })
+    .catch((error) => {
+      console.error(
+        `[worker] chat event outbox failed: ${schedulerErrorMessage(error)}`
+      )
+    })
+    .finally(() => {
+      chatOutboxPublishPromise = undefined
+    })
+
+  return chatOutboxPublishPromise
+}
+
 const scheduler = setInterval(() => {
   schedulerTick().catch(() => undefined)
 }, schedulerIntervalMs)
+const chatOutboxPublisher = setInterval(() => {
+  void publishPendingChatEvents()
+}, chatEventOutboxIntervalMs)
 
 schedulerTick().catch(() => undefined)
+void publishPendingChatEvents()
 
 function recordWorkerHeartbeat() {
   writeWorkerHeartbeat().catch((error) => {
@@ -781,7 +807,9 @@ async function shutdown() {
 
   shuttingDown = true
   clearInterval(scheduler)
+  clearInterval(chatOutboxPublisher)
   try {
+    await chatOutboxPublishPromise
     await Promise.all([
       worker.close(),
       chatArticleIntegrationWorker.close(),

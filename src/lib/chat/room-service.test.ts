@@ -130,6 +130,7 @@ describe("chat room service", () => {
   it("creates one durable message for an active room member", async () => {
     const created = message()
     const store = {
+      chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
       chatMessage: {
         create: vi.fn().mockResolvedValue(created),
         findUnique: vi.fn().mockResolvedValue(null),
@@ -154,11 +155,21 @@ describe("chat room service", () => {
       created: true,
       message: { body: "Hello Arctic", sequence: "1" },
     })
+    expect(store.chatEventOutbox.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          aggregateId: "room-1",
+          eventType: "room-message",
+          version: 1,
+        }),
+      })
+    )
   })
 
   it("persists typed action messages without accepting arbitrary message kinds", async () => {
     const create = vi.fn().mockResolvedValue({ ...message(), kind: "ACTION" })
     const store = {
+      chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
       chatMessage: { create, findUnique: vi.fn().mockResolvedValue(null) },
       chatRoom: { findUnique: vi.fn().mockResolvedValue(room()), update: vi.fn().mockResolvedValue({}) },
       chatRoomBan: {},
@@ -250,6 +261,7 @@ describe("chat room service", () => {
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 0 })
     const transactionStore = {
+      chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
       chatMessage: { create, findUnique: vi.fn().mockResolvedValue(null) },
       chatRoom: {
         findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }),
@@ -295,6 +307,7 @@ describe("chat room service", () => {
       .mockRejectedValueOnce(new Error("insertion failed"))
       .mockResolvedValueOnce(message())
     const store = {
+      chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
       chatMessage: { create, findUnique: vi.fn().mockResolvedValue(null) },
       chatRoom: {
         findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }),
@@ -308,6 +321,7 @@ describe("chat room service", () => {
       $transaction: async (work: (transaction: unknown) => Promise<unknown>) => {
         let stagedNextMessageAllowedAt = nextMessageAllowedAt
         const transactionStore = {
+          chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
           chatMessage: { create, findUnique: vi.fn().mockResolvedValue(null) },
           chatRoom: {
             findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }),
@@ -358,6 +372,7 @@ describe("chat room service", () => {
   it("exempts only application administrators from the durable slow-mode claim", async () => {
     const updateMany = vi.fn()
     const store = {
+      chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
       chatMessage: { create: vi.fn().mockResolvedValue(message()), findUnique: vi.fn().mockResolvedValue(null) },
       chatRoom: {
         findUnique: vi.fn().mockResolvedValue({ ...room(), slowModeSeconds: 30 }),
@@ -387,6 +402,7 @@ describe("chat room service", () => {
     })
     const store = {
       article: { findFirst: vi.fn().mockResolvedValue({ feed: { title: "Arctic Feed" }, id: "article-1234", title: "A useful article" }) },
+      chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
       chatMessage: { create, findFirst: vi.fn().mockResolvedValue(null), findUnique: vi.fn().mockResolvedValue(null) },
       chatRoom: { findUnique: vi.fn().mockResolvedValue(room()), update: vi.fn().mockResolvedValue({}) },
       chatRoomBan: {},

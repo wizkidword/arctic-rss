@@ -10,10 +10,6 @@ import {
   updateChatRoomModerationSettings,
 } from "@/lib/chat/moderation"
 import { createChatModerationIdempotency, parseChatModerationIdempotencyKey } from "@/lib/chat/moderation-idempotency"
-import {
-  publishChatRoomClosed,
-  publishChatRoomMembershipRemoved,
-} from "@/lib/chat/room-events"
 import { enforceRateLimit, getRateLimitErrorMessage } from "@/lib/rate-limit"
 
 import { chatNoStoreResponse, chatRouteErrorResponse } from "../../../../chat-response"
@@ -56,7 +52,6 @@ export async function POST(
         roomSlug: slug,
         targetHandle: input.targetHandle,
       })
-      await publishChatRoomMembershipRemoved(result)
       return chatNoStoreResponse(result)
     }
 
@@ -70,7 +65,6 @@ export async function POST(
         roomSlug: slug,
         targetHandle: input.targetHandle,
       })
-      await publishChatRoomMembershipRemoved(result)
       return chatNoStoreResponse(result)
     }
 
@@ -139,10 +133,6 @@ export async function PATCH(
       roomSlug: slug,
       settings: parseChatRoomModerationSettingsInput(body),
     })
-    if (updated.state === "SUSPENDED") {
-      await publishChatRoomClosed({ roomId: updated.id })
-    }
-
     return chatNoStoreResponse(updated)
   } catch (error) {
     return chatRouteErrorResponse(error)

@@ -5,6 +5,7 @@ import {
   ChatModerationError,
   banChatRoomMember,
   createChatReport,
+  kickChatRoomMember,
   listChatReports,
   parseChatReportInput,
   resolveChatReport,
@@ -36,13 +37,14 @@ function member(userId: string, role: "MEMBER" | "OPERATOR" = "MEMBER") {
 
 function createStore() {
   const actor = member("user-1", "OPERATOR")
-  const target = member("user-2")
+  const target = member("user-2222")
   const memberFindUnique = vi.fn(({ where }: { where: { roomId_userId: { userId: string } } }) =>
     Promise.resolve(where.roomId_userId.userId === "user-1" ? actor : target)
   )
 
   return {
     chatAuditLog: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
+    chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
     chatMessage: {
       findUnique: vi.fn().mockResolvedValue({
         article: {
@@ -67,13 +69,13 @@ function createStore() {
         },
         roomId: "room-1234",
         sender: { chatProfile: { handle: "northernlights" } },
-        senderUserId: "user-2",
+        senderUserId: "user-2222",
         sequence: BigInt(9),
         version: 1,
       }),
     },
     chatProfile: {
-      findUnique: vi.fn().mockResolvedValue({ handle: "northernlights", userId: "user-2" }),
+      findUnique: vi.fn().mockResolvedValue({ handle: "northernlights", userId: "user-2222" }),
     },
     chatReport: {
       create: vi.fn().mockResolvedValue({ id: "report-1", status: "OPEN" }),
@@ -81,7 +83,7 @@ function createStore() {
         id: "report-1",
         messageId: "message-1234",
         roomId: "room-1234",
-        targetUserId: "user-2",
+        targetUserId: "user-2222",
       }),
       update: vi.fn().mockResolvedValue({ id: "report-1" }),
     },
@@ -96,7 +98,7 @@ function createStore() {
     },
     chatRoomMember: {
       findUnique: memberFindUnique,
-      update: vi.fn().mockResolvedValue({ userId: "user-2" }),
+      update: vi.fn().mockResolvedValue({ userId: "user-2222" }),
     },
   } as unknown as ChatModerationStore
 }
@@ -146,7 +148,7 @@ describe("chat moderation", () => {
                     version: 1,
                   }),
                   senderHandle: "northernlights",
-                  senderUserId: "user-2",
+                  senderUserId: "user-2222",
                   sequence: "9",
                   version: 1,
                 },
@@ -157,7 +159,7 @@ describe("chat moderation", () => {
             },
           },
           roomId: "room-1234",
-          targetUserId: "user-2",
+          targetUserId: "user-2222",
         }),
       })
     )
@@ -272,7 +274,7 @@ describe("chat moderation", () => {
         store,
         targetHandle: "northernlights",
       })
-    ).resolves.toMatchObject({ roomId: "room-1234", targetUserId: "user-2" })
+    ).resolves.toMatchObject({ roomId: "room-1234", targetUserId: "user-2222" })
 
     expect(store.chatRoomBan.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -280,7 +282,7 @@ describe("chat moderation", () => {
           createdByUserId: "user-1",
           reason: "Repeated spam after warnings.",
           roomId: "room-1234",
-          targetUserId: "user-2",
+          targetUserId: "user-2222",
         }),
       })
     )
@@ -289,6 +291,49 @@ describe("chat moderation", () => {
     )
     expect(store.chatAuditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ action: "MEMBER_BANNED" }) })
+    )
+    expect(store.chatEventOutbox.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          eventType: "membership-removed",
+          payload: { roomId: "room-1234", targetUserId: "user-2222", type: "membership-removed" },
+        }),
+      })
+    )
+  })
+
+  it("queues room membership and suspension events with their moderation state", async () => {
+    const store = createStore()
+
+    await kickChatRoomMember({
+      identity,
+      reason: "Repeated spam after warnings.",
+      roomSlug: "ai",
+      store,
+      targetHandle: "northernlights",
+    })
+    await updateChatRoomModerationSettings({
+      identity: { role: "ADMIN", userId: "admin-1" },
+      roomSlug: "ai",
+      settings: { action: "state", state: "SUSPENDED" },
+      store,
+    })
+
+    expect(store.chatEventOutbox.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          payload: { roomId: "room-1234", targetUserId: "user-2222", type: "membership-removed" },
+        }),
+      })
+    )
+    expect(store.chatEventOutbox.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          payload: { roomId: "room-1234", type: "room-closed" },
+        }),
+      })
     )
   })
 
@@ -357,7 +402,7 @@ describe("chat moderation", () => {
       mockResolvedValueOnce: (value: unknown) => unknown
     }
     findUnique.mockResolvedValueOnce(member("user-1", "OPERATOR"))
-    findUnique.mockResolvedValueOnce(member("user-2", "OPERATOR"))
+    findUnique.mockResolvedValueOnce(member("user-2222", "OPERATOR"))
 
     await expect(
       banChatRoomMember({

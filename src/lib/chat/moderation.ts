@@ -4,6 +4,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
 
+import { enqueueChatRoomEvent } from "./event-outbox"
 import { normalizeChatHandle, normalizeChatRoomSlug } from "./normalization"
 import { canPerformChatAction, type ChatAction, type ChatRoomMemberRole } from "./permissions"
 import { type ChatModerationIdempotency, withChatModerationIdempotency } from "./moderation-idempotency"
@@ -83,6 +84,7 @@ export type ChatModerationStore = Pick<
   | "$executeRaw"
   | "$transaction"
   | "chatAuditLog"
+  | "chatEventOutbox"
   | "chatModerationAction"
   | "chatMessage"
   | "chatProfile"
@@ -575,6 +577,14 @@ export async function banChatRoomMember({
         roomId: context.room.id,
         targetUserId: context.target.profile.userId,
       })
+      await enqueueChatRoomEvent({
+        event: {
+          roomId: context.room.id,
+          targetUserId: context.target.profile.userId,
+          type: "membership-removed",
+        },
+        store: transaction,
+      })
 
           return {
             alreadyBanned: Boolean(activeBan),
@@ -731,6 +741,12 @@ export async function updateChatRoomModerationSettings({
             : { state: settings.state },
       roomId: room.id,
     })
+    if (settings.action === "state" && settings.state === "SUSPENDED") {
+      await enqueueChatRoomEvent({
+        event: { roomId: room.id, type: "room-closed" },
+        store: transaction,
+      })
+    }
 
       return updated
     },
@@ -786,6 +802,16 @@ async function changeRoomMember({
       roomId: context.room.id,
       targetUserId: context.target.profile.userId,
     })
+    if (action === "KICK_MEMBER") {
+      await enqueueChatRoomEvent({
+        event: {
+          roomId: context.room.id,
+          targetUserId: context.target.profile.userId,
+          type: "membership-removed",
+        },
+        store: transaction,
+      })
+    }
 
       return {
       roomId: context.room.id,

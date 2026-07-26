@@ -1430,6 +1430,28 @@ model ChatModerationAction {
   @@index([createdAt])
 }
 
+// Redis is only a delivery transport. Every room event is first stored here in
+// the transaction that changed chat state, then a leased worker publishes it.
+model ChatEventOutbox {
+  id             String    @id @default(cuid())
+  version        Int       @default(1)
+  eventType      String
+  aggregateType  String
+  aggregateId    String
+  payload        Json
+  createdAt      DateTime  @default(now())
+  availableAt    DateTime  @default(now())
+  attemptCount   Int       @default(0)
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+  deliveredAt    DateTime?
+  deadLetteredAt DateTime?
+  lastError      String?
+
+  @@index([deliveredAt, deadLetteredAt, availableAt, leaseExpiresAt, createdAt])
+  @@index([aggregateType, aggregateId, id])
+}
+
 // Holds are scoped to a single retained record. They carry the authorized
 // decision and review date without copying the protected record's contents.
 model ChatLegalHold {

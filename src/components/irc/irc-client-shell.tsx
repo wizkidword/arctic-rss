@@ -78,6 +78,42 @@ export function getNetworkStatusPresentation(connectionState: ConnectionState) {
     : { icon: "wifi-off" as const, label: "Network offline" }
 }
 
+export function mergeChatMessages(
+  current: readonly ChatMessage[],
+  incoming: readonly ChatMessage[]
+) {
+  const messagesById = new Map(current.map((message) => [message.id, message]))
+  for (const message of incoming) {
+    messagesById.set(message.id, message)
+  }
+
+  return [...messagesById.values()].sort((left, right) => {
+    const leftSequence = parseChatSequence(left.sequence)
+    const rightSequence = parseChatSequence(right.sequence)
+    if (leftSequence === null || rightSequence === null) {
+      return left.createdAt.localeCompare(right.createdAt)
+    }
+    return leftSequence === rightSequence ? left.id.localeCompare(right.id) : leftSequence < rightSequence ? -1 : 1
+  })
+}
+
+export function hasChatMessageSequenceGap(
+  messages: readonly ChatMessage[],
+  incoming: ChatMessage
+) {
+  const incomingSequence = parseChatSequence(incoming.sequence)
+  if (incomingSequence === null || messages.length === 0) {
+    return false
+  }
+
+  const latestSequence = messages.reduce<bigint | null>((latest, message) => {
+    const sequence = parseChatSequence(message.sequence)
+    return sequence !== null && (latest === null || sequence > latest) ? sequence : latest
+  }, null)
+
+  return latestSequence !== null && incomingSequence > latestSequence + BigInt(1)
+}
+
 const HIDE_ARCTIC_BOT_STORAGE_KEY = "arctic-rss:irc:hide-arctic-bot"
 const ARCTIC_BOT_VISIBILITY_EVENT = "arctic-rss:irc:arctic-bot-visibility"
 const BOT_VISIBILITY_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1_000
@@ -231,6 +267,8 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const autoConnectAttempted = useRef(false)
   const initialRoomJoinAttempted = useRef(false)
+  const joinedRoomsRef = useRef(joinedRooms)
+  const repairInFlightRoomIds = useRef(new Set<string>())
   const socketRef = useRef<Socket | null>(null)
   const blockedUserIdsRef = useRef(blockedUserIds)
   const hideArcticBotMessages = useSyncExternalStore(
@@ -249,6 +287,17 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
           (!message.senderUserId || !blockedUserIds.has(message.senderUserId))
       )
   const commandSuggestions = listChatCommandSuggestions(composer)
+
+  const updateJoinedRooms = useCallback(
+    (update: (current: Record<string, ChatRoomSnapshot>) => Record<string, ChatRoomSnapshot>) => {
+      setJoinedRooms((current) => {
+        const next = update(current)
+        joinedRoomsRef.current = next
+        return next
+      })
+    },
+    []
+  )
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -281,6 +330,39 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
     })
   }, [])
 
+  const repairRoomHistory = useCallback(async (roomId: string, slug: string) => {
+    if (repairInFlightRoomIds.current.has(roomId)) {
+      return
+    }
+
+    repairInFlightRoomIds.current.add(roomId)
+    try {
+      const response = await fetch(`/api/chat/rooms/${encodeURIComponent(slug)}`)
+      const snapshot = await response.json() as ChatRoomSnapshot & { error?: string }
+      if (!response.ok || !snapshot.room || snapshot.room.id !== roomId) {
+        throw new Error(snapshot.error || "Unable to recover recent chat history.")
+      }
+
+      updateJoinedRooms((current) => {
+        const existing = current[roomId]
+        if (!existing) {
+          return current
+        }
+        return {
+          ...current,
+          [roomId]: {
+            ...snapshot,
+            messages: mergeChatMessages(existing.messages, snapshot.messages),
+          },
+        }
+      })
+    } catch {
+      setNotice("A live chat update was missed. Reconnect to refresh this room.")
+    } finally {
+      repairInFlightRoomIds.current.delete(roomId)
+    }
+  }, [updateJoinedRooms])
+
   const connect = useCallback(async () => {
     if (connectionState === "connecting" || connectionState === "connected") {
       return
@@ -310,7 +392,7 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
       socket.on("connect", () => {
         setConnectionState("connected")
         setNotice("Connected to Arctic Network.")
-        Object.values(joinedRooms).forEach((snapshot) => subscribeToRoom(socket, snapshot.room.slug))
+        Object.values(joinedRoomsRef.current).forEach((snapshot) => subscribeToRoom(socket, snapshot.room.slug))
       })
       socket.on("connect_error", () => {
         setConnectionState("offline")
@@ -324,18 +406,27 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
         if (message.senderUserId && blockedUserIdsRef.current.has(message.senderUserId)) {
           return
         }
-        setJoinedRooms((current) => {
-          const snapshot = current[message.roomId]
-
-          if (!snapshot || snapshot.messages.some((item) => item.id === message.id)) {
+        const snapshot = joinedRoomsRef.current[message.roomId]
+        if (!snapshot || snapshot.messages.some((item) => item.id === message.id)) {
+          return
+        }
+        const hasGap = hasChatMessageSequenceGap(snapshot.messages, message)
+        updateJoinedRooms((current) => {
+          const currentSnapshot = current[message.roomId]
+          if (!currentSnapshot || currentSnapshot.messages.some((item) => item.id === message.id)) {
             return current
           }
-
           return {
             ...current,
-            [message.roomId]: { ...snapshot, messages: [...snapshot.messages, message] },
+            [message.roomId]: {
+              ...currentSnapshot,
+              messages: mergeChatMessages(currentSnapshot.messages, [message]),
+            },
           }
         })
+        if (hasGap) {
+          void repairRoomHistory(snapshot.room.id, snapshot.room.slug)
+        }
         setClearedRoomIds((current) => {
           if (!current.has(message.roomId)) {
             return current
@@ -356,7 +447,7 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
       setConnectionState("offline")
       setNotice(reason instanceof Error ? reason.message : "Unable to connect to chat.")
     }
-  }, [applyBlockUpdate, connectionState, joinedRooms])
+  }, [applyBlockUpdate, connectionState, repairRoomHistory, updateJoinedRooms])
 
   useEffect(() => {
     if (autoConnectAttempted.current) {
@@ -367,7 +458,7 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
     void connect()
   }, [connect])
 
-  async function joinRoom(room: ChatRoom) {
+  const joinRoom = useCallback(async (room: ChatRoom) => {
     setNotice(`Joining #${room.slug}…`)
 
     try {
@@ -386,7 +477,7 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
         throw new Error(snapshot.error || "Unable to open this room.")
       }
 
-      setJoinedRooms((current) => ({ ...current, [snapshot.room.id]: snapshot }))
+      updateJoinedRooms((current) => ({ ...current, [snapshot.room.id]: snapshot }))
       setClearedRoomIds((current) => {
         const next = new Set(current)
         next.delete(snapshot.room.id)
@@ -403,7 +494,7 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
       setNotice(reason instanceof Error ? reason.message : "Unable to join this room.")
       return false
     }
-  }
+  }, [updateJoinedRooms])
 
   useEffect(() => {
     if (initialRoomJoinAttempted.current || !initialRoomSlug) {
@@ -419,7 +510,7 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
 
       return () => window.clearTimeout(timer)
     }
-  }, [initialRoomSlug, rooms])
+  }, [initialRoomSlug, joinRoom, rooms])
 
   async function leaveRoom(reason?: string) {
     if (!activeRoom) {
@@ -437,7 +528,7 @@ function ConnectedIrcClient({ initialBlockedUserIds, initialRoomSlug, profile: i
       }
 
       socketRef.current?.emit("room:unsubscribe", { roomId: activeRoom.id })
-      setJoinedRooms((current) => {
+      updateJoinedRooms((current) => {
         const next = { ...current }
         delete next[activeRoom.id]
         return next
@@ -921,6 +1012,10 @@ function subscribeToRoom(socket: Socket, slug: string) {
       socket.disconnect()
     }
   })
+}
+
+function parseChatSequence(value: string) {
+  return /^\d+$/.test(value) ? BigInt(value) : null
 }
 
 function shellTheme(theme: IrcTheme) {

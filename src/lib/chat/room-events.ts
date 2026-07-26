@@ -37,30 +37,30 @@ export async function publishChatRoomMessage(
   message: ChatMessageWire,
   dependencies: { publisher?: ChatRoomEventPublisher } = {}
 ) {
-  const event: ChatRoomMessageEvent = { message, type: "room-message" }
-  await (dependencies.publisher ?? getChatRoomEventPublisher()).publish(
-    CHAT_ROOM_EVENT_CHANNEL,
-    JSON.stringify(event)
-  )
+  await publishChatRoomEvent({ message, type: "room-message" }, dependencies)
 }
 
 export async function publishChatRoomMembershipRemoved(
   event: Omit<ChatRoomMembershipRemovedEvent, "type">,
   dependencies: { publisher?: ChatRoomEventPublisher } = {}
 ) {
-  await (dependencies.publisher ?? getChatRoomEventPublisher()).publish(
-    CHAT_ROOM_EVENT_CHANNEL,
-    JSON.stringify({ ...event, type: "membership-removed" })
-  )
+  await publishChatRoomEvent({ ...event, type: "membership-removed" }, dependencies)
 }
 
 export async function publishChatRoomClosed(
   event: Omit<ChatRoomClosedEvent, "type">,
   dependencies: { publisher?: ChatRoomEventPublisher } = {}
 ) {
+  await publishChatRoomEvent({ ...event, type: "room-closed" }, dependencies)
+}
+
+export async function publishChatRoomEvent(
+  event: ChatRoomEvent,
+  dependencies: { publisher?: ChatRoomEventPublisher } = {}
+) {
   await (dependencies.publisher ?? getChatRoomEventPublisher()).publish(
     CHAT_ROOM_EVENT_CHANNEL,
-    JSON.stringify({ ...event, type: "room-closed" })
+    JSON.stringify(event)
   )
 }
 

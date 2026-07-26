@@ -4,7 +4,6 @@ import {
   parseChatArticleShareInput,
   shareChatRoomArticle,
 } from "@/lib/chat/room-service"
-import { publishChatRoomMessage } from "@/lib/chat/room-events"
 import { enforceRateLimit, getRateLimitErrorMessage } from "@/lib/rate-limit"
 
 import { chatNoStoreResponse, chatRouteErrorResponse } from "../../../chat-response"
@@ -41,9 +40,6 @@ export async function POST(
       identity: { role: user.role, userId: user.id },
       roomId: snapshot.room.id,
     })
-
-    // Publish retries are safe: clients de-duplicate by durable message ID.
-    await publishChatRoomMessage(result.message)
 
     return chatNoStoreResponse(result, result.created ? 201 : 200)
   } catch (error) {

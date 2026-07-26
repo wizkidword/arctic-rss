@@ -44,6 +44,7 @@ function createStore({
       updateMany: vi.fn().mockResolvedValue({ count: deliveries.length }),
       upsert: vi.fn().mockResolvedValue({}),
     },
+    chatEventOutbox: { create: vi.fn().mockResolvedValue({ id: "event-1" }) },
     chatMessage: { create: messageCreate },
     chatRoom: {
       findUnique: vi.fn().mockResolvedValue(room),
@@ -149,6 +150,11 @@ describe("ArcticBot", () => {
     expect(store.chatBotDelivery.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: { messageId: "message-1", status: "POSTED" },
+      })
+    )
+    expect(store.chatEventOutbox.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ aggregateId: "room-1", eventType: "room-message" }),
       })
     )
   })

@@ -3,6 +3,7 @@ import type { PrismaClient } from "@/generated/prisma/client"
 import { getPrisma } from "@/lib/db"
 
 import { listChatBlockedUserIds } from "./blocks"
+import { enqueueChatRoomEvent } from "./event-outbox"
 import { normalizeChatHandle, normalizeChatRoomSlug } from "./normalization"
 import { canPerformChatAction, type ChatRoomMemberRole } from "./permissions"
 
@@ -54,6 +55,7 @@ export type ChatRoomStore = Pick<
   | "$transaction"
   | "article"
   | "chatBlock"
+  | "chatEventOutbox"
   | "chatMessage"
   | "chatRoom"
   | "chatRoomBan"
@@ -801,7 +803,13 @@ async function persistChatRoomMessage({
       where: { id: roomId },
     })
 
-    return { created: true, message: serializeMessage(message) }
+    const serializedMessage = serializeMessage(message)
+    await enqueueChatRoomEvent({
+      event: { message: serializedMessage, type: "room-message" },
+      store: transaction,
+    })
+
+    return { created: true, message: serializedMessage }
   }
 
   try {

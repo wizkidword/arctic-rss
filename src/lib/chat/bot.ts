@@ -1,5 +1,6 @@
 import { getPrisma } from "@/lib/db"
 
+import { enqueueChatRoomEvent } from "./event-outbox"
 import { getChatFeatureFlags, type ChatFeatureFlagEnvironment } from "./feature-flags"
 import { normalizeChatRoomSlug } from "./normalization"
 import { canPerformChatAction, type ChatRoomMemberRole } from "./permissions"
@@ -66,6 +67,9 @@ type ChatBotStore = {
     findMany(args: Record<string, unknown>): Promise<ChatBotDelivery[]>
     updateMany(args: Record<string, unknown>): Promise<{ count: number }>
     upsert(args: Record<string, unknown>): Promise<unknown>
+  }
+  chatEventOutbox: {
+    create(args: Record<string, unknown>): Promise<unknown>
   }
   chatMessage: {
     create(args: Record<string, unknown>): Promise<ChatBotMessageRecord>
@@ -513,7 +517,13 @@ async function drainChatRoomFeed({
       throw new Error("ArcticBot delivery state changed while posting.")
     }
 
-    return serializeBotMessage(message)
+    const serializedMessage = serializeBotMessage(message)
+    await enqueueChatRoomEvent({
+      event: { message: serializedMessage, type: "room-message" },
+      store: transaction,
+    })
+
+    return serializedMessage
   })
 }
 
