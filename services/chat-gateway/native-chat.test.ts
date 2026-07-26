@@ -18,7 +18,13 @@ describe("native chat gateway events", () => {
   it("subscribes two authorized clients and isolates room message broadcasts", async () => {
     gateway = createChatGateway({
       authenticateConnection: async () => ({
+        authVersion: 0,
+        authorizedAt: new Date().toISOString(),
+        chatEnabled: true,
+        emailVerified: true,
         handle: "northernlights",
+        plan: "FREE",
+        policyVersion: "launch-policy-v1",
         profileId: "profile-1",
         role: "USER",
         userId: "user-1",

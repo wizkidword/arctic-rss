@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "crypto"
 import type { PrismaClient } from "../generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
+import { notifyAccountSecurityChange } from "@/lib/chat/security-events"
 import {
   sendEmailVerificationEmail,
   sendWelcomeEmail,
@@ -116,6 +117,7 @@ export async function verifyEmailWithToken(
     outcome: "error" | "expired" | "invalid" | "replayed" | "success"
     shouldSendWelcome?: boolean
     status: "invalid-token" | "verified"
+    userId?: string
   }
 
   try {
@@ -206,6 +208,7 @@ export async function verifyEmailWithToken(
         outcome: "success" as const,
         shouldSendWelcome: !verificationToken.user.emailVerified,
         status: "verified" as const,
+        userId: verificationToken.userId,
       }
     })
   } catch {
@@ -237,6 +240,13 @@ export async function verifyEmailWithToken(
     } catch {
       console.error("Failed to send welcome email after verification.")
     }
+  }
+
+  if (result.status === "verified" && result.userId) {
+    await notifyAccountSecurityChange({
+      reason: "email_verification_changed",
+      userId: result.userId,
+    })
   }
 
   return { status: result.status }

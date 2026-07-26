@@ -27,13 +27,15 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     );
   });
 
-  it("keeps the chat gateway internal and opt-in", async () => {
+  it("keeps the chat gateway internal, opt-in, and readiness-checked", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
     const gateway = compose.split("  chat-gateway:")[1].split("  cloudflared:")[0];
 
     expect(gateway).toContain("target: chat-gateway");
     expect(gateway).toContain('profiles: ["chat"]');
     expect(gateway).not.toMatch(/^\s+ports:/m);
-    expect(gateway).toContain("http://127.0.0.1:3001/live");
+    expect(gateway).toContain("http://127.0.0.1:3001/ready");
+    expect(gateway).not.toContain("http://127.0.0.1:3001/live");
+    expect(gateway).toContain("restart: unless-stopped");
   });
 });

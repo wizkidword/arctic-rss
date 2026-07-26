@@ -7,6 +7,7 @@ import { getAppOrigin } from "@/lib/app-origin"
 import { getPrisma } from "@/lib/db"
 import { sendPasswordResetEmail } from "@/lib/mail"
 import { hashPassword } from "@/lib/password"
+import { notifyAccountSecurityChange } from "@/lib/chat/security-events"
 
 const RESET_TOKEN_BYTES = 32
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000
@@ -223,8 +224,15 @@ export async function resetPasswordWithToken({
         },
       })
 
-      return { outcome: "success", status: "reset" as const }
+      return { outcome: "success", status: "reset" as const, userId: resetToken.userId }
     })
+
+    if (result.status === "reset") {
+      await notifyAccountSecurityChange({
+        reason: "password_reset",
+        userId: result.userId,
+      })
+    }
 
     console.info(
       JSON.stringify({

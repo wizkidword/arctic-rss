@@ -6,6 +6,7 @@ import Redis from "ioredis"
 import { assertProductionAppOrigin } from "../../src/lib/app-origin"
 import {
   authenticateChatGatewayConnection,
+  revalidateChatGatewayAuthorization,
   type ChatGatewayUserStore,
 } from "../../src/lib/chat/gateway-auth"
 import { isChatEnabled } from "../../src/lib/chat/feature-flags"
@@ -13,6 +14,10 @@ import {
   CHAT_ROOM_EVENT_CHANNEL,
   parseChatRoomEvent,
 } from "../../src/lib/chat/room-events"
+import {
+  CHAT_ACCOUNT_SECURITY_EVENT_CHANNEL,
+  parseAccountSecurityEvent,
+} from "../../src/lib/chat/security-events"
 import { getChatConnectionTokenSettings } from "../../src/lib/chat/session-token"
 import {
   clearChatPresence,
@@ -30,11 +35,15 @@ import {
   sendChatRoomMessage,
   updateChatReadMarker,
 } from "../../src/lib/chat/room-service"
+import { createRedisRecoverySupervisor, type GatewayRedisClient } from "./redis-recovery"
 
 const DEFAULT_CHAT_GATEWAY_PORT = 3001
+const DEFAULT_AUTHORIZATION_MAX_AGE_SECONDS = 60
+const DEFAULT_REDIS_DEGRADED_GRACE_SECONDS = 90
 
 export async function createProductionChatGateway(
-  environment: Readonly<Record<string, string | undefined>> = process.env
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  { exit = (code: number) => process.exit(code) }: { exit?: (code: number) => never | void } = {}
 ): Promise<{ close: () => Promise<void>; gateway: ChatGateway; port: number }> {
   const logger = createChatGatewayLogger()
 
@@ -44,34 +53,76 @@ export async function createProductionChatGateway(
 
   const origin = assertProductionAppOrigin(environment).origin
   const tokenSettings = getChatConnectionTokenSettings(environment)
+  const recoverySettings = getChatGatewayRecoverySettings(environment)
   const port = getChatGatewayPort(environment)
   const prisma = getPrisma()
   const redis = createGatewayRedisClient()
+  const redisPublisher = redis.duplicate()
   const redisSubscriber = redis.duplicate()
   const roomEventSubscriber = redis.duplicate()
-  redisSubscriber.on("error", () => {
-    // The service's readiness and authentication paths already fail closed.
+  const securityEventSubscriber = redis.duplicate()
+  let gateway: ChatGateway | undefined
+  let terminating = false
+
+  const recovery = createRedisRecoverySupervisor({
+    clients: {
+      adapterPublisher: asGatewayRedisClient(redisPublisher),
+      adapterSubscriber: asGatewayRedisClient(redisSubscriber),
+      command: asGatewayRedisClient(redis),
+      roomEvents: asGatewayRedisClient(roomEventSubscriber),
+      securityEvents: asGatewayRedisClient(securityEventSubscriber),
+    },
+    gracePeriodMs: recoverySettings.redisDegradedGraceSeconds * 1_000,
+    onDegradedTimeout: () => {
+      if (terminating) {
+        return
+      }
+
+      terminating = true
+      logger.warn("redis_recovery_exhausted")
+      void Promise.all([gateway?.close() ?? Promise.resolve(), recovery.close()]).finally(() => {
+        exit(1)
+      })
+    },
+    onStateChange: (state) => {
+      if (state.ready) {
+        logger.info("redis_ready", {
+          reconnectCount: String(state.reconnectCount),
+          subscriberChannelCount: "2",
+        })
+      } else {
+        logger.warn("redis_degraded", { reconnectCount: String(state.reconnectCount) })
+      }
+    },
+    resubscribe: async () => {
+      await Promise.all([
+        roomEventSubscriber.subscribe(CHAT_ROOM_EVENT_CHANNEL),
+        securityEventSubscriber.subscribe(CHAT_ACCOUNT_SECURITY_EVENT_CHANNEL),
+      ])
+    },
   })
-  roomEventSubscriber.on("error", () => {
-    // The service's readiness and authentication paths already fail closed.
+
+  roomEventSubscriber.on("message", (channel, payload) => {
+    if (channel === CHAT_ROOM_EVENT_CHANNEL && gateway) {
+      void fanOutChatRoomEvent(gateway, parseChatRoomEvent(payload))
+    }
+  })
+  securityEventSubscriber.on("message", (channel, payload) => {
+    if (channel !== CHAT_ACCOUNT_SECURITY_EVENT_CHANNEL || !gateway) {
+      return
+    }
+
+    const event = parseAccountSecurityEvent(payload)
+    if (event) {
+      gateway.disconnectUser(event.userId, event.reason)
+    }
   })
 
   try {
-    await Promise.all([
-      redis.connect(),
-      redisSubscriber.connect(),
-      roomEventSubscriber.connect(),
-    ])
-
-    await Promise.all([
-      redis.ping(),
-      redisSubscriber.ping(),
-      roomEventSubscriber.ping(),
-    ])
-
-    const gateway = createChatGateway({
+    gateway = createChatGateway({
       authenticateConnection: (input) =>
         authenticateChatGatewayConnection({
+          environment,
           expectedOrigin: origin,
           origin: input.origin,
           replayStore: redis,
@@ -79,11 +130,22 @@ export async function createProductionChatGateway(
           token: input.token,
           tokenSecret: tokenSettings.secret,
         }),
-      configureIo: (io) => io.adapter(createAdapter(redis, redisSubscriber)),
+      authorizationMaxAgeMs: recoverySettings.authorizationMaxAgeSeconds * 1_000,
+      configureIo: (io) => io.adapter(createAdapter(redisPublisher, redisSubscriber)),
+      isConnectionReady: recovery.isReady,
       logger,
       readiness: async () => {
+        if (!recovery.isReady()) {
+          throw new Error("Redis is unavailable.")
+        }
         await Promise.all([redis.ping(), prisma.$queryRawUnsafe("SELECT 1")])
       },
+      revalidateAuthorization: (identity) =>
+        revalidateChatGatewayAuthorization({
+          environment,
+          identity,
+          store: prisma as ChatGatewayUserStore,
+        }),
     })
 
     attachNativeChatGateway(
@@ -102,33 +164,107 @@ export async function createProductionChatGateway(
       }
     )
 
-    roomEventSubscriber.on("message", (channel, payload) => {
-      if (channel !== CHAT_ROOM_EVENT_CHANNEL) {
-        return
-      }
-
-      void fanOutChatRoomEvent(gateway, parseChatRoomEvent(payload))
-    })
-    await roomEventSubscriber.subscribe(CHAT_ROOM_EVENT_CHANNEL)
+    await recovery.start()
+    const activeGateway = gateway
+    if (!activeGateway) {
+      throw new Error("Chat gateway did not initialize.")
+    }
 
     return {
       close: async () => {
-        await gateway.close()
-        await Promise.all([
-          redis.quit(),
-          redisSubscriber.quit(),
-          roomEventSubscriber.quit(),
-        ])
+        terminating = true
+        await Promise.all([activeGateway.close(), recovery.close()])
       },
-      gateway,
+      gateway: activeGateway,
       port,
     }
   } catch (error) {
-    redis.disconnect()
-    redisSubscriber.disconnect()
-    roomEventSubscriber.disconnect()
+    terminating = true
+    await Promise.allSettled([gateway?.close() ?? Promise.resolve(), recovery.close()])
     throw error
   }
+}
+
+export function getChatGatewayPort(
+  environment: Readonly<Record<string, string | undefined>> = process.env
+) {
+  const rawPort = environment.CHAT_GATEWAY_PORT?.trim()
+
+  if (!rawPort) {
+    return DEFAULT_CHAT_GATEWAY_PORT
+  }
+
+  const port = Number(rawPort)
+
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("CHAT_GATEWAY_PORT must be a valid TCP port.")
+  }
+
+  return port
+}
+
+export function getChatGatewayRecoverySettings(
+  environment: Readonly<Record<string, string | undefined>> = process.env
+) {
+  return {
+    authorizationMaxAgeSeconds: parseBoundedPositiveInteger(
+      environment.ARCTIC_IRC_AUTHORIZATION_MAX_AGE_SECONDS,
+      DEFAULT_AUTHORIZATION_MAX_AGE_SECONDS,
+      15,
+      300,
+      "ARCTIC_IRC_AUTHORIZATION_MAX_AGE_SECONDS"
+    ),
+    redisDegradedGraceSeconds: parseBoundedPositiveInteger(
+      environment.ARCTIC_IRC_REDIS_DEGRADED_GRACE_SECONDS,
+      DEFAULT_REDIS_DEGRADED_GRACE_SECONDS,
+      15,
+      600,
+      "ARCTIC_IRC_REDIS_DEGRADED_GRACE_SECONDS"
+    ),
+  }
+}
+
+function createGatewayRedisClient() {
+  const redis = new Redis(redisConnectionOptions().url, {
+    connectTimeout: 1_000,
+    enableOfflineQueue: false,
+    lazyConnect: true,
+    maxRetriesPerRequest: 0,
+    retryStrategy: (attempt) => {
+      const exponentialDelay = Math.min(1_000 * 2 ** Math.min(attempt - 1, 5), 30_000)
+      const jitter = Math.floor(Math.random() * Math.min(1_000, exponentialDelay / 4))
+      return exponentialDelay + jitter
+    },
+  })
+
+  redis.on("error", () => {
+    // The supervisor logs only connection state, never Redis URLs or payloads.
+  })
+
+  return redis
+}
+
+function asGatewayRedisClient(client: Redis) {
+  return client as unknown as GatewayRedisClient
+}
+
+function parseBoundedPositiveInteger(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  variableName: string
+) {
+  if (!value?.trim()) {
+    return fallback
+  }
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${variableName} must be an integer between ${minimum} and ${maximum}.`)
+  }
+
+  return parsed
 }
 
 async function fanOutChatRoomEvent(gateway: ChatGateway, event: ReturnType<typeof parseChatRoomEvent>) {
@@ -155,41 +291,6 @@ async function fanOutChatRoomEvent(gateway: ChatGateway, event: ReturnType<typeo
       .filter((socket) => socket.data.chat?.userId === event.targetUserId)
       .map((socket) => socket.leave(roomName))
   )
-}
-
-export function getChatGatewayPort(
-  environment: Readonly<Record<string, string | undefined>> = process.env
-) {
-  const rawPort = environment.CHAT_GATEWAY_PORT?.trim()
-
-  if (!rawPort) {
-    return DEFAULT_CHAT_GATEWAY_PORT
-  }
-
-  const port = Number(rawPort)
-
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error("CHAT_GATEWAY_PORT must be a valid TCP port.")
-  }
-
-  return port
-}
-
-function createGatewayRedisClient() {
-  const redis = new Redis(redisConnectionOptions().url, {
-    connectTimeout: 1_000,
-    enableOfflineQueue: false,
-    lazyConnect: true,
-    maxRetriesPerRequest: 0,
-    retryStrategy: () => null,
-  })
-
-  redis.on("error", () => {
-    // Liveness/readiness and connection authentication fail closed; never log
-    // Redis URLs, token data, or raw request details.
-  })
-
-  return redis
 }
 
 async function start() {

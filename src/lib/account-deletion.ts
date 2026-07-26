@@ -4,6 +4,7 @@ import type { PrismaClient } from "@/generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
 import { ARCTICIRC_POLICY_VERSION } from "@/lib/chat/policy-acceptance"
+import { notifyAccountSecurityChange } from "@/lib/chat/security-events"
 import { verifyPassword } from "@/lib/password"
 
 export const ACCOUNT_DELETION_CONFIRMATION = "DELETE"
@@ -99,4 +100,6 @@ export async function deleteAccount({
       throw new AccountDeletionError("Your account changed. Sign in again before deleting it.")
     }
   })
+
+  await notifyAccountSecurityChange({ reason: "account_disabled", userId })
 }

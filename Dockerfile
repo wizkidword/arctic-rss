@@ -38,6 +38,7 @@ FROM deps AS migrate
 WORKDIR /app
 COPY . .
 RUN npm run prisma:generate \
+  && npm prune --omit=dev \
   && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 migrate \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
@@ -49,6 +50,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY . .
 RUN npm run prisma:generate \
+  && npm prune --omit=dev \
   && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 worker \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
@@ -60,6 +62,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY . .
 RUN npm run prisma:generate \
+  && npm prune --omit=dev \
   && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 chatgateway \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx

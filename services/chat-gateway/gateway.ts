@@ -6,7 +6,7 @@ import {
 } from "node:http"
 import type { AddressInfo } from "node:net"
 
-import { Server } from "socket.io"
+import { Server, type Socket } from "socket.io"
 
 import type { ChatGatewayIdentity } from "../../src/lib/chat/gateway-auth"
 import type { ChatGatewayLogger } from "./logger"
@@ -18,6 +18,7 @@ export type ChatGatewayAuthenticator = (input: {
 
 export type ChatGateway = {
   close: () => Promise<void>
+  disconnectUser: (userId: string, reason: string) => number
   httpServer: HttpServer
   io: Server
   start: (port: number) => Promise<number>
@@ -25,15 +26,27 @@ export type ChatGateway = {
 
 export function createChatGateway({
   authenticateConnection,
+  authorizationMaxAgeMs = 60_000,
+  authorizationRecheckIntervalMs = Math.min(30_000, authorizationMaxAgeMs),
   configureIo,
+  isConnectionReady = () => true,
   logger,
   readiness = async () => {},
+  revalidateAuthorization,
 }: {
   authenticateConnection: ChatGatewayAuthenticator
+  authorizationMaxAgeMs?: number
+  authorizationRecheckIntervalMs?: number
   configureIo?: (io: Server) => void
+  isConnectionReady?: () => boolean
   logger: ChatGatewayLogger
   readiness?: () => Promise<void>
+  revalidateAuthorization?: (identity: ChatGatewayIdentity) => Promise<ChatGatewayIdentity>
 }): ChatGateway {
+  const socketsByUser = new Map<string, Set<Socket>>()
+  let activeSockets = 0
+  let forcedSecurityDisconnects = 0
+  let staleAuthorizationDisconnects = 0
   const httpServer = createServer((request, response) => {
     void handleHealthRequest(request, response, readiness)
   })
@@ -46,6 +59,12 @@ export function createChatGateway({
   configureIo?.(io)
 
   io.use(async (socket, next) => {
+    if (!isConnectionReady()) {
+      logger.warn("connection_rejected", { reason: "gateway_not_ready" })
+      next(new Error("unavailable"))
+      return
+    }
+
     try {
       const identity = await authenticateConnection({
         origin: socket.handshake.headers.origin,
@@ -55,27 +74,99 @@ export function createChatGateway({
       socket.data.chat = identity
       next()
     } catch {
-      logger.warn("connection_rejected")
+      logger.warn("connection_rejected", { reason: "authorization_failed" })
       next(new Error("unauthorized"))
     }
   })
 
   io.on("connection", (socket) => {
     const identity = socket.data.chat as ChatGatewayIdentity
+    const userSockets = socketsByUser.get(identity.userId) ?? new Set<Socket>()
+    userSockets.add(socket)
+    socketsByUser.set(identity.userId, userSockets)
+    activeSockets += 1
 
-    logger.info("connection_accepted", { connectionId: socket.id })
+    logger.info("connection_accepted", {
+      activeSockets: String(activeSockets),
+      socketsForUser: String(userSockets.size),
+    })
     socket.emit("session:ready", {
       handle: identity.handle,
       profileId: identity.profileId,
       role: identity.role,
     })
     socket.on("disconnect", () => {
-      logger.info("connection_closed", { connectionId: socket.id })
+      const tracked = socketsByUser.get(identity.userId)
+      tracked?.delete(socket)
+      if (tracked?.size === 0) {
+        socketsByUser.delete(identity.userId)
+      }
+      activeSockets = Math.max(0, activeSockets - 1)
+      logger.info("connection_closed", {
+        activeSockets: String(activeSockets),
+        socketsForUser: String(tracked?.size ?? 0),
+      })
     })
   })
 
+  const revalidationTimer = revalidateAuthorization
+    ? setInterval(() => {
+        void revalidateStaleSockets()
+      }, Math.max(1_000, authorizationRecheckIntervalMs))
+    : undefined
+  revalidationTimer?.unref()
+
+  async function revalidateStaleSockets() {
+    if (!revalidateAuthorization) {
+      return
+    }
+
+    const now = Date.now()
+    const sockets = [...socketsByUser.values()].flatMap((entries) => [...entries])
+
+    await Promise.all(
+      sockets.map(async (socket) => {
+        const identity = socket.data.chat as ChatGatewayIdentity
+        const authorizedAt = Date.parse(identity.authorizedAt)
+
+        if (!Number.isFinite(authorizedAt) || now - authorizedAt >= authorizationMaxAgeMs) {
+          try {
+            socket.data.chat = await revalidateAuthorization(identity)
+          } catch {
+            staleAuthorizationDisconnects += 1
+            socket.disconnect(true)
+            logger.warn("stale_authorization_rejected", {
+              staleAuthorizationDisconnects: String(staleAuthorizationDisconnects),
+            })
+          }
+        }
+      })
+    )
+  }
+
+  function disconnectUser(userId: string, reason: string) {
+    const sockets = [...(socketsByUser.get(userId) ?? [])]
+    for (const socket of sockets) {
+      socket.disconnect(true)
+    }
+
+    forcedSecurityDisconnects += sockets.length
+    logger.warn("security_disconnect", {
+      forcedSecurityDisconnects: String(forcedSecurityDisconnects),
+      reason,
+      socketCount: String(sockets.length),
+    })
+    return sockets.length
+  }
+
   return {
-    close: () => closeGateway(io, httpServer),
+    close: async () => {
+      if (revalidationTimer) {
+        clearInterval(revalidationTimer)
+      }
+      await closeGateway(io, httpServer)
+    },
+    disconnectUser,
     httpServer,
     io,
     start: (port) => startGateway(httpServer, port),
@@ -113,11 +204,7 @@ async function handleHealthRequest(
   sendJson(response, 404, { error: "Not found." })
 }
 
-function sendJson(
-  response: ServerResponse,
-  status: number,
-  body: unknown
-) {
+function sendJson(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, {
     "Cache-Control": "no-store",
     "Content-Type": "application/json; charset=utf-8",

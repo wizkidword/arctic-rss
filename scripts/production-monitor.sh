@@ -67,6 +67,17 @@ check_healthy_container app-worker-1
 check_healthy_container app-postgres-1
 check_healthy_container app-redis-1
 
+# The gateway is an opt-in profile. When it is running, its Compose healthcheck
+# probes /ready, and this explicit probe makes a lost Redis subscription visible
+# to the existing host alert flow without exposing gateway traffic publicly.
+if docker inspect app-chat-gateway-1 >/dev/null 2>&1; then
+  check_healthy_container app-chat-gateway-1
+  if ! docker exec app-chat-gateway-1 node -e \
+    "fetch('http://127.0.0.1:3001/ready').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"; then
+    failures+=("chat_gateway_ready")
+  fi
+fi
+
 if ! curl --fail --silent --show-error --max-time 10 \
   -H "Host: $OPS_PUBLIC_HOST" \
   http://127.0.0.1:3000/api/health >/dev/null; then

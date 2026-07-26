@@ -1,5 +1,7 @@
 import { Prisma, type PrismaClient } from "../generated/prisma/client"
 
+import { notifyAccountSecurityChange } from "@/lib/chat/security-events"
+
 type AdminBootstrapStore = Pick<PrismaClient, "$transaction">
 
 type BootstrapTarget = {
@@ -35,7 +37,7 @@ export async function promoteVerifiedUserToAdmin({
 }): Promise<{ status: "already-admin" | "promoted" }> {
   const normalizedEmail = normalizeAdminBootstrapEmail(email)
 
-  return store.$transaction(async (transaction) => {
+  const result = await store.$transaction(async (transaction) => {
     const matches = (await transaction.user.findMany({
       where: {
         email: {
@@ -111,6 +113,15 @@ export async function promoteVerifiedUserToAdmin({
       },
     })
 
-    return { status: "promoted" as const }
+    return { status: "promoted" as const, userId: target.id }
   })
+
+  if (result.status === "promoted") {
+    await notifyAccountSecurityChange({
+      reason: "role_changed",
+      userId: result.userId,
+    })
+  }
+
+  return { status: result.status }
 }
