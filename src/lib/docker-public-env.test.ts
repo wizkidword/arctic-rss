@@ -34,4 +34,14 @@ describe("docker public build environment", () => {
     expect(workerBlock).toContain("mem_limit: 1g")
     expect(workerBlock).toContain('NODE_OPTIONS: "--max-old-space-size=640"')
   })
+
+  it("keeps the Prisma datasource configuration in the minimized migration image", () => {
+    const dockerfile = readFileSync(
+      path.join(process.cwd(), "Dockerfile"),
+      "utf8"
+    )
+
+    expect(dockerfile).toContain("COPY prisma ./prisma")
+    expect(dockerfile).toContain("COPY prisma.config.ts ./")
+  })
 })

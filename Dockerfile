@@ -51,6 +51,7 @@ FROM ${NODE_IMAGE} AS migrate
 WORKDIR /app
 COPY --from=migrate-deps /app/node_modules ./node_modules
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN ./node_modules/.bin/prisma --version \
   && apk add --no-cache ca-certificates \
   && addgroup --system --gid 1001 nodejs \
