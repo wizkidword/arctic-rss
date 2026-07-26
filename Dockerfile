@@ -42,10 +42,17 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:3000/api/live').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"
 CMD ["node", "server.js"]
 
-FROM deps AS migrate
+FROM ${NODE_IMAGE} AS migrate-deps
 WORKDIR /app
+COPY docker/migrate/package.json docker/migrate/package-lock.json ./
+RUN npm ci
+
+FROM ${NODE_IMAGE} AS migrate
+WORKDIR /app
+COPY --from=migrate-deps /app/node_modules ./node_modules
 COPY prisma ./prisma
-RUN npm run prisma:generate \
+RUN ./node_modules/.bin/prisma --version \
+  && apk add --no-cache ca-certificates \
   && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 migrate \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx

@@ -10,7 +10,13 @@ describe("production Docker images", () => {
     expect(dockerfile).toContain("FROM deps AS production-deps");
     expect(dockerfile).toContain("RUN npm prune --omit=dev");
     expect(dockerfile).toContain("npm run runtime:build");
-    expect(dockerfile).toContain("FROM deps AS migrate");
+    expect(dockerfile).toContain("FROM ${NODE_IMAGE} AS migrate-deps");
+    expect(dockerfile).toContain(
+      "COPY docker/migrate/package.json docker/migrate/package-lock.json ./",
+    );
+    expect(dockerfile).toContain("FROM ${NODE_IMAGE} AS migrate");
+    expect(dockerfile).toContain("COPY --from=migrate-deps /app/node_modules ./node_modules");
+    expect(dockerfile).not.toContain("FROM deps AS migrate");
     expect(dockerfile).toContain(
       "rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx",
     );
