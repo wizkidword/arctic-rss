@@ -39,7 +39,11 @@ import {
   type ChatArticleIntegrationJobData,
 } from "../src/lib/chat/bot-queue"
 import { getChatFeatureFlags } from "../src/lib/chat/feature-flags"
-import { getChatRetentionSettings, purgeExpiredChatRecords } from "../src/lib/chat/retention"
+import {
+  getChatRetentionSettings,
+  purgeExpiredChatRecords,
+  type ChatRetentionContinuation,
+} from "../src/lib/chat/retention"
 import { processChatEventOutbox } from "../src/lib/chat/event-outbox"
 import {
   enqueueFeedRefresh,
@@ -93,7 +97,8 @@ const {
   smartDigestConcurrency,
   smartDigestEmailConcurrency,
 } = schedulerSettings()
-const { intervalMs: chatRetentionIntervalMs } = getChatRetentionSettings()
+const chatRetentionSettings = getChatRetentionSettings()
+const { intervalMs: chatRetentionIntervalMs } = chatRetentionSettings
 const prisma = getPrisma()
 const chatEventOutboxIntervalMs = readClampedPositiveInteger({
   fallback: 1_000,
@@ -432,6 +437,8 @@ let schedulerRunning = false
 let nextAuthTokenMaintenanceAt = 0
 let nextChatRetentionAt = 0
 let nextSecurityEventMaintenanceAt = 0
+let chatRetentionContinuation: ChatRetentionContinuation | undefined
+let chatRetentionFailureCount = 0
 
 function schedulerErrorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : "unknown error"
@@ -558,6 +565,7 @@ async function schedulerTick() {
       chatRetentionResult.status === "fulfilled" &&
       !("disabled" in chatRetentionResult.value && chatRetentionResult.value.disabled)
     ) {
+      chatRetentionFailureCount = 0
       console.log(
         JSON.stringify({
           event: "chat_retention",
@@ -602,8 +610,14 @@ async function schedulerTick() {
     }
 
     if (chatRetentionResult.status === "rejected") {
+      chatRetentionFailureCount += 1
       console.error(
-        `[worker] chat retention failed: ${schedulerErrorMessage(chatRetentionResult.reason)}`
+        JSON.stringify({
+          event: "chat_retention",
+          failureCount: chatRetentionFailureCount,
+          outcome: "failure",
+          reason: schedulerErrorMessage(chatRetentionResult.reason),
+        })
       )
     }
 
@@ -667,10 +681,21 @@ async function runChatRetention() {
   }
 
   nextChatRetentionAt = now + chatRetentionIntervalMs
-  return purgeExpiredChatRecords({
-    batchSize: getChatRetentionSettings().batchSize,
+  const result = await purgeExpiredChatRecords({
+    batchSize: chatRetentionSettings.batchSize,
+    continuation: chatRetentionContinuation,
+    maxBatches: chatRetentionSettings.maxBatches,
+    maxRuntimeMs: chatRetentionSettings.maxRuntimeMs,
     store: prisma,
   })
+  // Another worker may own the distributed lock. Preserve our local cursor in
+  // that case so a skipped pass cannot make the next successful pass rescan
+  // from the beginning.
+  if (!result.skipped) {
+    chatRetentionContinuation = result.continuation ?? undefined
+  }
+
+  return result
 }
 
 async function enqueuePendingSmartDigestEmails() {

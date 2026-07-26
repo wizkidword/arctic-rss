@@ -1258,6 +1258,7 @@ model ChatRoomMember {
   @@unique([roomId, userId])
   @@index([userId, status])
   @@index([roomId, status, role])
+  @@index([status, leftAt, id], map: "ChatRoomMember_retention_left_idx")
 }
 
 model ChatMessage {
@@ -1292,6 +1293,8 @@ model ChatMessage {
   @@unique([senderUserId, clientMessageId])
   @@index([roomId, sequence])
   @@index([senderUserId, createdAt])
+  @@index([createdAt, id], map: "ChatMessage_retention_created_idx")
+  @@index([deletedAt, id], map: "ChatMessage_retention_deleted_idx")
 }
 
 model ChatBotDelivery {
@@ -1369,6 +1372,7 @@ model ChatReport {
   @@index([closedAt, retentionClass])
   @@index([roomId, createdAt])
   @@index([targetUserId, createdAt])
+  @@index([retentionClass, closedAt, id], map: "ChatReport_retention_closed_idx")
 }
 
 // Evidence is kept out of the ordinary report row. It is created once with
@@ -1413,6 +1417,7 @@ model ChatAuditLog {
   @@index([roomId, createdAt])
   @@index([actorUserId, createdAt])
   @@index([targetUserId, createdAt])
+  @@index([createdAt, id], map: "ChatAuditLog_retention_created_idx")
 }
 
 // Durable receipts make moderator retries safe. The result is intentionally a
@@ -1481,4 +1486,5 @@ model AccountDeletionRecord {
   createdAt        DateTime @default(now())
 
   @@index([completedAt])
+  @@index([completedAt, id], map: "AccountDeletionRecord_retention_completed_idx")
 }
