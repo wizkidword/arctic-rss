@@ -1367,13 +1367,13 @@ model ChatReport {
 // the report, never updated by application policy, and is removed with the
 // report unless the report is under an active scoped legal hold.
 model ChatReportEvidence {
-  id           String                         @id @default(cuid())
-  reportId     String                         @unique
-  schemaVersion Int                           @default(1)
-  captureState ChatReportEvidenceCaptureState @default(LEGACY_PARTIAL)
-  contentHash  String?
-  snapshot     Json
-  capturedAt   DateTime                       @default(now())
+  id            String                         @id @default(cuid())
+  reportId      String                         @unique
+  schemaVersion Int                            @default(1)
+  captureState  ChatReportEvidenceCaptureState @default(LEGACY_PARTIAL)
+  contentHash   String?
+  snapshot      Json
+  capturedAt    DateTime                       @default(now())
 
   report ChatReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
