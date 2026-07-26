@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+
 import { describe, expect, it } from "vitest"
 
 import {
@@ -25,5 +27,13 @@ describe("production chat gateway configuration", () => {
     expect(() =>
       getChatGatewayRecoverySettings({ ARCTIC_IRC_AUTHORIZATION_MAX_AGE_SECONDS: "301" })
     ).toThrow("ARCTIC_IRC_AUTHORIZATION_MAX_AGE_SECONDS")
+  })
+
+  it("connects Redis before attaching the Socket.IO Redis adapter", async () => {
+    const source = await readFile("services/chat-gateway/index.ts", "utf8")
+
+    expect(source.indexOf("await recovery.start()")).toBeLessThan(
+      source.indexOf("gateway = createChatGateway(")
+    )
   })
 })

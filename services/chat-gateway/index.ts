@@ -119,6 +119,11 @@ export async function createProductionChatGateway(
   })
 
   try {
+    // The Socket.IO Redis adapter subscribes as soon as it is attached. Its
+    // clients deliberately reject queued commands, so establish all Redis
+    // connections before constructing the adapter.
+    await recovery.start()
+
     gateway = createChatGateway({
       authenticateConnection: (input) =>
         authenticateChatGatewayConnection({
@@ -164,7 +169,6 @@ export async function createProductionChatGateway(
       }
     )
 
-    await recovery.start()
     const activeGateway = gateway
     if (!activeGateway) {
       throw new Error("Chat gateway did not initialize.")
