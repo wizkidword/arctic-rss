@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { request as httpRequest } from "node:http"
 
 const webPort = readPort("WEB_PORT", 3000)
 const gatewayPort = readPort("CHAT_GATEWAY_PORT", 3001)
@@ -45,7 +46,7 @@ async function waitForResponse({ headers, url }) {
 
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(url, { headers })
+      const response = await request(url, headers)
 
       if (response.ok) {
         return response
@@ -60,6 +61,40 @@ async function waitForResponse({ headers, url }) {
   }
 
   throw new Error(`Timed out waiting for ${url}: ${formatError(lastError)}`)
+}
+
+function request(url, headers) {
+  const target = new URL(url)
+
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      {
+        headers,
+        hostname: target.hostname,
+        method: "GET",
+        path: `${target.pathname}${target.search}`,
+        port: target.port,
+      },
+      (response) => {
+        const chunks = []
+
+        response.on("data", (chunk) => chunks.push(chunk))
+        response.on("end", () => {
+          const body = Buffer.concat(chunks).toString("utf8")
+
+          resolve({
+            headers: new Headers(response.headers),
+            json: async () => JSON.parse(body),
+            ok: (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300,
+            status: response.statusCode ?? 0,
+          })
+        })
+      }
+    )
+
+    request.once("error", reject)
+    request.end()
+  })
 }
 
 function formatError(error) {
