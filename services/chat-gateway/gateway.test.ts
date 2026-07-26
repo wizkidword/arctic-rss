@@ -2,6 +2,7 @@ import { io as createSocketClient } from "socket.io-client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createChatGateway, type ChatGateway } from "./gateway"
+import { DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS } from "./abuse"
 
 const logger = {
   info: vi.fn(),
@@ -93,6 +94,69 @@ describe("chat gateway", () => {
     })
   })
 
+  it("enforces per-user and trusted-client-IP connection caps", async () => {
+    gateway = createChatGateway({
+      abuseSettings: {
+        ...DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS,
+        maxActiveSocketsPerIp: 1,
+        maxActiveSocketsPerUser: 1,
+      },
+      authenticateConnection: async ({ token }) => ({
+        ...identity,
+        userId: token === "second-user" ? "user-2" : identity.userId,
+      }),
+      logger,
+    })
+    const port = await gateway.start(0)
+    const first = connect(port, "valid-token", "198.51.100.10")
+    await once(first, "session:ready")
+
+    const sameUser = connect(port, "valid-token", "198.51.100.11")
+    await expect(once(sameUser, "connect_error")).resolves.toBeInstanceOf(Error)
+
+    const sameIp = connect(port, "second-user", "198.51.100.10")
+    await expect(once(sameIp, "connect_error")).resolves.toBeInstanceOf(Error)
+  })
+
+  it("limits handshake rates before authentication and sets Socket.IO's payload ceiling", async () => {
+    gateway = createChatGateway({
+      abuseSettings: {
+        ...DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS,
+        maxEventPayloadBytes: 1_024,
+      },
+      authenticateConnection: async () => identity,
+      limitChatAction: async ({ action }) => action !== "chat_connection",
+      logger,
+    })
+    const port = await gateway.start(0)
+    const blocked = connect(port, "valid-token", "198.51.100.12")
+
+    await expect(once(blocked, "connect_error")).resolves.toBeInstanceOf(Error)
+    expect(
+      (gateway.io.engine as unknown as { opts: { maxHttpBufferSize: number } }).opts
+        .maxHttpBufferSize
+    ).toBe(1_024)
+  })
+
+  it("closes a raw Socket.IO client that exceeds the configured payload ceiling", async () => {
+    gateway = createChatGateway({
+      abuseSettings: {
+        ...DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS,
+        maxEventPayloadBytes: 1_024,
+      },
+      authenticateConnection: async () => identity,
+      logger,
+    })
+    const port = await gateway.start(0)
+    const client = connect(port)
+    await once(client, "session:ready")
+
+    const closed = once(client, "disconnect")
+    client.emit("room:subscribe", { slug: "x".repeat(2_048) })
+
+    await expect(closed).resolves.toBeDefined()
+  })
+
   it("disconnects every local socket for a replayed security event", async () => {
     gateway = createChatGateway({ authenticateConnection: async () => identity, logger })
     const port = await gateway.start(0)
@@ -132,9 +196,10 @@ describe("chat gateway", () => {
     )
   })
 
-  function connect(port: number) {
+  function connect(port: number, token = "valid-token", clientIp?: string) {
     const client = createSocketClient(`ws://127.0.0.1:${port}`, {
-      auth: { token: "valid-token" },
+      auth: { token },
+      extraHeaders: clientIp ? { "cf-connecting-ip": clientIp } : undefined,
       forceNew: true,
       transports: ["websocket"],
     })

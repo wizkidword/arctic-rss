@@ -29,6 +29,10 @@ import { enforceRateLimit } from "../../src/lib/rate-limit"
 
 import { createChatGateway, type ChatGateway } from "./gateway"
 import { createChatGatewayLogger } from "./logger"
+import {
+  DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS,
+  type ChatGatewayAbuseSettings,
+} from "./abuse"
 import { attachNativeChatGateway, nativeChatRoomEventName } from "./native-chat"
 import {
   getChatRoomSnapshot,
@@ -54,6 +58,7 @@ export async function createProductionChatGateway(
   const origin = assertProductionAppOrigin(environment).origin
   const tokenSettings = getChatConnectionTokenSettings(environment)
   const recoverySettings = getChatGatewayRecoverySettings(environment)
+  const abuseSettings = getChatGatewayAbuseSettings(environment)
   const port = getChatGatewayPort(environment)
   const prisma = getPrisma()
   const redis = createGatewayRedisClient()
@@ -136,9 +141,12 @@ export async function createProductionChatGateway(
           tokenSecret: tokenSettings.secret,
         }),
       authorizationMaxAgeMs: recoverySettings.authorizationMaxAgeSeconds * 1_000,
+      abuseSettings,
       configureIo: (io) => io.adapter(createAdapter(redisPublisher, redisSubscriber)),
       isConnectionReady: recovery.isReady,
       logger,
+      limitChatAction: async ({ action, ip, roomId, userId }) =>
+        (await enforceRateLimit({ action, ip, roomId, userId })).allowed,
       readiness: async () => {
         if (!recovery.isReady()) {
           throw new Error("Redis is unavailable.")
@@ -160,9 +168,14 @@ export async function createProductionChatGateway(
         sendMessage: (input) => sendChatRoomMessage({ ...input, store: prisma }),
         updateReadMarker: (input) => updateChatReadMarker({ ...input, store: prisma }),
       },
-      async (identity) =>
-        (await enforceRateLimit({ action: "chat_message", userId: identity.userId }))
-          .allowed,
+      async (identity, roomId) =>
+        (
+          await enforceRateLimit({
+            action: "chat_message",
+            roomId,
+            userId: identity.userId,
+          })
+        ).allowed,
       {
         clear: (input) => clearChatPresence(input, redis),
         mark: (input) => markChatPresence(input, redis),
@@ -224,6 +237,55 @@ export function getChatGatewayRecoverySettings(
       15,
       600,
       "ARCTIC_IRC_REDIS_DEGRADED_GRACE_SECONDS"
+    ),
+  }
+}
+
+export function getChatGatewayAbuseSettings(
+  environment: Readonly<Record<string, string | undefined>> = process.env
+): ChatGatewayAbuseSettings {
+  return {
+    maxActiveSocketsPerIp: parseBoundedPositiveInteger(
+      environment.ARCTIC_IRC_MAX_SOCKETS_PER_IP,
+      DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS.maxActiveSocketsPerIp,
+      1,
+      100,
+      "ARCTIC_IRC_MAX_SOCKETS_PER_IP"
+    ),
+    maxActiveSocketsPerUser: parseBoundedPositiveInteger(
+      environment.ARCTIC_IRC_MAX_SOCKETS_PER_USER,
+      DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS.maxActiveSocketsPerUser,
+      1,
+      20,
+      "ARCTIC_IRC_MAX_SOCKETS_PER_USER"
+    ),
+    maxEventPayloadBytes: parseBoundedPositiveInteger(
+      environment.ARCTIC_IRC_MAX_EVENT_PAYLOAD_BYTES,
+      DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS.maxEventPayloadBytes,
+      1_024,
+      1_048_576,
+      "ARCTIC_IRC_MAX_EVENT_PAYLOAD_BYTES"
+    ),
+    maxMalformedEvents: parseBoundedPositiveInteger(
+      environment.ARCTIC_IRC_MAX_MALFORMED_EVENTS,
+      DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS.maxMalformedEvents,
+      1,
+      20,
+      "ARCTIC_IRC_MAX_MALFORMED_EVENTS"
+    ),
+    maxOutstandingOperations: parseBoundedPositiveInteger(
+      environment.ARCTIC_IRC_MAX_OUTSTANDING_OPERATIONS,
+      DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS.maxOutstandingOperations,
+      1,
+      50,
+      "ARCTIC_IRC_MAX_OUTSTANDING_OPERATIONS"
+    ),
+    maxRoomsPerSocket: parseBoundedPositiveInteger(
+      environment.ARCTIC_IRC_MAX_ROOMS_PER_SOCKET,
+      DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS.maxRoomsPerSocket,
+      1,
+      100,
+      "ARCTIC_IRC_MAX_ROOMS_PER_SOCKET"
     ),
   }
 }

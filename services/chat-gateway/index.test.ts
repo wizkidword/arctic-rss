@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   createProductionChatGateway,
+  getChatGatewayAbuseSettings,
   getChatGatewayPort,
   getChatGatewayRecoverySettings,
 } from "./index"
@@ -27,6 +28,17 @@ describe("production chat gateway configuration", () => {
     expect(() =>
       getChatGatewayRecoverySettings({ ARCTIC_IRC_AUTHORIZATION_MAX_AGE_SECONDS: "301" })
     ).toThrow("ARCTIC_IRC_AUTHORIZATION_MAX_AGE_SECONDS")
+    expect(getChatGatewayAbuseSettings({})).toMatchObject({
+      maxActiveSocketsPerIp: 20,
+      maxActiveSocketsPerUser: 5,
+      maxEventPayloadBytes: 65_536,
+      maxMalformedEvents: 5,
+      maxOutstandingOperations: 8,
+      maxRoomsPerSocket: 20,
+    })
+    expect(() =>
+      getChatGatewayAbuseSettings({ ARCTIC_IRC_MAX_SOCKETS_PER_USER: "21" })
+    ).toThrow("ARCTIC_IRC_MAX_SOCKETS_PER_USER")
   })
 
   it("connects Redis before attaching the Socket.IO Redis adapter", async () => {

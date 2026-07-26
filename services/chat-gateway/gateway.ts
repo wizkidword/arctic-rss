@@ -5,10 +5,17 @@ import {
   type ServerResponse,
 } from "node:http"
 import type { AddressInfo } from "node:net"
+import { isIP } from "node:net"
 
 import { Server, type Socket } from "socket.io"
 
 import type { ChatGatewayIdentity } from "../../src/lib/chat/gateway-auth"
+import {
+  createChatSocketAbuseControls,
+  DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS,
+  type ChatGatewayAbuseSettings,
+  type ChatGatewayEventLimiter,
+} from "./abuse"
 import type { ChatGatewayLogger } from "./logger"
 
 export type ChatGatewayAuthenticator = (input: {
@@ -28,8 +35,10 @@ export function createChatGateway({
   authenticateConnection,
   authorizationMaxAgeMs = 60_000,
   authorizationRecheckIntervalMs = Math.min(30_000, authorizationMaxAgeMs),
+  abuseSettings = DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS,
   configureIo,
   isConnectionReady = () => true,
+  limitChatAction = async () => true,
   logger,
   readiness = async () => {},
   revalidateAuthorization,
@@ -37,13 +46,18 @@ export function createChatGateway({
   authenticateConnection: ChatGatewayAuthenticator
   authorizationMaxAgeMs?: number
   authorizationRecheckIntervalMs?: number
+  abuseSettings?: ChatGatewayAbuseSettings
   configureIo?: (io: Server) => void
   isConnectionReady?: () => boolean
+  limitChatAction?: ChatGatewayEventLimiter
   logger: ChatGatewayLogger
   readiness?: () => Promise<void>
   revalidateAuthorization?: (identity: ChatGatewayIdentity) => Promise<ChatGatewayIdentity>
 }): ChatGateway {
   const socketsByUser = new Map<string, Set<Socket>>()
+  const socketsByIp = new Map<string, Set<Socket>>()
+  const pendingConnectionsByIp = new Map<string, number>()
+  const pendingConnectionsByUser = new Map<string, number>()
   let activeSockets = 0
   let forcedSecurityDisconnects = 0
   let staleAuthorizationDisconnects = 0
@@ -54,6 +68,7 @@ export function createChatGateway({
     // WebSocket-only avoids long-polling sticky-session requirements when the
     // gateway is scaled horizontally behind the Redis adapter.
     transports: ["websocket"],
+    maxHttpBufferSize: abuseSettings.maxEventPayloadBytes,
   })
 
   configureIo?.(io)
@@ -65,15 +80,49 @@ export function createChatGateway({
       return
     }
 
+    const clientIp = getGatewayClientIp(socket)
+
+    let connectionAllowed = false
+    try {
+      connectionAllowed = await limitChatAction({ action: "chat_connection", ip: clientIp })
+    } catch {
+      logger.warn("connection_rejected", { reason: "rate_limit_unavailable" })
+      next(new Error("unavailable"))
+      return
+    }
+
+    if (!connectionAllowed) {
+      logger.warn("connection_rejected", { reason: "rate_limited" })
+      next(new Error("rate-limited"))
+      return
+    }
+
     try {
       const identity = await authenticateConnection({
         origin: socket.handshake.headers.origin,
         token: socket.handshake.auth?.token,
       })
 
+      const admission = reserveConnection(identity.userId, clientIp)
+      if (admission !== "accepted") {
+        logger.warn("connection_rejected", { reason: admission })
+        next(new Error("connection-limit"))
+        return
+      }
+
       socket.data.chat = identity
+      socket.data.chatAdmission = { clientIp, userId: identity.userId }
+      socket.data.chatAbuse = createChatSocketAbuseControls({
+        clientIp,
+        identity,
+        limiter: limitChatAction,
+        logger,
+        settings: abuseSettings,
+        socket,
+      })
       next()
     } catch {
+      void limitChatAction({ action: "chat_authorization_failure", ip: clientIp })
       logger.warn("connection_rejected", { reason: "authorization_failed" })
       next(new Error("unauthorized"))
     }
@@ -81,9 +130,19 @@ export function createChatGateway({
 
   io.on("connection", (socket) => {
     const identity = socket.data.chat as ChatGatewayIdentity
+    const admission = socket.data.chatAdmission as {
+      clientIp: string | undefined
+      userId: string
+    }
+    releasePendingConnection(admission.userId, admission.clientIp)
     const userSockets = socketsByUser.get(identity.userId) ?? new Set<Socket>()
     userSockets.add(socket)
     socketsByUser.set(identity.userId, userSockets)
+    if (admission.clientIp) {
+      const ipSockets = socketsByIp.get(admission.clientIp) ?? new Set<Socket>()
+      ipSockets.add(socket)
+      socketsByIp.set(admission.clientIp, ipSockets)
+    }
     activeSockets += 1
 
     logger.info("connection_accepted", {
@@ -100,6 +159,13 @@ export function createChatGateway({
       tracked?.delete(socket)
       if (tracked?.size === 0) {
         socketsByUser.delete(identity.userId)
+      }
+      if (admission.clientIp) {
+        const ipSockets = socketsByIp.get(admission.clientIp)
+        ipSockets?.delete(socket)
+        if (ipSockets?.size === 0) {
+          socketsByIp.delete(admission.clientIp)
+        }
       }
       activeSockets = Math.max(0, activeSockets - 1)
       logger.info("connection_closed", {
@@ -144,6 +210,36 @@ export function createChatGateway({
     )
   }
 
+  function reserveConnection(userId: string, clientIp: string | undefined) {
+    const activeUserSockets = socketsByUser.get(userId)?.size ?? 0
+    const pendingUserSockets = pendingConnectionsByUser.get(userId) ?? 0
+
+    if (activeUserSockets + pendingUserSockets >= abuseSettings.maxActiveSocketsPerUser) {
+      return "user_connection_limit"
+    }
+
+    if (clientIp) {
+      const activeIpSockets = socketsByIp.get(clientIp)?.size ?? 0
+      const pendingIpSockets = pendingConnectionsByIp.get(clientIp) ?? 0
+
+      if (activeIpSockets + pendingIpSockets >= abuseSettings.maxActiveSocketsPerIp) {
+        return "ip_connection_limit"
+      }
+
+      pendingConnectionsByIp.set(clientIp, pendingIpSockets + 1)
+    }
+
+    pendingConnectionsByUser.set(userId, pendingUserSockets + 1)
+    return "accepted"
+  }
+
+  function releasePendingConnection(userId: string, clientIp: string | undefined) {
+    decrementConnectionCount(pendingConnectionsByUser, userId)
+    if (clientIp) {
+      decrementConnectionCount(pendingConnectionsByIp, clientIp)
+    }
+  }
+
   function disconnectUser(userId: string, reason: string) {
     const sockets = [...(socketsByUser.get(userId) ?? [])]
     for (const socket of sockets) {
@@ -171,6 +267,24 @@ export function createChatGateway({
     io,
     start: (port) => startGateway(httpServer, port),
   }
+}
+
+function decrementConnectionCount(connections: Map<string, number>, key: string) {
+  const current = connections.get(key) ?? 0
+
+  if (current <= 1) {
+    connections.delete(key)
+    return
+  }
+
+  connections.set(key, current - 1)
+}
+
+function getGatewayClientIp(socket: Socket) {
+  const header = socket.handshake.headers["cf-connecting-ip"]
+  const value = (Array.isArray(header) ? header[0] : header)?.trim().toLowerCase()
+
+  return value && isIP(value) !== 0 ? value : undefined
 }
 
 async function handleHealthRequest(

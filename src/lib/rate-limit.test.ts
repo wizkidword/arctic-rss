@@ -111,6 +111,47 @@ describe("rate limiter", () => {
     })
   })
 
+  it("uses IP and room-scoped counters for chat connection and room events", async () => {
+    const store = createCounterStore()
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await expect(
+        enforceRateLimit(
+          { action: "chat_connection", ip: "198.51.100.44" },
+          { store }
+        )
+      ).resolves.toEqual({ allowed: true })
+    }
+
+    await expect(
+      enforceRateLimit({ action: "chat_connection", ip: "198.51.100.44" }, { store })
+    ).resolves.toMatchObject({ allowed: false, scope: "ip" })
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await expect(
+        enforceRateLimit(
+          {
+            action: "chat_room_subscribe",
+            roomId: "room-arctic",
+            userId: "user-789",
+          },
+          { store }
+        )
+      ).resolves.toEqual({ allowed: true })
+    }
+
+    await expect(
+      enforceRateLimit(
+        {
+          action: "chat_room_subscribe",
+          roomId: "room-arctic",
+          userId: "user-789",
+        },
+        { store }
+      )
+    ).resolves.toMatchObject({ allowed: false, scope: "user-room" })
+  })
+
   it("shares a Redis counter across application instances", async () => {
     const redisStore = createCounterStore()
     const firstInstance = { store: redisStore }

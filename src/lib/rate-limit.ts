@@ -28,9 +28,16 @@ export type RateLimitAction =
   | "admin_opml_import"
   | "ai_digest"
   | "ai_summary"
+  | "chat_authorization_failure"
+  | "chat_connection"
   | "chat_message"
+  | "chat_malformed_event"
   | "chat_moderation"
+  | "chat_read_marker"
   | "chat_report"
+  | "chat_room_subscribe"
+  | "chat_room_unsubscribe"
+  | "chat_session_token"
   | "feed_discovery"
   | "feedback"
   | "image_proxy"
@@ -45,6 +52,7 @@ export type RateLimitInput = {
   account?: string | null
   action: RateLimitAction
   ip?: string | null
+  roomId?: string | null
   token?: string | null
   userId?: string | null
 }
@@ -70,11 +78,11 @@ export type RateLimitDependencies = {
   store?: RateLimitStore
 }
 
-const inputSubject = (name: "account" | "ip" | "token" | "userId") =>
+const inputSubject = (name: "account" | "ip" | "roomId" | "token" | "userId") =>
   (input: RateLimitInput) => normalizeIdentifier(input[name])
 
 const combinedSubject = (
-  ...names: Array<"account" | "ip" | "token" | "userId">
+  ...names: Array<"account" | "ip" | "roomId" | "token" | "userId">
 ) =>
   (input: RateLimitInput) => {
     const values = names.map((name) => normalizeIdentifier(input[name]))
@@ -101,14 +109,55 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
   ai_summary: [
     { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
   ],
+  chat_authorization_failure: [
+    { limit: 12, scope: "ip", subject: inputSubject("ip"), windowMs: 5 * 60_000 },
+  ],
+  chat_connection: [
+    { limit: 30, scope: "ip", subject: inputSubject("ip"), windowMs: 60_000 },
+  ],
   chat_message: [
     { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+    {
+      limit: 12,
+      scope: "user-room",
+      subject: combinedSubject("userId", "roomId"),
+      windowMs: 60_000,
+    },
+  ],
+  chat_malformed_event: [
+    { limit: 10, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+    { limit: 30, scope: "ip", subject: inputSubject("ip"), windowMs: 60_000 },
   ],
   chat_moderation: [
     { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
   ],
+  chat_read_marker: [
+    { limit: 60, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+    {
+      limit: 30,
+      scope: "user-room",
+      subject: combinedSubject("userId", "roomId"),
+      windowMs: 60_000,
+    },
+  ],
   chat_report: [
     { limit: 6, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
+  ],
+  chat_room_subscribe: [
+    { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+    {
+      limit: 10,
+      scope: "user-room",
+      subject: combinedSubject("userId", "roomId"),
+      windowMs: 60_000,
+    },
+  ],
+  chat_room_unsubscribe: [
+    { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+  ],
+  chat_session_token: [
+    { limit: 20, scope: "user", subject: inputSubject("userId"), windowMs: 5 * 60_000 },
+    { limit: 60, scope: "ip", subject: inputSubject("ip"), windowMs: 5 * 60_000 },
   ],
   feed_discovery: [
     { limit: 20, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },

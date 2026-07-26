@@ -28,6 +28,29 @@ not authorization to change production.
   gateway closes and exits with status 1. Compose's `unless-stopped` policy then
   recreates it.
 
+## WebSocket abuse boundaries
+
+The gateway accepts only Cloudflare's validated `CF-Connecting-IP` header as a
+client IP. Its connection rate limit is deliberately fail-closed when that
+header is absent, so verify the tunnel or reverse proxy overwrites and forwards
+the header before enabling chat. Never substitute `X-Forwarded-For` without a
+reviewed trusted-proxy design.
+
+Socket.IO is WebSocket-only and limits an incoming event packet to 64 KiB by
+default. The gateway also enforces 5 active sockets per user, 20 per trusted
+client IP, 20 rooms per socket, 8 outstanding operations per socket, and
+disconnects a socket after 5 malformed events. Redis-backed limits cover
+session-token requests, connection attempts, subscribe/unsubscribe, read
+markers, messages, malformed events, and authorization failures. These
+defaults can be adjusted only through the bounded `ARCTIC_IRC_MAX_*` variables
+in `.env.example` after an approved capacity test; do not print production
+values.
+
+Malformed payloads and optional acknowledgement callbacks are safe: an absent
+or failing callback cannot crash the gateway. Structured logs record counts
+only, under `connection_rejected`, `malformed_event`,
+`malformed_event_disconnect`, and `operation_limit_rejected`.
+
 ## Required release procedure
 
 1. Use the normal approved-release procedure: clean reviewed commit, successful
@@ -74,6 +97,10 @@ Then use two controlled beta accounts through the canonical WSS route:
    gateway exits, Compose restarts it, and the host monitor records the
    readiness failure and recovery. Do not perform this destructive test during
    a user-facing window.
+6. Confirm one controlled account can use multiple normal tabs while the
+   configured socket cap rejects the next connection, then close a tab and
+   confirm a new connection succeeds. Run any connection-flood or oversized
+   payload exercise only against an approved non-production gateway.
 
 Relevant structured log event names are `redis_degraded`, `redis_ready`,
 `redis_recovery_exhausted`, `security_disconnect`,

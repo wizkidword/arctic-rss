@@ -6,12 +6,30 @@ import {
   getChatConnectionTokenSettings,
   issueChatConnectionToken,
 } from "@/lib/chat/session-token"
+import {
+  enforceRateLimit,
+  getRateLimitErrorMessage,
+  getTrustedClientIp,
+} from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
     const user = await requireChatEligibleUser({ mutationRequest: request })
+    const rateLimit = await enforceRateLimit({
+      action: "chat_session_token",
+      ip: getTrustedClientIp(request.headers),
+      userId: user.id,
+    })
+
+    if (!rateLimit.allowed) {
+      return Response.json(
+        { error: getRateLimitErrorMessage() },
+        { headers: { "Cache-Control": "no-store" }, status: 429 }
+      )
+    }
+
     const profile = await getChatProfileForUser(user.id)
 
     if (!profile) {
