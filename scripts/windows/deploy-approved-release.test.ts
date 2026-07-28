@@ -20,4 +20,18 @@ describe("approved release command", () => {
     expect(script).toContain("app-redis-ephemeral-1")
     expect(script).toContain('test "$redis_ephemeral_health" = healthy')
   })
+
+  it("records migration verification and source-built image identities", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain('migration_status="verified"')
+    expect(script).toContain("printf 'MIGRATION_STATUS=%s\\n' \"$migration_status\"")
+    expect(script).toContain('docker inspect -f \'{{.Image}}\' app-web-1')
+    expect(script).toContain('docker inspect -f \'{{.Image}}\' app-worker-1')
+    expect(script).toContain('docker inspect -f \'{{.Image}}\' app-chat-gateway-1')
+    expect(script).toContain('migrationStatus = $migrationStatus')
+    expect(script).toContain('webImage = $webImage')
+    expect(script).toContain('workerImage = $workerImage')
+    expect(script).toContain('chatGatewayImage = $chatGatewayImage')
+  })
 })

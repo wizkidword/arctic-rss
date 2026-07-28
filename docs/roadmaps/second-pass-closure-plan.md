@@ -39,8 +39,8 @@ provider-side decision requiring explicit authorization.
 | Area | Evidence on 2026-07-28 | State |
 | --- | --- | --- |
 | Source baseline | `origin/main` is `107377b`; it contains implementation commits for every P1–P3 remediation item in the original plan. | Code complete, subject to live parity. |
-| Candidate commits | Candidate `ae98231` is nine commits ahead of `origin/main`; it includes the Sharp standalone fix, backup failure alert wiring, polished alerts, the reproducible gate evidence, and closure documentation. | Pushed as draft PR #28; not deployed. |
-| CI | The complete CI workflow passed for candidate `ae98231`, including CodeQL after the owner-approved public-visibility decision. | Proven for the candidate SHA. |
+| Candidate commits | This branch includes the Sharp standalone fix, backup failure alert wiring, polished alerts, reproducible-gate support, closure evidence, and release-record provenance improvements. | Pushed as draft PR #28; not deployed. |
+| CI | Full CI passed for the preceding reviewed candidates, including CodeQL after the owner-approved public-visibility decision. | Always recheck CI for the exact current candidate SHA before promotion or release. |
 | Focused regression gates | 111 focused chat, worker, image, monitor, and backup tests passed locally. | Proven locally. |
 | Static validation | A bounded Windows harness completed full Vitest naturally (209 files, 932 tests) and Prisma format/validation. Typecheck and lint exit 0; lint retains two pre-existing unused-parameter warnings. The production build compiled and the standalone Sharp runtime loaded. | Local gate verified. |
 | Public surface | Canonical health returned `200 {"status":"ok"}` and login returned `200` with a password field. | Live and verified. |
@@ -49,7 +49,7 @@ provider-side decision requiring explicit authorization.
 | Backups and alerts | Daily backup and monitor timers are active; latest backup is complete; the off-host sync task last succeeded; alert delivery is configured and SMTP-accepted. | Live and verified. |
 | Redis condition | Durable and ephemeral Redis are healthy but both remain above the monitor's fragmentation threshold. | Open operational condition; do not restart Redis casually. |
 | Worker isolation | The compatibility `worker` is live. The five-service `split-workers` profile is available in source but intentionally not activated. | Deliberately deferred cutover. |
-| Image runtime | Minimal compiled images are in source. The Sharp standalone-runtime fix is reviewed, pushed, and CI-proven in candidate `ae98231`. | Open release item; not deployed. |
+| Image runtime | Minimal compiled images are in source. The Sharp standalone-runtime fix is reviewed and pushed in the candidate branch. | Open release item; not deployed. |
 
 ## Original-plan reconciliation
 
@@ -92,11 +92,13 @@ ambiguous hanging command.
    reproducible local-gate support, and closure evidence. The alert scripts
    are already installed on OVH; this brings Git history into parity without
    pretending it is an application deployment.
-2. **Completed 2026-07-28.** Wait for fresh CI on the exact candidate SHA.
-   Candidate `ae98231` passed the complete workflow, including CodeQL.
-3. **Revalidated 2026-07-28.** The approved-release command already creates a
+2. Require fresh CI on the exact candidate SHA. Prior candidates passed the
+   complete workflow, including CodeQL, but that evidence is never
+   transferable to a later commit.
+3. **Completed in source 2026-07-28.** The approved-release command creates a
    private, non-secret JSON release record with the exact commit, archive
-   SHA-256, CI run, backup identifier, health results, and retained prior
+   SHA-256, CI run, backup identifier, migration verification, source-built
+   web/worker/chat-gateway image IDs, health results, and retained prior
    release. The current live release remains unproven because its source
    directory is not a Git checkout and no verified record was available during
    the OVH audit. The next approved release will close that live gap.
