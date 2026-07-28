@@ -22,7 +22,7 @@ small vertical slice. Do not begin several roadmap items at once.
 | --- | --- | --- | --- |
 | 1 | Search and saved searches | Makes an existing reader useful again as subscriptions grow. | In progress: source slices ready; OVH preflight and release evidence remain |
 | 2 | Reader automation | Builds on saved-search/query semantics to reduce routine triage. | Not started |
-| 3 | Story comparison | Helps readers understand coverage across sources instead of only consuming a chronological feed. | Not started |
+| 3 | Story comparison | Helps readers understand coverage across sources instead of only consuming a chronological feed. | In progress: source signal foundation only |
 | 4 | Better briefings | Improves the value of the existing AI and digest foundations. | Not started |
 | 5 | Podcast transcripts | Extends the podcast experience from playback to research and recall. | Not started |
 | 6 | Capture tools | Gives users a low-friction way to bring outside reading into Arctic RSS. | Not started |
@@ -80,6 +80,12 @@ affecting another user's reader state.
 ### 3. Story comparison
 
 **User outcome:** see how several sources cover the same event or topic.
+
+**Current foundation:** canonical URLs, normalized titles, and an explicitly
+configured publication-time window now produce individual, visible evidence
+records. This layer returns neither a score nor a grouping verdict; future
+cluster policy must keep its merge reasons, split/merge/dismiss controls, and
+version history explicit.
 
 **Thin first release:**
 
