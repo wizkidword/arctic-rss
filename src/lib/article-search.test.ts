@@ -4,6 +4,7 @@ import {
   articleSearchHref,
   listReaderArticleSearchPageWithClient,
   parseArticleSearchFilters,
+  savedSearchCreateHref,
 } from "./article-search"
 
 function createArticleRecord(id: string) {
@@ -55,6 +56,9 @@ describe("article search filters", () => {
     )
     expect(articleSearchHref(filters)).toBe(
       "/app/search?v=1&q=sea+ice&source=source-1&folder=folder-1&collection=collection-1&state=starred&from=2026-06-01&to=2026-06-30"
+    )
+    expect(savedSearchCreateHref(filters)).toBe(
+      "/app/saved-searches/new?v=1&q=sea+ice&source=source-1&folder=folder-1&collection=collection-1&state=starred&from=2026-06-01&to=2026-06-30"
     )
   })
 

@@ -4,7 +4,7 @@
 production-remediation work. This is a decision aid and resumption guide, not
 a commitment to build every item or a schedule.
 
-**Last reviewed:** 2026-07-13
+**Last reviewed:** 2026-07-28
 
 ## Current baseline
 
@@ -20,7 +20,7 @@ small vertical slice. Do not begin several roadmap items at once.
 
 | Order | Initiative | Why it belongs here | Status |
 | --- | --- | --- | --- |
-| 1 | Search and saved searches | Makes an existing reader useful again as subscriptions grow. | Not started |
+| 1 | Search and saved searches | Makes an existing reader useful again as subscriptions grow. | In progress: source slices ready; OVH preflight and release evidence remain |
 | 2 | Reader automation | Builds on saved-search/query semantics to reduce routine triage. | Not started |
 | 3 | Story comparison | Helps readers understand coverage across sources instead of only consuming a chronological feed. | Not started |
 | 4 | Better briefings | Improves the value of the existing AI and digest foundations. | Not started |
@@ -50,12 +50,14 @@ the same focused view later.
 - Save a named search and reopen it from the reader navigation.
 - Keep results scoped to the current user and paginate them.
 
-**Design decisions to make first:** PostgreSQL full-text search versus a
-dedicated search service; how long article text is retained; and whether saved
-searches are a full filter language or a constrained form builder.
+**Implemented design:** PostgreSQL full-text search with a constrained,
+versioned saved-filter form. Saved searches are private shortcuts only; they do
+not yet schedule work, send notifications, or use AI.
 
-**Done when:** a user can save a query, new matching articles appear in it, and
-the results remain private, fast, and share no raw cross-user data.
+**Source slice done when:** a user can save a query, reopen or delete only
+their own saved filter, and matching results remain private. Production remains
+separately gated on the OVH migration-role, capacity, and representative query
+plan evidence.
 
 ### 2. Reader automation and rules
 

@@ -283,6 +283,7 @@ model User {
   aiDigests               AiDigest[]
   smartDigestRules        SmartDigestRule[]
   smartDigests            SmartDigest[]
+  savedSearches           SavedSearch[]
   importJobs              ImportJob[]
   bugReports              BugReport[]
   featureSuggestions      FeatureSuggestion[]
@@ -840,6 +841,31 @@ model SmartDigestRule {
   @@unique([userId, id])
   @@index([userId, isEnabled])
   @@index([isEnabled, nextRunAt])
+}
+
+// A saved search is a user-owned snapshot of the versioned reader search
+// filters. It does not execute on a schedule or send notifications; those
+// behaviors stay with Smart Digest rules until they have their own lifecycle.
+model SavedSearch {
+  id                String    @id @default(cuid())
+  userId            String
+  name              String
+  description       String?
+  definitionVersion Int       @default(1)
+  query             String
+  state             String    @default("all")
+  subscriptionId    String?
+  folderId          String?
+  collectionId      String?
+  publishedAfter    DateTime?
+  publishedBefore   DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, id])
+  @@index([userId, updatedAt])
 }
 
 model DigestRun {
