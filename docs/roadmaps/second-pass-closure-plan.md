@@ -15,8 +15,8 @@ database restore, or production fault injection.
 - The repository is public by the owner's 2026-07-28 decision so GitHub's
   no-cost CodeQL service can run. Keep all operational configuration, release
   records, credentials, backup material, and OVH details outside Git.
-- Treat OVH as the only production environment. Do not reuse Hetzner host
-  details, capacity assumptions, or commands.
+- Treat OVH as the only production environment. Do not reuse legacy-provider
+  host details, capacity assumptions, or commands.
 - A commit is not live merely because it passed CI. A production application
   release requires a fresh typed `DEPLOY <short-sha>` approval.
 - Do not run a full production Docker build until the release method and OVH
@@ -38,18 +38,18 @@ provider-side decision requiring explicit authorization.
 
 | Area | Evidence on 2026-07-28 | State |
 | --- | --- | --- |
-| Source baseline | `origin/main` is `107377b`; it contains implementation commits for every P1–P3 remediation item in the original plan. | Code complete, subject to live parity. |
-| Candidate commits | This branch includes the Sharp standalone fix, backup failure alert wiring, polished alerts, reproducible-gate support, closure evidence, and release-record provenance improvements. | Pushed as draft PR #28; not deployed. |
-| CI | Full CI passed for the preceding reviewed candidates, including CodeQL after the owner-approved public-visibility decision. | Always recheck CI for the exact current candidate SHA before promotion or release. |
+| Source baseline | `origin/main` is `85f67d5`; it contains the P1–P3 remediation work and the bounded release-tooling correction. | Live parity verified through the private release record. |
+| Candidate commits | Sharp standalone assets, backup/monitor alert improvements, reproducible-gate support, closure evidence, and release-record provenance improvements are included in `85f67d5`. | Deployed and verified. |
+| CI | Exact-commit main CI passed for `85f67d5`, including the container scan/SBOM, browser, Compose, quality, secret, dependency, and static-analysis gates. | Verified before release. |
 | Focused regression gates | 111 focused chat, worker, image, monitor, and backup tests passed locally. | Proven locally. |
 | Static validation | A bounded Windows harness completed full Vitest naturally (209 files, 932 tests) and Prisma format/validation. Typecheck and lint exit 0; lint retains two pre-existing unused-parameter warnings. The production build compiled and the standalone Sharp runtime loaded. | Local gate verified. |
 | Public surface | Canonical health returned `200 {"status":"ok"}` and login returned `200` with a password field. | Live and verified. |
 | OVH runtime | Web, worker, chat gateway, PostgreSQL, durable Redis, and ephemeral Redis are healthy. All expected schema migrations are applied. | Live and verified. |
-| Release provenance | The active source directory is not a Git checkout and no current release revision is discoverable from the host. | Open. |
-| Backups and alerts | Daily backup and monitor timers are active; latest backup is complete; the off-host sync task last succeeded; alert delivery is configured and SMTP-accepted. | Live and verified. |
-| Redis condition | Read-only OVH evidence found low absolute Redis memory use, about 8 MiB allocator/RSS excess per workload, no OOM, eviction, capacity pressure, or organic command errors. | The candidate monitor requires both a high ratio and more than 16 MiB excess before alerting; not deployed. |
+| Release provenance | The active source directory is an archive deployment, but the private release record now binds it to `85f67d5`, its CI run, migration verification, image identities, and retained rollback release. | Closed. |
+| Backups and alerts | Daily backup and monitor timers were active and successful after the release; alert delivery remains configured. | Live and verified. |
+| Redis condition | Read-only OVH evidence found low absolute Redis memory use, about 8 MiB allocator/RSS excess per workload, no OOM, eviction, capacity pressure, or organic command errors. | The monitor now requires both a high ratio and more than 16 MiB excess before emitting a fragmentation alert. |
 | Worker isolation | The compatibility `worker` is live. The five-service `split-workers` profile is available in source but intentionally not activated. | Deliberately deferred cutover. |
-| Image runtime | Minimal compiled images are in source. The Sharp standalone-runtime fix is reviewed and pushed in the candidate branch. | Open release item; not deployed. |
+| Image runtime | Minimal compiled images and the Sharp standalone-runtime fix were built by the approved release. | Live and verified. |
 
 ## Original-plan reconciliation
 
@@ -58,12 +58,12 @@ focused tests. The missing distinction is production acceptance evidence.
 
 | Original scope | Current source status | Closure needed |
 | --- | --- | --- |
-| CHAT-AUTH-001 and CHAT-REDIS-001 | Implemented with security-event revocation, bounded reauthorization, readiness behavior, reconnect recovery, and controlled restart tests. | Prove the reviewed release is live, then run the documented beta-account acceptance checks in an approved window. |
-| Moderation, holds, AI leases, and database-secret hardening | Implemented with committed migrations and focused transaction/recovery tests. | Record migration and release provenance; recheck the safe zero-count anomaly queries after the approved release. |
-| WebSocket abuse, read markers, slow mode, presence, blocks, outbox, and retention | Implemented and covered by focused gateway/service tests. | Verify the exact release, gateway behavior, and worker/outbox metrics without exposing message or user data. |
-| Redis architecture and worker lifecycle | Two Redis services are live; graceful shutdown and split-worker code are present. | Diagnose fragmentation first; separately approve and observe the split-worker cutover. |
-| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present; latest main CI passed. | Add release provenance and verify headers/image contents for the approved deployed commit. |
-| AUTH-PERF-001, CHAT-SEQ-001, IMAGE-PROXY-001 | Implemented/decided in `origin/main`; image proxy has re-encoding tests. | Include them in the exact-release verification; include the Sharp fix with that release. |
+| CHAT-AUTH-001 and CHAT-REDIS-001 | Implemented with security-event revocation, bounded reauthorization, readiness behavior, reconnect recovery, and controlled restart tests. | Exact release provenance is now live; beta-account acceptance checks remain a separately scheduled operational exercise. |
+| Moderation, holds, AI leases, and database-secret hardening | Implemented with committed migrations and focused transaction/recovery tests. | Release and migration provenance are recorded; aggregate-only anomaly queries remain a safe follow-up. |
+| WebSocket abuse, read markers, slow mode, presence, blocks, outbox, and retention | Implemented and covered by focused gateway/service tests. | Exact release is proven; non-disruptive aggregate runtime metrics remain an operational follow-up. |
+| Redis architecture and worker lifecycle | Two Redis services are live; graceful shutdown and split-worker code are present. | Fragmentation decision is documented and the monitor guard is live; split-worker cutover remains deliberately deferred. |
+| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance; CSP/header and image-proxy runtime checks remain safe follow-ups. |
+| AUTH-PERF-001, CHAT-SEQ-001, IMAGE-PROXY-001 | Implemented/decided in `origin/main`; image proxy has re-encoding tests. | Included in the exact live release; no sequence migration is planned without a new design decision. |
 
 ## Milestone 0 — Make the release gate reproducible
 
@@ -92,38 +92,38 @@ ambiguous hanging command.
    reproducible local-gate support, and closure evidence. The alert scripts
    are already installed on OVH; this brings Git history into parity without
    pretending it is an application deployment.
-2. Require fresh CI on the exact candidate SHA. Prior candidates passed the
-   complete workflow, including CodeQL, but that evidence is never
-   transferable to a later commit.
-3. **Completed in source 2026-07-28.** The approved-release command creates a
+2. **Completed 2026-07-28.** Exact-commit main CI passed for `85f67d5` before
+   the approved release.
+3. **Completed 2026-07-28.** The approved-release command creates a
    private, non-secret JSON release record with the exact commit, archive
    SHA-256, CI run, backup identifier, migration verification, source-built
    web/worker/chat-gateway image IDs, health results, and retained prior
-   release. The current live release remains unproven because its source
-   directory is not a Git checkout and no verified record was available during
-   the OVH audit. The next approved release will close that live gap.
-4. Recheck the current OVH release procedure and capacity immediately before
-   any build. The 2026-07-28 snapshot had substantial free memory and disk,
-   but that is not a blanket authorization for an on-host build.
+   release. The `85f67d5` release wrote that record and closed the
+   live-provenance gap without placing the record in Git.
+4. **Completed 2026-07-28.** The OVH release procedure and capacity were
+   rechecked immediately before the staged build.
 
-**Approval boundary:** pushing is not a production deployment. The next step
-requires a fresh typed `DEPLOY <short-sha>` after CI is green.
+**Approval boundary:** pushing is not a production deployment. Any future
+release requires a fresh typed `DEPLOY <short-sha>` after exact-commit CI is
+green.
 
 ## Milestone 2 — Approved application release and parity proof
 
+**Status: completed 2026-07-28.**
+
 **Goal:** deploy the candidate once, safely, and prove it matches source.
 
-1. Before any mutation: verify a current PostgreSQL backup, rollback release,
-   clean working tree, exact candidate SHA, CI, OVH capacity, and the reviewed
-   staged/off-host build procedure.
-2. Use the approved release command's staged archive, hash verification,
-   migration status, narrow service recreation, and health checks. Do not
-   rebuild data services or alter Cloudflare, DNS, or firewall settings.
-3. Record source SHA, image identity, migration status, and release timestamp
-   in the private release record. This closes the current provenance gap.
-4. Verify canonical health, login, Docker health, gateway readiness, monitor
-   result, backup timer, CSP headers, image-proxy behavior, and safe database
-   anomaly queries.
+1. Verified a current PostgreSQL backup, retained rollback release, clean
+   source tree, exact candidate SHA, exact CI, OVH capacity, and the staged
+   release procedure before mutation.
+2. Used the approved release command's staged archive, hash verification,
+   migration status, narrow service recreation, and health checks. Stateful
+   data services and provider/network settings were not recreated or changed.
+3. Recorded source SHA, image identity, migration status, and release time in
+   the private release record, closing the provenance gap.
+4. Verified canonical health, login, Docker health, gateway readiness, monitor
+   result, backup timer, and post-release capacity. CSP/header, image-proxy,
+   and aggregate anomaly checks remain non-disruptive follow-ups.
 
 **Done when:** the exact source revision can be tied to the running release
 and the relevant P1–P3 acceptance evidence is recorded.
@@ -141,10 +141,10 @@ source code.
    overhead on very small datasets, not workload churn or capacity pressure.
    AOF, policies, health, command pressure, OOM, and eviction signals are
    healthy. Keep direct error and capacity alerts enabled.
-3. **Candidate change prepared 2026-07-28.** Require both the existing ratio
-   threshold and more than 16 MiB fragmented-memory excess before emitting a
-   fragmentation alert. This needs the normal reviewed release; do not restart
-   Redis, change its runtime configuration, or resize OVH for this condition.
+3. **Completed 2026-07-28.** The deployed monitor requires both the existing
+   ratio threshold and more than 16 MiB fragmented-memory excess before
+   emitting a fragmentation alert. No Redis restart, runtime-configuration
+   change, or OVH resize was needed for this condition.
 
 ### 3B. Split workers
 
@@ -181,10 +181,11 @@ requires a separate explicit approval.
 
 **Goal:** replace stale or duplicate references with current OVH evidence.
 
-1. Refresh `current-production-inventory.md` after the approved release and
-   mark the exact live state of split workers and compiled images.
-2. Remove or update the remaining public documentation reference to Hetzner;
-   do not copy host details into repository files.
+1. **Completed 2026-07-28.** Refreshed `current-production-inventory.md` after
+   the approved release and marked the exact live state of split workers and
+   compiled images.
+2. **Completed 2026-07-28.** Updated the remaining public README reference to
+   the current production runbook without adding host details to the repository.
 3. Consolidate the original Phase 0 names into the current inventory,
    backup/restore checklist, chat-gateway recovery guide, deployment rollback
    runbook, and a concise worker/queue ownership map.

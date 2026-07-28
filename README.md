@@ -116,8 +116,9 @@ docker compose --profile tunnel up --build
 
 Production is served through Cloudflare at
 [https://arcticrss.com](https://arcticrss.com). See
-[DEPLOYMENT.md](DEPLOYMENT.md) and [PROJECT.md](PROJECT.md) for the Hetzner
-runbook, backups, restores, upgrades, rollbacks, and health validation.
+[DEPLOYMENT.md](DEPLOYMENT.md) and [PROJECT.md](PROJECT.md) for the current
+  production runbook, backups, restores, upgrades, rollbacks, and health
+  validation.
 
 The public-safe readiness endpoint is available at `/api/health`. Docker uses
 the loopback-only liveness endpoint at `/api/live`.
