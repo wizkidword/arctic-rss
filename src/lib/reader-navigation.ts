@@ -18,7 +18,12 @@ export type ReaderShortcutTarget = {
 } | null
 
 export function articleSelectionHref(basePath: string, articleId: string) {
-  return `${basePath}?articleId=${encodeURIComponent(articleId)}`
+  const [path, query = ""] = basePath.split("?", 2)
+  const params = new URLSearchParams(query)
+
+  params.set("articleId", articleId)
+
+  return `${path}?${params.toString()}`
 }
 
 export function articleDetailHref(articleId: string) {

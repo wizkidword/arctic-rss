@@ -88,6 +88,15 @@ type PublicReaderArticleStore = {
   }
 }
 
+type ReaderArticleStore = {
+  article: {
+    findMany(args: {
+      include: Prisma.ArticleInclude
+      where: Prisma.ArticleWhereInput
+    }): Promise<ReaderArticleRecord[]>
+  }
+}
+
 declare const sanitizedArticleHtmlBrand: unique symbol
 
 export type SanitizedArticleHtml = string & {
@@ -340,6 +349,62 @@ export async function listReaderArticlePage({
         ? encodeTimeCursor(visibleArticles.at(-1)!)
         : null,
   }
+}
+
+/**
+ * Loads already-authorized article ids with the same relation shape used by
+ * every reader surface. Callers that discover ids through another query (such
+ * as full-text search) must still pass through this guard: a subscription can
+ * be paused or removed between the discovery query and detail hydration.
+ */
+export async function listReaderArticlesByIdsForUser({
+  articleIds,
+  userId,
+}: {
+  articleIds: string[]
+  userId: string
+}): Promise<ReaderArticle[]> {
+  return listReaderArticlesByIdsForUserWithClient({
+    articleIds,
+    store: getPrisma(),
+    userId,
+  })
+}
+
+export async function listReaderArticlesByIdsForUserWithClient({
+  articleIds,
+  store,
+  userId,
+}: {
+  articleIds: string[]
+  store: ReaderArticleStore
+  userId: string
+}): Promise<ReaderArticle[]> {
+  const uniqueArticleIds = [...new Set(articleIds)].filter(Boolean)
+
+  if (!uniqueArticleIds.length) {
+    return []
+  }
+
+  const articles = await store.article.findMany({
+    include: readerArticleInclude(userId),
+    where: {
+      AND: [
+        { id: { in: uniqueArticleIds } },
+        notArchivedArticleWhere(userId),
+        subscribedArticleWhere(userId),
+      ],
+    },
+  })
+  const articlesById = new Map(
+    articles.map((article) => [article.id, mapReaderArticle(article)])
+  )
+
+  return uniqueArticleIds.flatMap((articleId) => {
+    const article = articlesById.get(articleId)
+
+    return article ? [article] : []
+  })
 }
 
 export async function listPublicReaderArticles({
