@@ -9,6 +9,7 @@ BACKUP_MAX_AGE_SECONDS="${BACKUP_MAX_AGE_SECONDS:-108000}"
 TLS_MIN_VALIDITY_SECONDS="${TLS_MIN_VALIDITY_SECONDS:-2592000}"
 IMPORT_STUCK_AFTER_SECONDS="${IMPORT_STUCK_AFTER_SECONDS:-900}"
 REDIS_FRAGMENTATION_MAX_RATIO="${REDIS_FRAGMENTATION_MAX_RATIO:-1.5}"
+REDIS_FRAGMENTATION_MIN_BYTES="${REDIS_FRAGMENTATION_MIN_BYTES:-16777216}"
 
 if [[ ! -r "$ALERT_ENV_FILE" ]] || [[ ! -r "$BACKUP_ENV_FILE" ]]; then
   echo "Required monitor environment file is not readable." >&2
@@ -50,6 +51,11 @@ fi
 
 if ! [[ "$REDIS_FRAGMENTATION_MAX_RATIO" =~ ^[1-9][0-9]*(\.[0-9]+)?$ ]]; then
   echo "REDIS_FRAGMENTATION_MAX_RATIO must be a positive number." >&2
+  exit 1
+fi
+
+if ! [[ "$REDIS_FRAGMENTATION_MIN_BYTES" =~ ^[0-9]+$ ]]; then
+  echo "REDIS_FRAGMENTATION_MIN_BYTES must be a non-negative whole number." >&2
   exit 1
 fi
 
@@ -219,6 +225,7 @@ for redis_workload in durable ephemeral; do
   rejected_commands="$(redis_info_value "$redis_container" stats total_error_replies || true)"
   oom_commands="$(redis_error_count "$redis_container" errorstat_OOM || true)"
   fragmentation_ratio="$(redis_info_value "$redis_container" memory mem_fragmentation_ratio || true)"
+  fragmentation_bytes="$(redis_info_value "$redis_container" memory mem_fragmentation_bytes || true)"
 
   record_redis_counter "${redis_workload}_rejected_connections" "$rejected_connections"
   record_redis_counter "${redis_workload}_rejected_commands" "$rejected_commands"
@@ -226,7 +233,14 @@ for redis_workload in durable ephemeral; do
 
   if ! [[ "$fragmentation_ratio" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
     failures+=("redis_${redis_workload}_fragmentation_probe")
-  elif awk -v actual="$fragmentation_ratio" -v maximum="$REDIS_FRAGMENTATION_MAX_RATIO" 'BEGIN { exit !(actual > maximum) }'; then
+  elif ! [[ "$fragmentation_bytes" =~ ^-?[0-9]+$ ]]; then
+    failures+=("redis_${redis_workload}_fragmentation_bytes_probe")
+  elif awk \
+    -v actual_ratio="$fragmentation_ratio" \
+    -v maximum_ratio="$REDIS_FRAGMENTATION_MAX_RATIO" \
+    -v actual_bytes="$fragmentation_bytes" \
+    -v minimum_bytes="$REDIS_FRAGMENTATION_MIN_BYTES" \
+    'BEGIN { exit !(actual_ratio > maximum_ratio && actual_bytes > minimum_bytes) }'; then
     failures+=("redis_${redis_workload}_fragmentation")
   fi
 done
