@@ -15,8 +15,7 @@ CREATE INDEX "Feed_title_trgm_idx"
   ON "Feed" USING GIN ("title" gin_trgm_ops);
 
 CREATE INDEX "FeedSubscription_customTitle_trgm_idx"
-  ON "FeedSubscription" USING GIN ("customTitle" gin_trgm_ops)
-  WHERE "customTitle" IS NOT NULL;
+  ON "FeedSubscription" USING GIN ("customTitle" gin_trgm_ops);
 
 CREATE INDEX "Folder_name_trgm_idx"
   ON "Folder" USING GIN ("name" gin_trgm_ops);

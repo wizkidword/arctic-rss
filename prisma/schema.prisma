@@ -427,6 +427,7 @@ model Folder {
 
   @@unique([userId, id])
   @@index([userId, sortOrder])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Folder_name_trgm_idx")
 }
 
 model Feed {
@@ -454,6 +455,7 @@ model Feed {
   chatRoomFeeds ChatRoomFeed[]
 
   @@index([nextFetchAt, id])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Feed_title_trgm_idx")
 }
 
 model FeedSubscription {
@@ -477,6 +479,7 @@ model FeedSubscription {
   @@unique([userId, feedId])
   @@unique([userId, id])
   @@index([userId, folderId])
+  @@index([customTitle(ops: raw("gin_trgm_ops"))], type: Gin, map: "FeedSubscription_customTitle_trgm_idx")
 }
 
 model Podcast {
