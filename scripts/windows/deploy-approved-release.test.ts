@@ -11,11 +11,14 @@ describe("approved release command", () => {
     )
   })
 
-  it("starts and verifies both Redis workloads before application services", async () => {
+  it("retains and verifies stateful workloads before application services", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 
     expect(script).toContain(
-      'up -d --no-deps --force-recreate postgres redis redis-ephemeral'
+      "Stateful services retain their existing containers and volumes during an",
+    )
+    expect(script).not.toContain(
+      'up -d --no-deps --force-recreate postgres redis redis-ephemeral',
     )
     expect(script).toContain("app-redis-ephemeral-1")
     expect(script).toContain('test "$redis_ephemeral_health" = healthy')

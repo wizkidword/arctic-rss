@@ -338,8 +338,10 @@ sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --
 migration_status="verified"
 sudo -n mv "$live" "$previous"
 sudo -n mv "$stage" "$live"
-sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate postgres redis redis-ephemeral
 
+# Stateful services retain their existing containers and volumes during an
+# application release. Their health is a release precondition, not a reason to
+# restart PostgreSQL or either Redis workload while swapping application code.
 for attempt in $(seq 1 18); do
   postgres_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-postgres-1)"
   redis_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-redis-1)"
