@@ -31,7 +31,7 @@ database restore, or production fault injection.
 | Local follow-up commits | This branch is three commits ahead: Sharp standalone assets, backup failure alert wiring, and polished alert email. | Not pushed. |
 | CI | The latest CI run for `107377b` passed. | Proven for `107377b`, not the three local commits. |
 | Focused regression gates | 111 focused chat, worker, image, monitor, and backup tests passed locally. | Proven locally. |
-| Static validation | Typecheck passed; lint has two pre-existing unused-parameter warnings and no errors. Direct full Vitest and Prisma CLI runs did not exit cleanly in this worktree, so neither is counted as a full local pass. | Investigate before release preflight. |
+| Static validation | Typecheck passed; lint has two pre-existing unused-parameter warnings and no errors. Direct full Vitest and Prisma CLI processes remained active after the surrounding terminal call returned, so no clean exit code was captured; neither is counted as a full local pass. | Investigate before release preflight. |
 | Public surface | Canonical health returned `200 {"status":"ok"}` and login returned `200` with a password field. | Live and verified. |
 | OVH runtime | Web, worker, chat gateway, PostgreSQL, durable Redis, and ephemeral Redis are healthy. All expected schema migrations are applied. | Live and verified. |
 | Release provenance | The active source directory is not a Git checkout and no current release revision is discoverable from the host. | Open. |
@@ -59,9 +59,10 @@ focused tests. The missing distinction is production acceptance evidence.
 **Goal:** a release candidate can be checked locally and in CI without an
 ambiguous hanging command.
 
-1. Reproduce the non-exiting full Vitest and direct Prisma CLI behavior in a
-   clean, bounded invocation. Treat it as a local-tooling or test-lifecycle
-   investigation until a minimal reproducer proves otherwise.
+1. Reproduce the full Vitest and direct Prisma CLI process-lifecycle behavior
+   in a clean, bounded invocation that captures their natural exit codes.
+   Treat it as a local-tooling or test-lifecycle investigation until a minimal
+   reproducer proves otherwise.
 2. Fix only the confirmed cause; do not weaken test coverage, introduce a
    blanket forced exit, or hide database errors.
 3. Run the normal release dry run with the supported Node runtime and record:
