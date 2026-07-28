@@ -148,13 +148,31 @@ source code.
 
 ### 3B. Split workers
 
-1. Observe the all-in-one worker's memory, queue backlog, and job latency on
-   the reviewed release.
-2. If isolation is justified, propose a separate cutover using the documented
-   `split-workers` profile. Stop the compatibility worker before starting the
-   five isolated workers; never run both ownership models as steady state.
-3. Verify all five health checks, queue ownership, maintenance lease behavior,
-   resource headroom, and rollback to the compatibility worker.
+1. **Completed 2026-07-28 (read-only OVH observation).** The compatibility
+   worker was healthy, within its resource budget, and had no waiting, active,
+   or delayed work across the known queues.
+2. **Decision 2026-07-28.** Do not activate `split-workers`. The current
+   terminal feed-refresh jobs are backoff-limited upstream-source failures,
+   rather than queue backlog, Redis pressure, or worker saturation. Retain the
+   all-in-one worker so the five-service profile does not reserve capacity
+   without a demonstrated benefit.
+3. Reopen this cutover only if sustained backlog, job latency, or resource
+   pressure demonstrates an isolation benefit. Any cutover still requires a
+   separate explicit approval: stop the compatibility worker before starting
+   the five isolated workers; never run both ownership models as steady state.
+
+### 3C. Upstream source health
+
+1. **Observed 2026-07-28 (aggregate-only).** Persistently failing subscribed
+   feeds had prior successful refreshes and were scheduled for retry rather
+   than overdue. Aggregated error classes were upstream HTTP responses, rate
+   limits, and a small number of timeouts; no queue, Redis, or worker defect
+   was evidenced.
+2. Treat source-level diagnosis and any user-facing failure policy as a
+   separate, privacy-aware decision. Do not expose individual feed URLs,
+   titles, account data, or raw failure text in logs, public documentation, or
+   alert email. A source-health feature needs its own threshold, notification,
+   retention, and authorization design before implementation.
 
 **Approval boundary:** either cutover changes production workload ownership and
 requires a separate explicit approval.
