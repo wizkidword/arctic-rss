@@ -20,6 +20,9 @@ describe("production monitor", () => {
     expect(script).toContain("total_error_replies")
     expect(script).toContain("errorstat_OOM")
     expect(script).toContain("mem_fragmentation_ratio")
+    expect(script).toContain("mem_fragmentation_bytes")
+    expect(script).toContain("REDIS_FRAGMENTATION_MIN_BYTES")
+    expect(script).toContain("actual_ratio > maximum_ratio && actual_bytes > minimum_bytes")
   })
 
   it("checks each enabled split worker independently", async () => {

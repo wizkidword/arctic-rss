@@ -46,10 +46,14 @@ docker compose exec -T redis-ephemeral sh -c 'redis-cli --no-auth-warning -a "$R
 ```
 
 The production monitor checks both containers, durable AOF health, configured
-policies, fragmentation, and increasing Redis command-error, OOM, and rejected
-connection counters. Treat an alert as a capacity incident: identify the
-workload first, preserve durable queue data, and do not move any BullMQ queue
-to `redis-ephemeral` to silence it.
+policies, and increasing Redis command-error, OOM, and rejected connection
+counters. It treats fragmentation as actionable only when both the ratio
+exceeds `1.5` and the fragmented-memory excess exceeds 16 MiB. This avoids
+false capacity alerts from the fixed allocator/RSS overhead of an otherwise
+small Redis dataset; set `REDIS_FRAGMENTATION_MIN_BYTES=0` only when a strict
+ratio-only policy is intentionally required. Treat a resulting alert as a
+capacity incident: identify the workload first, preserve durable queue data,
+and do not move any BullMQ queue to `redis-ephemeral` to silence it.
 
 ## Client IP source
 

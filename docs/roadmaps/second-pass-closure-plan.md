@@ -47,7 +47,7 @@ provider-side decision requiring explicit authorization.
 | OVH runtime | Web, worker, chat gateway, PostgreSQL, durable Redis, and ephemeral Redis are healthy. All expected schema migrations are applied. | Live and verified. |
 | Release provenance | The active source directory is not a Git checkout and no current release revision is discoverable from the host. | Open. |
 | Backups and alerts | Daily backup and monitor timers are active; latest backup is complete; the off-host sync task last succeeded; alert delivery is configured and SMTP-accepted. | Live and verified. |
-| Redis condition | Durable and ephemeral Redis are healthy but both remain above the monitor's fragmentation threshold. | Open operational condition; do not restart Redis casually. |
+| Redis condition | Read-only OVH evidence found low absolute Redis memory use, about 8 MiB allocator/RSS excess per workload, no OOM, eviction, capacity pressure, or organic command errors. | The candidate monitor requires both a high ratio and more than 16 MiB excess before alerting; not deployed. |
 | Worker isolation | The compatibility `worker` is live. The five-service `split-workers` profile is available in source but intentionally not activated. | Deliberately deferred cutover. |
 | Image runtime | Minimal compiled images are in source. The Sharp standalone-runtime fix is reviewed and pushed in the candidate branch. | Open release item; not deployed. |
 
@@ -135,12 +135,16 @@ source code.
 
 ### 3A. Redis fragmentation
 
-1. Gather non-mutating memory, allocator, keyspace, command-pressure, AOF,
-   and eviction evidence for both Redis workloads.
-2. Identify whether the ratios are allocator fragmentation, workload churn,
-   or capacity pressure. Keep alerting enabled while investigating.
-3. Propose the smallest safe corrective action and rollback plan. A Redis
-   restart, config change, or provider resize requires explicit authorization.
+1. **Completed 2026-07-28.** Gather non-mutating memory, allocator, keyspace,
+   command-pressure, AOF, and eviction evidence for both Redis workloads.
+2. **Completed 2026-07-28.** The high ratios reflect allocator/RSS baseline
+   overhead on very small datasets, not workload churn or capacity pressure.
+   AOF, policies, health, command pressure, OOM, and eviction signals are
+   healthy. Keep direct error and capacity alerts enabled.
+3. **Candidate change prepared 2026-07-28.** Require both the existing ratio
+   threshold and more than 16 MiB fragmented-memory excess before emitting a
+   fragmentation alert. This needs the normal reviewed release; do not restart
+   Redis, change its runtime configuration, or resize OVH for this condition.
 
 ### 3B. Split workers
 
