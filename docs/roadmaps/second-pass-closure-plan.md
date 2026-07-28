@@ -23,6 +23,15 @@ database restore, or production fault injection.
 - Preserve the prior release and verified PostgreSQL backup before every
   approved production mutation.
 
+## Publication blocker
+
+On 2026-07-28, the configured GitHub origin reported this repository as public.
+That conflicts with the private-repository operating rule above. Do not push
+the current candidate, open a pull request, or publish new history until the
+repository's intended visibility is explicitly decided and, if needed,
+restored through an authorized provider-side change. A visibility change is
+outside this plan's normal repository-work authority.
+
 ## Reconciliation snapshot
 
 | Area | Evidence on 2026-07-28 | State |
@@ -81,6 +90,9 @@ ambiguous hanging command.
    presentation. The alert scripts are already installed on OVH; this step
    brings Git history into parity without pretending it is an application
    deployment.
+   **First confirm that the target GitHub repository is private. If it is
+   public, stop before push and obtain explicit authorization for a visibility
+   decision.**
 2. Wait for fresh CI on the exact candidate SHA. Do not rely on CI for
    `107377b` after the candidate changes.
 3. Update the private release record/process so the deployed archive or image
