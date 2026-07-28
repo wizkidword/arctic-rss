@@ -31,7 +31,7 @@ database restore, or production fault injection.
 | Local follow-up commits | This branch is three commits ahead: Sharp standalone assets, backup failure alert wiring, and polished alert email. | Not pushed. |
 | CI | The latest CI run for `107377b` passed. | Proven for `107377b`, not the three local commits. |
 | Focused regression gates | 111 focused chat, worker, image, monitor, and backup tests passed locally. | Proven locally. |
-| Static validation | Typecheck passed; lint has two pre-existing unused-parameter warnings and no errors. Direct full Vitest and Prisma CLI processes remained active after the surrounding terminal call returned, so no clean exit code was captured; neither is counted as a full local pass. | Investigate before release preflight. |
+| Static validation | A bounded Windows harness completed full Vitest naturally (209 files, 932 tests) and Prisma format/validation. Typecheck and lint exit 0; lint retains two pre-existing unused-parameter warnings. The production build compiled and the standalone Sharp runtime loaded. | Local gate verified. |
 | Public surface | Canonical health returned `200 {"status":"ok"}` and login returned `200` with a password field. | Live and verified. |
 | OVH runtime | Web, worker, chat gateway, PostgreSQL, durable Redis, and ephemeral Redis are healthy. All expected schema migrations are applied. | Live and verified. |
 | Release provenance | The active source directory is not a Git checkout and no current release revision is discoverable from the host. | Open. |
@@ -59,18 +59,18 @@ focused tests. The missing distinction is production acceptance evidence.
 **Goal:** a release candidate can be checked locally and in CI without an
 ambiguous hanging command.
 
-1. Reproduce the full Vitest and direct Prisma CLI process-lifecycle behavior
-   in a clean, bounded invocation that captures their natural exit codes.
-   Treat it as a local-tooling or test-lifecycle investigation until a minimal
-   reproducer proves otherwise.
-2. Fix only the confirmed cause; do not weaken test coverage, introduce a
-   blanket forced exit, or hide database errors.
-3. Run the normal release dry run with the supported Node runtime and record:
-   tests, Prisma generation/validation/status, typecheck, lint, production
-   build, and release-gate result.
+**Status: completed 2026-07-28.**
 
-**Done when:** the preflight finishes naturally with an auditable result and
-the two lint warnings are either intentionally documented or fixed.
+- A bounded harness showed that full Vitest terminates naturally after 209
+  files and 932 tests; the earlier terminal result had returned before its
+  child process completed.
+- Prisma validation terminates naturally. A Windows `core.autocrlf=true`
+  checkout had changed `prisma/schema.prisma` to CRLF, which Prisma rejects as
+  unformatted. `.gitattributes` now explicitly retains LF for that schema. A
+  fresh temporary worktree verified both the attribute and `prisma format --check`.
+- Typecheck, Prisma format/validation, and the production build passed. Lint
+  exits successfully with the two existing unused-parameter warnings; they are
+  recorded as non-blocking cleanup rather than hidden or suppressed.
 
 ## Milestone 1 — Prepare a traceable release candidate
 
