@@ -5,7 +5,7 @@ implementation backlog. This is the successor to the July 2026 second-pass
 plan. It separates source completion, OVH rollout, and production proof before
 any Arctic Story Intelligence work begins.
 
-**Reviewed:** 2026-07-28  
+**Reviewed:** 2026-07-28
 **Scope:** private Arctic RSS repository and the current OVH production host.
 This document does not authorize a deployment, provider change, DNS change,
 database restore, or production fault injection.
