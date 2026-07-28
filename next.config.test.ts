@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest"
 import nextConfig from "./next.config"
 
 describe("nextConfig security headers", () => {
+  it("keeps Sharp runtime assets in standalone output", () => {
+    expect(nextConfig.outputFileTracingIncludes).toEqual({
+      "/*": ["node_modules/sharp/**/*", "node_modules/@img/sharp-*/**/*"],
+    })
+  })
+
   it("adds compatible browser security headers to every path, including static files", async () => {
     expect(nextConfig.headers).toBeTypeOf("function")
 
