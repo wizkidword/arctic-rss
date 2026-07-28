@@ -326,7 +326,10 @@ sudo -n docker compose -p "$compose_project" --project-directory "$stage" config
 sudo -n install -d -m 755 /etc/systemd/journald.conf.d
 sudo -n install -m 644 "$stage/ops/systemd/60-arctic-rss-log-retention.conf" /etc/systemd/journald.conf.d/60-arctic-rss-log-retention.conf
 sudo -n systemctl restart systemd-journald
-sudo -n systemd-analyze cat-config systemd/journald.conf | grep -qx 'MaxRetentionSec=30day'
+# Do not use `grep -q` here: with `pipefail`, its expected early exit can
+# surface as SIGPIPE from systemd-analyze and abort an otherwise valid staged
+# release. Awk consumes the complete stream before returning the assertion.
+sudo -n systemd-analyze cat-config systemd/journald.conf | awk '$0 == "MaxRetentionSec=30day" { found = 1 } END { exit !found }'
 sudo -n journalctl --rotate
 sudo -n journalctl --vacuum-time=30d
 # chat-gateway is deliberately opt-in behind the "chat" Compose profile.
