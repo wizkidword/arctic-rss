@@ -335,6 +335,7 @@ sudo -n journalctl --vacuum-time=30d
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" --profile chat build migrate web worker chat-gateway
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate </dev/null
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
+migration_status="verified"
 sudo -n mv "$live" "$previous"
 sudo -n mv "$stage" "$live"
 sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate postgres redis redis-ephemeral
@@ -358,6 +359,7 @@ test "$redis_ephemeral_health" = healthy
 # authenticate against a stale client connection. Do not start chat when it
 # was intentionally inactive before the release.
 chat_gateway_health="not-running"
+chat_gateway_image="not-running"
 chat_gateway_was_running="$(sudo -n docker inspect -f '{{.State.Running}}' app-chat-gateway-1 2>/dev/null || true)"
 if [ "$chat_gateway_was_running" = true ]; then
   sudo -n docker compose -p "$compose_project" --project-directory "$live" --profile chat up -d --no-deps --force-recreate chat-gateway
@@ -371,6 +373,7 @@ if [ "$chat_gateway_was_running" = true ]; then
   done
 
   test "$chat_gateway_health" = healthy
+  chat_gateway_image="$(sudo -n docker inspect -f '{{.Image}}' app-chat-gateway-1)"
 fi
 
 sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate web worker
@@ -386,6 +389,9 @@ done
 
 test "$web_health" = healthy
 test "$worker_health" = healthy
+
+web_image="$(sudo -n docker inspect -f '{{.Image}}' app-web-1)"
+worker_image="$(sudo -n docker inspect -f '{{.Image}}' app-worker-1)"
 
 for container in app-postgres-1 app-redis-1 app-redis-ephemeral-1 app-web-1 app-worker-1; do
   test "$(sudo -n docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$container")" = journald
@@ -403,17 +409,25 @@ test "$monitor_result" = success
 test "$monitor_status" = 0
 
 printf 'PREVIOUS_RELEASE=%s\n' "$previous"
+printf 'MIGRATION_STATUS=%s\n' "$migration_status"
 printf 'WEB_HEALTH=%s\n' "$web_health"
+printf 'WEB_IMAGE=%s\n' "$web_image"
 printf 'WORKER_HEALTH=%s\n' "$worker_health"
+printf 'WORKER_IMAGE=%s\n' "$worker_image"
 printf 'REDIS_EPHEMERAL_HEALTH=%s\n' "$redis_ephemeral_health"
 printf 'CHAT_GATEWAY_HEALTH=%s\n' "$chat_gateway_health"
+printf 'CHAT_GATEWAY_IMAGE=%s\n' "$chat_gateway_image"
 '@
   $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost)
   $stageOutput = Invoke-RemoteScript -Config $config -Script $remoteScript
   $previousRelease = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_RELEASE"
+  $migrationStatus = Get-ReleaseMarker -Output $stageOutput -Name "MIGRATION_STATUS"
   $webHealth = Get-ReleaseMarker -Output $stageOutput -Name "WEB_HEALTH"
+  $webImage = Get-ReleaseMarker -Output $stageOutput -Name "WEB_IMAGE"
   $workerHealth = Get-ReleaseMarker -Output $stageOutput -Name "WORKER_HEALTH"
+  $workerImage = Get-ReleaseMarker -Output $stageOutput -Name "WORKER_IMAGE"
   $chatGatewayHealth = Get-ReleaseMarker -Output $stageOutput -Name "CHAT_GATEWAY_HEALTH"
+  $chatGatewayImage = Get-ReleaseMarker -Output $stageOutput -Name "CHAT_GATEWAY_IMAGE"
 
   $publicHealth = (Invoke-RequiredCommand -FilePath "curl.exe" -Arguments @(
     "-fsS", "https://$($config.CanonicalHost)/api/health"
@@ -439,11 +453,15 @@ printf 'CHAT_GATEWAY_HEALTH=%s\n' "$chat_gateway_health"
     deployedAtUtc = $deployedAt
     githubCiRun = $ci.Url
     loginHttpStatus = $loginStatus
+    migrationStatus = $migrationStatus
     previousRelease = $previousRelease
     publicHealth = $publicHealth
     chatGatewayHealth = $chatGatewayHealth
+    chatGatewayImage = $chatGatewayImage
     webHealth = $webHealth
+    webImage = $webImage
     workerHealth = $workerHealth
+    workerImage = $workerImage
   } | ConvertTo-Json | Set-Content -LiteralPath $recordPath -Encoding utf8
 
   Write-Host "Release complete and verified. Private release record: $recordPath"
