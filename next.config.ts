@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "2mb",
     },
   },
+  // `sharp` is a native, server-external package. Include its runtime assets
+  // explicitly so standalone images retain the decoder used by /api/image.
+  outputFileTracingIncludes: {
+    "/*": ["node_modules/sharp/**/*", "node_modules/@img/sharp-*/**/*"],
+  },
   async headers() {
     return [
       {
