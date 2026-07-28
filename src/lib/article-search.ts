@@ -166,7 +166,7 @@ export async function listReaderArticleSearchPageWithClient({
   const boundedLimit = pageSize(limit)
   const cursor = decodeArticleSearchCursor(filters.after)
   const state = normalizeSearchState(filters.state)
-  const sourceTerm = escapeLikeTerm(query)
+  const sourcePattern = `%${escapeLikeTerm(query)}%`
   const rows = await store.$queryRaw<ArticleSearchRow[]>`
     WITH search_terms AS (
       SELECT websearch_to_tsquery('simple'::regconfig, ${query}) AS "terms"
@@ -186,9 +186,9 @@ export async function listReaderArticleSearchPageWithClient({
             32
           )
           + CASE
-              WHEN "Feed"."title" ILIKE '%' || ${sourceTerm} || '%' ESCAPE CHR(92) THEN 0.35
-              WHEN COALESCE("FeedSubscription"."customTitle", '') ILIKE '%' || ${sourceTerm} || '%' ESCAPE CHR(92) THEN 0.35
-              WHEN COALESCE("Folder"."name", '') ILIKE '%' || ${sourceTerm} || '%' ESCAPE CHR(92) THEN 0.25
+              WHEN "Feed"."title" ILIKE ${sourcePattern} THEN 0.35
+              WHEN COALESCE("FeedSubscription"."customTitle", '') ILIKE ${sourcePattern} THEN 0.35
+              WHEN COALESCE("Folder"."name", '') ILIKE ${sourcePattern} THEN 0.25
               ELSE 0
             END
         )::double precision AS "rank"
@@ -236,9 +236,9 @@ export async function listReaderArticleSearchPageWithClient({
             || setweight(to_tsvector('simple'::regconfig, coalesce("Article"."summary", '')), 'C')
             || setweight(to_tsvector('simple'::regconfig, coalesce("Article"."contentText", '')), 'D')
           ) @@ search_terms."terms"
-          OR "Feed"."title" ILIKE '%' || ${sourceTerm} || '%' ESCAPE CHR(92)
-          OR COALESCE("FeedSubscription"."customTitle", '') ILIKE '%' || ${sourceTerm} || '%' ESCAPE CHR(92)
-          OR COALESCE("Folder"."name", '') ILIKE '%' || ${sourceTerm} || '%' ESCAPE CHR(92)
+          OR "Feed"."title" ILIKE ${sourcePattern}
+          OR COALESCE("FeedSubscription"."customTitle", '') ILIKE ${sourcePattern}
+          OR COALESCE("Folder"."name", '') ILIKE ${sourcePattern}
         )
     )
     SELECT "id", "createdAt", "publishedAt", "rank"

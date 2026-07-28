@@ -18,8 +18,9 @@ The query has two indexed discovery paths:
   text configuration so the behavior is deterministic for mixed-language feed
   content.
 - Trigram GIN indexes for feed titles, user-specific source aliases, and
-  user-owned folder names. The search term is parameterized and escapes LIKE
-  wildcards before these paths are used.
+  user-owned folder names. The search term is parameterized as one `%term%`
+  pattern and escapes LIKE wildcards using PostgreSQL's default backslash
+  escape character before these paths are used.
 
 The feed subscription and article-state joins remain the authorization
 boundary. A result id is then hydrated through the normal Reader visibility
@@ -48,6 +49,22 @@ query parameters.
 If the chosen plan regresses to a broad sequential scan at expected data
 volume, pause the release. Rework the search branches or indexing strategy
 before seeking a typed deployment approval.
+
+## CI evidence
+
+The PostgreSQL integration suite creates a non-user-data corpus with 1,000
+article bodies and 5,000 selective source/folder labels on the same PostgreSQL
+17 image used by production and captures
+`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for each indexed discovery
+expression. It requires the article full-text GIN plan and records the
+trigram-plan tree in CI output. PostgreSQL can correctly prefer a sequential
+scan for the small fixed label corpus, so CI does not pretend that a
+trigram-index choice there proves live-scale behavior. The committed migration,
+extension, and index expressions are nonetheless exercised together on a clean
+database. CI is intentionally not a substitute for the production preflight
+above: it cannot establish OVH resource headroom, production statistics, the
+migration-role privilege, or the complete tenant-scoped query plan at live
+scale.
 
 ## Migration note
 

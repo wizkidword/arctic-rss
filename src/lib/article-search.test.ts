@@ -115,10 +115,10 @@ describe("article search query", () => {
     expect(sql).toContain('"ArticleState"."archivedAt" IS NULL')
     expect(sql).toContain('"ArticleCollection"."userId" = ?')
     expect(sql).toContain("to_tsvector('simple'::regconfig")
-    expect(sql).toContain("ESCAPE CHR(92)")
+    expect(sql).toContain('"Feed"."title" ILIKE ?')
     expect(sql).not.toContain(injectionLikeQuery)
     expect(values).toContain(injectionLikeQuery)
-    expect(values).toContain("ice\\%\\_'; DROP TABLE Article; --")
+    expect(values).toContain("%ice\\%\\_'; DROP TABLE Article; --%")
     expect(findMany).toHaveBeenCalledWith({
       include: expect.objectContaining({
         states: expect.objectContaining({
