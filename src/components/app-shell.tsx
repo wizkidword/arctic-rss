@@ -20,6 +20,7 @@ import {
   MailIcon,
   MenuIcon,
   MessageCircleIcon,
+  SearchIcon,
   SettingsIcon,
   SparklesIcon,
   StarIcon,
@@ -275,6 +276,12 @@ function ReaderNav({
           href: "/app/starred",
           icon: StarIcon,
           label: "Starred",
+        },
+        {
+          count: 0,
+          href: "/app/search",
+          icon: SearchIcon,
+          label: "Search",
         },
         {
           count: 0,

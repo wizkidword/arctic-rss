@@ -21,6 +21,14 @@ describe("reader navigation", () => {
     )
   })
 
+  it("preserves a reader query while selecting a search result", () => {
+    expect(
+      articleSelectionHref("/app/search?v=1&q=ice+sheet&state=unread", "article/1")
+    ).toBe(
+      "/app/search?v=1&q=ice+sheet&state=unread&articleId=article%2F1"
+    )
+  })
+
   it("builds stable article detail URLs", () => {
     expect(articleDetailHref("article/1")).toBe("/app/article/article%2F1")
   })
