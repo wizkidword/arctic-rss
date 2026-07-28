@@ -1,4 +1,5 @@
 import { SearchIcon } from "lucide-react"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
@@ -9,6 +10,7 @@ import {
   ARTICLE_SEARCH_QUERY_VERSION,
   listReaderArticleSearchPage,
   parseArticleSearchFilters,
+  savedSearchCreateHref,
   type ArticleSearchFilters,
   type ArticleSearchParams,
 } from "@/lib/article-search"
@@ -125,6 +127,14 @@ function ArticleSearchForm({
         >
           Search
         </button>
+        {filters.query && (
+          <Link
+            className="inline-flex h-9 items-center rounded-md border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"
+            href={savedSearchCreateHref(filters)}
+          >
+            Save search
+          </Link>
+        )}
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         <SearchSelect

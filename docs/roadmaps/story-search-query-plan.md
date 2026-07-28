@@ -1,15 +1,17 @@
 # Arctic Story Search: query-plan acceptance record
 
-Status: source implementation is ready for CI verification; this document does
-not claim a production performance result.
+Status: source implementation and its CI query-plan gate are verified; this
+document does not claim a production performance result.
 
 ## Scope
 
 The first Story Intelligence slice searches only articles readable through an
 active subscription owned by the current user. It excludes the current user's
 archived articles and rechecks the same rule while loading display data. It
-does not add semantic embeddings, saved monitors, external sharing, or access
-to another user's source, folder, collection, or state.
+does not add semantic embeddings, scheduled saved monitors, external sharing,
+or access to another user's source, folder, collection, or state. Named saved
+searches are private shortcuts to this same filter model; they do not execute
+work or send notifications.
 
 The query has two indexed discovery paths:
 

@@ -285,6 +285,12 @@ function ReaderNav({
         },
         {
           count: 0,
+          href: "/app/saved-searches",
+          icon: BookmarkIcon,
+          label: "Saved searches",
+        },
+        {
+          count: 0,
           href: "/app/ai",
           label: "AI Summaries",
           icon: SparklesIcon,

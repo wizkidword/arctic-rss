@@ -3,28 +3,22 @@ import {
   listReaderArticlesByIdsForUserWithClient,
   type ReaderArticle,
 } from "./articles"
+import {
+  ARTICLE_SEARCH_QUERY_VERSION,
+  type ArticleSearchFilters,
+  type ArticleSearchParams,
+  type ArticleSearchState,
+} from "./article-search-types"
 import { getPrisma } from "./db"
 
-export const ARTICLE_SEARCH_QUERY_VERSION = 1
+export {
+  ARTICLE_SEARCH_QUERY_VERSION,
+  type ArticleSearchFilters,
+  type ArticleSearchParams,
+  type ArticleSearchState,
+} from "./article-search-types"
+
 const MAX_SEARCH_QUERY_LENGTH = 200
-
-export type ArticleSearchState = "all" | "read" | "starred" | "unread"
-
-export type ArticleSearchFilters = {
-  after?: string
-  collectionId?: string
-  folderId?: string
-  publishedAfter?: Date
-  publishedBefore?: Date
-  query: string
-  state: ArticleSearchState
-  subscriptionId?: string
-}
-
-export type ArticleSearchParams = Record<
-  string,
-  string | string[] | undefined
->
 
 export type ReaderArticleSearchPage = {
   articles: ReaderArticle[]
@@ -127,6 +121,13 @@ export function articleSearchHref(
   }
 
   return `/app/search?${params.toString()}`
+}
+
+export function savedSearchCreateHref(filters: ArticleSearchFilters) {
+  return articleSearchHref(filters).replace(
+    "/app/search?",
+    "/app/saved-searches/new?"
+  )
 }
 
 export async function listReaderArticleSearchPage({
