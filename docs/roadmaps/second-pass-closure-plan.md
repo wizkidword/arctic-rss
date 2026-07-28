@@ -6,13 +6,15 @@ plan. It separates source completion, OVH rollout, and production proof before
 any Arctic Story Intelligence work begins.
 
 **Reviewed:** 2026-07-28
-**Scope:** private Arctic RSS repository and the current OVH production host.
+**Scope:** Arctic RSS repository and the current OVH production host.
 This document does not authorize a deployment, provider change, DNS change,
 database restore, or production fault injection.
 
 ## Operating rules
 
-- Keep the repository private and operational configuration outside Git.
+- The repository is public by the owner's 2026-07-28 decision so GitHub's
+  no-cost CodeQL service can run. Keep all operational configuration, release
+  records, credentials, backup material, and OVH details outside Git.
 - Treat OVH as the only production environment. Do not reuse Hetzner host
   details, capacity assumptions, or commands.
 - A commit is not live merely because it passed CI. A production application
@@ -23,22 +25,22 @@ database restore, or production fault injection.
 - Preserve the prior release and verified PostgreSQL backup before every
   approved production mutation.
 
-## Publication blocker
+## Publication decision
 
-On 2026-07-28, the configured GitHub origin reported this repository as public.
-That conflicts with the private-repository operating rule above. Do not push
-the current candidate, open a pull request, or publish new history until the
-repository's intended visibility is explicitly decided and, if needed,
-restored through an authorized provider-side change. A visibility change is
-outside this plan's normal repository-work authority.
+**Resolved 2026-07-28.** The owner explicitly chose public visibility to keep
+GitHub's no-cost CodeQL scanning available rather than purchase GitHub Code
+Security for a private repository. The source history is consequently public;
+do not add operational details, release records, credentials, backup material,
+or any user data to the repository. A future visibility change remains a
+provider-side decision requiring explicit authorization.
 
 ## Reconciliation snapshot
 
 | Area | Evidence on 2026-07-28 | State |
 | --- | --- | --- |
 | Source baseline | `origin/main` is `107377b`; it contains implementation commits for every P1–P3 remediation item in the original plan. | Code complete, subject to live parity. |
-| Local follow-up commits | This branch is three commits ahead: Sharp standalone assets, backup failure alert wiring, and polished alert email. | Not pushed. |
-| CI | The latest CI run for `107377b` passed. | Proven for `107377b`, not the three local commits. |
+| Candidate commits | Candidate `ae98231` is nine commits ahead of `origin/main`; it includes the Sharp standalone fix, backup failure alert wiring, polished alerts, the reproducible gate evidence, and closure documentation. | Pushed as draft PR #28; not deployed. |
+| CI | The complete CI workflow passed for candidate `ae98231`, including CodeQL after the owner-approved public-visibility decision. | Proven for the candidate SHA. |
 | Focused regression gates | 111 focused chat, worker, image, monitor, and backup tests passed locally. | Proven locally. |
 | Static validation | A bounded Windows harness completed full Vitest naturally (209 files, 932 tests) and Prisma format/validation. Typecheck and lint exit 0; lint retains two pre-existing unused-parameter warnings. The production build compiled and the standalone Sharp runtime loaded. | Local gate verified. |
 | Public surface | Canonical health returned `200 {"status":"ok"}` and login returned `200` with a password field. | Live and verified. |
@@ -47,7 +49,7 @@ outside this plan's normal repository-work authority.
 | Backups and alerts | Daily backup and monitor timers are active; latest backup is complete; the off-host sync task last succeeded; alert delivery is configured and SMTP-accepted. | Live and verified. |
 | Redis condition | Durable and ephemeral Redis are healthy but both remain above the monitor's fragmentation threshold. | Open operational condition; do not restart Redis casually. |
 | Worker isolation | The compatibility `worker` is live. The five-service `split-workers` profile is available in source but intentionally not activated. | Deliberately deferred cutover. |
-| Image runtime | Minimal compiled images are in source. The local Sharp standalone-runtime fix is not in a reviewed/pushed release. | Open release item. |
+| Image runtime | Minimal compiled images are in source. The Sharp standalone-runtime fix is reviewed, pushed, and CI-proven in candidate `ae98231`. | Open release item; not deployed. |
 
 ## Original-plan reconciliation
 
@@ -85,19 +87,19 @@ ambiguous hanging command.
 
 **Goal:** turn source changes into one reviewable, reproducible candidate.
 
-1. Review and push the three local commits as a small private change set:
-   Sharp standalone assets, backup-failure notification wiring, and alert
-   presentation. The alert scripts are already installed on OVH; this step
-   brings Git history into parity without pretending it is an application
-   deployment.
-   **First confirm that the target GitHub repository is private. If it is
-   public, stop before push and obtain explicit authorization for a visibility
-   decision.**
-2. Wait for fresh CI on the exact candidate SHA. Do not rely on CI for
-   `107377b` after the candidate changes.
-3. Update the private release record/process so the deployed archive or image
-   records its source revision without copying secrets into labels, logs, or
-   public responses.
+1. **Completed 2026-07-28.** Review and push the bounded candidate: Sharp
+   standalone assets, backup-failure notification wiring, alert presentation,
+   reproducible local-gate support, and closure evidence. The alert scripts
+   are already installed on OVH; this brings Git history into parity without
+   pretending it is an application deployment.
+2. **Completed 2026-07-28.** Wait for fresh CI on the exact candidate SHA.
+   Candidate `ae98231` passed the complete workflow, including CodeQL.
+3. **Revalidated 2026-07-28.** The approved-release command already creates a
+   private, non-secret JSON release record with the exact commit, archive
+   SHA-256, CI run, backup identifier, health results, and retained prior
+   release. The current live release remains unproven because its source
+   directory is not a Git checkout and no verified record was available during
+   the OVH audit. The next approved release will close that live gap.
 4. Recheck the current OVH release procedure and capacity immediately before
    any build. The 2026-07-28 snapshot had substantial free memory and disk,
    but that is not a blanket authorization for an on-host build.
