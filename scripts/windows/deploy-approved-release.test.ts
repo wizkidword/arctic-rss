@@ -24,6 +24,17 @@ describe("approved release command", () => {
     expect(script).toContain('test "$redis_ephemeral_health" = healthy')
   })
 
+  it("uses a pipefail-safe journal retention assertion", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain(
+      "systemd-analyze cat-config systemd/journald.conf | awk",
+    )
+    expect(script).not.toContain(
+      "systemd-analyze cat-config systemd/journald.conf | grep -qx 'MaxRetentionSec=30day'",
+    )
+  })
+
   it("records migration verification and source-built image identities", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 
