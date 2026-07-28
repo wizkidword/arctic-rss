@@ -1,2 +1,6 @@
 # Shell scripts run on the Linux VPS and must retain Unix line endings.
 *.sh text eol=lf
+
+# Prisma validates schema formatting byte-for-byte; Windows CRLF checkouts fail
+# that validation even when the committed schema is otherwise unchanged.
+prisma/schema.prisma text eol=lf
