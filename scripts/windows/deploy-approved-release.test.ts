@@ -77,6 +77,9 @@ describe("approved release command", () => {
     expect(script).toContain("CREATE\\s+(?:UNIQUE\\s+)?INDEX")
     expect(script).toContain('MIGRATION_OWNERSHIP_PRECHECK=passed')
     expect(script).toContain('process.stdout.write(new URL(process.env.DATABASE_URL).username)')
+    expect(script).toContain(
+      "process.stdout.write(new URL(process.env.DATABASE_URL).username)' </dev/null 2>/dev/null)",
+    )
     expect(script.indexOf("MIGRATION_OWNERSHIP_PRECHECK=passed")).toBeLessThan(
       script.indexOf("arctic-rss-backup.service"),
     )
