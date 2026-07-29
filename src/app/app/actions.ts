@@ -80,6 +80,7 @@ import {
 } from "@/lib/story-cluster-reader"
 import {
   dismissStoryClusterForUser,
+  mergeStoryClustersForUser,
   splitStoryClusterMemberForUser,
   StoryClusterControlError,
 } from "@/lib/story-cluster-controls"
@@ -131,6 +132,11 @@ export type DismissStoryClusterActionState = {
 }
 
 export type SplitStoryClusterMemberActionState = {
+  message: string
+  status: "idle" | "success" | "error"
+}
+
+export type MergeStoryClustersActionState = {
   message: string
   status: "idle" | "success" | "error"
 }
@@ -1488,6 +1494,74 @@ export async function splitStoryClusterMemberAction(
 
     return {
       message: "Arctic RSS could not separate this source from the related-coverage group.",
+      status: "error",
+    }
+  }
+}
+
+export async function mergeStoryClustersAction(
+  _previousState: MergeStoryClustersActionState,
+  formData: FormData
+): Promise<MergeStoryClustersActionState> {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    return {
+      message: "You need to sign in before merging related coverage.",
+      status: "error",
+    }
+  }
+
+  const articleId = String(formData.get("articleId") ?? "").trim()
+  const firstClusterId = String(formData.get("firstClusterId") ?? "").trim()
+  const secondClusterId = String(formData.get("secondClusterId") ?? "").trim()
+
+  if (!articleId || !firstClusterId || !secondClusterId) {
+    return {
+      message: "Choose two available related-coverage groups first.",
+      status: "error",
+    }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "story_cluster_control",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
+  try {
+    const result = await mergeStoryClustersForUser({
+      firstClusterId,
+      secondClusterId,
+      userId: session.user.id,
+    })
+
+    if (!result.merged) {
+      return {
+        message: "These related-coverage groups are already merged.",
+        status: "success",
+      }
+    }
+
+    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
+
+    return {
+      message: "Related-coverage groups merged. Original articles are unchanged.",
+      status: "success",
+    }
+  } catch (error) {
+    if (error instanceof StoryClusterControlError) {
+      return {
+        message: error.message,
+        status: "error",
+      }
+    }
+
+    return {
+      message: "Arctic RSS could not merge these related-coverage groups.",
       status: "error",
     }
   }

@@ -9,6 +9,7 @@ import {
   type EvaluateStoryClusterActionState
 } from "@/app/app/actions"
 import { StoryClusterDismissButton } from "@/components/story-cluster-dismiss-button"
+import { StoryClusterMergeControl } from "@/components/story-cluster-merge-control"
 import { StoryClusterSplitButton } from "@/components/story-cluster-split-button"
 import { Button } from "@/components/ui/button"
 import { articleDetailHref } from "@/lib/reader-navigation"
@@ -133,6 +134,8 @@ export function StoryClusterPanel({
             />
           </section>
         ))}
+
+        <StoryClusterMergeControl articleId={articleId} clusters={clusters} />
 
         {state.status !== "idle" && (
           <p

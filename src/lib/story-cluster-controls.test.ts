@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   dismissStoryClusterForUserWithClient,
+  mergeStoryClustersForUserWithClient,
   splitStoryClusterMemberForUserWithClient,
   StoryClusterControlError,
   type StoryClusterControlStore,
@@ -131,6 +132,89 @@ const activeThreeMemberCluster = {
       version: 1,
     },
   ],
+}
+
+const activeMergeableClusters = {
+  primary: {
+    currentVersionNumber: 1,
+    id: "cluster-a",
+    status: "ACTIVE" as const,
+    versions: [
+      {
+        algorithmVersion: "canonical-url-or-normalized-title-72h-v1",
+        evidence: [
+          {
+            leftMember: { articleId: "article-a" },
+            rightMember: { articleId: "article-shared" },
+            signal: "CANONICAL_URL" as const,
+          },
+        ],
+        members: [
+          {
+            articleId: "article-a",
+            articleTitle: "First outlet's story",
+            articleUrl: "https://first.example/story",
+            feedTitle: "First Source",
+            publishedAt: new Date("2026-07-28T10:00:00.000Z"),
+          },
+          {
+            articleId: "article-shared",
+            articleTitle: "Shared outlet's story",
+            articleUrl: "https://shared.example/story",
+            feedTitle: "Shared Source",
+            publishedAt: new Date("2026-07-28T10:30:00.000Z"),
+          },
+        ],
+        version: 1,
+      },
+    ],
+  },
+  secondary: {
+    currentVersionNumber: 1,
+    id: "cluster-b",
+    status: "ACTIVE" as const,
+    versions: [
+      {
+        algorithmVersion: "canonical-url-or-normalized-title-72h-v1",
+        evidence: [
+          {
+            leftMember: { articleId: "article-b" },
+            rightMember: { articleId: "article-shared" },
+            signal: "NORMALIZED_TITLE" as const,
+          },
+        ],
+        members: [
+          {
+            articleId: "article-b",
+            articleTitle: "Second outlet's story",
+            articleUrl: "https://second.example/story",
+            feedTitle: "Second Source",
+            publishedAt: new Date("2026-07-28T11:00:00.000Z"),
+          },
+          {
+            articleId: "article-shared",
+            articleTitle: "Shared outlet's story",
+            articleUrl: "https://shared.example/story",
+            feedTitle: "Shared Source",
+            publishedAt: new Date("2026-07-28T10:30:00.000Z"),
+          },
+        ],
+        version: 1,
+      },
+    ],
+  },
+}
+
+function mergeableClusterById(clusterId: string) {
+  if (clusterId === activeMergeableClusters.primary.id) {
+    return activeMergeableClusters.primary
+  }
+
+  if (clusterId === activeMergeableClusters.secondary.id) {
+    return activeMergeableClusters.secondary
+  }
+
+  return null
 }
 
 describe("dismissStoryClusterForUserWithClient", () => {
@@ -353,6 +437,196 @@ describe("splitStoryClusterMemberForUserWithClient", () => {
     ).rejects.toEqual(
       new StoryClusterControlError(
         "The remaining sources do not form a fully explained related-coverage group."
+      )
+    )
+
+    expect(mocks.versionCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe("mergeStoryClustersForUserWithClient", () => {
+  it("adds explained immutable merge snapshots and hides only the absorbed group", async () => {
+    const { mocks, store } = createStore()
+    mocks.clusterFindUnique.mockImplementation(({ where }) =>
+      Promise.resolve(mergeableClusterById(where.userId_id.id))
+    )
+    mocks.versionCreate
+      .mockResolvedValueOnce({ id: "version-primary-2", version: 2 })
+      .mockResolvedValueOnce({ id: "version-secondary-2", version: 2 })
+
+    await expect(
+      mergeStoryClustersForUserWithClient({
+        firstClusterId: "cluster-b",
+        secondClusterId: "cluster-a",
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toEqual({
+      clusterId: "cluster-a",
+      merged: true,
+      versionNumber: 2,
+    })
+
+    expect(mocks.versionFindFirst).toHaveBeenCalledWith({
+      select: {
+        version: true,
+      },
+      where: {
+        clusterId: "cluster-a",
+        deduplicationKey: "story-cluster-merge:cluster-a:cluster-b",
+      },
+    })
+    expect(mocks.versionCreate).toHaveBeenNthCalledWith(1, {
+      data: {
+        action: "MERGED",
+        algorithmVersion: "canonical-url-or-normalized-title-72h-v1",
+        clusterId: "cluster-a",
+        deduplicationKey: "story-cluster-merge:cluster-a:cluster-b",
+        version: 2,
+      },
+      select: {
+        id: true,
+        version: true,
+      },
+    })
+    expect(mocks.versionCreate).toHaveBeenNthCalledWith(2, {
+      data: {
+        action: "MERGED",
+        algorithmVersion: "canonical-url-or-normalized-title-72h-v1",
+        clusterId: "cluster-b",
+        deduplicationKey: "story-cluster-merged-into:cluster-a",
+        version: 2,
+      },
+      select: {
+        id: true,
+        version: true,
+      },
+    })
+    expect(mocks.memberCreate).toHaveBeenCalledTimes(5)
+    expect(mocks.evidenceCreateMany).toHaveBeenNthCalledWith(1, {
+      data: [
+        {
+          clusterVersionId: "version-primary-2",
+          leftMemberId: "member-article-a",
+          rightMemberId: "member-article-shared",
+          signal: "CANONICAL_URL",
+        },
+        {
+          clusterVersionId: "version-primary-2",
+          leftMemberId: "member-article-b",
+          rightMemberId: "member-article-shared",
+          signal: "NORMALIZED_TITLE",
+        },
+      ],
+    })
+    expect(mocks.clusterUpdate).toHaveBeenNthCalledWith(1, {
+      data: {
+        currentVersionNumber: 2,
+      },
+      where: {
+        id: "cluster-a",
+      },
+    })
+    expect(mocks.clusterUpdate).toHaveBeenNthCalledWith(2, {
+      data: {
+        currentVersionNumber: 2,
+        status: "MERGED",
+      },
+      where: {
+        id: "cluster-b",
+      },
+    })
+  })
+
+  it("is idempotent when the deterministic primary group already recorded the merge", async () => {
+    const { mocks, store } = createStore({ versionFindFirst: { version: 2 } })
+    mocks.clusterFindUnique.mockImplementation(({ where }) =>
+      Promise.resolve(mergeableClusterById(where.userId_id.id))
+    )
+
+    await expect(
+      mergeStoryClustersForUserWithClient({
+        firstClusterId: "cluster-a",
+        secondClusterId: "cluster-b",
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toEqual({
+      clusterId: "cluster-a",
+      merged: false,
+      versionNumber: 2,
+    })
+
+    expect(mocks.versionCreate).not.toHaveBeenCalled()
+    expect(mocks.clusterUpdate).not.toHaveBeenCalled()
+  })
+
+  it("rejects groups without a shared source instead of inferring an opaque connection", async () => {
+    const { mocks, store } = createStore()
+    const unrelatedSecondary = {
+      ...activeMergeableClusters.secondary,
+      versions: [
+        {
+          ...activeMergeableClusters.secondary.versions[0],
+          evidence: [
+            {
+              leftMember: { articleId: "article-b" },
+              rightMember: { articleId: "article-c" },
+              signal: "NORMALIZED_TITLE" as const,
+            },
+          ],
+          members: [
+            activeMergeableClusters.secondary.versions[0].members[0],
+            {
+              articleId: "article-c",
+              articleTitle: "Third outlet's story",
+              articleUrl: "https://third.example/story",
+              feedTitle: "Third Source",
+              publishedAt: new Date("2026-07-28T11:30:00.000Z"),
+            },
+          ],
+        },
+      ],
+    }
+    mocks.clusterFindUnique.mockImplementation(({ where }) =>
+      Promise.resolve(
+        where.userId_id.id === "cluster-a"
+          ? activeMergeableClusters.primary
+          : where.userId_id.id === "cluster-b"
+            ? unrelatedSecondary
+            : null
+      )
+    )
+
+    await expect(
+      mergeStoryClustersForUserWithClient({
+        firstClusterId: "cluster-a",
+        secondClusterId: "cluster-b",
+        store,
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new StoryClusterControlError(
+        "These related-coverage groups do not share a visible source to explain a merge."
+      )
+    )
+
+    expect(mocks.versionCreate).not.toHaveBeenCalled()
+  })
+
+  it("does not expose or alter a group that is unavailable to the signed-in reader", async () => {
+    const { mocks, store } = createStore({ cluster: null })
+
+    await expect(
+      mergeStoryClustersForUserWithClient({
+        firstClusterId: "cluster-a",
+        secondClusterId: "cluster-b",
+        store,
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new StoryClusterControlError(
+        "One of those related-coverage groups is not available."
       )
     )
 
