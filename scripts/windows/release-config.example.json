@@ -5,5 +5,6 @@
   "AppDirectory": "/opt/arctic-rss/app",
   "ComposeProject": "app",
   "CanonicalHost": "your-public-host.example",
+  "LocalBuildRoot": "D:\\Arctic RSS Docker",
   "ReleaseRecordDirectory": "C:\\Users\\your-user\\.arctic-rss\\release-records"
 }
