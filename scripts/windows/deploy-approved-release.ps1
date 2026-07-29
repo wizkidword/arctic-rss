@@ -176,7 +176,13 @@ function Get-RemotePublicBuildSettings {
 set -euo pipefail
 env_file='__APP_DIRECTORY__/.env'
 test -f "$env_file"
-ga_measurement_id="$(awk -F= '$1 == "NEXT_PUBLIC_GA_MEASUREMENT_ID" { sub(/^[^=]*=/, ""); print; exit }' "$env_file")"
+ga_measurement_id="$(sudo -n awk -F= '$1 == "NEXT_PUBLIC_GA_MEASUREMENT_ID" { sub(/^[^=]*=/, ""); print; exit }' "$env_file")"
+case "$ga_measurement_id" in
+  \"*\")
+    ga_measurement_id="${ga_measurement_id#\"}"
+    ga_measurement_id="${ga_measurement_id%\"}"
+    ;;
+esac
 case "$ga_measurement_id" in
   ""|G-[A-Z0-9]*) ;;
   *) printf 'Invalid public analytics identifier in the live environment.\n' >&2; exit 1 ;;
