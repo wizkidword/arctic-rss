@@ -1,11 +1,13 @@
 import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
-import { buildStoryClusterTimelineComparison } from "@/lib/story-cluster-comparison"
+import {
+  buildStoryClusterTimelineComparison,
+  type StoryClusterComparableSource,
+} from "@/lib/story-cluster-comparison"
 import { articleDetailHref } from "@/lib/reader-navigation"
 import type {
   StoryClusterPresentation,
-  StoryClusterPresentationMember,
 } from "@/lib/story-cluster-reader"
 
 const timelineDateFormatter = new Intl.DateTimeFormat("en", {
@@ -87,7 +89,7 @@ function SourceMoment({
   source,
 }: {
   label: string
-  source: StoryClusterPresentationMember | null
+  source: StoryClusterComparableSource | null
 }) {
   return (
     <div>
@@ -105,7 +107,7 @@ function SourceMoment({
   )
 }
 
-function SourceCitation({ source }: { source: StoryClusterPresentationMember }) {
+function SourceCitation({ source }: { source: StoryClusterComparableSource }) {
   return (
     <div className="min-w-0 text-sm">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">

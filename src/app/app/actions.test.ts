@@ -50,6 +50,13 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockStoryClusterAnalysisError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "StoryClusterAnalysisError"
+    }
+  }
+
   class MockStoryClusterControlError extends Error {
     constructor(message: string) {
       super(message)
@@ -68,6 +75,7 @@ const mocks = vi.hoisted(() => {
     dismissStoryClusterForUser: vi.fn(),
     enqueueAiDigest: vi.fn(),
     evaluateStoryClustersForArticleUser: vi.fn(),
+    generateStoryClusterAnalysisForUser: vi.fn(),
     generateArticleSummaryForUser: vi.fn(),
     getPrisma: vi.fn(),
     getDiscoverDirectoryFeed: vi.fn(),
@@ -80,6 +88,7 @@ const mocks = vi.hoisted(() => {
     MockFeedValidationError,
     MockOpmlImportJobError,
     MockStoryClusterReaderError,
+    MockStoryClusterAnalysisError,
     MockStoryClusterControlError,
     moveSubscriptionToFolder: vi.fn(),
     redirect: vi.fn((path: string) => {
@@ -220,6 +229,11 @@ vi.mock("@/lib/story-cluster-reader", () => ({
   StoryClusterReaderError: mocks.MockStoryClusterReaderError,
 }))
 
+vi.mock("@/lib/story-cluster-analysis", () => ({
+  generateStoryClusterAnalysisForUser: mocks.generateStoryClusterAnalysisForUser,
+  StoryClusterAnalysisError: mocks.MockStoryClusterAnalysisError,
+}))
+
 vi.mock("@/lib/story-cluster-controls", () => ({
   dismissStoryClusterForUser: mocks.dismissStoryClusterForUser,
   mergeStoryClustersForUser: mocks.mergeStoryClustersForUser,
@@ -240,6 +254,7 @@ import {
   evaluateStoryClusterAction,
   generateAiDigestAction,
   generateArticleSummaryAction,
+  generateStoryClusterAnalysisAction,
   importOpmlAction,
   markArticleReadOnOpen,
   mergeStoryClustersAction,
@@ -1520,6 +1535,67 @@ describe("generateArticleSummaryAction", () => {
 
     expect(result).toEqual({
       message: "AI summary monthly limit reached.",
+      status: "error",
+    })
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe("generateStoryClusterAnalysisAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.generateStoryClusterAnalysisForUser.mockReset()
+    mocks.refresh.mockReset()
+    mocks.revalidatePath.mockReset()
+  })
+
+  it("runs a cited analysis only for the signed-in user's selected group", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.generateStoryClusterAnalysisForUser.mockResolvedValue({
+      fromCache: false,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("clusterId", "cluster-1")
+
+    const result = await generateStoryClusterAnalysisAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
+      action: "story_cluster_analysis",
+      userId: "user-1",
+    })
+    expect(mocks.generateStoryClusterAnalysisForUser).toHaveBeenCalledWith({
+      clusterId: "cluster-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(mocks.refresh).toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "Cited source analysis generated.",
+      status: "success",
+    })
+  })
+
+  it("keeps the deterministic timeline available when optional AI is unavailable", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.generateStoryClusterAnalysisForUser.mockRejectedValue(
+      new mocks.MockStoryClusterAnalysisError(
+        "Cited AI comparison is unavailable on this server. The source timeline is still available."
+      )
+    )
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("clusterId", "cluster-1")
+
+    await expect(
+      generateStoryClusterAnalysisAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "Cited AI comparison is unavailable on this server. The source timeline is still available.",
       status: "error",
     })
     expect(mocks.refresh).not.toHaveBeenCalled()

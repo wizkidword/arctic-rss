@@ -15,11 +15,13 @@ describe("StoryClusterTimeline", () => {
     const markup = renderToStaticMarkup(
       <StoryClusterTimeline
         cluster={{
+          analysis: null,
           id: "cluster-1",
           members: [
             {
               articleId: "article-later",
               feedTitle: "Later Source",
+              memberId: "member-later",
               publishedAt: "2026-07-28T12:00:00.000Z",
               title: "Later headline",
               url: "https://later.example/story",
@@ -27,6 +29,7 @@ describe("StoryClusterTimeline", () => {
             {
               articleId: "article-first",
               feedTitle: "First Source",
+              memberId: "member-first",
               publishedAt: "2026-07-28T10:00:00.000Z",
               title: "First headline",
               url: "https://first.example/story",
@@ -34,6 +37,7 @@ describe("StoryClusterTimeline", () => {
             {
               articleId: "article-undated",
               feedTitle: "Undated Source",
+              memberId: "member-undated",
               publishedAt: null,
               title: "Undated headline",
               url: "https://undated.example/story",

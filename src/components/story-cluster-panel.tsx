@@ -9,6 +9,7 @@ import {
   type EvaluateStoryClusterActionState
 } from "@/app/app/actions"
 import { StoryClusterDismissButton } from "@/components/story-cluster-dismiss-button"
+import { StoryClusterAnalysis } from "@/components/story-cluster-analysis"
 import { StoryClusterMergeControl } from "@/components/story-cluster-merge-control"
 import { StoryClusterSplitButton } from "@/components/story-cluster-split-button"
 import { StoryClusterTimeline } from "@/components/story-cluster-timeline"
@@ -102,6 +103,7 @@ export function StoryClusterPanel({
               .
             </p>
             <StoryClusterTimeline cluster={cluster} />
+            <StoryClusterAnalysis articleId={articleId} cluster={cluster} />
             <ul className="mt-3 space-y-2 border-t pt-3">
               {cluster.members.map((member) => (
                 <li key={member.articleId}>

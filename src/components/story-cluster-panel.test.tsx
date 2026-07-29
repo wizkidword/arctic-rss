@@ -16,6 +16,10 @@ vi.mock("@/components/story-cluster-dismiss-button", () => ({
   StoryClusterDismissButton: () => <button type="button">Dismiss group</button>
 }))
 
+vi.mock("@/components/story-cluster-analysis", () => ({
+  StoryClusterAnalysis: () => <div>Cited analysis control</div>
+}))
+
 vi.mock("@/components/story-cluster-merge-control", () => ({
   StoryClusterMergeControl: ({ clusters }: { clusters: unknown[] }) =>
     clusters.length > 1 ? <button type="button">Merge groups</button> : null
@@ -34,11 +38,13 @@ describe("StoryClusterPanel", () => {
         articleId="article-1"
         clusters={[
           {
+            analysis: null,
             id: "cluster-1",
             members: [
               {
                 articleId: "article-1",
                 feedTitle: "Example Feed",
+                memberId: "member-1",
                 publishedAt: "2026-07-28T10:00:00.000Z",
                 title: "Current coverage",
                 url: "https://example.com/current"
@@ -46,6 +52,7 @@ describe("StoryClusterPanel", () => {
               {
                 articleId: "article-2",
                 feedTitle: "Another Feed",
+                memberId: "member-2",
                 publishedAt: "2026-07-28T11:00:00.000Z",
                 title: "Related coverage",
                 url: "https://example.com/related"
@@ -53,6 +60,7 @@ describe("StoryClusterPanel", () => {
               {
                 articleId: "article-3",
                 feedTitle: "Third Feed",
+                memberId: "member-3",
                 publishedAt: null,
                 title: "Third coverage",
                 url: "https://example.com/third"

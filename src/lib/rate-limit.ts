@@ -30,6 +30,7 @@ export type RateLimitAction =
   | "admin_opml_import"
   | "ai_digest"
   | "ai_summary"
+  | "story_cluster_analysis"
   | "chat_authorization_failure"
   | "chat_connection"
   | "chat_message"
@@ -115,6 +116,9 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
   ],
   ai_summary: [
     { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
+  ],
+  story_cluster_analysis: [
+    { limit: 6, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
   ],
   chat_authorization_failure: [
     { limit: 12, scope: "ip", subject: inputSubject("ip"), windowMs: 5 * 60_000 },
