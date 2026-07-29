@@ -40,9 +40,10 @@ packages and workflow actions.
 3. Use the approval-gated
    [release command](approved-release-command.md), or follow
    [deployment-rollback-runbook.md](deployment-rollback-runbook.md) manually:
-   record the commit and archive checksum, run a verified backup, stage and
-   build the exact archive, run the one-shot migration, then recreate only the
-   web and worker services.
+   record the commit and archive checksum, verify the migration role can alter
+   every existing object referenced by an unapplied migration, run a verified
+   backup, stage and build the exact archive, run the one-shot migration, then
+   recreate only the web and worker services.
 4. Record the deployment time, backup identifier, health/smoke result, and the
    retained rollback release in the private operator inventory.
 

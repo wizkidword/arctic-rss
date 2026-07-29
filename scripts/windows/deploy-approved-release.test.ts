@@ -48,4 +48,20 @@ describe("approved release command", () => {
     expect(script).toContain('workerImage = $workerImage')
     expect(script).toContain('chatGatewayImage = $chatGatewayImage')
   })
+
+  it("checks pending migration ownership before backup, staging, or builds", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain("function Get-MigrationOwnershipTargets")
+    expect(script).toContain("[AllowEmptyCollection()]")
+    expect(script).toContain("[AllowEmptyString()]")
+    expect(script).toContain('$MigrationName -notmatch "^[A-Za-z0-9_]+$"')
+    expect(script).toContain("ALTER\\s+(?:TYPE|DOMAIN)")
+    expect(script).toContain("CREATE\\s+(?:UNIQUE\\s+)?INDEX")
+    expect(script).toContain('MIGRATION_OWNERSHIP_PRECHECK=passed')
+    expect(script).toContain('process.stdout.write(new URL(process.env.DATABASE_URL).username)')
+    expect(script.indexOf("MIGRATION_OWNERSHIP_PRECHECK=passed")).toBeLessThan(
+      script.indexOf("arctic-rss-backup.service"),
+    )
+  })
 })
