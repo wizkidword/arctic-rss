@@ -85,8 +85,10 @@ affecting another user's reader state.
 configured publication-time window now produce individual, visible evidence
 records. Clusters are now also modeled as user-owned, append-only member
 snapshots with per-pair named evidence and an idempotency key for reruns. This
-layer still returns neither a score nor a grouping verdict; future cluster
-policy must keep its merge reasons and split/merge/dismiss controls explicit.
+layer now deterministically proposes groups from exact canonical-URL matches,
+or matching normalized titles published within 72 hours. It still returns no
+score; future persistence and UI must keep its merge reasons and
+split/merge/dismiss controls explicit.
 
 **Thin first release:**
 
