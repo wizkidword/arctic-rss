@@ -73,6 +73,7 @@ services:
       - "127.0.0.1:${EPHEMERAL_REDIS_PORT:-6380}:6379"
 
   migrate:
+    image: ${MIGRATE_IMAGE:-arctic-rss-migrate}
     build:
       context: .
       target: migrate
@@ -101,6 +102,7 @@ services:
       driver: journald
 
   web:
+    image: ${WEB_IMAGE:-arctic-rss-web}
     build:
       context: .
       target: runner
@@ -147,6 +149,7 @@ services:
       driver: journald
 
   worker:
+    image: ${WORKER_IMAGE:-arctic-rss-worker}
     build:
       context: .
       target: worker
@@ -280,6 +283,7 @@ services:
       start_period: 45s
 
   chat-gateway:
+    image: ${CHAT_GATEWAY_IMAGE:-arctic-rss-chat-gateway}
     build:
       context: .
       target: chat-gateway
