@@ -903,6 +903,7 @@ model SavedSearch {
 model StoryCluster {
   id                   String             @id @default(cuid())
   userId               String
+  deduplicationKey     String
   status               StoryClusterStatus @default(ACTIVE)
   currentVersionNumber Int                @default(0)
   createdAt            DateTime           @default(now())
@@ -912,6 +913,7 @@ model StoryCluster {
   versions StoryClusterVersion[]
 
   @@unique([userId, id])
+  @@unique([userId, deduplicationKey])
   @@index([userId, status, updatedAt])
 }
 
@@ -923,6 +925,7 @@ model StoryClusterVersion {
   clusterId        String
   version          Int
   action           StoryClusterVersionAction
+  algorithmVersion String?
   deduplicationKey String?
   createdAt        DateTime                  @default(now())
 
