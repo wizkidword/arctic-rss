@@ -729,8 +729,11 @@ sudo -n journalctl --rotate
 sudo -n journalctl --vacuum-time=30d
 # Application images were built and archived locally from the exact source
 # commit, then hash-verified and loaded above. Never build them on OVH.
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps --no-build -T migrate </dev/null
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps --no-build -T migrate ./node_modules/.bin/prisma migrate status </dev/null
+# `docker compose run` does not support `--no-build` on the OVH Compose
+# version. It never builds unless `--build` is explicitly supplied, so these
+# remain off-host-image-only while staying compatible with that runtime.
+sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate </dev/null
+sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
 migration_status="verified"
 sudo -n mv "$live" "$previous"
 sudo -n mv "$stage" "$live"
