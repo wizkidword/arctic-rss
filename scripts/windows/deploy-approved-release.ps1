@@ -573,7 +573,7 @@ if [ "$pending_targets" -eq 0 ]; then
   exit 0
 fi
 
-migration_user="$(sudo -n docker compose -p "$compose_project" --project-directory "$live" run --rm --no-deps -T migrate node -e 'process.stdout.write(new URL(process.env.DATABASE_URL).username)' 2>/dev/null)"
+migration_user="$(sudo -n docker compose -p "$compose_project" --project-directory "$live" run --rm --no-deps -T migrate node -e 'process.stdout.write(new URL(process.env.DATABASE_URL).username)' </dev/null 2>/dev/null)"
 printf '%s' "$migration_user" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*$'
 
 ownership_failure=0
