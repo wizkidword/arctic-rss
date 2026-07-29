@@ -393,12 +393,16 @@ describe("ReaderSurface display modes", () => {
               {
                 articleId: "article-1",
                 feedTitle: "Example Feed",
+                publishedAt: "2026-07-28T10:00:00.000Z",
                 title: "First unread article",
+                url: "https://example.com/first-unread",
               },
               {
                 articleId: "article-2",
                 feedTitle: "Example Feed",
+                publishedAt: "2026-07-28T11:00:00.000Z",
                 title: "Second unread article",
+                url: "https://example.com/second-unread",
               },
             ],
             reasons: ["CANONICAL_URL"],

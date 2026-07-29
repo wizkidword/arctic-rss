@@ -11,6 +11,7 @@ import {
 import { StoryClusterDismissButton } from "@/components/story-cluster-dismiss-button"
 import { StoryClusterMergeControl } from "@/components/story-cluster-merge-control"
 import { StoryClusterSplitButton } from "@/components/story-cluster-split-button"
+import { StoryClusterTimeline } from "@/components/story-cluster-timeline"
 import { Button } from "@/components/ui/button"
 import { articleDetailHref } from "@/lib/reader-navigation"
 import type { StoryClusterSignal } from "@/lib/story-cluster-history"
@@ -100,6 +101,7 @@ export function StoryClusterPanel({
               {cluster.reasons.map((reason) => signalLabels[reason]).join("; ")}
               .
             </p>
+            <StoryClusterTimeline cluster={cluster} />
             <ul className="mt-3 space-y-2 border-t pt-3">
               {cluster.members.map((member) => (
                 <li key={member.articleId}>
