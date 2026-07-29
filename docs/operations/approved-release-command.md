@@ -51,6 +51,19 @@ printing it, builds the staged images, applies and verifies committed Prisma
 migrations, retains the previous source directory, recreates only web and
 worker, and verifies local/public health, login, and the monitor service.
 
+Before that backup, archive, staging, or image build, the approved path performs
+a read-only ownership preflight for unapplied migrations. It obtains the
+migration-role name inside a short-lived migration container without printing
+the connection URL, then confirms the role can alter the existing quoted
+PostgreSQL types/relations referenced by committed migration SQL, create the
+needed public-schema objects, and create requested extensions. It exits before
+any release mutation when that check fails.
+
+The guard intentionally recognizes Prisma-style `ALTER TYPE`, `ALTER TABLE`,
+`ALTER SEQUENCE`, `ALTER DOMAIN`, `ALTER MATERIALIZED VIEW`, `ALTER INDEX`,
+`CREATE INDEX`, object-creation, and extension statements. Custom raw SQL
+outside that scope still requires a manual migration ownership review.
+
 It writes a non-secret JSON release record to the configured private local
 directory. Schema-changing releases still require a reviewed migration and a
 forward-fix plan; do not use the retained source directory alone to roll code

@@ -144,6 +144,91 @@ function Get-ReleaseMarker {
   return $marker[0].Substring($Name.Length + 1)
 }
 
+function Add-MigrationOwnershipTarget {
+  param(
+    [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Targets,
+    [Parameter(Mandatory)][hashtable]$Seen,
+    [Parameter(Mandatory)][string]$MigrationName,
+    [Parameter(Mandatory)][string]$Kind,
+    [Parameter(Mandatory)][string]$Schema,
+    [Parameter(Mandatory)][AllowEmptyString()][string]$ObjectName
+  )
+
+  if ($MigrationName -notmatch "^[A-Za-z0-9_]+$") {
+    throw "Migration ownership preflight found an unsupported identifier."
+  }
+  foreach ($value in @($Kind, $Schema)) {
+    if ($value -notmatch "^[A-Za-z_][A-Za-z0-9_]*$") {
+      throw "Migration ownership preflight found an unsupported identifier."
+    }
+  }
+  if (-not [string]::IsNullOrWhiteSpace($ObjectName) -and $ObjectName -notmatch "^[A-Za-z_][A-Za-z0-9_]*$") {
+    throw "Migration ownership preflight found an unsupported identifier."
+  }
+
+  $key = "$MigrationName|$Kind|$Schema|$ObjectName"
+  if ($Seen.ContainsKey($key)) {
+    return
+  }
+
+  $Seen[$key] = $true
+  $Targets.Add([pscustomobject]@{
+    MigrationName = $MigrationName
+    Kind = $Kind
+    Schema = $Schema
+    ObjectName = $ObjectName
+  })
+}
+
+function Get-MigrationOwnershipTargets {
+  param([Parameter(Mandatory)][string]$MigrationsDirectory)
+
+  if (-not (Test-Path -LiteralPath $MigrationsDirectory -PathType Container)) {
+    throw "The tracked Prisma migrations directory could not be located."
+  }
+
+  $targets = [System.Collections.Generic.List[object]]::new()
+  $seen = @{}
+  $objectPatterns = @(
+    [pscustomobject]@{ Kind = "TYPE"; Pattern = '(?im)^\s*ALTER\s+(?:TYPE|DOMAIN)\s+(?:(?<schema>"[A-Za-z_][A-Za-z0-9_]*"|[A-Za-z_][A-Za-z0-9_]*)\.)?(?<object>"[A-Za-z_][A-Za-z0-9_]*")' },
+    [pscustomobject]@{ Kind = "RELATION"; Pattern = '(?im)^\s*ALTER\s+(?:TABLE|SEQUENCE|MATERIALIZED\s+VIEW|INDEX)\s+(?:IF\s+EXISTS\s+)?(?:(?<schema>"[A-Za-z_][A-Za-z0-9_]*"|[A-Za-z_][A-Za-z0-9_]*)\.)?(?<object>"[A-Za-z_][A-Za-z0-9_]*")' },
+    [pscustomobject]@{ Kind = "RELATION"; Pattern = '(?im)^\s*CREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+"[A-Za-z_][A-Za-z0-9_]*"\s+ON\s+(?:(?<schema>"[A-Za-z_][A-Za-z0-9_]*"|[A-Za-z_][A-Za-z0-9_]*)\.)?(?<object>"[A-Za-z_][A-Za-z0-9_]*")' }
+  )
+
+  foreach ($directory in Get-ChildItem -LiteralPath $MigrationsDirectory -Directory | Sort-Object Name) {
+    $migrationName = $directory.Name
+    if ($migrationName -notmatch "^[A-Za-z0-9_]+$") {
+      throw "Migration ownership preflight found an unsupported migration directory."
+    }
+
+    $migrationPath = Join-Path $directory.FullName "migration.sql"
+    if (-not (Test-Path -LiteralPath $migrationPath -PathType Leaf)) {
+      continue
+    }
+
+    $sql = Get-Content -LiteralPath $migrationPath -Raw
+    foreach ($pattern in $objectPatterns) {
+      foreach ($match in [regex]::Matches($sql, $pattern.Pattern)) {
+        $schema = $match.Groups["schema"].Value -replace '^"|"$', ''
+        if ([string]::IsNullOrWhiteSpace($schema)) {
+          $schema = "public"
+        }
+        $objectName = $match.Groups["object"].Value -replace '^"|"$', ''
+        Add-MigrationOwnershipTarget -Targets $targets -Seen $seen -MigrationName $migrationName -Kind $pattern.Kind -Schema $schema -ObjectName $objectName
+      }
+    }
+
+    if ($sql -match '(?im)^\s*CREATE\s+(?:TABLE|TYPE|SEQUENCE|VIEW|MATERIALIZED\s+VIEW)\b') {
+      Add-MigrationOwnershipTarget -Targets $targets -Seen $seen -MigrationName $migrationName -Kind "SCHEMA_CREATE" -Schema "public" -ObjectName ""
+    }
+    if ($sql -match '(?im)^\s*CREATE\s+EXTENSION\b') {
+      Add-MigrationOwnershipTarget -Targets $targets -Seen $seen -MigrationName $migrationName -Kind "DATABASE_CREATE" -Schema "public" -ObjectName ""
+    }
+  }
+
+  return $targets.ToArray()
+}
+
 function Get-ReleaseRun {
   param(
     [Parameter(Mandatory)][string]$Repository,
@@ -254,6 +339,7 @@ Invoke-LocalCheck -Label "Validating Prisma schema" -FilePath "npx" -Arguments @
 $repository = (Invoke-RequiredCommand -FilePath "gh" -Arguments @("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner") | Select-Object -Last 1).Trim()
 $ci = Wait-ForSuccessfulCi -Repository $repository -Commit $commit -TimeoutMinutes $CiTimeoutMinutes
 $shortSha = $commit.Substring(0, 7)
+$migrationOwnershipTargets = Get-MigrationOwnershipTargets -MigrationsDirectory (Join-Path (Get-Location) "prisma/migrations")
 
 Write-Host "Target commit: $commit"
 Write-Host "GitHub CI: $($ci.Url)"
@@ -271,6 +357,89 @@ if (-not $Approve) {
 $confirmation = Read-Host "Type DEPLOY $shortSha to start the approved production release"
 if ($confirmation -cne "DEPLOY $shortSha") {
   throw "Production release was not approved."
+}
+
+if ($migrationOwnershipTargets.Count -gt 0) {
+  $ownershipTargetLines = @(
+    $migrationOwnershipTargets | ForEach-Object {
+      "$($_.MigrationName)`t$($_.Kind)`t$($_.Schema)`t$($_.ObjectName)"
+    }
+  )
+  $ownershipTargetPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($ownershipTargetLines -join "`n")))
+  $ownershipPreflightScript = @'
+set -euo pipefail
+live='__APP_DIRECTORY__'
+compose_project='__COMPOSE_PROJECT__'
+target_payload_b64='__OWNERSHIP_TARGETS_BASE64__'
+targets="$(printf '%s' "$target_payload_b64" | base64 -d)"
+
+query_database() {
+  local sql="$1"
+  sudo -n docker exec app-postgres-1 sh -c 'exec psql -v ON_ERROR_STOP=1 -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' sh "$sql"
+}
+
+finished_migrations="$(query_database "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL;")"
+is_migration_finished() {
+  printf '%s\n' "$finished_migrations" | awk -v candidate="$1" '$0 == candidate { found = 1 } END { exit !found }'
+}
+
+pending_targets=0
+while IFS=$'\t' read -r migration kind schema object_name; do
+  [ -n "$migration" ] || continue
+  if ! is_migration_finished "$migration"; then
+    pending_targets=$((pending_targets + 1))
+  fi
+done <<< "$targets"
+
+if [ "$pending_targets" -eq 0 ]; then
+  printf 'MIGRATION_OWNERSHIP_PRECHECK=passed\n'
+  exit 0
+fi
+
+migration_user="$(sudo -n docker compose -p "$compose_project" --project-directory "$live" run --rm --no-deps -T migrate node -e 'process.stdout.write(new URL(process.env.DATABASE_URL).username)' 2>/dev/null)"
+printf '%s' "$migration_user" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*$'
+
+ownership_failure=0
+while IFS=$'\t' read -r migration kind schema object_name; do
+  [ -n "$migration" ] || continue
+  if is_migration_finished "$migration"; then
+    continue
+  fi
+
+  case "$kind" in
+    TYPE)
+      ownership_state="$(query_database "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM pg_type type_object JOIN pg_namespace schema_object ON schema_object.oid = type_object.typnamespace WHERE schema_object.nspname = '$schema' AND type_object.typname = '$object_name') THEN 'missing' WHEN EXISTS (SELECT 1 FROM pg_type type_object JOIN pg_namespace schema_object ON schema_object.oid = type_object.typnamespace WHERE schema_object.nspname = '$schema' AND type_object.typname = '$object_name' AND (type_object.typowner = (SELECT oid FROM pg_roles WHERE rolname = '$migration_user') OR pg_has_role('$migration_user', type_object.typowner, 'USAGE') OR (SELECT rolsuper FROM pg_roles WHERE rolname = '$migration_user'))) THEN 'owned' ELSE 'unowned' END;")"
+      ;;
+    RELATION)
+      ownership_state="$(query_database "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM pg_class relation_object JOIN pg_namespace schema_object ON schema_object.oid = relation_object.relnamespace WHERE schema_object.nspname = '$schema' AND relation_object.relname = '$object_name') THEN 'missing' WHEN EXISTS (SELECT 1 FROM pg_class relation_object JOIN pg_namespace schema_object ON schema_object.oid = relation_object.relnamespace WHERE schema_object.nspname = '$schema' AND relation_object.relname = '$object_name' AND (relation_object.relowner = (SELECT oid FROM pg_roles WHERE rolname = '$migration_user') OR pg_has_role('$migration_user', relation_object.relowner, 'USAGE') OR (SELECT rolsuper FROM pg_roles WHERE rolname = '$migration_user'))) THEN 'owned' ELSE 'unowned' END;")"
+      ;;
+    SCHEMA_CREATE)
+      ownership_state="$(query_database "SELECT CASE WHEN has_schema_privilege('$migration_user', '$schema', 'CREATE') OR (SELECT rolsuper FROM pg_roles WHERE rolname = '$migration_user') THEN 'owned' ELSE 'unowned' END;")"
+      ;;
+    DATABASE_CREATE)
+      ownership_state="$(query_database "SELECT CASE WHEN has_database_privilege('$migration_user', current_database(), 'CREATE') OR (SELECT rolsuper FROM pg_roles WHERE rolname = '$migration_user') THEN 'owned' ELSE 'unowned' END;")"
+      ;;
+    *)
+      printf 'Migration ownership preflight encountered an unsupported target kind.\n' >&2
+      exit 1
+      ;;
+  esac
+
+  if [ "$ownership_state" = "unowned" ]; then
+    printf 'Migration ownership preflight failed: %s needs %s access to %s.%s.\n' "$migration" "$kind" "$schema" "$object_name" >&2
+    ownership_failure=1
+  fi
+done <<< "$targets"
+
+test "$ownership_failure" = 0
+printf 'MIGRATION_OWNERSHIP_PRECHECK=passed\n'
+'@
+  $ownershipPreflightScript = $ownershipPreflightScript.Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__OWNERSHIP_TARGETS_BASE64__', $ownershipTargetPayload)
+  $ownershipOutput = Invoke-RemoteScript -Config $config -Script $ownershipPreflightScript
+  $ownershipStatus = Get-ReleaseMarker -Output $ownershipOutput -Name "MIGRATION_OWNERSHIP_PRECHECK"
+  if ($ownershipStatus -ne "passed") {
+    throw "The migration ownership preflight did not pass."
+  }
 }
 
 $backupOutput = Invoke-RemoteScript -Config $config -Script @'
