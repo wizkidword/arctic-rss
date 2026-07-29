@@ -87,7 +87,9 @@ records. Clusters are now also modeled as user-owned, append-only member
 snapshots with per-pair named evidence and an idempotency key for reruns. This
 layer now deterministically proposes groups from exact canonical-URL matches,
 or matching normalized titles published within 72 hours. It still returns no
-score; future persistence and UI must keep its merge reasons and
+score. The persistence service rechecks active subscription and archive
+visibility before atomically creating the first version, or returning the same
+user's existing candidate. Future UI must keep merge reasons and
 split/merge/dismiss controls explicit.
 
 **Thin first release:**
