@@ -72,6 +72,7 @@ const mocks = vi.hoisted(() => {
     getPrisma: vi.fn(),
     getDiscoverDirectoryFeed: vi.fn(),
     getUserFeedSubscription: vi.fn(),
+    mergeStoryClustersForUser: vi.fn(),
     MockAiDigestError,
     MockAiSummaryError,
     MockArticleCollectionError,
@@ -221,6 +222,7 @@ vi.mock("@/lib/story-cluster-reader", () => ({
 
 vi.mock("@/lib/story-cluster-controls", () => ({
   dismissStoryClusterForUser: mocks.dismissStoryClusterForUser,
+  mergeStoryClustersForUser: mocks.mergeStoryClustersForUser,
   splitStoryClusterMemberForUser: mocks.splitStoryClusterMemberForUser,
   StoryClusterControlError: mocks.MockStoryClusterControlError,
 }))
@@ -240,6 +242,7 @@ import {
   generateArticleSummaryAction,
   importOpmlAction,
   markArticleReadOnOpen,
+  mergeStoryClustersAction,
   moveSubscriptionToFolderAction,
   removeArticleFromCollectionAction,
   removePodcastEpisodeFromCollectionAction,
@@ -1733,6 +1736,73 @@ describe("splitStoryClusterMemberAction", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
     expect(result).toEqual({
       message: "This source is already separated from the related-coverage group.",
+      status: "success",
+    })
+  })
+})
+
+describe("mergeStoryClustersAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.mergeStoryClustersForUser.mockReset()
+    mocks.revalidatePath.mockReset()
+  })
+
+  it("merges only the signed-in user's selected coverage groups", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.mergeStoryClustersForUser.mockResolvedValue({
+      clusterId: "cluster-1",
+      merged: true,
+      versionNumber: 2,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("firstClusterId", "cluster-1")
+    formData.set("secondClusterId", "cluster-2")
+
+    const result = await mergeStoryClustersAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
+      action: "story_cluster_control",
+      userId: "user-1",
+    })
+    expect(mocks.mergeStoryClustersForUser).toHaveBeenCalledWith({
+      firstClusterId: "cluster-1",
+      secondClusterId: "cluster-2",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(result).toEqual({
+      message: "Related-coverage groups merged. Original articles are unchanged.",
+      status: "success",
+    })
+  })
+
+  it("does not revalidate a merge already represented in history", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.mergeStoryClustersForUser.mockResolvedValue({
+      clusterId: "cluster-1",
+      merged: false,
+      versionNumber: 2,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("firstClusterId", "cluster-1")
+    formData.set("secondClusterId", "cluster-2")
+
+    const result = await mergeStoryClustersAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "These related-coverage groups are already merged.",
       status: "success",
     })
   })

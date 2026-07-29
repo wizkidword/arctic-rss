@@ -146,6 +146,7 @@ enum SmartDigestEmailStatus {
 enum StoryClusterStatus {
   ACTIVE
   DISMISSED
+  MERGED
 }
 
 // These actions are append-only history entries. The current cluster status is

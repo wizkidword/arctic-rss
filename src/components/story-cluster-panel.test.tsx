@@ -16,6 +16,11 @@ vi.mock("@/components/story-cluster-dismiss-button", () => ({
   StoryClusterDismissButton: () => <button type="button">Dismiss group</button>
 }))
 
+vi.mock("@/components/story-cluster-merge-control", () => ({
+  StoryClusterMergeControl: ({ clusters }: { clusters: unknown[] }) =>
+    clusters.length > 1 ? <button type="button">Merge groups</button> : null
+}))
+
 vi.mock("@/components/story-cluster-split-button", () => ({
   StoryClusterSplitButton: () => <button type="button">Separate source</button>
 }))

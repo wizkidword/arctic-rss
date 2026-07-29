@@ -30,9 +30,11 @@ type CurrentStoryClusterVersion = {
 type UserStoryCluster = {
   currentVersionNumber: number
   id: string
-  status: "ACTIVE" | "DISMISSED"
+  status: StoryClusterStatus
   versions: CurrentStoryClusterVersion[]
 }
+
+type StoryClusterStatus = "ACTIVE" | "DISMISSED" | "MERGED"
 
 type StoryClusterControlTransaction = {
   storyCluster: {
@@ -101,7 +103,12 @@ type StoryClusterControlTransaction = {
 
 type ControlVersionAction = Extract<
   StoryClusterVersionAction,
-  "DISMISSED" | "SPLIT"
+  "DISMISSED" | "MERGED" | "SPLIT"
+>
+
+type InactiveStoryClusterStatus = Extract<
+  StoryClusterStatus,
+  "DISMISSED" | "MERGED"
 >
 
 export type StoryClusterControlStore = {
@@ -119,6 +126,12 @@ export type DismissStoryClusterResult = {
 export type SplitStoryClusterMemberResult = {
   clusterId: string
   split: boolean
+  versionNumber: number
+}
+
+export type MergeStoryClustersResult = {
+  clusterId: string
+  merged: boolean
   versionNumber: number
 }
 
@@ -223,6 +236,12 @@ export async function dismissStoryClusterForUserWithClient({
         dismissed: false,
         versionNumber: cluster.currentVersionNumber,
       }
+    }
+
+    if (cluster.status === "MERGED") {
+      throw new StoryClusterControlError(
+        "This related-coverage group was merged into another group."
+      )
     }
 
     const currentVersion = cluster.versions[0]
@@ -351,6 +370,12 @@ export async function splitStoryClusterMemberForUserWithClient({
       throw new StoryClusterControlError("This related-coverage group is already dismissed.")
     }
 
+    if (cluster.status === "MERGED") {
+      throw new StoryClusterControlError(
+        "This related-coverage group was merged into another group."
+      )
+    }
+
     const deduplicationKey = splitDeduplicationKey(normalizedMemberArticleId)
     const existingSplit = await transaction.storyClusterVersion.findFirst({
       select: {
@@ -436,6 +461,276 @@ export async function splitStoryClusterMemberForUserWithClient({
   })
 }
 
+/**
+ * Combines two active groups from the same reader only when they share a
+ * source. The shared source keeps the saved named evidence graph connected;
+ * no opaque similarity score is introduced by this manual control.
+ */
+export async function mergeStoryClustersForUser({
+  firstClusterId,
+  secondClusterId,
+  userId,
+}: {
+  firstClusterId: string
+  secondClusterId: string
+  userId: string
+}): Promise<MergeStoryClustersResult> {
+  return mergeStoryClustersForUserWithClient({
+    firstClusterId,
+    secondClusterId,
+    store: getPrisma() as unknown as StoryClusterControlStore,
+    userId,
+  })
+}
+
+export async function mergeStoryClustersForUserWithClient({
+  firstClusterId,
+  secondClusterId,
+  store,
+  userId,
+}: {
+  firstClusterId: string
+  secondClusterId: string
+  store: StoryClusterControlStore
+  userId: string
+}): Promise<MergeStoryClustersResult> {
+  const normalizedFirstClusterId = firstClusterId.trim()
+  const normalizedSecondClusterId = secondClusterId.trim()
+  const normalizedUserId = userId.trim()
+
+  if (!normalizedFirstClusterId || !normalizedSecondClusterId || !normalizedUserId) {
+    throw new StoryClusterControlError("Choose two available related-coverage groups first.")
+  }
+
+  if (normalizedFirstClusterId === normalizedSecondClusterId) {
+    throw new StoryClusterControlError("Choose two different related-coverage groups to merge.")
+  }
+
+  const [primaryClusterId, secondaryClusterId] = [
+    normalizedFirstClusterId,
+    normalizedSecondClusterId,
+  ].sort((left, right) => left.localeCompare(right))
+
+  return store.$transaction(async (transaction) => {
+    const primary = await findUserStoryCluster({
+      clusterId: primaryClusterId,
+      transaction,
+      userId: normalizedUserId,
+    })
+    const secondary = await findUserStoryCluster({
+      clusterId: secondaryClusterId,
+      transaction,
+      userId: normalizedUserId,
+    })
+
+    if (!primary || !secondary) {
+      throw new StoryClusterControlError("One of those related-coverage groups is not available.")
+    }
+
+    const deduplicationKey = mergeDeduplicationKey(primary.id, secondary.id)
+    const existingMerge = await transaction.storyClusterVersion.findFirst({
+      select: {
+        version: true,
+      },
+      where: {
+        clusterId: primary.id,
+        deduplicationKey,
+      },
+    })
+
+    if (existingMerge) {
+      return {
+        clusterId: primary.id,
+        merged: false,
+        versionNumber: existingMerge.version,
+      }
+    }
+
+    if (primary.status !== "ACTIVE" || secondary.status !== "ACTIVE") {
+      throw new StoryClusterControlError(
+        "Both related-coverage groups must still be active before they can merge."
+      )
+    }
+
+    const primaryVersion = currentVersionForCluster(primary)
+    const secondaryVersion = currentVersionForCluster(secondary)
+    const primarySnapshot = snapshotInputFromCurrentVersion(primaryVersion)
+    const secondarySnapshot = snapshotInputFromCurrentVersion(secondaryVersion)
+
+    if (!sharesArticle(primarySnapshot.members, secondarySnapshot.members)) {
+      throw new StoryClusterControlError(
+        "These related-coverage groups do not share a visible source to explain a merge."
+      )
+    }
+
+    const members = mergeMembers(primarySnapshot.members, secondarySnapshot.members)
+    const evidence = mergeEvidence(primarySnapshot.evidence, secondarySnapshot.evidence)
+
+    try {
+      createStoryClusterVersionSnapshot({
+        action: "MERGED",
+        deduplicationKey,
+        evidence,
+        members,
+        previousVersionNumber: primary.currentVersionNumber,
+      })
+    } catch (error) {
+      if (error instanceof StoryClusterControlError) {
+        throw error
+      }
+
+      throw new StoryClusterControlError(
+        "These related-coverage groups cannot form one fully explained group."
+      )
+    }
+
+    const mergedVersion = await appendClusterVersion({
+      action: "MERGED",
+      cluster: primary,
+      currentVersion: primaryVersion,
+      deduplicationKey,
+      evidence,
+      members,
+      transaction,
+    })
+    await appendClusterVersion({
+      action: "MERGED",
+      cluster: secondary,
+      currentVersion: secondaryVersion,
+      deduplicationKey: mergedIntoDeduplicationKey(primary.id),
+      evidence: secondarySnapshot.evidence,
+      members: secondarySnapshot.members,
+      status: "MERGED",
+      transaction,
+    })
+
+    return {
+      clusterId: primary.id,
+      merged: true,
+      versionNumber: mergedVersion.version,
+    }
+  })
+}
+
+async function findUserStoryCluster({
+  clusterId,
+  transaction,
+  userId,
+}: {
+  clusterId: string
+  transaction: StoryClusterControlTransaction
+  userId: string
+}) {
+  return transaction.storyCluster.findUnique({
+    select: {
+      currentVersionNumber: true,
+      id: true,
+      status: true,
+      versions: {
+        orderBy: {
+          version: "desc",
+        },
+        select: {
+          algorithmVersion: true,
+          evidence: {
+            select: {
+              leftMember: {
+                select: {
+                  articleId: true,
+                },
+              },
+              rightMember: {
+                select: {
+                  articleId: true,
+                },
+              },
+              signal: true,
+            },
+          },
+          members: {
+            select: {
+              articleId: true,
+              articleTitle: true,
+              articleUrl: true,
+              feedTitle: true,
+              publishedAt: true,
+            },
+          },
+          version: true,
+        },
+        take: 1,
+      },
+    },
+    where: {
+      userId_id: {
+        id: clusterId,
+        userId,
+      },
+    },
+  })
+}
+
+function currentVersionForCluster(cluster: UserStoryCluster) {
+  const currentVersion = cluster.versions[0]
+
+  if (!currentVersion || currentVersion.version !== cluster.currentVersionNumber) {
+    throw new StoryClusterControlError(
+      "This related-coverage group is missing its current history snapshot."
+    )
+  }
+
+  return currentVersion
+}
+
+function sharesArticle(
+  firstMembers: StoryClusterMemberSnapshotInput[],
+  secondMembers: StoryClusterMemberSnapshotInput[]
+) {
+  const firstArticleIds = new Set(firstMembers.map((member) => member.articleId))
+
+  return secondMembers.some((member) => firstArticleIds.has(member.articleId))
+}
+
+function mergeMembers(
+  firstMembers: StoryClusterMemberSnapshotInput[],
+  secondMembers: StoryClusterMemberSnapshotInput[]
+) {
+  const membersByArticleId = new Map<string, StoryClusterMemberSnapshotInput>()
+
+  for (const member of [...firstMembers, ...secondMembers]) {
+    if (!membersByArticleId.has(member.articleId)) {
+      membersByArticleId.set(member.articleId, member)
+    }
+  }
+
+  return [...membersByArticleId.values()]
+}
+
+function mergeEvidence(
+  firstEvidence: StoryClusterEvidenceInput[],
+  secondEvidence: StoryClusterEvidenceInput[]
+) {
+  const evidenceByKey = new Map<string, StoryClusterEvidenceInput>()
+
+  for (const evidence of [...firstEvidence, ...secondEvidence]) {
+    const [leftArticleId, rightArticleId] = [
+      evidence.leftArticleId,
+      evidence.rightArticleId,
+    ].sort((left, right) => left.localeCompare(right))
+    const key = `${leftArticleId}\u0000${rightArticleId}\u0000${evidence.signal}`
+
+    if (!evidenceByKey.has(key)) {
+      evidenceByKey.set(key, {
+        leftArticleId,
+        rightArticleId,
+        signal: evidence.signal,
+      })
+    }
+  }
+
+  return [...evidenceByKey.values()]
+}
+
 function snapshotInputFromCurrentVersion(currentVersion: CurrentStoryClusterVersion) {
   return {
     evidence: currentVersion.evidence.map((evidence) => ({
@@ -469,7 +764,7 @@ async function appendClusterVersion({
   deduplicationKey: string | null
   evidence: StoryClusterEvidenceInput[]
   members: StoryClusterMemberSnapshotInput[]
-  status?: "DISMISSED"
+  status?: InactiveStoryClusterStatus
   transaction: StoryClusterControlTransaction
 }) {
   const snapshot = createStoryClusterVersionSnapshot({
@@ -539,6 +834,17 @@ async function appendClusterVersion({
 
 function splitDeduplicationKey(memberArticleId: string) {
   return `story-cluster-split:${memberArticleId}`
+}
+
+function mergeDeduplicationKey(
+  primaryClusterId: string,
+  secondaryClusterId: string
+) {
+  return `story-cluster-merge:${primaryClusterId}:${secondaryClusterId}`
+}
+
+function mergedIntoDeduplicationKey(primaryClusterId: string) {
+  return `story-cluster-merged-into:${primaryClusterId}`
 }
 
 function requireArticleId(articleId: string | null) {

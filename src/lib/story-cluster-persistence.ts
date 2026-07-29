@@ -18,7 +18,7 @@ type AuthorizedClusterArticle = {
 type PersistedCluster = {
   currentVersionNumber: number
   id: string
-  status: "ACTIVE" | "DISMISSED"
+  status: "ACTIVE" | "DISMISSED" | "MERGED"
 }
 
 type PersistedClusterVersion = {
