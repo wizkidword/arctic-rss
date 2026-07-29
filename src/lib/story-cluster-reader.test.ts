@@ -132,12 +132,16 @@ describe("story cluster reader presentation", () => {
           {
             articleId: "article-1",
             feedTitle: "Example Feed",
-            title: "Current article"
+            publishedAt: "2026-07-28T12:00:00.000Z",
+            title: "Current article",
+            url: "https://example.com/current"
           },
           {
             articleId: "article-2",
             feedTitle: "Example Feed",
-            title: "Related article"
+            publishedAt: "2026-07-28T12:00:00.000Z",
+            title: "Related article",
+            url: "https://example.com/related"
           }
         ],
         reasons: ["CANONICAL_URL"]

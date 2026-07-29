@@ -25,7 +25,9 @@ const MAX_VISIBLE_STORY_CLUSTERS_PER_ARTICLE = 3
 export type StoryClusterPresentationMember = {
   articleId: string
   feedTitle: string
+  publishedAt: string | null
   title: string
+  url: string
 }
 
 export type StoryClusterPresentation = {
@@ -334,7 +336,9 @@ function presentationFromVersion(
             {
               articleId: article.id,
               feedTitle: article.feedTitle,
-              title: article.title
+              publishedAt: article.publishedAt?.toISOString() ?? null,
+              title: article.title,
+              url: article.url
             }
           ]
         : []

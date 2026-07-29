@@ -39,17 +39,23 @@ describe("StoryClusterPanel", () => {
               {
                 articleId: "article-1",
                 feedTitle: "Example Feed",
-                title: "Current coverage"
+                publishedAt: "2026-07-28T10:00:00.000Z",
+                title: "Current coverage",
+                url: "https://example.com/current"
               },
               {
                 articleId: "article-2",
                 feedTitle: "Another Feed",
-                title: "Related coverage"
+                publishedAt: "2026-07-28T11:00:00.000Z",
+                title: "Related coverage",
+                url: "https://example.com/related"
               },
               {
                 articleId: "article-3",
                 feedTitle: "Third Feed",
-                title: "Third coverage"
+                publishedAt: null,
+                title: "Third coverage",
+                url: "https://example.com/third"
               }
             ],
             reasons: ["CANONICAL_URL", "PUBLICATION_TIME_WINDOW"]
@@ -69,5 +75,8 @@ describe("StoryClusterPanel", () => {
     expect(markup).toContain("Separate source")
     expect(markup).toContain("remaining group must still have an explained connection")
     expect(markup).toContain("It preserves every original article")
+    expect(markup).toContain("Coverage timeline and source comparison")
+    expect(markup).toContain("Headline framing by source")
+    expect(markup).toContain('href="https://example.com/related"')
   })
 })
