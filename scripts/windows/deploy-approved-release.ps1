@@ -243,10 +243,18 @@ function New-OffHostReleaseImages {
   )
 
   $images = [ordered]@{
-    Migrate = "$($Config.ComposeProject)-migrate"
-    Web = "$($Config.ComposeProject)-web"
-    Worker = "$($Config.ComposeProject)-worker"
-    ChatGateway = "$($Config.ComposeProject)-chat-gateway"
+    # The tag is intentionally unique to this release. Loading an archive must
+    # never replace the image selected by the currently live Compose source.
+    Migrate = "$($Config.ComposeProject)-migrate:release-$ShortSha"
+    Web = "$($Config.ComposeProject)-web:release-$ShortSha"
+    Worker = "$($Config.ComposeProject)-worker:release-$ShortSha"
+    ChatGateway = "$($Config.ComposeProject)-chat-gateway:release-$ShortSha"
+  }
+  $imageEnvironmentVariables = [ordered]@{
+    Migrate = "MIGRATE_IMAGE"
+    Web = "WEB_IMAGE"
+    Worker = "WORKER_IMAGE"
+    ChatGateway = "CHAT_GATEWAY_IMAGE"
   }
   $buildTargets = [ordered]@{
     Migrate = "migrate"
@@ -278,6 +286,11 @@ function New-OffHostReleaseImages {
     ArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $imageArchive).Hash.ToLowerInvariant()
     ArchiveBytes = $archiveInfo.Length
     Images = @($images.Values)
+    ImageEnvironment = @(
+      $images.Keys | ForEach-Object {
+        "$($imageEnvironmentVariables[$_])=$($images[$_])"
+      }
+    )
   }
 }
 
@@ -671,6 +684,7 @@ expected_hash='__ARCHIVE_HASH__'
 image_archive='/tmp/arctic-rss-__SHORT_SHA__-images.tar'
 expected_image_hash='__IMAGE_ARCHIVE_HASH__'
 expected_images_b64='__OFFHOST_IMAGES_BASE64__'
+release_image_environment_b64='__RELEASE_IMAGE_ENVIRONMENT_BASE64__'
 release_root='__RELEASE_ROOT__'
 live='__APP_DIRECTORY__'
 stage="$release_root/staging/$short_sha"
@@ -690,6 +704,11 @@ sudo -n install -d -m 755 "$stage"
 sudo -n tar -xzf "$archive" -C "$stage"
 test -f "$stage/ops/systemd/60-arctic-rss-log-retention.conf"
 sudo -n install -m 600 -o root -g root "$live/.env" "$stage/.env"
+# Compose reads the image variables from the staged environment file. Keep the
+# tag immutable so a loaded archive cannot alter the still-live source before
+# the release has passed migrations and health checks.
+sudo -n sed -i -E '/^(MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE)=/d' "$stage/.env"
+printf '%s' "$release_image_environment_b64" | base64 -d | sudo -n tee -a "$stage/.env" >/dev/null
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" config -q
 compose_images="$(sudo -n docker compose -p "$compose_project" --project-directory "$stage" --profile chat config --images)"
 sudo -n docker load --input "$image_archive" >/dev/null
@@ -798,7 +817,8 @@ printf 'CHAT_GATEWAY_HEALTH=%s\n' "$chat_gateway_health"
 printf 'CHAT_GATEWAY_IMAGE=%s\n' "$chat_gateway_image"
 '@
   $offHostImagesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.Images -join "`n")))
-  $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__IMAGE_ARCHIVE_HASH__', $offHostImages.ArchiveHash).Replace('__OFFHOST_IMAGES_BASE64__', $offHostImagesPayload).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost)
+  $releaseImageEnvironmentPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.ImageEnvironment -join "`n")))
+  $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__IMAGE_ARCHIVE_HASH__', $offHostImages.ArchiveHash).Replace('__OFFHOST_IMAGES_BASE64__', $offHostImagesPayload).Replace('__RELEASE_IMAGE_ENVIRONMENT_BASE64__', $releaseImageEnvironmentPayload).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost)
   $stageOutput = Invoke-RemoteScript -Config $config -Script $remoteScript
   $previousRelease = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_RELEASE"
   $migrationStatus = Get-ReleaseMarker -Output $stageOutput -Name "MIGRATION_STATUS"

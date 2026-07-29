@@ -16,6 +16,16 @@ describe("approved release command", () => {
     expect(script).not.toContain(' --profile chat build migrate web worker chat-gateway')
   })
 
+  it("keeps uploaded release images isolated from the live Compose image tags", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain('"$($Config.ComposeProject)-worker:release-$ShortSha"')
+    expect(script).toContain('ImageEnvironment = @(')
+    expect(script).toContain("release_image_environment_b64=")
+    expect(script).toContain("MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE")
+    expect(script).toContain("__RELEASE_IMAGE_ENVIRONMENT_BASE64__")
+  })
+
   it("retains and verifies stateful workloads before application services", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 

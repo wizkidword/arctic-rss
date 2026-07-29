@@ -27,6 +27,17 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     );
   });
 
+  it("allows a release to select immutable application image tags", async () => {
+    const compose = await readFile("docker-compose.yml", "utf8");
+
+    expect(compose).toContain('image: ${MIGRATE_IMAGE:-arctic-rss-migrate}');
+    expect(compose).toContain('image: ${WEB_IMAGE:-arctic-rss-web}');
+    expect(compose).toContain('image: ${WORKER_IMAGE:-arctic-rss-worker}');
+    expect(compose).toContain(
+      'image: ${CHAT_GATEWAY_IMAGE:-arctic-rss-chat-gateway}',
+    );
+  });
+
   it("pins the reviewed PostgreSQL and Redis base images", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
 
