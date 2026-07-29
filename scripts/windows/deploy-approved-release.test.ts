@@ -59,6 +59,7 @@ describe("approved release command", () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 
     expect(script).toContain('"D:\\Arctic RSS Docker"')
+    expect(script).toContain('$raw.PSObject.Properties["LocalBuildRoot"]')
     expect(script).toContain("function Assert-RemoteImageCapacity")
     expect(script.indexOf("Assert-RemoteImageCapacity")).toBeLessThan(
       script.indexOf("arctic-rss-backup.service"),
