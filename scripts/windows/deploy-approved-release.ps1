@@ -101,11 +101,18 @@ function Get-ReleaseConfiguration {
     [string]$raw.ReleaseRecordDirectory
   }
 
+  $configuredBuildRootProperty = $raw.PSObject.Properties["LocalBuildRoot"]
+  $configuredBuildRoot = if ($null -eq $configuredBuildRootProperty) {
+    ""
+  } else {
+    [string]$configuredBuildRootProperty.Value
+  }
+
   $localBuildRoot = if ([string]::IsNullOrWhiteSpace([string]$LocalBuildRoot)) {
-    if ([string]::IsNullOrWhiteSpace([string]$raw.LocalBuildRoot)) {
+    if ([string]::IsNullOrWhiteSpace($configuredBuildRoot)) {
       "D:\Arctic RSS Docker"
     } else {
-      [string]$raw.LocalBuildRoot
+      $configuredBuildRoot
     }
   } else {
     $LocalBuildRoot
