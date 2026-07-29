@@ -66,6 +66,16 @@ describe("approved release command", () => {
     )
   })
 
+  it("reads and normalizes the root-protected public build setting", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain(
+      "sudo -n awk -F= '$1 == \"NEXT_PUBLIC_GA_MEASUREMENT_ID\"",
+    )
+    expect(script).toContain('ga_measurement_id="${ga_measurement_id#\\"}"')
+    expect(script).toContain('ga_measurement_id="${ga_measurement_id%\\"}"')
+  })
+
   it("checks pending migration ownership before backup, staging, or builds", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 
