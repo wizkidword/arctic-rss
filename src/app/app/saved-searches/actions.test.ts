@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => {
   }
 
   return {
+    acknowledgeSavedSearchMonitorForUser: vi.fn(),
     auth: vi.fn(),
     createSavedSearchForUser: vi.fn(),
     deleteSavedSearchForUser: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => {
       throw new Error(`REDIRECT:${path}`)
     }),
     revalidatePath: vi.fn(),
+    setSavedSearchMonitorEnabledForUser: vi.fn(),
   }
 })
 
@@ -33,14 +35,18 @@ vi.mock("@/auth", () => ({
 }))
 
 vi.mock("@/lib/saved-searches", () => ({
+  acknowledgeSavedSearchMonitorForUser: mocks.acknowledgeSavedSearchMonitorForUser,
   createSavedSearchForUser: mocks.createSavedSearchForUser,
   deleteSavedSearchForUser: mocks.deleteSavedSearchForUser,
   SavedSearchError: mocks.MockSavedSearchError,
+  setSavedSearchMonitorEnabledForUser: mocks.setSavedSearchMonitorEnabledForUser,
 }))
 
 import {
+  acknowledgeSavedSearchMonitorAction,
   createSavedSearchAction,
   deleteSavedSearchAction,
+  setSavedSearchMonitorEnabledAction,
 } from "./actions"
 
 describe("saved search actions", () => {
@@ -107,5 +113,34 @@ describe("saved search actions", () => {
       userId: "user-1",
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/saved-searches")
+  })
+
+  it("uses only the authenticated user when enabling a saved monitor", async () => {
+    const formData = new FormData()
+    formData.set("enabled", "true")
+    formData.set("savedSearchId", "saved-search-1")
+
+    await expect(setSavedSearchMonitorEnabledAction(formData)).resolves.toBeUndefined()
+
+    expect(mocks.setSavedSearchMonitorEnabledForUser).toHaveBeenCalledWith({
+      enabled: true,
+      savedSearchId: "saved-search-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/saved-searches")
+  })
+
+  it("does not reveal a missing monitor when marking results seen", async () => {
+    mocks.acknowledgeSavedSearchMonitorForUser.mockRejectedValue(
+      new mocks.MockSavedSearchError("Saved search not found.")
+    )
+    const formData = new FormData()
+    formData.set("savedSearchId", "another-users-search")
+
+    await expect(acknowledgeSavedSearchMonitorAction(formData)).resolves.toBeUndefined()
+    expect(mocks.acknowledgeSavedSearchMonitorForUser).toHaveBeenCalledWith({
+      savedSearchId: "another-users-search",
+      userId: "user-1",
+    })
   })
 })

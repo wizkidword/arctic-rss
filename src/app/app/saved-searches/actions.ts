@@ -5,8 +5,10 @@ import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
 import {
+  acknowledgeSavedSearchMonitorForUser,
   createSavedSearchForUser,
   deleteSavedSearchForUser,
+  setSavedSearchMonitorEnabledForUser,
   SavedSearchError,
 } from "@/lib/saved-searches"
 import { parseArticleSearchFilters, type ArticleSearchParams } from "@/lib/article-search"
@@ -62,6 +64,55 @@ export async function deleteSavedSearchAction(formData: FormData) {
 
   try {
     await deleteSavedSearchForUser({
+      savedSearchId: formValue(formData, "savedSearchId"),
+      userId: session.user.id,
+    })
+  } catch (error) {
+    if (!(error instanceof SavedSearchError)) {
+      throw error
+    }
+  }
+
+  revalidatePath("/app/saved-searches")
+}
+
+export async function setSavedSearchMonitorEnabledAction(formData: FormData) {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized")
+  }
+
+  const enabled = formValue(formData, "enabled")
+
+  if (enabled !== "true" && enabled !== "false") {
+    return
+  }
+
+  try {
+    await setSavedSearchMonitorEnabledForUser({
+      enabled: enabled === "true",
+      savedSearchId: formValue(formData, "savedSearchId"),
+      userId: session.user.id,
+    })
+  } catch (error) {
+    if (!(error instanceof SavedSearchError)) {
+      throw error
+    }
+  }
+
+  revalidatePath("/app/saved-searches")
+}
+
+export async function acknowledgeSavedSearchMonitorAction(formData: FormData) {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized")
+  }
+
+  try {
+    await acknowledgeSavedSearchMonitorForUser({
       savedSearchId: formValue(formData, "savedSearchId"),
       userId: session.user.id,
     })

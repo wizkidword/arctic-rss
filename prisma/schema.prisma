@@ -887,28 +887,35 @@ model SmartDigestRule {
 }
 
 // A saved search is a user-owned snapshot of the versioned reader search
-// filters. It does not execute on a schedule or send notifications; those
-// behaviors stay with Smart Digest rules until they have their own lifecycle.
+// filters. A user may opt it into the bounded, in-app monitor lifecycle; it
+// never enables AI, email, webhooks, or reader automation on its own.
 model SavedSearch {
-  id                String    @id @default(cuid())
-  userId            String
-  name              String
-  description       String?
-  definitionVersion Int       @default(1)
-  query             String
-  state             String    @default("all")
-  subscriptionId    String?
-  folderId          String?
-  collectionId      String?
-  publishedAfter    DateTime?
-  publishedBefore   DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                     String    @id @default(cuid())
+  userId                 String
+  name                   String
+  description            String?
+  definitionVersion      Int       @default(1)
+  query                  String
+  state                  String    @default("all")
+  subscriptionId         String?
+  folderId               String?
+  collectionId           String?
+  publishedAfter         DateTime?
+  publishedBefore        DateTime?
+  monitorEnabled         Boolean   @default(false)
+  monitorNewMatchCount   Int       @default(0)
+  monitorLastRunAt       DateTime?
+  monitorNextRunAt       DateTime?
+  monitorCursorCreatedAt DateTime?
+  monitorCursorArticleId String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, id])
   @@index([userId, updatedAt])
+  @@index([monitorEnabled, monitorNextRunAt])
 }
 
 // Story clusters belong to a user because feed visibility, corrections, and

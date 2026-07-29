@@ -68,6 +68,10 @@ import {
   schedulerSettings,
 } from "../src/lib/refresh-scheduler"
 import { readClampedPositiveInteger } from "../src/lib/refresh-schedule"
+import {
+  processDueSavedMonitors,
+  savedMonitorSettings,
+} from "../src/lib/saved-monitors"
 import { assertSecureProductionConfiguration } from "../src/lib/production-security"
 import { cleanupExpiredSecurityEvents } from "../src/lib/security-event-maintenance"
 import { processSmartDigestEmailDelivery } from "../src/lib/smart-digest-delivery"
@@ -121,6 +125,7 @@ const {
   smartDigestConcurrency,
   smartDigestEmailConcurrency,
 } = schedulerSettings()
+const savedMonitorSchedulerSettings = savedMonitorSettings()
 const chatRetentionSettings = getChatRetentionSettings()
 const { intervalMs: chatRetentionIntervalMs } = chatRetentionSettings
 const prisma = getPrisma()
@@ -612,6 +617,7 @@ async function schedulerTick() {
       maintenanceResult,
       securityEventMaintenanceResult,
       aiOperationReconciliationResult,
+      savedMonitorResult,
     ] = await Promise.allSettled([
       enqueueDueFeeds(),
       enqueueDuePodcasts(),
@@ -622,6 +628,7 @@ async function schedulerTick() {
       runAuthTokenMaintenance(),
       runSecurityEventMaintenance(),
       runAiOperationReconciliation(),
+      runSavedMonitors(),
     ])
 
     if (feedResult.status === "fulfilled") {
@@ -766,6 +773,24 @@ async function schedulerTick() {
         )}`
       )
     }
+
+    if (savedMonitorResult.status === "fulfilled") {
+      console.log(
+        JSON.stringify({
+          event: "saved_monitor_scheduler",
+          outcome: "success",
+          ...savedMonitorResult.value,
+        })
+      )
+    }
+
+    if (savedMonitorResult.status === "rejected") {
+      console.error(
+        `[worker] saved monitor scheduler failed: ${schedulerErrorMessage(
+          savedMonitorResult.reason
+        )}`
+      )
+    }
   } finally {
     schedulerRunning = false
   }
@@ -891,6 +916,13 @@ async function runAiOperationReconciliation() {
   return reconcileExpiredAiUsageOperations({
     batchSize: schedulerBatchSize,
     store: prisma as unknown as Parameters<typeof reconcileExpiredAiUsageOperations>[0]["store"],
+  })
+}
+
+async function runSavedMonitors() {
+  return processDueSavedMonitors({
+    settings: savedMonitorSchedulerSettings,
+    store: prisma as unknown as Parameters<typeof processDueSavedMonitors>[0]["store"],
   })
 }
 

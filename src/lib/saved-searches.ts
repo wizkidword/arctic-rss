@@ -22,6 +22,12 @@ export type SavedSearchRecord = {
   description: string | null
   folderId: string | null
   id: string
+  monitorCursorArticleId: string | null
+  monitorCursorCreatedAt: Date | null
+  monitorEnabled: boolean
+  monitorLastRunAt: Date | null
+  monitorNewMatchCount: number
+  monitorNextRunAt: Date | null
   name: string
   publishedAfter: Date | null
   publishedBefore: Date | null
@@ -53,7 +59,18 @@ type SavedSearchStore = {
   }
   savedSearch: {
     create(args: {
-      data: Omit<SavedSearchRecord, "createdAt" | "id" | "updatedAt">
+      data: Omit<
+        SavedSearchRecord,
+        | "createdAt"
+        | "id"
+        | "monitorCursorArticleId"
+        | "monitorCursorCreatedAt"
+        | "monitorEnabled"
+        | "monitorLastRunAt"
+        | "monitorNewMatchCount"
+        | "monitorNextRunAt"
+        | "updatedAt"
+      >
     }): Promise<SavedSearchRecord>
     deleteMany(args: {
       where: { id: string; userId: string }
@@ -62,6 +79,10 @@ type SavedSearchStore = {
       orderBy: Array<{ updatedAt: "desc" }>
       where: { userId: string }
     }): Promise<SavedSearchRecord[]>
+    updateMany(args: {
+      data: Record<string, unknown>
+      where: { id: string; userId: string }
+    }): Promise<{ count: number }>
   }
 }
 
@@ -177,6 +198,95 @@ export async function deleteSavedSearchForUserWithClient({
 
   const result = await store.savedSearch.deleteMany({
     where: { id, userId },
+  })
+
+  if (!result.count) {
+    throw new SavedSearchError("Saved search not found.")
+  }
+}
+
+export async function setSavedSearchMonitorEnabledForUser({
+  enabled,
+  now = new Date(),
+  savedSearchId,
+  userId,
+}: {
+  enabled: boolean
+  now?: Date
+  savedSearchId: string
+  userId: string
+}) {
+  return setSavedSearchMonitorEnabledForUserWithClient({
+    enabled,
+    now,
+    savedSearchId,
+    store: getSavedSearchStore(),
+    userId,
+  })
+}
+
+export async function setSavedSearchMonitorEnabledForUserWithClient({
+  enabled,
+  now = new Date(),
+  savedSearchId,
+  store,
+  userId,
+}: {
+  enabled: boolean
+  now?: Date
+  savedSearchId: string
+  store: SavedSearchStore
+  userId: string
+}) {
+  const id = normalizeSavedSearchIdentifier(savedSearchId)
+
+  const result = await store.savedSearch.updateMany({
+    data: enabled
+      ? {
+          monitorCursorArticleId: "",
+          monitorCursorCreatedAt: now,
+          monitorEnabled: true,
+          monitorLastRunAt: null,
+          monitorNextRunAt: now,
+        }
+      : {
+          monitorEnabled: false,
+          monitorNextRunAt: null,
+        },
+    where: { id, userId },
+  })
+
+  if (!result.count) {
+    throw new SavedSearchError("Saved search not found.")
+  }
+}
+
+export async function acknowledgeSavedSearchMonitorForUser({
+  savedSearchId,
+  userId,
+}: {
+  savedSearchId: string
+  userId: string
+}) {
+  return acknowledgeSavedSearchMonitorForUserWithClient({
+    savedSearchId,
+    store: getSavedSearchStore(),
+    userId,
+  })
+}
+
+export async function acknowledgeSavedSearchMonitorForUserWithClient({
+  savedSearchId,
+  store,
+  userId,
+}: {
+  savedSearchId: string
+  store: SavedSearchStore
+  userId: string
+}) {
+  const result = await store.savedSearch.updateMany({
+    data: { monitorNewMatchCount: 0 },
+    where: { id: normalizeSavedSearchIdentifier(savedSearchId), userId },
   })
 
   if (!result.count) {
@@ -306,6 +416,16 @@ function normalizeIdentifier(value: string | undefined) {
   const normalized = value?.trim()
 
   return normalized && normalized.length <= 128 ? normalized : undefined
+}
+
+function normalizeSavedSearchIdentifier(value: string) {
+  const id = value.trim()
+
+  if (!id || id.length > 128) {
+    throw new SavedSearchError("Saved search not found.")
+  }
+
+  return id
 }
 
 function normalizeDate(value: Date | undefined) {

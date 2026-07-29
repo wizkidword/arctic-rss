@@ -207,9 +207,11 @@ has a documented decision. Then start one thin vertical slice only:
    authorization boundaries, paginates, and has an isolated PostgreSQL
    query-plan gate.
 2. **PRODUCT-STORY-001B — saved monitors.** Private named saved searches are
-   deployed as shortcuts to the proven filter model. Scheduled evaluation,
-   new-match counts, and notifications are the next bounded monitor slice; do
-   not add automation or AI briefings in the same release.
+   deployed as shortcuts to the proven filter model. The next source candidate
+   adds opt-in scheduled evaluation, pause/resume, durable new-match counts,
+   and a mark-seen control. It intentionally adds no AI, notification,
+   webhook, reader automation, or historical backfill. It remains un-deployed
+   until its migration and exact-commit CI gates pass.
 
 Story clustering, timelines, Story Rooms, delta briefings, automation, and
 transcripts remain later work. Each needs its own data-retention, cost,

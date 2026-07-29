@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  acknowledgeSavedSearchMonitorForUserWithClient,
   createSavedSearchForUserWithClient,
   deleteSavedSearchForUserWithClient,
   listSavedSearchesForUserWithClient,
+  setSavedSearchMonitorEnabledForUserWithClient,
   SavedSearchError,
   savedSearchHref,
 } from "./saved-searches"
@@ -16,6 +18,12 @@ function savedSearchRecord(overrides: Partial<Record<string, unknown>> = {}) {
     description: null,
     folderId: null,
     id: "saved-search-1",
+    monitorCursorArticleId: null,
+    monitorCursorCreatedAt: null,
+    monitorEnabled: false,
+    monitorLastRunAt: null,
+    monitorNewMatchCount: 0,
+    monitorNextRunAt: null,
     name: "Sea ice",
     publishedAfter: null,
     publishedBefore: null,
@@ -53,6 +61,7 @@ function createStore({
       create: vi.fn().mockResolvedValue(savedSearchRecord()),
       deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
       findMany: vi.fn().mockResolvedValue(savedSearches),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
   }
 }
@@ -178,6 +187,58 @@ describe("saved searches", () => {
         userId: "user-1",
       })
     ).rejects.toBeInstanceOf(SavedSearchError)
+  })
+
+  it("starts a monitor at the current cursor and only inside the current user's scope", async () => {
+    const store = createStore()
+    const now = new Date("2026-07-29T12:00:00.000Z")
+
+    await setSavedSearchMonitorEnabledForUserWithClient({
+      enabled: true,
+      now,
+      savedSearchId: " saved-search-1 ",
+      store,
+      userId: "user-1",
+    })
+
+    expect(store.savedSearch.updateMany).toHaveBeenCalledWith({
+      data: {
+        monitorCursorArticleId: "",
+        monitorCursorCreatedAt: now,
+        monitorEnabled: true,
+        monitorLastRunAt: null,
+        monitorNextRunAt: now,
+      },
+      where: { id: "saved-search-1", userId: "user-1" },
+    })
+  })
+
+  it("pauses and acknowledges a monitor without touching another user's row", async () => {
+    const store = createStore()
+
+    await setSavedSearchMonitorEnabledForUserWithClient({
+      enabled: false,
+      savedSearchId: "saved-search-1",
+      store,
+      userId: "user-1",
+    })
+    await acknowledgeSavedSearchMonitorForUserWithClient({
+      savedSearchId: "saved-search-1",
+      store,
+      userId: "user-1",
+    })
+
+    expect(store.savedSearch.updateMany).toHaveBeenNthCalledWith(1, {
+      data: {
+        monitorEnabled: false,
+        monitorNextRunAt: null,
+      },
+      where: { id: "saved-search-1", userId: "user-1" },
+    })
+    expect(store.savedSearch.updateMany).toHaveBeenNthCalledWith(2, {
+      data: { monitorNewMatchCount: 0 },
+      where: { id: "saved-search-1", userId: "user-1" },
+    })
   })
 
   it("reopens the saved filter snapshot through the versioned reader URL", () => {
