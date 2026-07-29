@@ -90,6 +90,30 @@ describe("rate limiter", () => {
     })
   })
 
+  it("bounds reader-triggered cited story comparisons per account", async () => {
+    const store = createCounterStore()
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await expect(
+        enforceRateLimit(
+          { action: "story_cluster_analysis", userId: "user-789" },
+          { store }
+        )
+      ).resolves.toEqual({ allowed: true })
+    }
+
+    await expect(
+      enforceRateLimit(
+        { action: "story_cluster_analysis", userId: "user-789" },
+        { store }
+      )
+    ).resolves.toMatchObject({
+      allowed: false,
+      retryAfterSeconds: 3600,
+      scope: "user",
+    })
+  })
+
   it("bounds native chat message sends per account", async () => {
     const store = createCounterStore()
 

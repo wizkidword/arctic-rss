@@ -5,7 +5,10 @@ const RESERVED_UNITS_PER_OPERATION = 1
 export const AI_USAGE_PERIOD_TIMEZONE = "UTC"
 export const AI_OPERATION_LEASE_DURATION_MS = 60_000
 
-export type AiUsageAction = "ARTICLE_SUMMARY" | "DAILY_DIGEST"
+export type AiUsageAction =
+  | "ARTICLE_SUMMARY"
+  | "DAILY_DIGEST"
+  | "STORY_COMPARISON"
 export type AiOperationStatus =
   "RESERVED" | "PROCESSING" | "COMPLETED" | "FAILED"
 

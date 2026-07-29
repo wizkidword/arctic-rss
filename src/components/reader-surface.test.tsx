@@ -388,11 +388,13 @@ describe("ReaderSurface display modes", () => {
         selectedArticleId="article-2"
         storyClusters={[
           {
+            analysis: null,
             id: "cluster-1",
             members: [
               {
                 articleId: "article-1",
                 feedTitle: "Example Feed",
+                memberId: "member-1",
                 publishedAt: "2026-07-28T10:00:00.000Z",
                 title: "First unread article",
                 url: "https://example.com/first-unread",
@@ -400,6 +402,7 @@ describe("ReaderSurface display modes", () => {
               {
                 articleId: "article-2",
                 feedTitle: "Example Feed",
+                memberId: "member-2",
                 publishedAt: "2026-07-28T11:00:00.000Z",
                 title: "Second unread article",
                 url: "https://example.com/second-unread",

@@ -11,6 +11,10 @@ import {
   generateArticleSummaryForUser,
 } from "@/lib/ai-summaries"
 import {
+  generateStoryClusterAnalysisForUser,
+  StoryClusterAnalysisError,
+} from "@/lib/story-cluster-analysis"
+import {
   addPodcastEpisodeToCollection,
   addArticleToCollection,
   ArticleCollectionError,
@@ -122,6 +126,11 @@ export type GenerateArticleSummaryActionState = {
 }
 
 export type EvaluateStoryClusterActionState = {
+  message: string
+  status: "idle" | "success" | "error"
+}
+
+export type GenerateStoryClusterAnalysisActionState = {
   message: string
   status: "idle" | "success" | "error"
 }
@@ -1360,6 +1369,69 @@ export async function evaluateStoryClusterAction(
 
     return {
       message: "Arctic RSS could not check related coverage.",
+      status: "error",
+    }
+  }
+}
+
+export async function generateStoryClusterAnalysisAction(
+  _previousState: GenerateStoryClusterAnalysisActionState,
+  formData: FormData
+): Promise<GenerateStoryClusterAnalysisActionState> {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    return {
+      message: "You need to sign in before generating a cited comparison.",
+      status: "error",
+    }
+  }
+
+  const articleId = String(formData.get("articleId") ?? "").trim()
+  const clusterId = String(formData.get("clusterId") ?? "").trim()
+
+  if (!articleId || !clusterId) {
+    return {
+      message: "Choose an available story group before generating a comparison.",
+      status: "error",
+    }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "story_cluster_analysis",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
+  try {
+    const analysis = await generateStoryClusterAnalysisForUser({
+      clusterId,
+      userId: session.user.id,
+    })
+
+    revalidateArticleListPaths()
+    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
+    refresh()
+
+    return {
+      message: analysis.fromCache
+        ? "Cited source analysis ready."
+        : "Cited source analysis generated.",
+      status: "success",
+    }
+  } catch (error) {
+    if (error instanceof StoryClusterAnalysisError) {
+      return {
+        message: error.message,
+        status: "error",
+      }
+    }
+
+    return {
+      message: "Arctic RSS could not generate that cited comparison.",
       status: "error",
     }
   }

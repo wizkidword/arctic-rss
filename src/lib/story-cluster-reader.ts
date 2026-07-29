@@ -25,18 +25,50 @@ const MAX_VISIBLE_STORY_CLUSTERS_PER_ARTICLE = 3
 export type StoryClusterPresentationMember = {
   articleId: string
   feedTitle: string
+  memberId: string
   publishedAt: string | null
   title: string
   url: string
+}
+
+export type StoryClusterAnalysisPresentation = {
+  claims: Array<{
+    citations: string[]
+    kind:
+      | "LATEST_DEVELOPMENT"
+      | "NEW_FACT"
+      | "CORRECTION"
+      | "REPEATED_CLAIM"
+      | "DISAGREEMENT"
+    statement: string
+  }>
+  model: string
+  provider: string
+  sourceCount: number
 }
 
 export type StoryClusterPresentation = {
   id: string
   members: StoryClusterPresentationMember[]
   reasons: StoryClusterSignal[]
+  analysis: StoryClusterAnalysisPresentation | null
 }
 
 type StoryClusterVersionRecord = {
+  analyses: Array<{
+    claims: Array<{
+      citations: Array<{
+        memberId: string
+        position: number
+      }>
+      kind: StoryClusterAnalysisPresentation["claims"][number]["kind"]
+      position: number
+      statement: string
+    }>
+    model: string
+    provider: string
+    sourceCount: number
+  }>
   cluster: {
     currentVersionNumber: number
     id: string
@@ -52,6 +84,7 @@ type StoryClusterVersionRecord = {
   }>
   members: Array<{
     articleId: string | null
+    id: string
   }>
   version: number
 }
@@ -245,9 +278,40 @@ export async function listStoryClustersForArticleUserWithClient({
           signal: true
         }
       },
+      analyses: {
+        orderBy: {
+          createdAt: "desc"
+        },
+        select: {
+          claims: {
+            orderBy: {
+              position: "asc"
+            },
+            select: {
+              citations: {
+                orderBy: {
+                  position: "asc"
+                },
+                select: {
+                  memberId: true,
+                  position: true
+                }
+              },
+              kind: true,
+              position: true,
+              statement: true
+            }
+          },
+          model: true,
+          provider: true,
+          sourceCount: true
+        },
+        take: 1
+      },
       members: {
         select: {
-          articleId: true
+          articleId: true,
+          id: true
         }
       },
       version: true
@@ -336,6 +400,7 @@ function presentationFromVersion(
             {
               articleId: article.id,
               feedTitle: article.feedTitle,
+              memberId: member.id,
               publishedAt: article.publishedAt?.toISOString() ?? null,
               title: article.title,
               url: article.url
@@ -375,10 +440,57 @@ function presentationFromVersion(
   const evidenceSignals = new Set(evidence.map((edge) => edge.signal))
 
   return {
+    analysis: presentationAnalysis(
+      version,
+      new Set(members.map((member) => member.memberId))
+    ),
     id: version.cluster.id,
     members,
     reasons: STORY_CLUSTER_SIGNALS.filter((signal) =>
       evidenceSignals.has(signal)
     )
+  }
+}
+
+function presentationAnalysis(
+  version: StoryClusterVersionRecord,
+  visibleMemberIds: Set<string>
+): StoryClusterAnalysisPresentation | null {
+  const analysis = version.analyses[0]
+
+  if (!analysis) {
+    return null
+  }
+
+  const claims = analysis.claims
+    .slice()
+    .sort((left, right) => left.position - right.position)
+    .flatMap((claim) => {
+      const citations = claim.citations
+        .slice()
+        .sort((left, right) => left.position - right.position)
+        .map((citation) => citation.memberId)
+        .filter((memberId) => visibleMemberIds.has(memberId))
+
+      return citations.length
+        ? [
+            {
+              citations,
+              kind: claim.kind,
+              statement: claim.statement
+            }
+          ]
+        : []
+    })
+
+  if (!claims.length) {
+    return null
+  }
+
+  return {
+    claims,
+    model: analysis.model,
+    provider: analysis.provider,
+    sourceCount: analysis.sourceCount
   }
 }

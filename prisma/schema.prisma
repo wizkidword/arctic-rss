@@ -89,6 +89,7 @@ enum BulkReadJobStatus {
 enum AiAction {
   ARTICLE_SUMMARY
   DAILY_DIGEST
+  STORY_COMPARISON
   EXPLAIN_ARTICLE
   SMART_CATEGORY
   SEARCH
@@ -170,6 +171,17 @@ enum StoryClusterSignal {
   SHARED_NAMED_ENTITIES
   TEXT_SIMILARITY
   SOURCE_DUPLICATION
+}
+
+// Each generated comparison statement is deliberately constrained to a small
+// set of reader-visible, source-backed categories. This is not a source score
+// or a claim about a publication's ideology.
+enum StoryClusterAnalysisClaimKind {
+  LATEST_DEVELOPMENT
+  NEW_FACT
+  CORRECTION
+  REPEATED_CLAIM
+  DISAGREEMENT
 }
 
 enum DigestRunStatus {
@@ -933,6 +945,7 @@ model StoryClusterVersion {
   cluster  StoryCluster           @relation(fields: [clusterId], references: [id], onDelete: Cascade)
   members  StoryClusterMember[]
   evidence StoryClusterEvidence[]
+  analyses StoryClusterAnalysis[]
 
   @@unique([clusterId, version])
   @@unique([clusterId, deduplicationKey])
@@ -952,10 +965,11 @@ model StoryClusterMember {
   publishedAt      DateTime?
   createdAt        DateTime  @default(now())
 
-  version         StoryClusterVersion    @relation(fields: [clusterVersionId], references: [id], onDelete: Cascade)
-  article         Article?               @relation(fields: [articleId], references: [id], onDelete: SetNull)
-  evidenceAsLeft  StoryClusterEvidence[] @relation("StoryClusterEvidenceLeft")
-  evidenceAsRight StoryClusterEvidence[] @relation("StoryClusterEvidenceRight")
+  version           StoryClusterVersion            @relation(fields: [clusterVersionId], references: [id], onDelete: Cascade)
+  article           Article?                       @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  evidenceAsLeft    StoryClusterEvidence[]         @relation("StoryClusterEvidenceLeft")
+  evidenceAsRight   StoryClusterEvidence[]         @relation("StoryClusterEvidenceRight")
+  analysisCitations StoryClusterAnalysisCitation[]
 
   @@unique([clusterVersionId, articleId])
   @@index([articleId])
@@ -977,6 +991,58 @@ model StoryClusterEvidence {
 
   @@unique([clusterVersionId, leftMemberId, rightMemberId, signal], map: "StoryClusterEvidence_clusterVersionId_leftMemberId_rightMem_key")
   @@index([clusterVersionId])
+}
+
+// Cited comparisons are immutable outputs of an explicit reader request. They
+// are tied to one cluster version, so a later split, merge, or rerun never
+// presents an analysis as if it described the changed source set.
+model StoryClusterAnalysis {
+  id               String   @id @default(cuid())
+  clusterVersionId String
+  provider         String
+  model            String
+  promptVersion    String
+  sourceCount      Int
+  createdAt        DateTime @default(now())
+
+  version StoryClusterVersion         @relation(fields: [clusterVersionId], references: [id], onDelete: Cascade)
+  claims  StoryClusterAnalysisClaim[]
+
+  @@unique([clusterVersionId, provider, model, promptVersion], map: "StoryClusterAnalysis_clusterVersionId_provider_model_prompt_key")
+  @@index([clusterVersionId, createdAt])
+}
+
+// An AI-generated statement is not stored unless its citations are stored too.
+// Citation rows point at the immutable member snapshot rather than a mutable
+// article query, preserving the exact reader-authorized source set.
+model StoryClusterAnalysisClaim {
+  id         String                        @id @default(cuid())
+  analysisId String
+  kind       StoryClusterAnalysisClaimKind
+  statement  String
+  position   Int
+  createdAt  DateTime                      @default(now())
+
+  analysis  StoryClusterAnalysis           @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  citations StoryClusterAnalysisCitation[]
+
+  @@unique([analysisId, position])
+  @@index([analysisId])
+}
+
+model StoryClusterAnalysisCitation {
+  id        String   @id @default(cuid())
+  claimId   String
+  memberId  String
+  position  Int
+  createdAt DateTime @default(now())
+
+  claim  StoryClusterAnalysisClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  member StoryClusterMember        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([claimId, memberId])
+  @@unique([claimId, position])
+  @@index([memberId])
 }
 
 model DigestRun {

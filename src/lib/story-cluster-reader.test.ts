@@ -85,6 +85,7 @@ describe("story cluster reader presentation", () => {
       storyClusterVersion: {
         findMany: vi.fn().mockResolvedValue([
           {
+            analyses: [],
             cluster: { currentVersionNumber: 1, id: "cluster-current" },
             evidence: [
               {
@@ -93,10 +94,14 @@ describe("story cluster reader presentation", () => {
                 signal: "CANONICAL_URL"
               }
             ],
-            members: [{ articleId: "article-1" }, { articleId: "article-2" }],
+            members: [
+              { articleId: "article-1", id: "member-1" },
+              { articleId: "article-2", id: "member-2" }
+            ],
             version: 1
           },
           {
+            analyses: [],
             cluster: { currentVersionNumber: 2, id: "cluster-stale" },
             evidence: [
               {
@@ -105,7 +110,10 @@ describe("story cluster reader presentation", () => {
                 signal: "CANONICAL_URL"
               }
             ],
-            members: [{ articleId: "article-1" }, { articleId: "article-3" }],
+            members: [
+              { articleId: "article-1", id: "member-1" },
+              { articleId: "article-3", id: "member-3" }
+            ],
             version: 1
           }
         ])
@@ -127,11 +135,13 @@ describe("story cluster reader presentation", () => {
 
     expect(clusters).toEqual([
       {
+        analysis: null,
         id: "cluster-current",
         members: [
           {
             articleId: "article-1",
             feedTitle: "Example Feed",
+            memberId: "member-1",
             publishedAt: "2026-07-28T12:00:00.000Z",
             title: "Current article",
             url: "https://example.com/current"
@@ -139,6 +149,7 @@ describe("story cluster reader presentation", () => {
           {
             articleId: "article-2",
             feedTitle: "Example Feed",
+            memberId: "member-2",
             publishedAt: "2026-07-28T12:00:00.000Z",
             title: "Related article",
             url: "https://example.com/related"
@@ -174,6 +185,7 @@ describe("story cluster reader presentation", () => {
         storyClusterVersion: {
           findMany: vi.fn().mockResolvedValue([
             {
+              analyses: [],
               cluster: { currentVersionNumber: 1, id: "cluster-hidden-member" },
               evidence: [
                 {
@@ -182,7 +194,10 @@ describe("story cluster reader presentation", () => {
                   signal: "CANONICAL_URL"
                 }
               ],
-              members: [{ articleId: "article-1" }, { articleId: "article-2" }],
+              members: [
+                { articleId: "article-1", id: "member-1" },
+                { articleId: "article-2", id: "member-2" }
+              ],
               version: 1
             }
           ])
@@ -192,6 +207,68 @@ describe("story cluster reader presentation", () => {
     })
 
     expect(clusters).toEqual([])
+  })
+
+  it("presents stored AI statements only with their visible snapshot citations", async () => {
+    const clusters = await listStoryClustersForArticleUserWithClient({
+      articleId: "article-1",
+      loadArticles: vi
+        .fn()
+        .mockResolvedValue([
+          createReaderArticle("article-1", "Current article", "current"),
+          createReaderArticle("article-2", "Related article", "related")
+        ]),
+      store: {
+        storyClusterVersion: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              analyses: [
+                {
+                  claims: [
+                    {
+                      citations: [{ memberId: "member-1", position: 0 }],
+                      kind: "NEW_FACT",
+                      position: 0,
+                      statement: "The later source adds a cited detail."
+                    }
+                  ],
+                  model: "gpt-5.4-mini",
+                  provider: "openai",
+                  sourceCount: 2
+                }
+              ],
+              cluster: { currentVersionNumber: 1, id: "cluster-current" },
+              evidence: [
+                {
+                  leftMember: { articleId: "article-1" },
+                  rightMember: { articleId: "article-2" },
+                  signal: "CANONICAL_URL"
+                }
+              ],
+              members: [
+                { articleId: "article-1", id: "member-1" },
+                { articleId: "article-2", id: "member-2" }
+              ],
+              version: 1
+            }
+          ])
+        }
+      },
+      userId: "user-1"
+    })
+
+    expect(clusters[0]?.analysis).toEqual({
+      claims: [
+        {
+          citations: ["member-1"],
+          kind: "NEW_FACT",
+          statement: "The later source adds a cited detail."
+        }
+      ],
+      model: "gpt-5.4-mini",
+      provider: "openai",
+      sourceCount: 2
+    })
   })
 })
 

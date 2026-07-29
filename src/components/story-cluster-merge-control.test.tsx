@@ -14,18 +14,20 @@ describe("StoryClusterMergeControl", () => {
         articleId="article-1"
         clusters={[
           {
+            analysis: null,
             id: "cluster-1",
             members: [
-              { articleId: "article-1", feedTitle: "First Feed", publishedAt: "2026-07-28T10:00:00.000Z", title: "First story", url: "https://first.example/story" },
-              { articleId: "article-2", feedTitle: "Second Feed", publishedAt: "2026-07-28T11:00:00.000Z", title: "Second story", url: "https://second.example/story" },
+              { articleId: "article-1", feedTitle: "First Feed", memberId: "member-1", publishedAt: "2026-07-28T10:00:00.000Z", title: "First story", url: "https://first.example/story" },
+              { articleId: "article-2", feedTitle: "Second Feed", memberId: "member-2", publishedAt: "2026-07-28T11:00:00.000Z", title: "Second story", url: "https://second.example/story" },
             ],
             reasons: ["CANONICAL_URL"],
           },
           {
+            analysis: null,
             id: "cluster-2",
             members: [
-              { articleId: "article-1", feedTitle: "First Feed", publishedAt: "2026-07-28T10:00:00.000Z", title: "First story", url: "https://first.example/story" },
-              { articleId: "article-3", feedTitle: "Third Feed", publishedAt: "2026-07-28T12:00:00.000Z", title: "Third story", url: "https://third.example/story" },
+              { articleId: "article-1", feedTitle: "First Feed", memberId: "member-1", publishedAt: "2026-07-28T10:00:00.000Z", title: "First story", url: "https://first.example/story" },
+              { articleId: "article-3", feedTitle: "Third Feed", memberId: "member-3", publishedAt: "2026-07-28T12:00:00.000Z", title: "Third story", url: "https://third.example/story" },
             ],
             reasons: ["NORMALIZED_TITLE"],
           },
@@ -48,10 +50,11 @@ describe("StoryClusterMergeControl", () => {
         articleId="article-1"
         clusters={[
           {
+            analysis: null,
             id: "cluster-1",
             members: [
-              { articleId: "article-1", feedTitle: "First Feed", publishedAt: "2026-07-28T10:00:00.000Z", title: "First story", url: "https://first.example/story" },
-              { articleId: "article-2", feedTitle: "Second Feed", publishedAt: "2026-07-28T11:00:00.000Z", title: "Second story", url: "https://second.example/story" },
+              { articleId: "article-1", feedTitle: "First Feed", memberId: "member-1", publishedAt: "2026-07-28T10:00:00.000Z", title: "First story", url: "https://first.example/story" },
+              { articleId: "article-2", feedTitle: "Second Feed", memberId: "member-2", publishedAt: "2026-07-28T11:00:00.000Z", title: "Second story", url: "https://second.example/story" },
             ],
             reasons: ["CANONICAL_URL"],
           },
