@@ -10,6 +10,7 @@ import {
 } from "@/components/article-context-menu"
 import { ArticleSourceIcon } from "@/components/article-source-icon"
 import { ArticleReadTracker } from "@/components/article-read-tracker"
+import { StoryClusterPanel } from "@/components/story-cluster-panel"
 import {
   ArticleStateControls,
   MarkAllReadButton,
@@ -38,6 +39,7 @@ import {
   type DisplayMode,
 } from "@/lib/settings"
 import { type ArticleCollectionPickerItem } from "@/lib/article-collections"
+import { type StoryClusterPresentation } from "@/lib/story-cluster-reader"
 import { extractYouTubeVideoId } from "@/lib/youtube-feeds"
 import { cn } from "@/lib/utils"
 
@@ -57,6 +59,7 @@ export function ReaderSurface({
   nextPageHref,
   readOnlyActionReason,
   selectedArticleId,
+  storyClusters,
   title,
   toolbar,
 }: {
@@ -73,6 +76,7 @@ export function ReaderSurface({
   nextPageHref?: string
   readOnlyActionReason?: string
   selectedArticleId?: string
+  storyClusters?: StoryClusterPresentation[]
   title: string
   toolbar?: React.ReactNode
 }) {
@@ -144,6 +148,7 @@ export function ReaderSurface({
         hasExplicitSelection: Boolean(explicitlySelectedArticle),
         readOnlyActionReason,
         selectedArticle,
+        storyClusters,
         trackSelectedArticleRead:
           Boolean(explicitlySelectedArticle) && !readOnlyActionReason,
       })}
@@ -173,6 +178,7 @@ function renderReaderView({
   hasExplicitSelection,
   readOnlyActionReason,
   selectedArticle,
+  storyClusters,
   trackSelectedArticleRead,
 }: {
   articleCollections: ArticleCollectionPickerItem[]
@@ -186,6 +192,7 @@ function renderReaderView({
   hasExplicitSelection: boolean
   readOnlyActionReason?: string
   selectedArticle: ReaderArticle | undefined
+  storyClusters?: StoryClusterPresentation[]
   trackSelectedArticleRead: boolean
 }) {
   if (!articles.length) {
@@ -210,6 +217,9 @@ function renderReaderView({
             dateTimePreferences={dateTimePreferences}
             key={article.id}
             readOnlyActionReason={readOnlyActionReason}
+            storyClusters={
+              article.id === selectedArticle?.id ? storyClusters : undefined
+            }
           />
         ))}
       </section>
@@ -237,6 +247,7 @@ function renderReaderView({
           currentCollection={currentCollection}
           dateTimePreferences={dateTimePreferences}
           readOnlyActionReason={readOnlyActionReason}
+          storyClusters={storyClusters}
           trackRead={trackSelectedArticleRead}
         />
       </section>
@@ -283,6 +294,7 @@ function renderReaderView({
         currentCollection={currentCollection}
         dateTimePreferences={dateTimePreferences}
         readOnlyActionReason={readOnlyActionReason}
+        storyClusters={storyClusters}
         trackRead={trackSelectedArticleRead}
       />
     </section>
@@ -440,6 +452,7 @@ function ArticleReaderCard({
   currentCollection,
   dateTimePreferences,
   readOnlyActionReason,
+  storyClusters,
   trackRead = false,
 }: {
   article: ReaderArticle | undefined
@@ -448,6 +461,7 @@ function ArticleReaderCard({
   currentCollection?: ActiveArticleCollection
   dateTimePreferences: DateTimePreferences
   readOnlyActionReason?: string
+  storyClusters?: StoryClusterPresentation[]
   trackRead?: boolean
 }) {
   if (!article) {
@@ -508,6 +522,9 @@ function ArticleReaderCard({
             readOnlyReason={readOnlyActionReason}
             summary={article.aiSummary}
           />
+          {storyClusters ? (
+            <StoryClusterPanel articleId={article.id} clusters={storyClusters} />
+          ) : null}
           <ArticleBody article={article} />
           <a
             className="inline-flex w-fit items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"

@@ -1,0 +1,374 @@
+import {
+  getReaderArticleForUser,
+  listReaderArticles,
+  listReaderArticlesByIdsForUser,
+  type ReaderArticle
+} from "./articles"
+import {
+  STORY_CLUSTER_SIGNALS,
+  type StoryClusterSignal
+} from "./story-cluster-history"
+import {
+  buildStoryClusterCandidates,
+  type StoryClusterCandidate
+} from "./story-cluster-policy"
+import {
+  persistStoryClusterCandidateForUser,
+  StoryClusterPersistenceError
+} from "./story-cluster-persistence"
+import { getPrisma } from "./db"
+
+export const STORY_CLUSTER_READER_WINDOW_SIZE = 50
+const STORY_CLUSTER_VERSION_LOOKUP_LIMIT = 12
+const MAX_VISIBLE_STORY_CLUSTERS_PER_ARTICLE = 3
+
+export type StoryClusterPresentationMember = {
+  articleId: string
+  feedTitle: string
+  title: string
+}
+
+export type StoryClusterPresentation = {
+  id: string
+  members: StoryClusterPresentationMember[]
+  reasons: StoryClusterSignal[]
+}
+
+type StoryClusterVersionRecord = {
+  cluster: {
+    currentVersionNumber: number
+    id: string
+  }
+  evidence: Array<{
+    leftMember: {
+      articleId: string | null
+    }
+    rightMember: {
+      articleId: string | null
+    }
+    signal: StoryClusterSignal
+  }>
+  members: Array<{
+    articleId: string | null
+  }>
+  version: number
+}
+
+export type StoryClusterReaderStore = {
+  storyClusterVersion: {
+    findMany(
+      args: Record<string, unknown>
+    ): Promise<StoryClusterVersionRecord[]>
+  }
+}
+
+type ReaderArticleLoader = (input: {
+  articleIds: string[]
+  userId: string
+}) => Promise<ReaderArticle[]>
+
+type StoryClusterEvaluationDependencies = {
+  getReaderArticle: (input: {
+    articleId: string
+    userId: string
+  }) => Promise<ReaderArticle | null>
+  listReaderArticles: (input: {
+    limit: number
+    userId: string
+  }) => Promise<ReaderArticle[]>
+  persistCandidate: (input: {
+    candidate: StoryClusterCandidate
+    userId: string
+  }) => Promise<{
+    created: boolean
+  }>
+}
+
+export type StoryClusterEvaluationResult = {
+  created: boolean
+  matched: boolean
+}
+
+export class StoryClusterReaderError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "StoryClusterReaderError"
+  }
+}
+
+/**
+ * Runs the approved deterministic policy only after a signed-in reader asks
+ * for related coverage. The input window is deliberately capped, and the
+ * persistence layer rechecks every article's current visibility in its own
+ * transaction before it writes a versioned cluster.
+ */
+export async function evaluateStoryClustersForArticleUser({
+  articleId,
+  userId
+}: {
+  articleId: string
+  userId: string
+}): Promise<StoryClusterEvaluationResult> {
+  return evaluateStoryClustersForArticleUserWithDependencies({
+    articleId,
+    dependencies: {
+      getReaderArticle: getReaderArticleForUser,
+      listReaderArticles,
+      persistCandidate: persistStoryClusterCandidateForUser
+    },
+    userId
+  })
+}
+
+export async function evaluateStoryClustersForArticleUserWithDependencies({
+  articleId,
+  dependencies,
+  userId
+}: {
+  articleId: string
+  dependencies: StoryClusterEvaluationDependencies
+  userId: string
+}): Promise<StoryClusterEvaluationResult> {
+  const normalizedArticleId = articleId.trim()
+  const normalizedUserId = userId.trim()
+
+  if (!normalizedArticleId || !normalizedUserId) {
+    throw new StoryClusterReaderError("Choose an available article first.")
+  }
+
+  const selectedArticle = await dependencies.getReaderArticle({
+    articleId: normalizedArticleId,
+    userId: normalizedUserId
+  })
+
+  if (!selectedArticle) {
+    throw new StoryClusterReaderError(
+      "That article is not available in your active subscriptions."
+    )
+  }
+
+  const readerArticles = await dependencies.listReaderArticles({
+    limit: STORY_CLUSTER_READER_WINDOW_SIZE,
+    userId: normalizedUserId
+  })
+  const candidate = buildStoryClusterCandidates(
+    boundedReaderWindow(selectedArticle, readerArticles)
+  ).find((entry) => entry.memberArticleIds.includes(selectedArticle.id))
+
+  if (!candidate) {
+    return { created: false, matched: false }
+  }
+
+  try {
+    const persisted = await dependencies.persistCandidate({
+      candidate,
+      userId: normalizedUserId
+    })
+
+    return { created: persisted.created, matched: true }
+  } catch (error) {
+    if (error instanceof StoryClusterPersistenceError) {
+      throw new StoryClusterReaderError(error.message)
+    }
+
+    throw error
+  }
+}
+
+/**
+ * Reads only current, active versions for an article. Membership is hydrated
+ * again through the reader access guard, so a saved snapshot never exposes a
+ * source that was later paused, removed, or archived for this user.
+ */
+export async function listStoryClustersForArticleUser({
+  articleId,
+  userId
+}: {
+  articleId: string
+  userId: string
+}): Promise<StoryClusterPresentation[]> {
+  return listStoryClustersForArticleUserWithClient({
+    articleId,
+    loadArticles: listReaderArticlesByIdsForUser,
+    store: getPrisma() as unknown as StoryClusterReaderStore,
+    userId
+  })
+}
+
+export async function listStoryClustersForArticleUserWithClient({
+  articleId,
+  loadArticles,
+  store,
+  userId
+}: {
+  articleId: string
+  loadArticles: ReaderArticleLoader
+  store: StoryClusterReaderStore
+  userId: string
+}): Promise<StoryClusterPresentation[]> {
+  const normalizedArticleId = articleId.trim()
+  const normalizedUserId = userId.trim()
+
+  if (!normalizedArticleId || !normalizedUserId) {
+    return []
+  }
+
+  const versions = await store.storyClusterVersion.findMany({
+    orderBy: [{ cluster: { updatedAt: "desc" } }, { version: "desc" }],
+    select: {
+      cluster: {
+        select: {
+          currentVersionNumber: true,
+          id: true
+        }
+      },
+      evidence: {
+        select: {
+          leftMember: {
+            select: {
+              articleId: true
+            }
+          },
+          rightMember: {
+            select: {
+              articleId: true
+            }
+          },
+          signal: true
+        }
+      },
+      members: {
+        select: {
+          articleId: true
+        }
+      },
+      version: true
+    },
+    take: STORY_CLUSTER_VERSION_LOOKUP_LIMIT,
+    where: {
+      cluster: {
+        status: "ACTIVE",
+        userId: normalizedUserId
+      },
+      members: {
+        some: {
+          articleId: normalizedArticleId
+        }
+      }
+    }
+  })
+  const currentVersions = versions
+    .filter(
+      (version) => version.version === version.cluster.currentVersionNumber
+    )
+    .slice(0, MAX_VISIBLE_STORY_CLUSTERS_PER_ARTICLE)
+
+  if (!currentVersions.length) {
+    return []
+  }
+
+  const visibleArticles = await loadArticles({
+    articleIds: [
+      ...new Set(
+        currentVersions.flatMap((version) =>
+          version.members.flatMap((member) =>
+            member.articleId ? [member.articleId] : []
+          )
+        )
+      )
+    ],
+    userId: normalizedUserId
+  })
+  const visibleArticlesById = new Map(
+    visibleArticles.map((article) => [article.id, article])
+  )
+
+  return currentVersions.flatMap((version) => {
+    const presentation = presentationFromVersion(version, visibleArticlesById)
+
+    return presentation ? [presentation] : []
+  })
+}
+
+function boundedReaderWindow(
+  selectedArticle: ReaderArticle,
+  readerArticles: ReaderArticle[]
+) {
+  const articleIds = new Set<string>()
+  const window: ReaderArticle[] = []
+
+  for (const article of [selectedArticle, ...readerArticles]) {
+    if (articleIds.has(article.id)) {
+      continue
+    }
+
+    articleIds.add(article.id)
+    window.push(article)
+
+    if (window.length === STORY_CLUSTER_READER_WINDOW_SIZE) {
+      break
+    }
+  }
+
+  return window
+}
+
+function presentationFromVersion(
+  version: StoryClusterVersionRecord,
+  visibleArticlesById: Map<string, ReaderArticle>
+): StoryClusterPresentation | null {
+  const members = version.members
+    .flatMap((member) => {
+      const article = member.articleId
+        ? visibleArticlesById.get(member.articleId)
+        : undefined
+
+      return article
+        ? [
+            {
+              articleId: article.id,
+              feedTitle: article.feedTitle,
+              title: article.title
+            }
+          ]
+        : []
+    })
+    .sort((left, right) => left.articleId.localeCompare(right.articleId))
+
+  if (members.length < 2) {
+    return null
+  }
+
+  const memberIds = new Set(members.map((member) => member.articleId))
+  const evidence = version.evidence.filter((edge) => {
+    const leftArticleId = edge.leftMember.articleId
+    const rightArticleId = edge.rightMember.articleId
+
+    return Boolean(
+      leftArticleId &&
+      rightArticleId &&
+      memberIds.has(leftArticleId) &&
+      memberIds.has(rightArticleId)
+    )
+  })
+  const explainedMemberIds = new Set(
+    evidence.flatMap((edge) => [
+      edge.leftMember.articleId,
+      edge.rightMember.articleId
+    ])
+  )
+
+  if (members.some((member) => !explainedMemberIds.has(member.articleId))) {
+    return null
+  }
+
+  const evidenceSignals = new Set(evidence.map((edge) => edge.signal))
+
+  return {
+    id: version.cluster.id,
+    members,
+    reasons: STORY_CLUSTER_SIGNALS.filter((signal) =>
+      evidenceSignals.has(signal)
+    )
+  }
+}
