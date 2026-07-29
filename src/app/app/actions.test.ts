@@ -50,6 +50,13 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockStoryClusterControlError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "StoryClusterControlError"
+    }
+  }
+
   return {
     addArticleToCollection: vi.fn(),
     addPodcastEpisodeToCollection: vi.fn(),
@@ -58,6 +65,7 @@ const mocks = vi.hoisted(() => {
     createOpmlImportJob: vi.fn(),
     auth: vi.fn(),
     deleteArticleForUser: vi.fn(),
+    dismissStoryClusterForUser: vi.fn(),
     enqueueAiDigest: vi.fn(),
     evaluateStoryClustersForArticleUser: vi.fn(),
     generateArticleSummaryForUser: vi.fn(),
@@ -71,6 +79,7 @@ const mocks = vi.hoisted(() => {
     MockFeedValidationError,
     MockOpmlImportJobError,
     MockStoryClusterReaderError,
+    MockStoryClusterControlError,
     moveSubscriptionToFolder: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
@@ -209,6 +218,11 @@ vi.mock("@/lib/story-cluster-reader", () => ({
   StoryClusterReaderError: mocks.MockStoryClusterReaderError,
 }))
 
+vi.mock("@/lib/story-cluster-controls", () => ({
+  dismissStoryClusterForUser: mocks.dismissStoryClusterForUser,
+  StoryClusterControlError: mocks.MockStoryClusterControlError,
+}))
+
 vi.mock("@/lib/url-safety", () => ({
   FeedFetchError: class FeedFetchError extends Error {},
   UnsafeUrlError: class UnsafeUrlError extends Error {},
@@ -218,6 +232,7 @@ import {
   addArticleToCollectionAction,
   addPodcastEpisodeToCollectionAction,
   deleteArticleAction,
+  dismissStoryClusterAction,
   evaluateStoryClusterAction,
   generateAiDigestAction,
   generateArticleSummaryAction,
@@ -1518,6 +1533,7 @@ describe("evaluateStoryClusterAction", () => {
     mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
     mocks.evaluateStoryClustersForArticleUser.mockResolvedValue({
       created: true,
+      dismissed: false,
       matched: true,
     })
     const formData = new FormData()
@@ -1547,6 +1563,7 @@ describe("evaluateStoryClusterAction", () => {
     mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
     mocks.evaluateStoryClustersForArticleUser.mockResolvedValue({
       created: false,
+      dismissed: false,
       matched: false,
     })
     const formData = new FormData()
@@ -1560,6 +1577,92 @@ describe("evaluateStoryClusterAction", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
     expect(result).toEqual({
       message: "No matching coverage was found in your latest 50 visible articles.",
+      status: "success",
+    })
+  })
+
+  it("explains when matching coverage was previously dismissed", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.evaluateStoryClustersForArticleUser.mockResolvedValue({
+      created: false,
+      dismissed: true,
+      matched: true,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+
+    const result = await evaluateStoryClusterAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "You previously dismissed matching coverage for this article. Your original articles remain visible.",
+      status: "success",
+    })
+  })
+})
+
+describe("dismissStoryClusterAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.dismissStoryClusterForUser.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.revalidatePath.mockReset()
+  })
+
+  it("dismisses only the signed-in user's selected group", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.dismissStoryClusterForUser.mockResolvedValue({
+      clusterId: "cluster-1",
+      dismissed: true,
+      versionNumber: 2,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("clusterId", "cluster-1")
+
+    const result = await dismissStoryClusterAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
+      action: "story_cluster_control",
+      userId: "user-1",
+    })
+    expect(mocks.dismissStoryClusterForUser).toHaveBeenCalledWith({
+      clusterId: "cluster-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(result).toEqual({
+      message: "Related-coverage group dismissed. Your original articles are unchanged.",
+      status: "success",
+    })
+  })
+
+  it("does not revalidate an already dismissed group", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.dismissStoryClusterForUser.mockResolvedValue({
+      clusterId: "cluster-1",
+      dismissed: false,
+      versionNumber: 2,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("clusterId", "cluster-1")
+
+    const result = await dismissStoryClusterAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "This related-coverage group is already dismissed.",
       status: "success",
     })
   })

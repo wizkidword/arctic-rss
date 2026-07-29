@@ -14,7 +14,10 @@ describe("story cluster reader evaluation", () => {
       "Shared story",
       "story"
     )
-    const persistCandidate = vi.fn().mockResolvedValue({ created: true })
+    const persistCandidate = vi.fn().mockResolvedValue({
+      created: true,
+      dismissed: false
+    })
 
     const result = await evaluateStoryClustersForArticleUserWithDependencies({
       articleId: selectedArticle.id,
@@ -31,7 +34,7 @@ describe("story cluster reader evaluation", () => {
       userId: "user-1"
     })
 
-    expect(result).toEqual({ created: true, matched: true })
+    expect(result).toEqual({ created: true, dismissed: false, matched: true })
     expect(persistCandidate).toHaveBeenCalledWith({
       candidate: expect.objectContaining({
         memberArticleIds: ["article-1", "article-2"]
@@ -71,7 +74,7 @@ describe("story cluster reader evaluation", () => {
       userId: "user-1"
     })
 
-    expect(result).toEqual({ created: false, matched: false })
+    expect(result).toEqual({ created: false, dismissed: false, matched: false })
     expect(persistCandidate).not.toHaveBeenCalled()
   })
 })

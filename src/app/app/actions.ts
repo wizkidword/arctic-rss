@@ -78,6 +78,10 @@ import {
   evaluateStoryClustersForArticleUser,
   StoryClusterReaderError,
 } from "@/lib/story-cluster-reader"
+import {
+  dismissStoryClusterForUser,
+  StoryClusterControlError,
+} from "@/lib/story-cluster-controls"
 import { FeedFetchError, UnsafeUrlError } from "@/lib/url-safety"
 
 const MANUAL_FEED_REFRESH_COOLDOWN_MS = 5 * 60 * 1000
@@ -116,6 +120,11 @@ export type GenerateArticleSummaryActionState = {
 }
 
 export type EvaluateStoryClusterActionState = {
+  message: string
+  status: "idle" | "success" | "error"
+}
+
+export type DismissStoryClusterActionState = {
   message: string
   status: "idle" | "success" | "error"
 }
@@ -1314,6 +1323,13 @@ export async function evaluateStoryClusterAction(
       }
     }
 
+    if (result.dismissed) {
+      return {
+        message: "You previously dismissed matching coverage for this article. Your original articles remain visible.",
+        status: "success",
+      }
+    }
+
     revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
 
     return {
@@ -1332,6 +1348,72 @@ export async function evaluateStoryClusterAction(
 
     return {
       message: "Arctic RSS could not check related coverage.",
+      status: "error",
+    }
+  }
+}
+
+export async function dismissStoryClusterAction(
+  _previousState: DismissStoryClusterActionState,
+  formData: FormData
+): Promise<DismissStoryClusterActionState> {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    return {
+      message: "You need to sign in before dismissing related coverage.",
+      status: "error",
+    }
+  }
+
+  const articleId = String(formData.get("articleId") ?? "").trim()
+  const clusterId = String(formData.get("clusterId") ?? "").trim()
+
+  if (!articleId || !clusterId) {
+    return {
+      message: "Choose an available related-coverage group first.",
+      status: "error",
+    }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "story_cluster_control",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
+  try {
+    const result = await dismissStoryClusterForUser({
+      clusterId,
+      userId: session.user.id,
+    })
+
+    if (!result.dismissed) {
+      return {
+        message: "This related-coverage group is already dismissed.",
+        status: "success",
+      }
+    }
+
+    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
+
+    return {
+      message: "Related-coverage group dismissed. Your original articles are unchanged.",
+      status: "success",
+    }
+  } catch (error) {
+    if (error instanceof StoryClusterControlError) {
+      return {
+        message: error.message,
+        status: "error",
+      }
+    }
+
+    return {
+      message: "Arctic RSS could not dismiss this related-coverage group.",
       status: "error",
     }
   }
