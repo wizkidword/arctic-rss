@@ -77,6 +77,14 @@ describe("approved release command", () => {
     )
   })
 
+  it("keeps off-host build progress out of the release metadata result", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain('$imageBuildOutput | Out-Host')
+    expect(script).toContain('$imageArchiveOutput | Out-Host')
+    expect(script).toContain('ArchiveBytes = $archiveInfo.Length')
+  })
+
   it("reads and normalizes the root-protected public build setting", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 

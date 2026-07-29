@@ -235,12 +235,14 @@ function New-OffHostReleaseImages {
   }
 
   New-Item -ItemType Directory -Path $sourceDirectory | Out-Null
-  Invoke-LocalCheck -Label "Creating exact local image-build source" -FilePath "git" -Arguments @(
+  $sourceArchiveOutput = Invoke-LocalCheck -Label "Creating exact local image-build source" -FilePath "git" -Arguments @(
     "archive", "--format=tar", "--output=$sourceArchive", $Commit
   )
-  Invoke-LocalCheck -Label "Extracting exact local image-build source" -FilePath "tar.exe" -Arguments @(
+  $sourceArchiveOutput | Out-Host
+  $sourceExtractionOutput = Invoke-LocalCheck -Label "Extracting exact local image-build source" -FilePath "tar.exe" -Arguments @(
     "-xf", $sourceArchive, "-C", $sourceDirectory
   )
+  $sourceExtractionOutput | Out-Host
 
   $images = [ordered]@{
     # The tag is intentionally unique to this release. Loading an archive must
@@ -264,17 +266,19 @@ function New-OffHostReleaseImages {
   }
 
   foreach ($name in $images.Keys) {
-    Invoke-LocalCheck -Label "Building $name image locally" -FilePath $DockerExecutable -Arguments @(
+    $imageBuildOutput = Invoke-LocalCheck -Label "Building $name image locally" -FilePath $DockerExecutable -Arguments @(
       "build", "--platform", "linux/amd64", "--file", (Join-Path $sourceDirectory "Dockerfile"),
       "--target", $buildTargets[$name], "--tag", $images[$name],
       "--build-arg", "APP_ORIGIN=$($BuildSettings.AppOrigin)",
       "--build-arg", "NEXT_PUBLIC_GA_MEASUREMENT_ID=$($BuildSettings.GoogleAnalyticsMeasurementId)",
       $sourceDirectory
     )
+    $imageBuildOutput | Out-Host
   }
 
   $imageSaveArguments = @("image", "save", "--output", $imageArchive) + @($images.Values)
-  Invoke-LocalCheck -Label "Creating transfer-ready image archive" -FilePath $DockerExecutable -Arguments $imageSaveArguments
+  $imageArchiveOutput = Invoke-LocalCheck -Label "Creating transfer-ready image archive" -FilePath $DockerExecutable -Arguments $imageSaveArguments
+  $imageArchiveOutput | Out-Host
 
   $archiveInfo = Get-Item -LiteralPath $imageArchive
   if ($archiveInfo.Length -le 0) {
