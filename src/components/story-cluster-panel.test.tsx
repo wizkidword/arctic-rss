@@ -16,6 +16,10 @@ vi.mock("@/components/story-cluster-dismiss-button", () => ({
   StoryClusterDismissButton: () => <button type="button">Dismiss group</button>
 }))
 
+vi.mock("@/components/story-cluster-split-button", () => ({
+  StoryClusterSplitButton: () => <button type="button">Separate source</button>
+}))
+
 import { StoryClusterPanel } from "./story-cluster-panel"
 
 describe("StoryClusterPanel", () => {
@@ -36,6 +40,11 @@ describe("StoryClusterPanel", () => {
                 articleId: "article-2",
                 feedTitle: "Another Feed",
                 title: "Related coverage"
+              },
+              {
+                articleId: "article-3",
+                feedTitle: "Third Feed",
+                title: "Third coverage"
               }
             ],
             reasons: ["CANONICAL_URL", "PUBLICATION_TIME_WINDOW"]
@@ -52,6 +61,8 @@ describe("StoryClusterPanel", () => {
     expect(markup).toContain('href="/app/article/article-2"')
     expect(markup).toContain("Check again")
     expect(markup).toContain("Dismiss group")
+    expect(markup).toContain("Separate source")
+    expect(markup).toContain("remaining group must still have an explained connection")
     expect(markup).toContain("It preserves every original article")
   })
 })

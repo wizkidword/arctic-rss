@@ -94,6 +94,7 @@ const mocks = vi.hoisted(() => {
     enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
     revalidatePath: vi.fn(),
     setArticleReadState: vi.fn(),
+    splitStoryClusterMemberForUser: vi.fn(),
     subscribeToFeed: vi.fn(),
     unsubscribeFromFeed: vi.fn(),
     updateAiPreferencesForUser: vi.fn(),
@@ -220,6 +221,7 @@ vi.mock("@/lib/story-cluster-reader", () => ({
 
 vi.mock("@/lib/story-cluster-controls", () => ({
   dismissStoryClusterForUser: mocks.dismissStoryClusterForUser,
+  splitStoryClusterMemberForUser: mocks.splitStoryClusterMemberForUser,
   StoryClusterControlError: mocks.MockStoryClusterControlError,
 }))
 
@@ -246,6 +248,7 @@ import {
   resendEmailVerificationAction,
   submitBugReportAction,
   submitFeatureSuggestionAction,
+  splitStoryClusterMemberAction,
   unsubscribeFeedAction,
   updateAiPreferencesAction,
   updateDateTimePreferences,
@@ -1663,6 +1666,73 @@ describe("dismissStoryClusterAction", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
     expect(result).toEqual({
       message: "This related-coverage group is already dismissed.",
+      status: "success",
+    })
+  })
+})
+
+describe("splitStoryClusterMemberAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.revalidatePath.mockReset()
+    mocks.splitStoryClusterMemberForUser.mockReset()
+  })
+
+  it("separates a source only through the signed-in user's group control", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.splitStoryClusterMemberForUser.mockResolvedValue({
+      clusterId: "cluster-1",
+      split: true,
+      versionNumber: 2,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("clusterId", "cluster-1")
+    formData.set("memberArticleId", "article-2")
+
+    const result = await splitStoryClusterMemberAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
+      action: "story_cluster_control",
+      userId: "user-1",
+    })
+    expect(mocks.splitStoryClusterMemberForUser).toHaveBeenCalledWith({
+      clusterId: "cluster-1",
+      memberArticleId: "article-2",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(result).toEqual({
+      message: "Source separated from the related-coverage group. Original articles are unchanged.",
+      status: "success",
+    })
+  })
+
+  it("does not revalidate an already separated source", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.splitStoryClusterMemberForUser.mockResolvedValue({
+      clusterId: "cluster-1",
+      split: false,
+      versionNumber: 2,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("clusterId", "cluster-1")
+    formData.set("memberArticleId", "article-2")
+
+    const result = await splitStoryClusterMemberAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "This source is already separated from the related-coverage group.",
       status: "success",
     })
   })

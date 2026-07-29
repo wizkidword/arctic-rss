@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   dismissStoryClusterForUserWithClient,
+  splitStoryClusterMemberForUserWithClient,
   StoryClusterControlError,
   type StoryClusterControlStore,
 } from "./story-cluster-controls"
@@ -41,8 +42,10 @@ function createStore({
       },
     ],
   },
+  versionFindFirst = null,
 }: {
   cluster?: unknown
+  versionFindFirst?: { version: number } | null
 } = {}) {
   const mocks = {
     clusterFindUnique: vi.fn().mockResolvedValue(cluster),
@@ -52,6 +55,7 @@ function createStore({
       Promise.resolve({ articleId: data.articleId, id: `member-${data.articleId}` })
     ),
     versionCreate: vi.fn().mockResolvedValue({ id: "version-2", version: 2 }),
+    versionFindFirst: vi.fn().mockResolvedValue(versionFindFirst),
   }
   const transaction = {
     storyCluster: {
@@ -66,6 +70,7 @@ function createStore({
     },
     storyClusterVersion: {
       create: mocks.versionCreate,
+      findFirst: mocks.versionFindFirst,
     },
   }
   const store = {
@@ -79,6 +84,53 @@ function createStore({
     mocks,
     store: store as unknown as StoryClusterControlStore,
   }
+}
+
+const activeThreeMemberCluster = {
+  currentVersionNumber: 1,
+  id: "cluster-1",
+  status: "ACTIVE" as const,
+  versions: [
+    {
+      algorithmVersion: "canonical-url-or-normalized-title-72h-v1",
+      evidence: [
+        {
+          leftMember: { articleId: "article-a" },
+          rightMember: { articleId: "article-b" },
+          signal: "CANONICAL_URL" as const,
+        },
+        {
+          leftMember: { articleId: "article-b" },
+          rightMember: { articleId: "article-c" },
+          signal: "NORMALIZED_TITLE" as const,
+        },
+      ],
+      members: [
+        {
+          articleId: "article-a",
+          articleTitle: "First headline",
+          articleUrl: "https://first.example/story",
+          feedTitle: "First Source",
+          publishedAt: new Date("2026-07-28T10:00:00.000Z"),
+        },
+        {
+          articleId: "article-b",
+          articleTitle: "Second headline",
+          articleUrl: "https://second.example/story",
+          feedTitle: "Second Source",
+          publishedAt: new Date("2026-07-28T11:00:00.000Z"),
+        },
+        {
+          articleId: "article-c",
+          articleTitle: "Third headline",
+          articleUrl: "https://third.example/story",
+          feedTitle: "Third Source",
+          publishedAt: new Date("2026-07-28T12:00:00.000Z"),
+        },
+      ],
+      version: 1,
+    },
+  ],
 }
 
 describe("dismissStoryClusterForUserWithClient", () => {
@@ -180,6 +232,128 @@ describe("dismissStoryClusterForUserWithClient", () => {
       })
     ).rejects.toEqual(
       new StoryClusterControlError("That related-coverage group is not available.")
+    )
+
+    expect(mocks.versionCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe("splitStoryClusterMemberForUserWithClient", () => {
+  it("separates one source by appending an immutable, explained split snapshot", async () => {
+    const { mocks, store } = createStore({ cluster: activeThreeMemberCluster })
+
+    await expect(
+      splitStoryClusterMemberForUserWithClient({
+        clusterId: "cluster-1",
+        memberArticleId: "article-c",
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toEqual({
+      clusterId: "cluster-1",
+      split: true,
+      versionNumber: 2,
+    })
+
+    expect(mocks.versionFindFirst).toHaveBeenCalledWith({
+      select: {
+        version: true,
+      },
+      where: {
+        clusterId: "cluster-1",
+        deduplicationKey: "story-cluster-split:article-c",
+      },
+    })
+    expect(mocks.versionCreate).toHaveBeenCalledWith({
+      data: {
+        action: "SPLIT",
+        algorithmVersion: "canonical-url-or-normalized-title-72h-v1",
+        clusterId: "cluster-1",
+        deduplicationKey: "story-cluster-split:article-c",
+        version: 2,
+      },
+      select: {
+        id: true,
+        version: true,
+      },
+    })
+    expect(mocks.memberCreate).toHaveBeenCalledTimes(2)
+    expect(mocks.evidenceCreateMany).toHaveBeenCalledWith({
+      data: [
+        {
+          clusterVersionId: "version-2",
+          leftMemberId: "member-article-a",
+          rightMemberId: "member-article-b",
+          signal: "CANONICAL_URL",
+        },
+      ],
+    })
+    expect(mocks.clusterUpdate).toHaveBeenCalledWith({
+      data: {
+        currentVersionNumber: 2,
+      },
+      where: {
+        id: "cluster-1",
+      },
+    })
+  })
+
+  it("does not create a duplicate history version when a source was already separated", async () => {
+    const { mocks, store } = createStore({
+      cluster: activeThreeMemberCluster,
+      versionFindFirst: { version: 2 },
+    })
+
+    await expect(
+      splitStoryClusterMemberForUserWithClient({
+        clusterId: "cluster-1",
+        memberArticleId: "article-c",
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toEqual({
+      clusterId: "cluster-1",
+      split: false,
+      versionNumber: 2,
+    })
+
+    expect(mocks.versionCreate).not.toHaveBeenCalled()
+    expect(mocks.clusterUpdate).not.toHaveBeenCalled()
+  })
+
+  it("rejects a split that would leave fewer than two sources", async () => {
+    const { mocks, store } = createStore()
+
+    await expect(
+      splitStoryClusterMemberForUserWithClient({
+        clusterId: "cluster-1",
+        memberArticleId: "article-a",
+        store,
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new StoryClusterControlError(
+        "A related-coverage group needs at least two sources after a split."
+      )
+    )
+
+    expect(mocks.versionCreate).not.toHaveBeenCalled()
+  })
+
+  it("rejects a split when the remaining sources would no longer have a named connection", async () => {
+    const { mocks, store } = createStore({ cluster: activeThreeMemberCluster })
+
+    await expect(
+      splitStoryClusterMemberForUserWithClient({
+        clusterId: "cluster-1",
+        memberArticleId: "article-b",
+        store,
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new StoryClusterControlError(
+        "The remaining sources do not form a fully explained related-coverage group."
+      )
     )
 
     expect(mocks.versionCreate).not.toHaveBeenCalled()
