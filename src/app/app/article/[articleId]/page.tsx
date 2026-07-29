@@ -11,6 +11,7 @@ import {
 } from "@/lib/articles"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
+import { listStoryClustersForArticleUser } from "@/lib/story-cluster-reader"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
 import { listChatRoomRecommendationsForArticle } from "@/lib/chat/article-recommendations"
 import { isChatEnabled } from "@/lib/chat/feature-flags"
@@ -28,7 +29,7 @@ export default async function ArticleDetailPage({
 
   const { articleId } = await params
   const chatEnabled = isChatEnabled()
-  const [settings, selectedArticle, articles, articleCollections, chatRooms] = await Promise.all([
+  const [settings, selectedArticle, articles, articleCollections, chatRooms, storyClusters] = await Promise.all([
     getOrCreateUserSettings(session.user.id),
     getReaderArticleForUser({
       articleId,
@@ -44,6 +45,10 @@ export default async function ArticleDetailPage({
           userId: session.user.id,
         })
       : Promise.resolve([]),
+    listStoryClustersForArticleUser({
+      articleId,
+      userId: session.user.id,
+    }),
   ])
 
   if (!selectedArticle) {
@@ -63,6 +68,7 @@ export default async function ArticleDetailPage({
       description={`${selectedArticle.feedTitle} - stable article view.`}
       emptyMessage="That article is not available in your active subscriptions."
       selectedArticleId={selectedArticle.id}
+      storyClusters={storyClusters}
       title="Article"
       toolbar={
         chatEnabled ? (

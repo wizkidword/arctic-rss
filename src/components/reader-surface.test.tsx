@@ -16,6 +16,18 @@ vi.mock("@/components/article-ai-summary-panel", () => ({
   ArticleAiSummaryPanel: () => null,
 }))
 
+vi.mock("@/components/story-cluster-panel", () => ({
+  StoryClusterPanel: ({
+    articleId,
+    clusters,
+  }: {
+    articleId: string
+    clusters: Array<{ id: string }>
+  }) => (
+    <div data-story-clusters={clusters.length} data-story-article={articleId} />
+  ),
+}))
+
 vi.mock("@/components/article-context-menu", () => ({
   ArticleActionToolbar: ({
     article,
@@ -362,6 +374,43 @@ describe("ReaderSurface display modes", () => {
 
     expect(markup).toContain('data-action-toolbar="persistent"')
     expect(markup).toContain("Actions for Second unread article")
+  })
+
+  it("attaches related coverage to the selected article detail only", () => {
+    const markup = renderToStaticMarkup(
+      <ReaderSurface
+        articles={articles}
+        basePath="/app"
+        defaultView="CLASSIC"
+        displayMode="THREE_PANE"
+        description="All articles"
+        emptyMessage="No articles."
+        selectedArticleId="article-2"
+        storyClusters={[
+          {
+            id: "cluster-1",
+            members: [
+              {
+                articleId: "article-1",
+                feedTitle: "Example Feed",
+                title: "First unread article",
+              },
+              {
+                articleId: "article-2",
+                feedTitle: "Example Feed",
+                title: "Second unread article",
+              },
+            ],
+            reasons: ["CANONICAL_URL"],
+          },
+        ]}
+        title="All Articles"
+      />
+    )
+
+    expect(markup).toContain('data-story-article="article-2"')
+    expect(markup).toContain('data-story-clusters="1"')
+    expect(markup).not.toContain('data-story-article="article-1"')
   })
 
   it("embeds YouTube videos inline for selected YouTube articles", () => {

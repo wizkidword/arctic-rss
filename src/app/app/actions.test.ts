@@ -43,6 +43,13 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockStoryClusterReaderError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "StoryClusterReaderError"
+    }
+  }
+
   return {
     addArticleToCollection: vi.fn(),
     addPodcastEpisodeToCollection: vi.fn(),
@@ -52,6 +59,7 @@ const mocks = vi.hoisted(() => {
     auth: vi.fn(),
     deleteArticleForUser: vi.fn(),
     enqueueAiDigest: vi.fn(),
+    evaluateStoryClustersForArticleUser: vi.fn(),
     generateArticleSummaryForUser: vi.fn(),
     getPrisma: vi.fn(),
     getDiscoverDirectoryFeed: vi.fn(),
@@ -62,6 +70,7 @@ const mocks = vi.hoisted(() => {
     MockFeedSubscriptionError,
     MockFeedValidationError,
     MockOpmlImportJobError,
+    MockStoryClusterReaderError,
     moveSubscriptionToFolder: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
@@ -195,6 +204,11 @@ vi.mock("@/lib/rate-limit", () => ({
   getRateLimitErrorMessage: () => "Too many requests. Please wait a few minutes and try again.",
 }))
 
+vi.mock("@/lib/story-cluster-reader", () => ({
+  evaluateStoryClustersForArticleUser: mocks.evaluateStoryClustersForArticleUser,
+  StoryClusterReaderError: mocks.MockStoryClusterReaderError,
+}))
+
 vi.mock("@/lib/url-safety", () => ({
   FeedFetchError: class FeedFetchError extends Error {},
   UnsafeUrlError: class UnsafeUrlError extends Error {},
@@ -204,6 +218,7 @@ import {
   addArticleToCollectionAction,
   addPodcastEpisodeToCollectionAction,
   deleteArticleAction,
+  evaluateStoryClusterAction,
   generateAiDigestAction,
   generateArticleSummaryAction,
   importOpmlAction,
@@ -1487,6 +1502,66 @@ describe("generateArticleSummaryAction", () => {
       status: "error",
     })
     expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe("evaluateStoryClusterAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.evaluateStoryClustersForArticleUser.mockReset()
+    mocks.revalidatePath.mockReset()
+  })
+
+  it("evaluates only the signed-in user's selected article", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.evaluateStoryClustersForArticleUser.mockResolvedValue({
+      created: true,
+      matched: true,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+
+    const result = await evaluateStoryClusterAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
+      action: "story_cluster_evaluation",
+      userId: "user-1",
+    })
+    expect(mocks.evaluateStoryClustersForArticleUser).toHaveBeenCalledWith({
+      articleId: "article-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(result).toEqual({
+      message: "Related coverage is ready.",
+      status: "success",
+    })
+  })
+
+  it("returns a readable result when the capped reader window has no match", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.evaluateStoryClustersForArticleUser.mockResolvedValue({
+      created: false,
+      matched: false,
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+
+    const result = await evaluateStoryClusterAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      message: "No matching coverage was found in your latest 50 visible articles.",
+      status: "success",
+    })
   })
 })
 

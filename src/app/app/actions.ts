@@ -74,6 +74,10 @@ import {
   type DisplayMode,
   type ThemePreference,
 } from "@/lib/settings"
+import {
+  evaluateStoryClustersForArticleUser,
+  StoryClusterReaderError,
+} from "@/lib/story-cluster-reader"
 import { FeedFetchError, UnsafeUrlError } from "@/lib/url-safety"
 
 const MANUAL_FEED_REFRESH_COOLDOWN_MS = 5 * 60 * 1000
@@ -107,6 +111,11 @@ export type ImportOpmlActionState = {
 }
 
 export type GenerateArticleSummaryActionState = {
+  message: string
+  status: "idle" | "success" | "error"
+}
+
+export type EvaluateStoryClusterActionState = {
   message: string
   status: "idle" | "success" | "error"
 }
@@ -1256,6 +1265,73 @@ export async function generateArticleSummaryAction(
 
     return {
       message: "Arctic RSS could not summarize that article.",
+      status: "error",
+    }
+  }
+}
+
+export async function evaluateStoryClusterAction(
+  _previousState: EvaluateStoryClusterActionState,
+  formData: FormData
+): Promise<EvaluateStoryClusterActionState> {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    return {
+      message: "You need to sign in before checking related coverage.",
+      status: "error",
+    }
+  }
+
+  const articleId = String(formData.get("articleId") ?? "").trim()
+
+  if (!articleId) {
+    return {
+      message: "Choose an article before checking related coverage.",
+      status: "error",
+    }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "story_cluster_evaluation",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
+  try {
+    const result = await evaluateStoryClustersForArticleUser({
+      articleId,
+      userId: session.user.id,
+    })
+
+    if (!result.matched) {
+      return {
+        message: "No matching coverage was found in your latest 50 visible articles.",
+        status: "success",
+      }
+    }
+
+    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
+
+    return {
+      message: result.created
+        ? "Related coverage is ready."
+        : "Related coverage is already up to date.",
+      status: "success",
+    }
+  } catch (error) {
+    if (error instanceof StoryClusterReaderError) {
+      return {
+        message: error.message,
+        status: "error",
+      }
+    }
+
+    return {
+      message: "Arctic RSS could not check related coverage.",
       status: "error",
     }
   }
