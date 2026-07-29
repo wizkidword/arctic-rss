@@ -3,12 +3,17 @@ import { readFile } from "node:fs/promises"
 import { describe, expect, it } from "vitest"
 
 describe("approved release command", () => {
-  it("enables the opt-in chat profile before building the chat gateway", async () => {
+  it("builds application images locally and loads them on the VPS without a VPS build", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 
     expect(script).toContain(
-      'docker compose -p "$compose_project" --project-directory "$stage" --profile chat build migrate web worker chat-gateway',
+      "function New-OffHostReleaseImages",
     )
+    expect(script).toContain('"--platform", "linux/amd64"')
+    expect(script).toContain('sudo -n docker load --input "$image_archive" >/dev/null')
+    expect(script).toContain('run --rm --no-deps --no-build -T migrate')
+    expect(script).toContain('up -d --no-deps --no-build --force-recreate web worker')
+    expect(script).not.toContain(' --profile chat build migrate web worker chat-gateway')
   })
 
   it("retains and verifies stateful workloads before application services", async () => {
@@ -47,6 +52,17 @@ describe("approved release command", () => {
     expect(script).toContain('webImage = $webImage')
     expect(script).toContain('workerImage = $workerImage')
     expect(script).toContain('chatGatewayImage = $chatGatewayImage')
+    expect(script).toContain('localImageArchiveSha256 = $offHostImages.ArchiveHash')
+  })
+
+  it("uses the dedicated local build root and checks OVH disk headroom before backup", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain('"D:\\Arctic RSS Docker"')
+    expect(script).toContain("function Assert-RemoteImageCapacity")
+    expect(script.indexOf("Assert-RemoteImageCapacity")).toBeLessThan(
+      script.indexOf("arctic-rss-backup.service"),
+    )
   })
 
   it("checks pending migration ownership before backup, staging, or builds", async () => {

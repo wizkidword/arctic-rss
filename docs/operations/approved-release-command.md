@@ -1,8 +1,10 @@
 # Approved release command
 
-`scripts/windows/deploy-approved-release.ps1` makes the existing reviewed VPS
-deployment repeatable without moving SSH access, production environment values,
-or approval decisions into GitHub Actions.
+`scripts/windows/deploy-approved-release.ps1` makes the reviewed VPS deployment
+repeatable without moving SSH access, production environment values, or approval
+decisions into GitHub Actions. It builds the application images on the release
+operator's Windows Docker Desktop host, then transfers the finished images to
+OVH; it does not build application images on the VPS.
 
 The command releases only a clean local checkout whose `HEAD` exactly matches
 `origin/main`. It runs the full local gate, requires the complete CI workflow
@@ -15,6 +17,12 @@ Copy `scripts/windows/release-config.example.json` to a private location outside
 the repository, fill in the local SSH key path and the reviewed non-secret VPS
 settings, and keep the file private. Do not put environment values, passwords,
 tokens, or backup contents in this file.
+
+`LocalBuildRoot` is a private, non-secret local path for exact source
+workspaces and retained image archives. It defaults to `D:\Arctic RSS Docker`
+when omitted. Docker Desktop must be running before an approved release; the
+release command will use its per-user command-line client if a terminal has not
+yet picked up Docker's PATH update.
 
 ## Run a safe preflight
 
@@ -45,11 +53,18 @@ pwsh -File .\scripts\windows\deploy-approved-release.ps1 `
 ```
 
 The command then requires the operator to type `DEPLOY <short-sha>`. It creates
-an exact `git archive`, verifies its SHA-256 locally and on the VPS, runs and
-verifies the backup, stages the archive while copying the live `.env` without
-printing it, builds the staged images, applies and verifies committed Prisma
+an exact local source workspace, builds the migration, web, worker, and
+chat-gateway images for `linux/amd64`, and retains one transfer archive under
+`LocalBuildRoot`. Before it begins a backup, it confirms OVH has enough free
+space for the transferred archive and loaded layers. It then verifies the
+source and image SHA-256 values locally and on the VPS, loads the finished
+images without running a VPS build, applies and verifies committed Prisma
 migrations, retains the previous source directory, recreates only web and
 worker, and verifies local/public health, login, and the monitor service.
+
+The image archive is intentionally retained on the local build drive for a
+short-lived recovery/retry path. Review it before removing it; the release
+command never deletes prior local image archives automatically.
 
 Before that backup, archive, staging, or image build, the approved path performs
 a read-only ownership preflight for unapplied migrations. It obtains the

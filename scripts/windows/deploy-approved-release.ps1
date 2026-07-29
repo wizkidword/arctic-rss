@@ -6,6 +6,11 @@ param(
   [ValidateRange(1, 120)]
   [int]$CiTimeoutMinutes = 30,
 
+  # Keep production image builds off the VPS. The default matches the dedicated
+  # local builder location; operators on another machine can set this private,
+  # non-secret path in their release configuration instead.
+  [string]$LocalBuildRoot,
+
   [switch]$Approve,
 
   [switch]$DryRun
@@ -96,6 +101,20 @@ function Get-ReleaseConfiguration {
     [string]$raw.ReleaseRecordDirectory
   }
 
+  $localBuildRoot = if ([string]::IsNullOrWhiteSpace([string]$LocalBuildRoot)) {
+    if ([string]::IsNullOrWhiteSpace([string]$raw.LocalBuildRoot)) {
+      "D:\Arctic RSS Docker"
+    } else {
+      [string]$raw.LocalBuildRoot
+    }
+  } else {
+    $LocalBuildRoot
+  }
+
+  if (-not (Test-Path -LiteralPath $localBuildRoot -PathType Container)) {
+    throw "The local Docker build root was not found. Create it or set LocalBuildRoot in the private release configuration."
+  }
+
   return [pscustomobject]@{
     SshHost = $sshHost
     SshUser = $sshUser
@@ -105,6 +124,7 @@ function Get-ReleaseConfiguration {
     ComposeProject = $composeProject
     CanonicalHost = $canonicalHost
     ReleaseRecordDirectory = $recordDirectory
+    LocalBuildRoot = (Resolve-Path -LiteralPath $localBuildRoot).Path
   }
 }
 
@@ -123,6 +143,155 @@ function Invoke-RemoteScript {
   }
 
   return $output
+}
+
+function Get-DockerExecutable {
+  $dockerCommand = Get-Command "docker" -ErrorAction SilentlyContinue
+  if ($null -ne $dockerCommand) {
+    return $dockerCommand.Source
+  }
+
+  $perUserDocker = Join-Path $env:LOCALAPPDATA "Programs\DockerDesktop\resources\bin\docker.exe"
+  if (Test-Path -LiteralPath $perUserDocker -PathType Leaf) {
+    return $perUserDocker
+  }
+
+  throw "Docker Desktop's command-line client was not found. Start Docker Desktop and open a new terminal before releasing."
+}
+
+function Get-RemotePublicBuildSettings {
+  param([Parameter(Mandatory)][pscustomobject]$Config)
+
+  # This reads only the client-visible analytics identifier. It is returned in
+  # base64 so the remote command's structured output remains single-line and
+  # it is never written to the console or release record.
+  $script = @'
+set -euo pipefail
+env_file='__APP_DIRECTORY__/.env'
+test -f "$env_file"
+ga_measurement_id="$(awk -F= '$1 == "NEXT_PUBLIC_GA_MEASUREMENT_ID" { sub(/^[^=]*=/, ""); print; exit }' "$env_file")"
+case "$ga_measurement_id" in
+  ""|G-[A-Z0-9]*) ;;
+  *) printf 'Invalid public analytics identifier in the live environment.\n' >&2; exit 1 ;;
+esac
+printf 'NEXT_PUBLIC_GA_MEASUREMENT_ID_B64=%s\n' "$(printf '%s' "$ga_measurement_id" | base64 | tr -d '\n')"
+'@
+  $script = $script.Replace('__APP_DIRECTORY__', $Config.AppDirectory)
+  $output = Invoke-RemoteScript -Config $Config -Script $script
+  $encodedMeasurementId = Get-ReleaseMarker -Output $output -Name "NEXT_PUBLIC_GA_MEASUREMENT_ID_B64"
+
+  try {
+    $measurementId = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encodedMeasurementId))
+  } catch {
+    throw "The remote public build setting was not valid base64."
+  }
+
+  if ($measurementId -notmatch '^(|G-[A-Z0-9]+)$') {
+    throw "The remote public analytics identifier had an unexpected format."
+  }
+
+  return [pscustomobject]@{
+    AppOrigin = "https://$($Config.CanonicalHost)"
+    GoogleAnalyticsMeasurementId = $measurementId
+  }
+}
+
+function New-OffHostReleaseImages {
+  param(
+    [Parameter(Mandatory)][pscustomobject]$Config,
+    [Parameter(Mandatory)][string]$DockerExecutable,
+    [Parameter(Mandatory)][string]$Commit,
+    [Parameter(Mandatory)][string]$ShortSha,
+    [Parameter(Mandatory)][pscustomobject]$BuildSettings
+  )
+
+  $workspaceRoot = Join-Path $Config.LocalBuildRoot "build-workspace"
+  $archiveRoot = Join-Path $Config.LocalBuildRoot "image-archives"
+  $sourceDirectory = Join-Path $workspaceRoot "release-$ShortSha"
+  # Keep the archive outside the Docker build context so it cannot become an
+  # unnecessary layer in every production image.
+  $sourceArchive = Join-Path $workspaceRoot "release-$ShortSha-source.tar"
+  $imageArchive = Join-Path $archiveRoot "arctic-rss-$ShortSha-images.tar"
+
+  New-Item -ItemType Directory -Force -Path $workspaceRoot, $archiveRoot | Out-Null
+  if ((Test-Path -LiteralPath $sourceDirectory) -or (Test-Path -LiteralPath $sourceArchive)) {
+    throw "The exact local image-build workspace already exists. Review or remove it before rebuilding this release."
+  }
+  if (Test-Path -LiteralPath $imageArchive) {
+    throw "The exact local image archive already exists. Review or remove it before rebuilding this release."
+  }
+
+  New-Item -ItemType Directory -Path $sourceDirectory | Out-Null
+  Invoke-LocalCheck -Label "Creating exact local image-build source" -FilePath "git" -Arguments @(
+    "archive", "--format=tar", "--output=$sourceArchive", $Commit
+  )
+  Invoke-LocalCheck -Label "Extracting exact local image-build source" -FilePath "tar.exe" -Arguments @(
+    "-xf", $sourceArchive, "-C", $sourceDirectory
+  )
+
+  $images = [ordered]@{
+    Migrate = "$($Config.ComposeProject)-migrate"
+    Web = "$($Config.ComposeProject)-web"
+    Worker = "$($Config.ComposeProject)-worker"
+    ChatGateway = "$($Config.ComposeProject)-chat-gateway"
+  }
+  $buildTargets = [ordered]@{
+    Migrate = "migrate"
+    Web = "runner"
+    Worker = "worker"
+    ChatGateway = "chat-gateway"
+  }
+
+  foreach ($name in $images.Keys) {
+    Invoke-LocalCheck -Label "Building $name image locally" -FilePath $DockerExecutable -Arguments @(
+      "build", "--platform", "linux/amd64", "--file", (Join-Path $sourceDirectory "Dockerfile"),
+      "--target", $buildTargets[$name], "--tag", $images[$name],
+      "--build-arg", "APP_ORIGIN=$($BuildSettings.AppOrigin)",
+      "--build-arg", "NEXT_PUBLIC_GA_MEASUREMENT_ID=$($BuildSettings.GoogleAnalyticsMeasurementId)",
+      $sourceDirectory
+    )
+  }
+
+  $imageSaveArguments = @("image", "save", "--output", $imageArchive) + @($images.Values)
+  Invoke-LocalCheck -Label "Creating transfer-ready image archive" -FilePath $DockerExecutable -Arguments $imageSaveArguments
+
+  $archiveInfo = Get-Item -LiteralPath $imageArchive
+  if ($archiveInfo.Length -le 0) {
+    throw "The local image archive was empty."
+  }
+
+  return [pscustomobject]@{
+    ArchivePath = $imageArchive
+    ArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $imageArchive).Hash.ToLowerInvariant()
+    ArchiveBytes = $archiveInfo.Length
+    Images = @($images.Values)
+  }
+}
+
+function Assert-RemoteImageCapacity {
+  param(
+    [Parameter(Mandatory)][pscustomobject]$Config,
+    [Parameter(Mandatory)][long]$ImageArchiveBytes
+  )
+
+  # Keep room for the uploaded archive, Docker's loaded layers, and normal OS
+  # work. This is deliberately conservative and stops before backup or any
+  # application mutation when the current host does not have the margin.
+  $requiredBytes = ($ImageArchiveBytes * 2L) + 2GB
+  $script = @'
+set -euo pipefail
+available_kib="$(df -Pk / | awk 'NR == 2 { print $4 }')"
+echo "ROOT_AVAILABLE_KIB=$available_kib"
+'@
+  $output = Invoke-RemoteScript -Config $Config -Script $script
+  $availableKib = Get-ReleaseMarker -Output $output -Name "ROOT_AVAILABLE_KIB"
+  if ($availableKib -notmatch '^[0-9]+$') {
+    throw "The remote disk-capacity preflight returned an invalid value."
+  }
+
+  if (([int64]$availableKib * 1KB) -lt $requiredBytes) {
+    throw "The OVH host does not have enough free disk for the transferred images with the required safety margin."
+  }
 }
 
 function Get-ReleaseMarker {
@@ -298,13 +467,14 @@ function Wait-ForSuccessfulCi {
   }
 }
 
-foreach ($command in "git", "gh", "npm", "npx", "ssh", "scp", "curl.exe") {
+foreach ($command in "git", "gh", "npm", "npx", "ssh", "scp", "curl.exe", "tar.exe") {
   if ($null -eq (Get-Command $command -ErrorAction SilentlyContinue)) {
     throw "Required command '$command' is not available."
   }
 }
 
 $config = Get-ReleaseConfiguration -Path $ConfigurationPath
+$dockerExecutable = Get-DockerExecutable
 $workingTree = @(& git status --porcelain)
 if ($workingTree.Count -ne 0) {
   throw "Refusing to release from a working tree with uncommitted changes."
@@ -442,6 +612,10 @@ printf 'MIGRATION_OWNERSHIP_PRECHECK=passed\n'
   }
 }
 
+$buildSettings = Get-RemotePublicBuildSettings -Config $config
+$offHostImages = New-OffHostReleaseImages -Config $config -DockerExecutable $dockerExecutable -Commit $commit -ShortSha $shortSha -BuildSettings $buildSettings
+Assert-RemoteImageCapacity -Config $config -ImageArchiveBytes $offHostImages.ArchiveBytes
+
 $backupOutput = Invoke-RemoteScript -Config $config -Script @'
 set -euo pipefail
 sudo -n systemctl start --wait arctic-rss-backup.service
@@ -462,11 +636,18 @@ try {
   )
   $archiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archivePath).Hash.ToLowerInvariant()
   $remoteArchive = "/tmp/arctic-rss-$shortSha.tar.gz"
-  $target = "$($config.SshUser)@$($config.SshHost):$remoteArchive"
+  $remoteImageArchive = "/tmp/arctic-rss-$shortSha-images.tar"
+  $sourceTarget = "$($config.SshUser)@$($config.SshHost):$remoteArchive"
+  $imageTarget = "$($config.SshUser)@$($config.SshHost):$remoteImageArchive"
+
+  Write-Host "==> Uploading locally built release images"
+  Invoke-RequiredCommand -FilePath "scp" -Arguments @(
+    "-q", "-o", "BatchMode=yes", "-i", $config.SshKeyPath, $offHostImages.ArchivePath, $imageTarget
+  ) | Out-Null
 
   Write-Host "==> Uploading exact release archive"
   Invoke-RequiredCommand -FilePath "scp" -Arguments @(
-    "-q", "-o", "BatchMode=yes", "-i", $config.SshKeyPath, $archivePath, $target
+    "-q", "-o", "BatchMode=yes", "-i", $config.SshKeyPath, $archivePath, $sourceTarget
   ) | Out-Null
 
   $remoteScript = @'
@@ -474,6 +655,9 @@ set -euo pipefail
 short_sha='__SHORT_SHA__'
 archive='/tmp/arctic-rss-__SHORT_SHA__.tar.gz'
 expected_hash='__ARCHIVE_HASH__'
+image_archive='/tmp/arctic-rss-__SHORT_SHA__-images.tar'
+expected_image_hash='__IMAGE_ARCHIVE_HASH__'
+expected_images_b64='__OFFHOST_IMAGES_BASE64__'
 release_root='__RELEASE_ROOT__'
 live='__APP_DIRECTORY__'
 stage="$release_root/staging/$short_sha"
@@ -483,6 +667,8 @@ canonical_host='__CANONICAL_HOST__'
 
 actual_hash="$(sha256sum "$archive" | awk '{print $1}')"
 test "$actual_hash" = "$expected_hash"
+actual_image_hash="$(sha256sum "$image_archive" | awk '{print $1}')"
+test "$actual_image_hash" = "$expected_image_hash"
 test ! -e "$stage"
 test ! -e "$previous"
 test -f "$live/.env"
@@ -492,6 +678,14 @@ sudo -n tar -xzf "$archive" -C "$stage"
 test -f "$stage/ops/systemd/60-arctic-rss-log-retention.conf"
 sudo -n install -m 600 -o root -g root "$live/.env" "$stage/.env"
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" config -q
+compose_images="$(sudo -n docker compose -p "$compose_project" --project-directory "$stage" --profile chat config --images)"
+sudo -n docker load --input "$image_archive" >/dev/null
+while IFS= read -r image_name; do
+  [ -n "$image_name" ] || continue
+  printf '%s\n' "$compose_images" | awk -v expected="$image_name" '$0 == expected { found = 1 } END { exit !found }'
+  sudo -n docker image inspect "$image_name" >/dev/null
+done <<< "$(printf '%s' "$expected_images_b64" | base64 -d)"
+rm -f "$image_archive"
 sudo -n install -d -m 755 /etc/systemd/journald.conf.d
 sudo -n install -m 644 "$stage/ops/systemd/60-arctic-rss-log-retention.conf" /etc/systemd/journald.conf.d/60-arctic-rss-log-retention.conf
 sudo -n systemctl restart systemd-journald
@@ -501,12 +695,10 @@ sudo -n systemctl restart systemd-journald
 sudo -n systemd-analyze cat-config systemd/journald.conf | awk '$0 == "MaxRetentionSec=30day" { found = 1 } END { exit !found }'
 sudo -n journalctl --rotate
 sudo -n journalctl --vacuum-time=30d
-# chat-gateway is deliberately opt-in behind the "chat" Compose profile.
-# Include that profile while building so the explicitly named service is
-# available without changing whether the release starts it.
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" --profile chat build migrate web worker chat-gateway
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate </dev/null
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
+# Application images were built and archived locally from the exact source
+# commit, then hash-verified and loaded above. Never build them on OVH.
+sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps --no-build -T migrate </dev/null
+sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps --no-build -T migrate ./node_modules/.bin/prisma migrate status </dev/null
 migration_status="verified"
 sudo -n mv "$live" "$previous"
 sudo -n mv "$stage" "$live"
@@ -536,7 +728,7 @@ chat_gateway_health="not-running"
 chat_gateway_image="not-running"
 chat_gateway_was_running="$(sudo -n docker inspect -f '{{.State.Running}}' app-chat-gateway-1 2>/dev/null || true)"
 if [ "$chat_gateway_was_running" = true ]; then
-  sudo -n docker compose -p "$compose_project" --project-directory "$live" --profile chat up -d --no-deps --force-recreate chat-gateway
+  sudo -n docker compose -p "$compose_project" --project-directory "$live" --profile chat up -d --no-deps --no-build --force-recreate chat-gateway
 
   for attempt in $(seq 1 18); do
     chat_gateway_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-chat-gateway-1)"
@@ -550,7 +742,7 @@ if [ "$chat_gateway_was_running" = true ]; then
   chat_gateway_image="$(sudo -n docker inspect -f '{{.Image}}' app-chat-gateway-1)"
 fi
 
-sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --force-recreate web worker
+sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --no-build --force-recreate web worker
 
 for attempt in $(seq 1 18); do
   web_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-web-1)"
@@ -592,7 +784,8 @@ printf 'REDIS_EPHEMERAL_HEALTH=%s\n' "$redis_ephemeral_health"
 printf 'CHAT_GATEWAY_HEALTH=%s\n' "$chat_gateway_health"
 printf 'CHAT_GATEWAY_IMAGE=%s\n' "$chat_gateway_image"
 '@
-  $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost)
+  $offHostImagesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.Images -join "`n")))
+  $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__IMAGE_ARCHIVE_HASH__', $offHostImages.ArchiveHash).Replace('__OFFHOST_IMAGES_BASE64__', $offHostImagesPayload).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost)
   $stageOutput = Invoke-RemoteScript -Config $config -Script $remoteScript
   $previousRelease = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_RELEASE"
   $migrationStatus = Get-ReleaseMarker -Output $stageOutput -Name "MIGRATION_STATUS"
@@ -625,6 +818,8 @@ printf 'CHAT_GATEWAY_IMAGE=%s\n' "$chat_gateway_image"
     backupId = $backupId
     commit = $commit
     deployedAtUtc = $deployedAt
+    localImageArchiveBytes = $offHostImages.ArchiveBytes
+    localImageArchiveSha256 = $offHostImages.ArchiveHash
     githubCiRun = $ci.Url
     loginHttpStatus = $loginStatus
     migrationStatus = $migrationStatus
