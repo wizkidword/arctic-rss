@@ -143,6 +143,34 @@ enum SmartDigestEmailStatus {
   FAILED
 }
 
+enum StoryClusterStatus {
+  ACTIVE
+  DISMISSED
+}
+
+// These actions are append-only history entries. The current cluster status is
+// a materialized convenience for listing, while each user-visible decision has
+// a versioned snapshot below.
+enum StoryClusterVersionAction {
+  CREATED
+  RERUN
+  MERGED
+  SPLIT
+  DISMISSED
+  RESTORED
+}
+
+// A grouping explanation is always expressed as one or more named signals;
+// an opaque model score is intentionally not a signal type.
+enum StoryClusterSignal {
+  CANONICAL_URL
+  NORMALIZED_TITLE
+  PUBLICATION_TIME_WINDOW
+  SHARED_NAMED_ENTITIES
+  TEXT_SIMILARITY
+  SOURCE_DUPLICATION
+}
+
 enum DigestRunStatus {
   PENDING
   PROCESSING
@@ -284,6 +312,7 @@ model User {
   smartDigestRules        SmartDigestRule[]
   smartDigests            SmartDigest[]
   savedSearches           SavedSearch[]
+  storyClusters           StoryCluster[]
   importJobs              ImportJob[]
   bugReports              BugReport[]
   featureSuggestions      FeatureSuggestion[]
@@ -591,14 +620,15 @@ model Article {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  feed              Feed                    @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  states            ArticleState[]
-  collectionItems   ArticleCollectionItem[]
-  aiSummaries       ArticleAiSummary[]
-  aiDigestItems     AiDigestItem[]
-  smartDigestItems  SmartDigestItem[]
-  chatMessages      ChatMessage[]
-  chatBotDeliveries ChatBotDelivery[]
+  feed                Feed                    @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  states              ArticleState[]
+  collectionItems     ArticleCollectionItem[]
+  aiSummaries         ArticleAiSummary[]
+  aiDigestItems       AiDigestItem[]
+  smartDigestItems    SmartDigestItem[]
+  storyClusterMembers StoryClusterMember[]
+  chatMessages        ChatMessage[]
+  chatBotDeliveries   ChatBotDelivery[]
 
   @@unique([feedId, externalId])
   @@index([feedId, publishedAt])
@@ -866,6 +896,83 @@ model SavedSearch {
 
   @@unique([userId, id])
   @@index([userId, updatedAt])
+}
+
+// Story clusters belong to a user because feed visibility, corrections, and
+// dismissals are personal. They never replace or delete the shared Article.
+model StoryCluster {
+  id                   String             @id @default(cuid())
+  userId               String
+  status               StoryClusterStatus @default(ACTIVE)
+  currentVersionNumber Int                @default(0)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions StoryClusterVersion[]
+
+  @@unique([userId, id])
+  @@index([userId, status, updatedAt])
+}
+
+// A version is an immutable member snapshot produced by an explainable
+// clustering decision. Repeating the same non-null deduplication key for a
+// cluster must return the existing version rather than create another one.
+model StoryClusterVersion {
+  id               String                    @id @default(cuid())
+  clusterId        String
+  version          Int
+  action           StoryClusterVersionAction
+  deduplicationKey String?
+  createdAt        DateTime                  @default(now())
+
+  cluster  StoryCluster           @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  members  StoryClusterMember[]
+  evidence StoryClusterEvidence[]
+
+  @@unique([clusterId, version])
+  @@unique([clusterId, deduplicationKey])
+  @@index([clusterId, createdAt])
+}
+
+// Article membership is snapshotted per cluster version. The article relation
+// is optional and display fields are retained so old grouping explanations
+// survive ordinary feed/article retention without mutating original articles.
+model StoryClusterMember {
+  id               String    @id @default(cuid())
+  clusterVersionId String
+  articleId        String?
+  articleTitle     String
+  articleUrl       String
+  feedTitle        String
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  version         StoryClusterVersion    @relation(fields: [clusterVersionId], references: [id], onDelete: Cascade)
+  article         Article?               @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  evidenceAsLeft  StoryClusterEvidence[] @relation("StoryClusterEvidenceLeft")
+  evidenceAsRight StoryClusterEvidence[] @relation("StoryClusterEvidenceRight")
+
+  @@unique([clusterVersionId, articleId])
+  @@index([articleId])
+}
+
+// Every edge within a version records one visible reason. The pair is stored
+// in stable ID order by the service, and the migration rejects self-edges.
+model StoryClusterEvidence {
+  id               String             @id @default(cuid())
+  clusterVersionId String
+  leftMemberId     String
+  rightMemberId    String
+  signal           StoryClusterSignal
+  createdAt        DateTime           @default(now())
+
+  version     StoryClusterVersion @relation(fields: [clusterVersionId], references: [id], onDelete: Cascade)
+  leftMember  StoryClusterMember  @relation("StoryClusterEvidenceLeft", fields: [leftMemberId], references: [id], onDelete: Cascade)
+  rightMember StoryClusterMember  @relation("StoryClusterEvidenceRight", fields: [rightMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterVersionId, leftMemberId, rightMemberId, signal], map: "StoryClusterEvidence_clusterVersionId_leftMemberId_rightMem_key")
+  @@index([clusterVersionId])
 }
 
 model DigestRun {
