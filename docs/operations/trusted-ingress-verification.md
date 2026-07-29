@@ -1,50 +1,41 @@
 # Trusted ingress verification
 
-**Verified:** 2026-07-26  
-**Scope:** `NET-001` read-only production verification. No firewall, DNS, tunnel, or VPS configuration was changed.
+**Reconciled:** 2026-07-29
+**Scope:** `NET-001` read-only OVH verification. No firewall, DNS, tunnel,
+proxy, or VPS configuration was changed.
 
-## Verified packet paths
+## Current evidence
+
+- The canonical public health endpoint returned `200 {"status":"ok"}` over
+  HTTPS and the public login surface returned HTTP 200.
+- Four application/data listeners were present on the OVH host, all
+  loopback-bound. No listener on ports 3000, 3001, 5432, 6379, or 6380 was
+  bound beyond loopback, and the host firewall was active.
+- The chat gateway remains unpublished and intentionally inactive. Do not use
+  its older WebSocket acceptance result as evidence for the current release.
+- The previous packet-path diagram named an active `cloudflared` connector.
+  The current read-only host check did not find a running named `cloudflared`
+  service, process, or container, and no direct HTTP/HTTPS listener was
+  observed on the host. The old diagram is therefore historical evidence, not
+  a statement about the current OVH route.
+- `src/proxy.ts` still validates `Host` before routing and does not use
+  forwarding headers to choose security-sensitive application URLs. The chat
+  rate limiter accepts only Cloudflare's `CF-Connecting-IP`, not
+  `X-Forwarded-For`.
+
+## Required closure before claiming an exact packet path
+
+Use the private OVH/provider and Cloudflare inventories to identify the active
+edge connector or reverse proxy, then record only the non-secret topology:
 
 ```text
-Browser
-  -> public DNS
-  -> Cloudflare HTTPS edge
-  -> managed cloudflared connector on the VPS
-  -> Docker loopback web listener (127.0.0.1:3000)
-  -> Arctic RSS
-
-Canonical WebSocket upgrade (/socket.io)
-  -> Cloudflare HTTPS edge and managed connector
-  -> internal chat gateway
+Browser -> Cloudflare edge -> verified OVH connector/proxy -> loopback web
 ```
 
-The chat gateway has no host-published port. Its canonical WebSocket route
-accepted a standards-valid upgrade through the managed edge; it is not
-reachable as direct TCP port `3001`.
+Confirm that it is the sole application ingress, that forwarding headers are
+overwritten at the trusted boundary, and that an alternate DNS record cannot
+bypass the edge. Perform a controlled canonical WebSocket upgrade only after
+the opt-in chat gateway has separately been activated.
 
-## Evidence collected
-
-- The public canonical health endpoint returned `200` over HTTPS, included a
-  Cloudflare response marker and HSTS, and public DNS resolved.
-- Direct TCP checks from an external workstation reached controlled SSH only.
-  Ports `80`, `443`, `3000`, `3001`, `5432`, `6379`, and `6380` were not
-  reachable directly on the VPS address.
-- The host firewall was active. This effective external result agrees with the
-  host policy: provider-side rules are not stored in the repository, but the
-  direct checks crossed the provider boundary and found no alternate ingress.
-- Docker publishes web, PostgreSQL, durable Redis, and ephemeral Redis only on
-  loopback. The chat gateway is unpublished on the host.
-- The managed tunnel process, SSH service, and chat gateway were active during
-  verification.
-- The canonical local health request succeeded. The same request with an
-  unknown `Host` returned `400`.
-- `src/proxy.ts` validates `Host` before routing and never uses forwarding
-  headers to choose security-sensitive application URLs. The rate limiter uses
-  only Cloudflare's `CF-Connecting-IP`, not `X-Forwarded-For`.
-
-## Operational boundary
-
-Provider firewall rule listings and Cloudflare dashboard policy are maintained
-in private operator inventory and were not modified or copied into this
-repository. Re-run this read-only verification after any provider, DNS,
-tunnel, reverse-proxy, or Compose port-mapping change.
+This is an evidence task, not authorization to start a tunnel, expose a port,
+change DNS/Cloudflare, or activate chat.

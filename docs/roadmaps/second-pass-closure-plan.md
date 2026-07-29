@@ -5,7 +5,7 @@ implementation backlog. This is the successor to the July 2026 second-pass
 plan. It separates source completion, OVH rollout, and production proof before
 any Arctic Story Intelligence work begins.
 
-**Reviewed:** 2026-07-28
+**Reviewed:** 2026-07-29
 **Scope:** Arctic RSS repository and the current OVH production host.
 This document does not authorize a deployment, provider change, DNS change,
 database restore, or production fault injection.
@@ -36,17 +36,17 @@ provider-side decision requiring explicit authorization.
 
 ## Reconciliation snapshot
 
-| Area | Evidence on 2026-07-28 | State |
+| Area | Evidence on 2026-07-29 | State |
 | --- | --- | --- |
-| Source baseline | `origin/main` is `85f67d5`; it contains the P1–P3 remediation work and the bounded release-tooling correction. | Live parity verified through the private release record. |
-| Candidate commits | Sharp standalone assets, backup/monitor alert improvements, reproducible-gate support, closure evidence, and release-record provenance improvements are included in `85f67d5`. | Deployed and verified. |
-| CI | Exact-commit main CI passed for `85f67d5`, including the container scan/SBOM, browser, Compose, quality, secret, dependency, and static-analysis gates. | Verified before release. |
+| Source baseline | `origin/main` is `e975e66`; it contains the P1–P3 remediation work, Story Intelligence slices, and the OVH Compose compatibility correction. | The private release record and running web/worker image tags agree. |
+| Candidate commits | The current release includes private full-text search, saved searches, transparent story clustering, cited timelines, and optional cited analysis in addition to the remediation work. | Deployed with web/worker and verified through the release record. |
+| CI | Exact-commit main CI passed for `e975e66`, including the container scan/SBOM, browser, Compose, quality, secret, dependency, and static-analysis gates. | Verified before release. |
 | Focused regression gates | 111 focused chat, worker, image, monitor, and backup tests passed locally. | Proven locally. |
 | Static validation | A bounded Windows harness completed full Vitest naturally (209 files, 932 tests) and Prisma format/validation. Typecheck and lint exit 0; lint retains two pre-existing unused-parameter warnings. The production build compiled and the standalone Sharp runtime loaded. | Local gate verified. |
-| Public surface | Canonical health returned `200 {"status":"ok"}` and login returned `200` with a password field. | Live and verified. |
-| OVH runtime | Web, worker, chat gateway, PostgreSQL, durable Redis, and ephemeral Redis are healthy. All expected schema migrations are applied. | Live and verified. |
-| Release provenance | The active source directory is an archive deployment, but the private release record now binds it to `85f67d5`, its CI run, migration verification, image identities, and retained rollback release. | Closed. |
-| Backups and alerts | Daily backup and monitor timers were active and successful after the release; alert delivery remains configured. | Live and verified. |
+| Public surface | Canonical health returned `200 {"status":"ok"}` and login returned `200`. | Live and verified. |
+| OVH runtime | Web, worker, PostgreSQL, durable Redis, and ephemeral Redis are healthy. The chat gateway is an intentionally inactive opt-in profile; no active WebSocket acceptance claim is carried forward. There are no unfinished migrations; one historical rolled-back ledger row remains. | Web/worker and data services live and verified; chat runtime deferred. |
+| Release provenance | The active source directory is an archive deployment, and the private release record binds it to `e975e66`, its CI run, migration verification, image identities, and retained rollback release. | Closed for web/worker. |
+| Backups and alerts | Daily backup and monitor timers were active and successful during the 2026-07-29 reconciliation; a completed backup was present. | Live and verified. |
 | Redis condition | Read-only OVH evidence found low absolute Redis memory use, about 8 MiB allocator/RSS excess per workload, no OOM, eviction, capacity pressure, or organic command errors. | The monitor now requires both a high ratio and more than 16 MiB excess before emitting a fragmentation alert. |
 | Worker isolation | The compatibility `worker` is live. The five-service `split-workers` profile is available in source but intentionally not activated. | Deliberately deferred cutover. |
 | Image runtime | Minimal compiled images and the Sharp standalone-runtime fix were built by the approved release. | Live and verified. |
@@ -58,11 +58,11 @@ focused tests. The missing distinction is production acceptance evidence.
 
 | Original scope | Current source status | Closure needed |
 | --- | --- | --- |
-| CHAT-AUTH-001 and CHAT-REDIS-001 | Implemented with security-event revocation, bounded reauthorization, readiness behavior, reconnect recovery, and controlled restart tests. | Exact release provenance is now live; beta-account acceptance checks remain a separately scheduled operational exercise. |
+| CHAT-AUTH-001 and CHAT-REDIS-001 | Implemented with security-event revocation, bounded reauthorization, readiness behavior, reconnect recovery, and controlled restart tests. | Exact release provenance is live for the compatible web code; the opt-in gateway is inactive, so beta-account and active-gateway acceptance checks remain separately scheduled operational exercises. |
 | Moderation, holds, AI leases, and database-secret hardening | Implemented with committed migrations and focused transaction/recovery tests. | Release and migration provenance are recorded; aggregate-only anomaly queries remain a safe follow-up. |
 | WebSocket abuse, read markers, slow mode, presence, blocks, outbox, and retention | Implemented and covered by focused gateway/service tests. | Exact release is proven; non-disruptive aggregate runtime metrics remain an operational follow-up. |
 | Redis architecture and worker lifecycle | Two Redis services are live; graceful shutdown and split-worker code are present. | Fragmentation decision is documented and the monitor guard is live; split-worker cutover remains deliberately deferred. |
-| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance; CSP/header and image-proxy runtime checks remain safe follow-ups. |
+| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance. CSP/header and image-proxy runtime checks remain safe follow-ups; the pre-migration tunnel diagram must be replaced with the verified current OVH packet path. |
 | AUTH-PERF-001, CHAT-SEQ-001, IMAGE-PROXY-001 | Implemented/decided in `origin/main`; image proxy has re-encoding tests. | Included in the exact live release; no sequence migration is planned without a new design decision. |
 
 ## Milestone 0 — Make the release gate reproducible
@@ -202,12 +202,14 @@ current, reproducible, and OVH-specific.
 Do not start product work until Milestones 0–2 are complete and Milestone 3A
 has a documented decision. Then start one thin vertical slice only:
 
-1. **PRODUCT-STORY-001A — private full-text search.** Search articles readable
-   by the current user, retain existing authorization boundaries, paginate,
-   and record query-performance evidence.
-2. **PRODUCT-STORY-001B — saved monitors.** Add a constrained named saved
-   search on top of the proven search model; do not add automation or AI
-   briefings in the same release.
+1. **PRODUCT-STORY-001A — private full-text search.** Completed in source and
+   deployed. It searches only articles readable by the current user, retains
+   authorization boundaries, paginates, and has an isolated PostgreSQL
+   query-plan gate.
+2. **PRODUCT-STORY-001B — saved monitors.** Private named saved searches are
+   deployed as shortcuts to the proven filter model. Scheduled evaluation,
+   new-match counts, and notifications are the next bounded monitor slice; do
+   not add automation or AI briefings in the same release.
 
 Story clustering, timelines, Story Rooms, delta briefings, automation, and
 transcripts remain later work. Each needs its own data-retention, cost,

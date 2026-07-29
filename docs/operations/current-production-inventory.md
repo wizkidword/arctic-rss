@@ -1,16 +1,19 @@
 # Current production inventory
 
-**Captured:** 2026-07-28
-**Scope:** non-secret verification after the approved `85f67d5` release.
+**Captured:** 2026-07-29
+**Scope:** non-secret reconciliation after the approved `e975e66` release.
 
 This document intentionally excludes host addresses, account names, release
 paths, tunnel identifiers, environment values, and backup locations. Keep
 those details in the private operator inventory.
 
-> Durable and ephemeral Redis, compiled runtime images, and release
-> provenance are verified live as of 2026-07-28. The compatibility worker
-> remains intentionally active; the opt-in split-worker profile is deferred
-> until sustained workload evidence justifies a separately approved cutover.
+> The web and compatibility-worker images are running the approved
+> `e975e66` release. Durable and ephemeral Redis are healthy, and the
+> compatibility worker remains intentionally active. The opt-in chat gateway
+> is deliberately **not running**; do not describe its real-time path as
+> live-verified until it is separately activated and tested. The split-worker
+> profile remains deferred until sustained workload evidence justifies a
+> separately approved cutover.
 
 ## Verified runtime state
 
@@ -21,9 +24,13 @@ those details in the private operator inventory.
   append-only persistence, a deliberate memory ceiling, and a `noeviction`
   policy so queue jobs are not silently discarded. Ephemeral Redis has no
   volume and uses the separate short-lived-state policy.
-- The web process, compatibility worker, and active chat gateway report healthy
-  Docker status. The worker updates an internal heartbeat file for its health
-  check.
+- PostgreSQL, durable Redis, ephemeral Redis, web, and the compatibility
+  worker report healthy Docker status. The worker updates an internal
+  heartbeat file for its health check.
+- The existing chat-gateway container is cleanly stopped rather than failed or
+  OOM-killed. Its release record is `not-running`, which is the expected
+  result for the opt-in profile; the release procedure did not implicitly
+  activate it.
 - Stateless containers use read-only filesystems, restricted temporary storage,
   dropped Linux capabilities, no-new-privileges, bounded CPU/memory/process
   limits, and bounded local Docker logs. Stateful services retain only the
@@ -31,15 +38,25 @@ those details in the private operator inventory.
 - `/api/live` returns `200` only on loopback. `/api/health` returns a minimal
   `200 {"status":"ok"}` when PostgreSQL and Redis are ready, and public
   requests to `/api/live` return `404`.
-- The public edge redirects HTTP to HTTPS and serves the application through
-  the managed tunnel. HTTPS response protections include strict transport,
+- The canonical public health endpoint and login surface returned HTTP 200
+  during this capture. HTTPS response protections include strict transport,
   clickjacking, MIME-sniffing, referrer, and browser-permissions controls.
-- The production database has committed Prisma migrations applied. The release
-  procedure validates a custom-format backup with `pg_restore -l` before each
-  swap and retains the prior release directory for rollback.
+- Four application/data listeners were present and all were loopback-bound;
+  no public listener was observed for ports 3000, 3001, 5432, 6379, or 6380.
+  The host firewall was active. The exact current edge-to-OVH packet path is
+  intentionally recorded as pending in
+  [trusted-ingress-verification.md](trusted-ingress-verification.md), rather
+  than copied from the pre-migration tunnel snapshot.
+- The production database has no unfinished Prisma migrations. One historical
+  rolled-back migration record remains in the ledger, while the approved
+  release record reports 32 applied migrations; it is not an active migration
+  failure. The release procedure validates a custom-format backup with
+  `pg_restore -l` before each swap and retains the prior release directory for
+  rollback.
 - The private release record ties the live archive deployment to public commit
-  `85f67d5`, its successful CI run, migration verification, image identities,
-  and public health/login checks. The record itself remains outside Git.
+  `e975e66`, its successful CI run, migration verification, source-built web
+  and worker image tags, and public health/login checks. The record itself
+  remains outside Git.
 - Runtime and migration database accounts are separate, login-capable,
   non-superuser roles with no role-management or database-creation powers.
 - Database-level integrity guards prevent cross-user folder links, malformed
@@ -59,9 +76,10 @@ those details in the private operator inventory.
   deliberate memory ceiling and no-eviction policy. The application monitor
   checks backup freshness, service health, data-store persistence, disk space,
   readiness, and certificate expiry.
-- The backup and monitor timers were active and successful after the approved
-  release. Alert routing and the private off-host backup copy remain outside
-  this repository.
+- The backup and monitor timers were active and their latest service results
+  were successful during this capture. A current completed backup was present.
+  Alert routing and the private off-host backup copy remain outside this
+  repository.
 - A private Windows scheduled task copies the newest VPS backup to off-host
   storage, validates both database-file checksums, and retains 30 days of
   local copies. The latest manual synchronization and a disposable restore
@@ -90,10 +108,11 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
   `DURABLE_REDIS_URL`; rate limits and all chat gateway/event Redis clients use
   `EPHEMERAL_REDIS_URL`. `REDIS_URL` remains a compatibility fallback only for
   a staged one-Redis rollout.
-- The release procedure starts durable Redis, then ephemeral Redis, then an
-  active chat gateway, and finally web/worker containers. The monitor verifies
-  each health check, AOF where required, policy, error/OOM counters, and
-  fragmentation without printing secrets.
+- The release procedure starts durable Redis, then ephemeral Redis. It
+  recreates the chat gateway only when that opt-in profile was already running,
+  and finally recreates web/worker containers. The monitor verifies each
+  running service health check, AOF where required, policy, error/OOM
+  counters, and fragmentation without printing secrets.
 - WORKER-ARCH-001 intentionally keeps the all-in-one worker as the live
   default while offering an opt-in `split-workers` profile for ingestion,
   AI/mail, imports, maintenance, and chat events. Each split service has an
@@ -119,6 +138,14 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
 
 - Maintain the 30-day off-host backup retention and run the documented restore
   drill at least quarterly and after backup-format changes.
+- Reconcile the actual edge-to-OVH packet path from the private provider and
+  DNS inventory before asserting a managed-tunnel route. During this capture,
+  no named `cloudflared` service/process or running container was observed on
+  the host, while the public application remained available. This is a
+  documentation/evidence gap, not authorization to alter ingress.
+- Keep the chat gateway inactive until an explicitly approved beta activation
+  and controlled WebSocket acceptance test are scheduled. CHAT-AUTH-001 and
+  CHAT-REDIS-001 remain source- and CI-verified, not active-runtime verified.
 - Keep provider snapshots and SSH/firewall recovery procedures in the private
   operator inventory.
 - Monitor queue backlog and failed email delivery in the application admin
