@@ -12,6 +12,10 @@ vi.mock("@/app/app/actions", () => ({
   evaluateStoryClusterAction: vi.fn()
 }))
 
+vi.mock("@/components/story-cluster-dismiss-button", () => ({
+  StoryClusterDismissButton: () => <button type="button">Dismiss group</button>
+}))
+
 import { StoryClusterPanel } from "./story-cluster-panel"
 
 describe("StoryClusterPanel", () => {
@@ -47,6 +51,7 @@ describe("StoryClusterPanel", () => {
     expect(markup).toContain("Related coverage")
     expect(markup).toContain('href="/app/article/article-2"')
     expect(markup).toContain("Check again")
+    expect(markup).toContain("Dismiss group")
     expect(markup).toContain("It preserves every original article")
   })
 })

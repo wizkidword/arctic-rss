@@ -81,11 +81,13 @@ type StoryClusterEvaluationDependencies = {
     userId: string
   }) => Promise<{
     created: boolean
+    dismissed: boolean
   }>
 }
 
 export type StoryClusterEvaluationResult = {
   created: boolean
+  dismissed: boolean
   matched: boolean
 }
 
@@ -156,7 +158,7 @@ export async function evaluateStoryClustersForArticleUserWithDependencies({
   ).find((entry) => entry.memberArticleIds.includes(selectedArticle.id))
 
   if (!candidate) {
-    return { created: false, matched: false }
+    return { created: false, dismissed: false, matched: false }
   }
 
   try {
@@ -165,7 +167,11 @@ export async function evaluateStoryClustersForArticleUserWithDependencies({
       userId: normalizedUserId
     })
 
-    return { created: persisted.created, matched: true }
+    return {
+      created: persisted.created,
+      dismissed: persisted.dismissed,
+      matched: true
+    }
   } catch (error) {
     if (error instanceof StoryClusterPersistenceError) {
       throw new StoryClusterReaderError(error.message)

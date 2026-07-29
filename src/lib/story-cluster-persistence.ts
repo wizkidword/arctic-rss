@@ -18,6 +18,7 @@ type AuthorizedClusterArticle = {
 type PersistedCluster = {
   currentVersionNumber: number
   id: string
+  status: "ACTIVE" | "DISMISSED"
 }
 
 type PersistedClusterVersion = {
@@ -100,6 +101,7 @@ export type StoryClusterPersistenceStore = {
 export type PersistedStoryClusterCandidate = {
   clusterId: string
   created: boolean
+  dismissed: boolean
   versionId: string
   versionNumber: number
 }
@@ -239,6 +241,7 @@ export async function persistStoryClusterCandidateForUserWithClient({
       select: {
         currentVersionNumber: true,
         id: true,
+        status: true,
       },
       update: {},
       where: {
@@ -270,6 +273,7 @@ export async function persistStoryClusterCandidateForUserWithClient({
       return {
         clusterId: cluster.id,
         created: false,
+        dismissed: cluster.status === "DISMISSED",
         versionId: existingVersion.id,
         versionNumber: existingVersion.version,
       }
@@ -330,6 +334,7 @@ export async function persistStoryClusterCandidateForUserWithClient({
     return {
       clusterId: cluster.id,
       created: true,
+      dismissed: false,
       versionId: version.id,
       versionNumber: version.version,
     }

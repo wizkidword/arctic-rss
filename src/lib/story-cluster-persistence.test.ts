@@ -37,6 +37,7 @@ function createStore({
       url: "https://second.example/story",
     },
   ],
+  dismissed = false,
   existing = false,
 }: {
   articles?: Array<{
@@ -46,6 +47,7 @@ function createStore({
     title: string
     url: string
   }>
+  dismissed?: boolean
   existing?: boolean
 } = {}) {
   const mocks = {
@@ -54,6 +56,7 @@ function createStore({
     clusterUpsert: vi.fn().mockResolvedValue({
       currentVersionNumber: existing ? 1 : 0,
       id: "cluster-1",
+      status: dismissed ? "DISMISSED" : "ACTIVE",
     }),
     evidenceCreateMany: vi.fn().mockResolvedValue({ count: 1 }),
     memberCreate: vi.fn(({ data }) =>
@@ -109,6 +112,7 @@ describe("persistStoryClusterCandidateForUserWithClient", () => {
     ).resolves.toEqual({
       clusterId: "cluster-1",
       created: true,
+      dismissed: false,
       versionId: "version-1",
       versionNumber: 1,
     })
@@ -186,6 +190,7 @@ describe("persistStoryClusterCandidateForUserWithClient", () => {
     ).resolves.toEqual({
       clusterId: "cluster-1",
       created: false,
+      dismissed: false,
       versionId: "version-existing",
       versionNumber: 1,
     })
@@ -193,6 +198,27 @@ describe("persistStoryClusterCandidateForUserWithClient", () => {
     expect(mocks.versionCreate).not.toHaveBeenCalled()
     expect(mocks.memberCreate).not.toHaveBeenCalled()
     expect(mocks.evidenceCreateMany).not.toHaveBeenCalled()
+  })
+
+  it("preserves a dismissed group when a candidate is checked again", async () => {
+    const { mocks, store } = createStore({ dismissed: true, existing: true })
+
+    await expect(
+      persistStoryClusterCandidateForUserWithClient({
+        candidate,
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toEqual({
+      clusterId: "cluster-1",
+      created: false,
+      dismissed: true,
+      versionId: "version-existing",
+      versionNumber: 1,
+    })
+
+    expect(mocks.versionCreate).not.toHaveBeenCalled()
+    expect(mocks.clusterUpdate).not.toHaveBeenCalled()
   })
 
   it("rejects a candidate if any article is not visible to the user", async () => {

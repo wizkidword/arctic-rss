@@ -50,6 +50,7 @@ export type RateLimitAction =
   | "password_reset_complete"
   | "password_reset_request"
   | "signup"
+  | "story_cluster_control"
   | "story_cluster_evaluation"
   | "verification_resend"
 
@@ -218,6 +219,9 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
     },
   ],
   story_cluster_evaluation: [
+    { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
+  ],
+  story_cluster_control: [
     { limit: 30, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
   ],
   verification_resend: [

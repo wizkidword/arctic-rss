@@ -8,6 +8,7 @@ import {
   evaluateStoryClusterAction,
   type EvaluateStoryClusterActionState
 } from "@/app/app/actions"
+import { StoryClusterDismissButton } from "@/components/story-cluster-dismiss-button"
 import { Button } from "@/components/ui/button"
 import { articleDetailHref } from "@/lib/reader-navigation"
 import type { StoryClusterSignal } from "@/lib/story-cluster-history"
@@ -112,6 +113,10 @@ export function StoryClusterPanel({
                 </li>
               ))}
             </ul>
+            <StoryClusterDismissButton
+              articleId={articleId}
+              clusterId={cluster.id}
+            />
           </section>
         ))}
 
