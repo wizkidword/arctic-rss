@@ -2,6 +2,7 @@ import {
   AiPricingError,
   assertKnownAiPricing,
   estimateAiUsageCost,
+  requireApprovedOpenAiTextModel,
 } from "./ai-costs"
 import { getPrisma } from "./db"
 import {
@@ -15,7 +16,7 @@ import {
 } from "./ai-usage"
 
 const DEFAULT_LOCAL_DIGEST_MODEL = "local-digest-v1"
-const DEFAULT_OPENAI_DIGEST_MODEL = "gpt-5.5"
+const DEFAULT_OPENAI_DIGEST_MODEL = "gpt-5.4-mini"
 const MAX_DIGEST_ARTICLES = 20
 const MAX_OPENAI_DIGEST_ARTICLE_CHARS = 1_200
 const MAX_OPENAI_DIGEST_OUTPUT_TOKENS = 4_000
@@ -774,10 +775,11 @@ export function getAiDigestProvider(): AiDigestProvider {
 
     return createOpenAiDigestProvider({
       apiKey: process.env.OPENAI_API_KEY,
-      model:
+      model: requireApprovedOpenAiTextModel(
         process.env.AI_DIGEST_MODEL ||
-        process.env.AI_DEFAULT_MODEL ||
-        DEFAULT_OPENAI_DIGEST_MODEL,
+          process.env.AI_DEFAULT_MODEL ||
+          DEFAULT_OPENAI_DIGEST_MODEL,
+      ),
     })
   }
 

@@ -4,6 +4,7 @@ import {
   AiPricingError,
   assertKnownAiPricing,
   estimateAiUsageCost,
+  requireApprovedOpenAiTextModel,
 } from "./ai-costs"
 import { getPrisma } from "./db"
 import {
@@ -474,9 +475,10 @@ export function getStoryClusterAnalysisProvider(): StoryClusterAnalysisProvider 
 
   return createOpenAiStoryClusterAnalysisProvider({
     apiKey: process.env.OPENAI_API_KEY,
-    model:
+    model: requireApprovedOpenAiTextModel(
       process.env.STORY_COMPARISON_MODEL ||
-      DEFAULT_OPENAI_STORY_COMPARISON_MODEL,
+        DEFAULT_OPENAI_STORY_COMPARISON_MODEL,
+    ),
   })
 }
 

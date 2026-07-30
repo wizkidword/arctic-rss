@@ -4,6 +4,7 @@ import {
   AiPricingError,
   assertKnownAiPricing,
   estimateAiUsageCost,
+  requireApprovedOpenAiTextModel,
 } from "./ai-costs"
 import { getPrisma } from "./db"
 import {
@@ -16,7 +17,7 @@ import {
 } from "./ai-usage"
 
 const DEFAULT_LOCAL_MODEL = "local-extractive-v1"
-const DEFAULT_OPENAI_MODEL = "gpt-5.5"
+const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 const MAX_ARTICLE_CHARS = 12_000
 const MAX_OPENAI_SUMMARY_OUTPUT_TOKENS = 1_200
 const OPENAI_REQUEST_TIMEOUT_MS = 20_000
@@ -409,10 +410,11 @@ export function getAiSummaryProvider(): AiSummaryProvider {
 
     return createOpenAiSummaryProvider({
       apiKey: process.env.OPENAI_API_KEY,
-      model:
+      model: requireApprovedOpenAiTextModel(
         process.env.OPENAI_SUMMARY_MODEL ||
-        process.env.AI_DEFAULT_MODEL ||
-        DEFAULT_OPENAI_MODEL,
+          process.env.AI_DEFAULT_MODEL ||
+          DEFAULT_OPENAI_MODEL,
+      ),
     })
   }
 
