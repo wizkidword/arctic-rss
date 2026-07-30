@@ -13,6 +13,9 @@ itself; no firewall, DNS, tunnel, proxy, or VPS configuration was changed.
   proxied through the same Cloudflare Tunnel, and that tunnel reports healthy.
   Tunnel names, identifiers, connector metadata, and DNS targets remain in the
   private operator inventory.
+- A read-only provider DNS inventory found no DNS-only `A`, `AAAA`, or `CNAME`
+  application record. The current web-capable records are proxied; DNS-only
+  records are mail/text records, so no current DNS bypass candidate was found.
 - The provider inventory shows one healthy Linux connector replica. A
   read-only inventory of that connector found a separate OVH relay host with
   one running `cloudflared` container and no Arctic RSS application
@@ -52,11 +55,10 @@ itself; no firewall, DNS, tunnel, proxy, or VPS configuration was changed.
 Browser -> Cloudflare edge -> healthy Cloudflare Tunnel -> verified OVH relay -> verified internal Arctic RSS health endpoint
 ```
 
-The canonical and `www` records do not bypass the Cloudflare edge, but this
-does not establish that no other application alias can bypass it. The health
-response proves the relay's named upstream reaches Arctic RSS, but does not map
-that service to the intended application host or prove trusted headers are
-overwritten at the final ingress boundary.
+The canonical, `www`, and current provider DNS inventory do not expose a DNS
+bypass candidate. The health response proves the relay's named upstream reaches
+Arctic RSS, but does not map that service to the intended application host or
+prove trusted headers are overwritten at the final ingress boundary.
 
 ## Required closure before claiming an exact packet path
 
@@ -69,9 +71,8 @@ Browser -> Cloudflare edge -> verified OVH connector/proxy -> loopback web
 ```
 
 Confirm that it is the sole application ingress, that forwarding headers are
-overwritten at the trusted boundary, and that an alternate DNS record cannot
-bypass the edge. Perform a controlled canonical WebSocket upgrade only after
-the opt-in chat gateway has separately been activated.
+overwritten at the trusted boundary. Perform a controlled canonical WebSocket
+upgrade only after the opt-in chat gateway has separately been activated.
 
 This is an evidence task, not authorization to start a tunnel, expose a port,
 change DNS/Cloudflare, or activate chat.
