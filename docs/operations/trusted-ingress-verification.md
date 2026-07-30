@@ -1,8 +1,9 @@
 # Trusted ingress verification
 
 **Reconciled:** 2026-07-29, with provider/OVH cross-check
-**Scope:** `NET-001` read-only OVH verification. No firewall, DNS, tunnel,
-proxy, or VPS configuration was changed.
+**Scope:** `NET-001` non-destructive OVH verification. A cached, short-lived
+resolver helper ran in the relay's existing connector network and removed
+itself; no firewall, DNS, tunnel, proxy, or VPS configuration was changed.
 
 ## Current evidence
 
@@ -30,9 +31,11 @@ proxy, or VPS configuration was changed.
   this OVH host.
 - The relay's Cloudflared ingress rule sends the canonical hostname to a
   single-label internal service rather than a local listener, private/public
-  IP literal, or public hostname. The safe read-only inventory could not
-  resolve that service from the connector's runtime namespace, so the final
-  relay-to-application hop remains unverified.
+  IP literal, or public hostname. A cached, auto-removed helper sharing the
+  connector network received the expected `{"status":"ok"}` response from that
+  service's `/api/health` endpoint. Its standalone DNS utility was
+  non-diagnostic, so the service address and exact host identity remain in the
+  private operator inventory.
 - The previous packet-path diagram named an active OVH `cloudflared`
   connector. That diagram is historical evidence, not a statement about the
   current route.
@@ -46,20 +49,20 @@ proxy, or VPS configuration was changed.
 `NET-001` remains **incomplete**. The established portion is:
 
 ```text
-Browser -> Cloudflare edge -> healthy Cloudflare Tunnel -> verified OVH relay -> unverified internal service -> application
+Browser -> Cloudflare edge -> healthy Cloudflare Tunnel -> verified OVH relay -> verified internal Arctic RSS health endpoint
 ```
 
 The canonical and `www` records do not bypass the Cloudflare edge, but this
-does not establish that no other application alias can bypass it. It also does
-not prove the relay's named upstream reaches the intended application host or
-that trusted headers are overwritten at the final ingress boundary.
+does not establish that no other application alias can bypass it. The health
+response proves the relay's named upstream reaches Arctic RSS, but does not map
+that service to the intended application host or prove trusted headers are
+overwritten at the final ingress boundary.
 
 ## Required closure before claiming an exact packet path
 
-The active connector is now identified as a separate OVH relay. Use the
-private relay and resolver inventory to identify its named upstream and confirm
-that it reaches the intended OVH application host, then record only the
-non-secret topology:
+The active connector and its Arctic RSS health response are now verified. Use
+the private relay and resolver inventory to map the named upstream to the
+intended OVH application host, then record only the non-secret topology:
 
 ```text
 Browser -> Cloudflare edge -> verified OVH connector/proxy -> loopback web
