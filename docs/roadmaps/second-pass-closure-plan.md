@@ -62,7 +62,7 @@ focused tests. The missing distinction is production acceptance evidence.
 | Moderation, holds, AI leases, and database-secret hardening | Implemented with committed migrations and focused transaction/recovery tests. | Release and migration provenance are recorded; aggregate-only anomaly queries remain a safe follow-up. |
 | WebSocket abuse, read markers, slow mode, presence, blocks, outbox, and retention | Implemented and covered by focused gateway/service tests. | Exact release is proven; non-disruptive aggregate runtime metrics remain an operational follow-up. |
 | Redis architecture and worker lifecycle | Two Redis services are live; graceful shutdown and split-worker code are present. | Fragmentation decision is documented and the monitor guard is live; split-worker cutover remains deliberately deferred. |
-| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance. Public CSP/browser-protection headers are verified; the image-proxy missing-input boundary returns `400` with `no-store`, while successful remote-image transformation remains source/CI verified. Provider evidence confirms a healthy Cloudflare Tunnel for the canonical web names, but the active connector/origin hop is not present on the observed OVH host; `NET-001` remains incomplete. |
+| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance. Public CSP/browser-protection headers are verified; the image-proxy missing-input boundary returns `400` with `no-store`, while successful remote-image transformation remains source/CI verified. Provider evidence now identifies a separate OVH relay as the healthy Cloudflare connector, but its named internal upstream is not yet proven to reach the application host; `NET-001` remains incomplete. |
 | AUTH-PERF-001, CHAT-SEQ-001, IMAGE-PROXY-001 | Implemented/decided in `origin/main`; image proxy has re-encoding tests. | Included in the exact live release; no sequence migration is planned without a new design decision. |
 
 ## Milestone 0 — Make the release gate reproducible
@@ -194,12 +194,13 @@ requires a separate explicit approval.
 5. Keep a short private evidence record for backup freshness, off-host sync,
    alert delivery, monitor state changes, and release provenance.
 6. **Observed 2026-07-29 (read-only provider/OVH cross-check).** The canonical
-   web names are proxied through a healthy Cloudflare Tunnel, while the
-   observed OVH host has no active Cloudflare connector or non-loopback web
-   listener. Keep `NET-001` open until the private connector inventory proves
-   the final OVH origin hop, trusted-header boundary, and absence of an
-   alternate DNS bypass. This evidence is not authorization to change DNS,
-   tunnels, firewall, or provider settings.
+   web names are proxied through a healthy Cloudflare Tunnel. Its one Linux
+   connector replica runs on a separate OVH relay, not on the observed OVH
+   application host, and forwards to a named internal service. Keep `NET-001`
+   open until the private relay/resolver inventory proves that final application
+   hop, trusted-header boundary, and absence of an alternate DNS bypass. This
+   evidence is not authorization to change DNS, tunnels, firewall, or provider
+   settings.
 
 **Done when:** backup, restore, monitoring, rollback, and deployment facts are
 current, reproducible, and OVH-specific.
