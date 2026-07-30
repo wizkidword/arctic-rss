@@ -38,14 +38,14 @@ provider-side decision requiring explicit authorization.
 
 | Area | Evidence on 2026-07-29 | State |
 | --- | --- | --- |
-| Source baseline | `origin/main` is `e975e66`; it contains the P1–P3 remediation work, Story Intelligence slices, and the OVH Compose compatibility correction. | The private release record and running web/worker image tags agree. |
+| Source baseline | `origin/main` is `74ffd3f`; it contains the P1–P3 remediation work, Story Intelligence slices, the OVH Compose compatibility correction, and the approved off-host image-metadata fix. | The private release record and running web/worker image tags agree. |
 | Candidate commits | The current release includes private full-text search, saved searches, transparent story clustering, cited timelines, and optional cited analysis in addition to the remediation work. | Deployed with web/worker and verified through the release record. |
-| CI | Exact-commit main CI passed for `e975e66`, including the container scan/SBOM, browser, Compose, quality, secret, dependency, and static-analysis gates. | Verified before release. |
+| CI | Exact-commit main CI passed for `74ffd3f`, including the container scan/SBOM, browser, Compose, quality, secret, dependency, and static-analysis gates. | Verified before release. |
 | Focused regression gates | 111 focused chat, worker, image, monitor, and backup tests passed locally. | Proven locally. |
 | Static validation | A bounded Windows harness completed full Vitest naturally (209 files, 932 tests) and Prisma format/validation. Typecheck and lint exit 0; lint retains two pre-existing unused-parameter warnings. The production build compiled and the standalone Sharp runtime loaded. | Local gate verified. |
 | Public surface | Canonical health returned `200 {"status":"ok"}` and login returned `200`. | Live and verified. |
 | OVH runtime | Web, worker, PostgreSQL, durable Redis, and ephemeral Redis are healthy. The chat gateway is an intentionally inactive opt-in profile; no active WebSocket acceptance claim is carried forward. There are no unfinished migrations; one historical rolled-back ledger row remains. | Web/worker and data services live and verified; chat runtime deferred. |
-| Release provenance | The active source directory is an archive deployment, and the private release record binds it to `e975e66`, its CI run, migration verification, image identities, and retained rollback release. | Closed for web/worker. |
+| Release provenance | The active source directory is an archive deployment, and the private release record binds it to `74ffd3f`, its CI run, migration verification, image identities, and retained rollback release. | Closed for web/worker. |
 | Backups and alerts | Daily backup and monitor timers were active and successful during the 2026-07-29 reconciliation; a completed backup was present. | Live and verified. |
 | Redis condition | Read-only OVH evidence found low absolute Redis memory use, about 8 MiB allocator/RSS excess per workload, no OOM, eviction, capacity pressure, or organic command errors. | The monitor now requires both a high ratio and more than 16 MiB excess before emitting a fragmentation alert. |
 | Worker isolation | The compatibility `worker` is live. The five-service `split-workers` profile is available in source but intentionally not activated. | Deliberately deferred cutover. |
