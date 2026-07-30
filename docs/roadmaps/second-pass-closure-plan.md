@@ -206,12 +206,12 @@ has a documented decision. Then start one thin vertical slice only:
    deployed. It searches only articles readable by the current user, retains
    authorization boundaries, paginates, and has an isolated PostgreSQL
    query-plan gate.
-2. **PRODUCT-STORY-001B — saved monitors.** Private named saved searches are
-   deployed as shortcuts to the proven filter model. The next source candidate
-   adds opt-in scheduled evaluation, pause/resume, durable new-match counts,
-   and a mark-seen control. It intentionally adds no AI, notification,
-   webhook, reader automation, or historical backfill. It remains un-deployed
-   until its migration and exact-commit CI gates pass.
+2. **PRODUCT-STORY-001B — saved monitors.** Completed and deployed in the
+   `74ffd3f` release. Private named saved searches remain shortcuts to the
+   proven filter model and support opt-in scheduled evaluation, pause/resume,
+   durable new-match counts, and a mark-seen control. The feature intentionally
+   adds no AI, notification, webhook, reader automation, or historical
+   backfill.
 
 Story clustering, timelines, Story Rooms, delta briefings, automation, and
 transcripts remain later work. Each needs its own data-retention, cost,
