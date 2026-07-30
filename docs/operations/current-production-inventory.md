@@ -1,14 +1,14 @@
 # Current production inventory
 
 **Captured:** 2026-07-29
-**Scope:** non-secret reconciliation after the approved `e975e66` release.
+**Scope:** non-secret reconciliation after the approved `74ffd3f` release.
 
 This document intentionally excludes host addresses, account names, release
 paths, tunnel identifiers, environment values, and backup locations. Keep
 those details in the private operator inventory.
 
 > The web and compatibility-worker images are running the approved
-> `e975e66` release. Durable and ephemeral Redis are healthy, and the
+> `74ffd3f` release. Durable and ephemeral Redis are healthy, and the
 > compatibility worker remains intentionally active. The opt-in chat gateway
 > is deliberately **not running**; do not describe its real-time path as
 > live-verified until it is separately activated and tested. The split-worker
@@ -54,7 +54,7 @@ those details in the private operator inventory.
   `pg_restore -l` before each swap and retains the prior release directory for
   rollback.
 - The private release record ties the live archive deployment to public commit
-  `e975e66`, its successful CI run, migration verification, source-built web
+  `74ffd3f`, its successful CI run, migration verification, source-built web
   and worker image tags, and public health/login checks. The record itself
   remains outside Git.
 - Runtime and migration database accounts are separate, login-capable,

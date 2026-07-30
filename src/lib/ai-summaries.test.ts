@@ -5,9 +5,23 @@ import {
   createLocalSummaryProvider,
   createOpenAiSummaryProvider,
   generateArticleSummaryWithClient,
+  getAiSummaryProvider,
   type AiSummaryProvider,
   type AiSummaryStore,
 } from "./ai-summaries"
+
+describe("AI summary provider configuration", () => {
+  it("defaults OpenAI summaries to GPT-5.4 Mini", () => {
+    vi.stubEnv("AI_PROVIDER", "openai")
+    vi.stubEnv("OPENAI_API_KEY", "test-key")
+
+    try {
+      expect(getAiSummaryProvider().model).toBe("gpt-5.4-mini")
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+})
 
 function createSummaryStore({
   article = {
@@ -295,7 +309,7 @@ describe("AI article summaries", () => {
     const provider = createOpenAiSummaryProvider({
       apiKey: "test-key",
       fetcher,
-      model: "gpt-5.5",
+      model: "gpt-5.4-mini",
     })
 
     const result = await provider.summarize({

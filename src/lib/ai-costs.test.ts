@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { AiPricingError, assertKnownAiPricing } from "./ai-costs"
+import {
+  AiPricingError,
+  assertKnownAiPricing,
+  requireApprovedOpenAiTextModel,
+} from "./ai-costs"
 
 describe("AI pricing validation", () => {
   it("fails closed before an unknown external model can be used", () => {
@@ -19,5 +23,11 @@ describe("AI pricing validation", () => {
         provider: "local",
       }),
     ).not.toThrow()
+  })
+
+  it("permits only GPT-5.4 Mini or Nano for OpenAI AI features", () => {
+    expect(requireApprovedOpenAiTextModel("GPT-5.4-MINI")).toBe("gpt-5.4-mini")
+    expect(requireApprovedOpenAiTextModel("gpt-5.4-nano")).toBe("gpt-5.4-nano")
+    expect(() => requireApprovedOpenAiTextModel("gpt-5.5")).toThrow(AiPricingError)
   })
 })

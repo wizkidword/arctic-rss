@@ -4,12 +4,26 @@ import {
   AiDigestError,
   createLocalDigestProvider,
   createOpenAiDigestProvider,
+  getAiDigestProvider,
   getAiDigestWithClient,
   processAiDigestWithClient,
   requestAiDigestWithClient,
   type AiDigestProvider,
   type AiDigestStore,
 } from "./ai-digests"
+
+describe("AI digest provider configuration", () => {
+  it("defaults OpenAI digests to GPT-5.4 Mini", () => {
+    vi.stubEnv("AI_PROVIDER", "openai")
+    vi.stubEnv("OPENAI_API_KEY", "test-key")
+
+    try {
+      expect(getAiDigestProvider().model).toBe("gpt-5.4-mini")
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+})
 
 function createStore(): AiDigestStore {
   const operations = new Map<string, Record<string, unknown>>()

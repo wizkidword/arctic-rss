@@ -11,10 +11,6 @@ export class AiPricingError extends Error {
 }
 
 const OPENAI_STANDARD_TEXT_PRICING: Record<string, TokenPricing> = {
-  "gpt-5.4": {
-    inputPerMillion: 2.5,
-    outputPerMillion: 15,
-  },
   "gpt-5.4-mini": {
     inputPerMillion: 0.75,
     outputPerMillion: 4.5,
@@ -23,10 +19,21 @@ const OPENAI_STANDARD_TEXT_PRICING: Record<string, TokenPricing> = {
     inputPerMillion: 0.2,
     outputPerMillion: 1.25,
   },
-  "gpt-5.5": {
-    inputPerMillion: 5,
-    outputPerMillion: 30,
-  },
+}
+
+const APPROVED_OPENAI_TEXT_MODELS = new Set([
+  "gpt-5.4-mini",
+  "gpt-5.4-nano",
+])
+
+export function requireApprovedOpenAiTextModel(model: string) {
+  const normalized = model.trim().toLowerCase()
+
+  if (APPROVED_OPENAI_TEXT_MODELS.has(normalized)) {
+    return normalized
+  }
+
+  throw new AiPricingError("OpenAI AI features require GPT-5.4 Mini or Nano.")
 }
 
 export function estimateAiUsageCost({
@@ -73,7 +80,9 @@ export function assertKnownAiPricing({
     return
   }
 
-  if (!getAiTokenPricing({ model, provider })) {
+  const approvedModel = requireApprovedOpenAiTextModel(model)
+
+  if (!getAiTokenPricing({ model: approvedModel, provider })) {
     throw new AiPricingError(
       `No validated price is configured for OpenAI model ${model.trim() || "(empty)"}.`,
     )
