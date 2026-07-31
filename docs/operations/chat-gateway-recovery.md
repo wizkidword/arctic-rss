@@ -84,17 +84,27 @@ messages are not replayed automatically.
 1. Use the normal approved-release procedure: clean reviewed commit, successful
    CI, image/commit recording, PostgreSQL backup verification, and retained
    rollback release. Do not use `prisma db push`; this change has no migration.
-2. Build and deploy compatible web and chat-gateway images together. The web
-   service publishes the event contract and the gateway consumes it; do not
+2. Build and deploy compatible web, chat-gateway, and edge-proxy images
+   together. The web service publishes the event contract, the gateway
+   consumes it, and the proxy preserves the canonical browser route; do not
    deploy only one side.
 3. Preserve the production `.env` without displaying it. Defaults are safe, so
    the two new optional variables are only needed when a reviewed adjustment is
    required.
 4. If the chat profile is active, recreate it with the approved release tool.
-   It first restores healthy Redis, then recreates the gateway, followed by web
-   and worker. Do not manually replace the tunnel or publish port 3001.
-5. Confirm the host monitor is active. It now checks a running gateway's
-   `/ready` endpoint and raises the existing alert on a readiness transition.
+   It first restores healthy Redis, then recreates the gateway and edge proxy,
+   followed by web and worker. Do not publish port 3001.
+5. Confirm the host monitor is active. It checks a running gateway's `/ready`
+   endpoint and the proxy's container health, raising the existing alert on a
+   readiness transition.
+
+## Canonical route activation
+
+The `edge-proxy` service keeps every route on the existing web service except
+`/socket.io` and `/socket.io/`, which it forwards to the internal chat gateway
+with the WebSocket and `CF-Connecting-IP` headers preserved. After a verified
+release, point the existing managed-tunnel application at this internal proxy;
+do not add a direct gateway port or another public hostname.
 
 ## Verification in an approved change window
 
@@ -104,6 +114,7 @@ Run these from the VPS without reading or echoing `.env` values:
 sudo docker compose ps
 sudo docker exec app-chat-gateway-1 node -e "fetch('http://127.0.0.1:3001/live').then(r => { if (!r.ok) process.exit(1) })"
 sudo docker exec app-chat-gateway-1 node -e "fetch('http://127.0.0.1:3001/ready').then(r => { if (!r.ok) process.exit(1) })"
+sudo docker exec app-edge-proxy-1 wget -q -O /dev/null http://127.0.0.1:8080/api/live
 sudo systemctl is-active arctic-rss-monitor.timer
 ```
 

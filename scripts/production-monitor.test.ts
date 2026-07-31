@@ -9,6 +9,7 @@ describe("production monitor", () => {
     expect(script).toContain("app-chat-gateway-1")
     expect(script).toContain("http://127.0.0.1:3001/ready")
     expect(script).toContain('failures+=("chat_gateway_ready")')
+    expect(script).toContain("app-edge-proxy-1")
   })
 
   it("checks both Redis workloads, their policies, and command-pressure signals", async () => {

@@ -1,4 +1,5 @@
 ARG NODE_IMAGE=node:24.17.0-alpine3.23
+ARG NGINX_IMAGE=nginx:1.30.4-alpine3.24
 
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
@@ -88,3 +89,11 @@ COPY --from=builder --chown=chatgateway:nodejs /app/build/runtime/chat-gateway.m
 USER chatgateway
 EXPOSE 3001
 CMD ["node", "chat-gateway.mjs"]
+
+FROM ${NGINX_IMAGE} AS edge-proxy
+RUN sed -i '/^user /d' /etc/nginx/nginx.conf
+COPY ops/nginx/chat-proxy.conf /etc/nginx/conf.d/default.conf
+USER nginx
+ENTRYPOINT ["nginx"]
+CMD ["-g", "daemon off;"]
+EXPOSE 8080

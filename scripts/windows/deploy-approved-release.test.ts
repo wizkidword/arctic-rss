@@ -23,7 +23,7 @@ describe("approved release command", () => {
     expect(script).toContain('"$($Config.ComposeProject)-worker:release-$ShortSha"')
     expect(script).toContain('ImageEnvironment = @(')
     expect(script).toContain("release_image_environment_b64=")
-    expect(script).toContain("MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE")
+    expect(script).toContain("MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE|EDGE_PROXY_IMAGE")
     expect(script).toContain("__RELEASE_IMAGE_ENVIRONMENT_BASE64__")
   })
 
@@ -59,10 +59,13 @@ describe("approved release command", () => {
     expect(script).toContain('docker inspect -f \'{{.Image}}\' app-web-1')
     expect(script).toContain('docker inspect -f \'{{.Image}}\' app-worker-1')
     expect(script).toContain('docker inspect -f \'{{.Image}}\' app-chat-gateway-1')
+    expect(script).toContain('docker inspect -f \'{{.Image}}\' app-edge-proxy-1')
     expect(script).toContain('migrationStatus = $migrationStatus')
     expect(script).toContain('webImage = $webImage')
     expect(script).toContain('workerImage = $workerImage')
     expect(script).toContain('chatGatewayImage = $chatGatewayImage')
+    expect(script).toContain('edgeProxyHealth = $edgeProxyHealth')
+    expect(script).toContain('edgeProxyImage = $edgeProxyImage')
     expect(script).toContain('localImageArchiveSha256 = $offHostImages.ArchiveHash')
   })
 

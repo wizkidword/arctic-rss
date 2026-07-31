@@ -327,6 +327,42 @@ services:
     logging:
       driver: journald
 
+  edge-proxy:
+    image: ${EDGE_PROXY_IMAGE:-arctic-rss-edge-proxy}
+    build:
+      context: .
+      target: edge-proxy
+    profiles: ["chat"]
+    init: true
+    restart: unless-stopped
+    user: nginx
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m,mode=1777
+      - /var/run:rw,noexec,nosuid,size=1m,mode=1777
+    cap_drop:
+      - ALL
+    cpus: 0.25
+    mem_limit: 128m
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      web:
+        condition: service_healthy
+      chat-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/api/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # Deliberately no host `ports:` mapping. The managed tunnel is switched to
+    # this internal proxy only after the approved release has been verified.
+    logging:
+      driver: journald
+
   cloudflared:
     image: cloudflare/cloudflared:2026.6.1
     profiles: ["tunnel"]
