@@ -186,9 +186,11 @@ requires a separate explicit approval.
    compiled images.
 2. **Completed 2026-07-28.** Updated the remaining public README reference to
    the current production runbook without adding host details to the repository.
-3. Consolidate the original Phase 0 names into the current inventory,
-   backup/restore checklist, chat-gateway recovery guide, deployment rollback
-   runbook, and a concise worker/queue ownership map.
+3. **Completed 2026-07-30.** Consolidated the original Phase 0 terminology
+   into the current inventory, backup/restore checklist, chat-gateway recovery
+   guide, deployment rollback runbook, and worker/queue ownership map. The
+   current managed-tunnel mapping is recorded separately from the remaining
+   `NET-001` runtime-header proof.
 4. Revalidate an isolated restore rehearsal before its due date and at least
    quarterly thereafter. Do not reuse or modify historical failed attempts.
 5. Keep a short private evidence record for backup freshness, off-host sync,
