@@ -251,18 +251,21 @@ function New-OffHostReleaseImages {
     Web = "$($Config.ComposeProject)-web:release-$ShortSha"
     Worker = "$($Config.ComposeProject)-worker:release-$ShortSha"
     ChatGateway = "$($Config.ComposeProject)-chat-gateway:release-$ShortSha"
+    EdgeProxy = "$($Config.ComposeProject)-edge-proxy:release-$ShortSha"
   }
   $imageEnvironmentVariables = [ordered]@{
     Migrate = "MIGRATE_IMAGE"
     Web = "WEB_IMAGE"
     Worker = "WORKER_IMAGE"
     ChatGateway = "CHAT_GATEWAY_IMAGE"
+    EdgeProxy = "EDGE_PROXY_IMAGE"
   }
   $buildTargets = [ordered]@{
     Migrate = "migrate"
     Web = "runner"
     Worker = "worker"
     ChatGateway = "chat-gateway"
+    EdgeProxy = "edge-proxy"
   }
 
   foreach ($name in $images.Keys) {
@@ -711,7 +714,7 @@ sudo -n install -m 600 -o root -g root "$live/.env" "$stage/.env"
 # Compose reads the image variables from the staged environment file. Keep the
 # tag immutable so a loaded archive cannot alter the still-live source before
 # the release has passed migrations and health checks.
-sudo -n sed -i -E '/^(MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE)=/d' "$stage/.env"
+sudo -n sed -i -E '/^(MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE|EDGE_PROXY_IMAGE)=/d' "$stage/.env"
 printf '%s' "$release_image_environment_b64" | base64 -d | sudo -n tee -a "$stage/.env" >/dev/null
 sudo -n docker compose -p "$compose_project" --project-directory "$stage" config -q
 compose_images="$(sudo -n docker compose -p "$compose_project" --project-directory "$stage" --profile chat config --images)"
@@ -765,6 +768,8 @@ test "$redis_ephemeral_health" = healthy
 # was intentionally inactive before the release.
 chat_gateway_health="not-running"
 chat_gateway_image="not-running"
+edge_proxy_health="not-running"
+edge_proxy_image="not-running"
 chat_gateway_was_running="$(sudo -n docker inspect -f '{{.State.Running}}' app-chat-gateway-1 2>/dev/null || true)"
 if [ "$chat_gateway_was_running" = true ]; then
   sudo -n docker compose -p "$compose_project" --project-directory "$live" --profile chat up -d --no-deps --no-build --force-recreate chat-gateway
@@ -779,6 +784,18 @@ if [ "$chat_gateway_was_running" = true ]; then
 
   test "$chat_gateway_health" = healthy
   chat_gateway_image="$(sudo -n docker inspect -f '{{.Image}}' app-chat-gateway-1)"
+
+  sudo -n docker compose -p "$compose_project" --project-directory "$live" --profile chat up -d --no-deps --no-build --force-recreate edge-proxy
+  for attempt in $(seq 1 18); do
+    edge_proxy_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-edge-proxy-1)"
+    if [ "$edge_proxy_health" = healthy ]; then
+      break
+    fi
+    sleep 5
+  done
+
+  test "$edge_proxy_health" = healthy
+  edge_proxy_image="$(sudo -n docker inspect -f '{{.Image}}' app-edge-proxy-1)"
 fi
 
 sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --no-build --force-recreate web worker
@@ -801,6 +818,9 @@ worker_image="$(sudo -n docker inspect -f '{{.Image}}' app-worker-1)"
 for container in app-postgres-1 app-redis-1 app-redis-ephemeral-1 app-web-1 app-worker-1; do
   test "$(sudo -n docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$container")" = journald
 done
+if [ "$edge_proxy_health" = healthy ]; then
+  test "$(sudo -n docker inspect -f '{{.HostConfig.LogConfig.Type}}' app-edge-proxy-1)" = journald
+fi
 
 local_health="$(curl -fsS -H "Host: $canonical_host" http://127.0.0.1:3000/api/health)"
 local_live="$(curl -fsS http://127.0.0.1:3000/api/live)"
@@ -822,6 +842,8 @@ printf 'WORKER_IMAGE=%s\n' "$worker_image"
 printf 'REDIS_EPHEMERAL_HEALTH=%s\n' "$redis_ephemeral_health"
 printf 'CHAT_GATEWAY_HEALTH=%s\n' "$chat_gateway_health"
 printf 'CHAT_GATEWAY_IMAGE=%s\n' "$chat_gateway_image"
+printf 'EDGE_PROXY_HEALTH=%s\n' "$edge_proxy_health"
+printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
 '@
   $offHostImagesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.Images -join "`n")))
   $releaseImageEnvironmentPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.ImageEnvironment -join "`n")))
@@ -835,6 +857,8 @@ printf 'CHAT_GATEWAY_IMAGE=%s\n' "$chat_gateway_image"
   $workerImage = Get-ReleaseMarker -Output $stageOutput -Name "WORKER_IMAGE"
   $chatGatewayHealth = Get-ReleaseMarker -Output $stageOutput -Name "CHAT_GATEWAY_HEALTH"
   $chatGatewayImage = Get-ReleaseMarker -Output $stageOutput -Name "CHAT_GATEWAY_IMAGE"
+  $edgeProxyHealth = Get-ReleaseMarker -Output $stageOutput -Name "EDGE_PROXY_HEALTH"
+  $edgeProxyImage = Get-ReleaseMarker -Output $stageOutput -Name "EDGE_PROXY_IMAGE"
 
   $publicHealth = (Invoke-RequiredCommand -FilePath "curl.exe" -Arguments @(
     "-fsS", "https://$($config.CanonicalHost)/api/health"
@@ -867,6 +891,8 @@ printf 'CHAT_GATEWAY_IMAGE=%s\n' "$chat_gateway_image"
     publicHealth = $publicHealth
     chatGatewayHealth = $chatGatewayHealth
     chatGatewayImage = $chatGatewayImage
+    edgeProxyHealth = $edgeProxyHealth
+    edgeProxyImage = $edgeProxyImage
     webHealth = $webHealth
     webImage = $webImage
     workerHealth = $workerHealth

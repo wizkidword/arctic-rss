@@ -36,6 +36,9 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     expect(compose).toContain(
       'image: ${CHAT_GATEWAY_IMAGE:-arctic-rss-chat-gateway}',
     );
+    expect(compose).toContain(
+      'image: ${EDGE_PROXY_IMAGE:-arctic-rss-edge-proxy}',
+    );
   });
 
   it("pins the reviewed PostgreSQL and Redis base images", async () => {
@@ -62,7 +65,7 @@ describe("Cloudflare Tunnel Compose configuration", () => {
 
   it("keeps the chat gateway internal, opt-in, and readiness-checked", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
-    const gateway = compose.split("  chat-gateway:")[1].split("  cloudflared:")[0];
+    const gateway = compose.split("  chat-gateway:")[1].split("  edge-proxy:")[0];
 
     expect(gateway).toContain("target: chat-gateway");
     expect(gateway).toContain('profiles: ["chat"]');
@@ -70,5 +73,25 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     expect(gateway).toContain("http://127.0.0.1:3001/ready");
     expect(gateway).not.toContain("http://127.0.0.1:3001/live");
     expect(gateway).toContain("restart: unless-stopped");
+  });
+
+  it("routes only Socket.IO through the internal chat proxy", async () => {
+    const [compose, config] = await Promise.all([
+      readFile("docker-compose.yml", "utf8"),
+      readFile("ops/nginx/chat-proxy.conf", "utf8"),
+    ]);
+    const proxy = compose.split("  edge-proxy:")[1].split("  cloudflared:")[0];
+
+    expect(proxy).toContain('profiles: ["chat"]');
+    expect(proxy).toContain("user: nginx");
+    expect(proxy).not.toMatch(/^\s+ports:/m);
+    expect(proxy).toContain("target: edge-proxy");
+    expect(proxy).toContain("chat-gateway:");
+    expect(config).toContain("location = /socket.io");
+    expect(config).toContain("location ^~ /socket.io/");
+    expect(config).toContain("proxy_pass http://chat-gateway:3001;");
+    expect(config).toContain("proxy_pass http://web:3000;");
+    expect(config).toContain("proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;");
+    expect(config).toContain("proxy_set_header Upgrade $http_upgrade;");
   });
 });

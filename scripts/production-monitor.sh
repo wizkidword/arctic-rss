@@ -115,6 +115,10 @@ if docker inspect app-chat-gateway-1 >/dev/null 2>&1; then
   fi
 fi
 
+if docker inspect app-edge-proxy-1 >/dev/null 2>&1; then
+  check_healthy_container app-edge-proxy-1
+fi
+
 if ! curl --fail --silent --show-error --max-time 10 \
   -H "Host: $OPS_PUBLIC_HOST" \
   http://127.0.0.1:3000/api/health >/dev/null; then

@@ -7,6 +7,7 @@ describe("production Docker images", () => {
     const dockerfile = await readFile("Dockerfile", "utf8");
 
     expect(dockerfile).toContain("ARG NODE_IMAGE=node:24.17.0-alpine3.23");
+    expect(dockerfile).toContain("ARG NGINX_IMAGE=nginx:1.30.4-alpine3.24");
     expect(dockerfile).toContain("FROM deps AS production-deps");
     expect(dockerfile).toContain("RUN npm prune --omit=dev");
     expect(dockerfile).toContain("npm run runtime:build");
@@ -33,6 +34,12 @@ describe("production Docker images", () => {
     expect(dockerfile).toContain('COPY --from=builder --chown=chatgateway:nodejs /app/build/runtime/chat-gateway.mjs ./chat-gateway.mjs');
     expect(dockerfile).toContain('CMD ["node", "chat-gateway.mjs"]');
     expect(dockerfile).toContain("USER chatgateway");
+    expect(dockerfile).toContain("FROM ${NGINX_IMAGE} AS edge-proxy");
+    expect(dockerfile).toContain(
+      "COPY ops/nginx/chat-proxy.conf /etc/nginx/conf.d/default.conf",
+    );
+    expect(dockerfile).toContain("RUN sed -i '/^user /d' /etc/nginx/nginx.conf");
+    expect(dockerfile).toContain("USER nginx");
 
     const workerStage = dockerfile
       .split("FROM ${NODE_IMAGE} AS worker")[1]
