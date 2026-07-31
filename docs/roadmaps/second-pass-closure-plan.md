@@ -62,7 +62,7 @@ focused tests. The missing distinction is production acceptance evidence.
 | Moderation, holds, AI leases, and database-secret hardening | Implemented with committed migrations and focused transaction/recovery tests. | Release and migration provenance are recorded; aggregate-only anomaly queries remain a safe follow-up. |
 | WebSocket abuse, read markers, slow mode, presence, blocks, outbox, and retention | Implemented and covered by focused gateway/service tests. | Exact release is proven; non-disruptive aggregate runtime metrics remain an operational follow-up. |
 | Redis architecture and worker lifecycle | Two Redis services are live; graceful shutdown and split-worker code are present. | Fragmentation decision is documented and the monitor guard is live; split-worker cutover remains deliberately deferred. |
-| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance. Public CSP/browser-protection headers are verified; the image-proxy missing-input boundary returns `400` with `no-store`, while successful remote-image transformation remains source/CI verified. Provider evidence identifies a separate OVH relay as the healthy Cloudflare connector, and its named internal upstream returns the expected Arctic RSS health response. Current provider DNS has no bypass candidate. Mapping that service to the intended app host and trusted-header enforcement remain open; `NET-001` remains incomplete. |
+| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance. Public CSP/browser-protection headers are verified; the image-proxy missing-input boundary returns `400` with `no-store`, while successful remote-image transformation remains source/CI verified. The current managed tunnel origin is mapped to the OVH application-host Compose web service, and provider DNS has no web bypass candidate. One approved forged-header attempt was blocked before the limiter, so trusted-header overwrite remains unproven; `NET-001` remains incomplete. |
 | AUTH-PERF-001, CHAT-SEQ-001, IMAGE-PROXY-001 | Implemented/decided in `origin/main`; image proxy has re-encoding tests. | Included in the exact live release; no sequence migration is planned without a new design decision. |
 
 ## Milestone 0 — Make the release gate reproducible
@@ -193,16 +193,16 @@ requires a separate explicit approval.
    quarterly thereafter. Do not reuse or modify historical failed attempts.
 5. Keep a short private evidence record for backup freshness, off-host sync,
    alert delivery, monitor state changes, and release provenance.
-6. **Observed 2026-07-29 (non-destructive provider/OVH cross-check).** The canonical
-   web names are proxied through a healthy Cloudflare Tunnel. Its one Linux
-   connector replica runs on a separate OVH relay, not on the observed OVH
-   application host, and forwards to a named internal service. A cached,
-   auto-removed helper in that connector network received the expected Arctic
-   RSS health response. The current provider DNS inventory has no DNS-only
-   web-capable bypass candidate. Keep `NET-001` open until private inventory
-   maps the service to the intended application host and proves the
-   trusted-header boundary. This evidence is not authorization to change DNS,
-   tunnels, firewall, or provider settings.
+6. **Updated 2026-07-30 (managed-tunnel recovery and controlled proof).** The
+   current proxied public route uses a managed Cloudflare Tunnel whose healthy
+   OVH application-host connector reaches the Compose web service; the
+   current origin mapping is therefore complete without recording private
+   topology. A single approved forged-header image-proxy request returned HTTP
+   403 before reaching the limiter: the forged hashed key remained absent and
+   the aggregate anonymous image-proxy key count remained zero. Keep `NET-001`
+   open solely for a future, freshly approved edge-accepted runtime header
+   proof; do not retry the blocked request broadly. This evidence is not
+   authorization to change DNS, tunnels, firewall, or provider settings.
 
 **Done when:** backup, restore, monitoring, rollback, and deployment facts are
 current, reproducible, and OVH-specific.
