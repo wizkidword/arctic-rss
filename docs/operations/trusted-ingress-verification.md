@@ -25,12 +25,14 @@ only redacted operational results.
 - Source and tests confirm that security-sensitive URL construction ignores
   forwarding headers, and the rate limiter accepts only `CF-Connecting-IP`,
   not `X-Forwarded-For`.
-- One approved runtime header attempt used a reserved documentation-range
-  client-IP value and a loopback image URL. It returned HTTP 403 rather than
-  the application's expected invalid-image response. Before and after the
-  request, the forged-IP hashed limiter key was absent and the aggregate count
-  of anonymous image-proxy limiter keys was zero. The request therefore did
-  not reach the application limiter; no retry was sent.
+- Two separately approved, single runtime header attempts used the same
+  reserved documentation-range client-IP value but distinct image URL forms:
+  first a loopback URL, then an edge-acceptable public non-image URL. Each
+  returned HTTP 403 rather than the application's expected response. Before
+  and after each request, the forged-IP hashed limiter key was absent and the
+  aggregate count of anonymous image-proxy limiter keys was zero. Neither
+  request reached the application limiter; the shared result is consistent
+  with edge rejection of the supplied header, not proof of header overwrite.
 
 ## Current classification
 
@@ -47,11 +49,11 @@ remaining gap is runtime proof that Cloudflare overwrites `CF-Connecting-IP`.
 ## Required closure before claiming an exact packet path
 
 The origin mapping is complete for the current managed route. The header proof
-is still open because the one approved image-proxy request was blocked before
-the limiter. Do not retry broadly or infer header behavior from that 403. A
-future proof needs fresh approval for one edge-accepted request form that can
-demonstrably reach the limiter, followed by the same redacted hashed-key
-existence/count check.
+is still open because both approved image-proxy requests were blocked before
+the limiter. Do not infer header overwrite from the HTTP 403 results or retry
+broadly. A future proof needs fresh approval for a materially different,
+edge-accepted method that can demonstrably reach the limiter, followed by the
+same redacted hashed-key existence/count check.
 
 This is an evidence task, not authorization to change the tunnel, DNS,
 firewall, or application deployment.

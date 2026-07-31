@@ -197,12 +197,13 @@ requires a separate explicit approval.
    current proxied public route uses a managed Cloudflare Tunnel whose healthy
    OVH application-host connector reaches the Compose web service; the
    current origin mapping is therefore complete without recording private
-   topology. A single approved forged-header image-proxy request returned HTTP
-   403 before reaching the limiter: the forged hashed key remained absent and
-   the aggregate anonymous image-proxy key count remained zero. Keep `NET-001`
-   open solely for a future, freshly approved edge-accepted runtime header
-   proof; do not retry the blocked request broadly. This evidence is not
-   authorization to change DNS, tunnels, firewall, or provider settings.
+   topology. Two separately approved forged-header image-proxy requests with
+   distinct URL forms returned HTTP 403 before reaching the limiter: the
+   forged hashed key remained absent and the aggregate anonymous image-proxy
+   key count remained zero after each. Keep `NET-001` open solely for a
+   future, freshly approved materially different runtime header proof; do not
+   retry the blocked request form broadly. This evidence is not authorization
+   to change DNS, tunnels, firewall, or provider settings.
 
 **Done when:** backup, restore, monitoring, rollback, and deployment facts are
 current, reproducible, and OVH-specific.
