@@ -193,7 +193,7 @@ requires a separate explicit approval.
    quarterly thereafter. Do not reuse or modify historical failed attempts.
 5. Keep a short private evidence record for backup freshness, off-host sync,
    alert delivery, monitor state changes, and release provenance.
-6. **Updated 2026-07-30 (managed-tunnel recovery and controlled proof).** The
+6. **Updated 2026-07-30 (managed-tunnel recovery and controlled proofs).** The
    current proxied public route uses a managed Cloudflare Tunnel whose healthy
    OVH application-host connector reaches the Compose web service; the
    current origin mapping is therefore complete without recording private
@@ -206,7 +206,11 @@ requires a separate explicit approval.
    view filtered to edge-status 403 classified two of four sampled events as
    `Block` / Managed Rules, but the probes had no retained event identifier;
    that supports edge-side blocking without identifying the trigger or proving
-   header overwrite. This evidence is not authorization
+   header overwrite. A later one-use, exact-match Managed-Rules skip was
+   deployed for a single third request and deleted immediately after it also
+   returned HTTP 403 with unchanged redacted limiter measures; it does not
+   identify the remaining edge control or prove header overwrite. This evidence
+   is not authorization
    to change DNS, tunnels, firewall, or provider settings.
 
 **Done when:** backup, restore, monitoring, rollback, and deployment facts are

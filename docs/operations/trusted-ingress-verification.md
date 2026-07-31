@@ -1,6 +1,6 @@
 # Trusted ingress verification
 
-**Reconciled:** 2026-07-30, after approved managed-tunnel recovery and two
+**Reconciled:** 2026-07-30, after approved managed-tunnel recovery and three
 controlled header-proof attempts.
 **Scope:** `NET-001` OVH trusted-ingress verification. This record separates
 the historical relay evidence from the current managed-tunnel path and records
@@ -37,6 +37,14 @@ only redacted operational results.
   probes did not retain an event identifier, so the records cannot be uniquely
   correlated to either request; they support an edge-side block classification
   but do not identify the trigger or prove header overwrite.
+- One later approved, one-use provider WAF exception matched only a unique
+  image-route query marker and skipped only Managed Rules. Its redacted
+  pre-check was zero for both measures above; the single forged-header request
+  still returned HTTP 403, and the post-check remained zero for both measures.
+  The exception was deleted immediately and its absence was verified. This
+  attempt establishes only that the request was still blocked before the
+  limiter despite that narrowly scoped Managed-Rules skip; it neither
+  identifies the responsible edge control nor proves header overwrite.
 
 ## Current classification
 
@@ -53,8 +61,9 @@ remaining gap is runtime proof that Cloudflare overwrites `CF-Connecting-IP`.
 ## Required closure before claiming an exact packet path
 
 The origin mapping is complete for the current managed route. The header proof
-is still open because both approved image-proxy requests were blocked before
-the limiter. Do not infer header overwrite from the HTTP 403 results or retry
+is still open because all three approved image-proxy requests were blocked
+before the limiter, including one made while a one-use Managed-Rules skip was
+active. Do not infer header overwrite from the HTTP 403 results or retry
 broadly. A future proof needs fresh approval for a materially different,
 edge-accepted method that can demonstrably reach the limiter, followed by the
 same redacted hashed-key existence/count check.
