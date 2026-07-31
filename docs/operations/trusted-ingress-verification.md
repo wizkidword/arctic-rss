@@ -1,7 +1,7 @@
 # Trusted ingress verification
 
-**Reconciled:** 2026-07-30, after approved managed-tunnel recovery and one
-controlled header-proof attempt.
+**Reconciled:** 2026-07-30, after approved managed-tunnel recovery and two
+controlled header-proof attempts.
 **Scope:** `NET-001` OVH trusted-ingress verification. This record separates
 the historical relay evidence from the current managed-tunnel path and records
 only redacted operational results.
@@ -31,8 +31,12 @@ only redacted operational results.
   returned HTTP 403 rather than the application's expected response. Before
   and after each request, the forged-IP hashed limiter key was absent and the
   aggregate count of anonymous image-proxy limiter keys was zero. Neither
-  request reached the application limiter; the shared result is consistent
-  with edge rejection of the supplied header, not proof of header overwrite.
+  request reached the application limiter. A read-only provider Security
+  Events inspection, filtered to edge-status 403, showed two `Block` / Managed
+  Rules events among four sampled events in the current 24-hour window. The
+  probes did not retain an event identifier, so the records cannot be uniquely
+  correlated to either request; they support an edge-side block classification
+  but do not identify the trigger or prove header overwrite.
 
 ## Current classification
 

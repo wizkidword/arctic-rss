@@ -202,7 +202,11 @@ requires a separate explicit approval.
    forged hashed key remained absent and the aggregate anonymous image-proxy
    key count remained zero after each. Keep `NET-001` open solely for a
    future, freshly approved materially different runtime header proof; do not
-   retry the blocked request form broadly. This evidence is not authorization
+   retry the blocked request form broadly. A read-only provider Security Events
+   view filtered to edge-status 403 classified two of four sampled events as
+   `Block` / Managed Rules, but the probes had no retained event identifier;
+   that supports edge-side blocking without identifying the trigger or proving
+   header overwrite. This evidence is not authorization
    to change DNS, tunnels, firewall, or provider settings.
 
 **Done when:** backup, restore, monitoring, rollback, and deployment facts are
