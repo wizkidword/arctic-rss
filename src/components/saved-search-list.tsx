@@ -1,9 +1,10 @@
 import Link from "next/link"
-import { BellRingIcon, BookmarkIcon, CheckIcon, PauseIcon, PlayIcon, Trash2Icon } from "lucide-react"
+import { BellRingIcon, BookmarkIcon, CheckIcon, PauseIcon, PlayIcon, StarIcon, Trash2Icon } from "lucide-react"
 
 import {
   acknowledgeSavedSearchMonitorAction,
   deleteSavedSearchAction,
+  setSavedSearchMonitorActionAction,
   setSavedSearchMonitorEnabledAction,
 } from "@/app/app/saved-searches/actions"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -63,6 +64,9 @@ export function SavedSearchList({
                 <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
                   <BellRingIcon aria-hidden="true" className="size-3" />
                   Monitoring new incoming coverage
+                  {savedSearch.monitorAction === "star" && (
+                    <span>· starring new matches</span>
+                  )}
                   {savedSearch.monitorNewMatchCount > 0 && (
                     <span className="font-medium text-foreground">
                       · {savedSearch.monitorNewMatchCount} new
@@ -72,6 +76,25 @@ export function SavedSearchList({
               )}
             </div>
             <div className="flex flex-wrap gap-2 self-start">
+              <form action={setSavedSearchMonitorActionAction}>
+                <input name="savedSearchId" type="hidden" value={savedSearch.id} />
+                <label className="sr-only" htmlFor={`saved-search-monitor-action-${savedSearch.id}`}>
+                  New-match action for {savedSearch.name}
+                </label>
+                <select
+                  className="h-8 rounded-md border bg-background px-2 text-sm"
+                  defaultValue={savedSearch.monitorAction}
+                  id={`saved-search-monitor-action-${savedSearch.id}`}
+                  name="monitorAction"
+                >
+                  <option value="count">Count new matches</option>
+                  <option value="star">Star new matches</option>
+                </select>
+                <Button className="ml-2" size="sm" type="submit" variant="ghost">
+                  <StarIcon data-icon="inline-start" />
+                  Save action
+                </Button>
+              </form>
               <form action={setSavedSearchMonitorEnabledAction}>
                 <input name="enabled" type="hidden" value={String(!savedSearch.monitorEnabled)} />
                 <input name="savedSearchId" type="hidden" value={savedSearch.id} />

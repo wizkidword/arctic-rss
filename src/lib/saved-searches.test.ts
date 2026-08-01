@@ -5,12 +5,16 @@ import {
   createSavedSearchForUserWithClient,
   deleteSavedSearchForUserWithClient,
   listSavedSearchesForUserWithClient,
+  setSavedSearchMonitorActionForUserWithClient,
   setSavedSearchMonitorEnabledForUserWithClient,
   SavedSearchError,
   savedSearchHref,
 } from "./saved-searches"
+import type { SavedSearchRecord } from "./saved-searches"
 
-function savedSearchRecord(overrides: Partial<Record<string, unknown>> = {}) {
+function savedSearchRecord(
+  overrides: Partial<SavedSearchRecord> = {}
+): SavedSearchRecord {
   return {
     collectionId: null,
     createdAt: new Date("2026-07-28T10:00:00.000Z"),
@@ -20,6 +24,7 @@ function savedSearchRecord(overrides: Partial<Record<string, unknown>> = {}) {
     id: "saved-search-1",
     monitorCursorArticleId: null,
     monitorCursorCreatedAt: null,
+    monitorAction: "count",
     monitorEnabled: false,
     monitorLastRunAt: null,
     monitorNewMatchCount: 0,
@@ -237,6 +242,22 @@ describe("saved searches", () => {
     })
     expect(store.savedSearch.updateMany).toHaveBeenNthCalledWith(2, {
       data: { monitorNewMatchCount: 0 },
+      where: { id: "saved-search-1", userId: "user-1" },
+    })
+  })
+
+  it("sets the new-match action only for the current user's saved search", async () => {
+    const store = createStore()
+
+    await setSavedSearchMonitorActionForUserWithClient({
+      action: "star",
+      savedSearchId: " saved-search-1 ",
+      store,
+      userId: "user-1",
+    })
+
+    expect(store.savedSearch.updateMany).toHaveBeenCalledWith({
+      data: { monitorAction: "star" },
       where: { id: "saved-search-1", userId: "user-1" },
     })
   })

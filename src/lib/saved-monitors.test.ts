@@ -20,6 +20,7 @@ function monitor(overrides: Partial<Record<string, unknown>> = {}) {
     id: "saved-search-1",
     monitorCursorArticleId: "article-0",
     monitorCursorCreatedAt: new Date("2026-07-29T11:00:00.000Z"),
+    monitorAction: "count",
     monitorNextRunAt: new Date("2026-07-29T11:55:00.000Z"),
     publishedAfter: null,
     publishedBefore: null,
@@ -39,6 +40,10 @@ function createStore({
   updateCounts?: number[]
 } = {}) {
   return {
+    articleState: {
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
     savedSearch: {
       findMany: vi.fn().mockResolvedValue(due),
       updateMany: vi.fn().mockImplementation(async () => ({
@@ -127,6 +132,40 @@ describe("saved monitors", () => {
         }),
       })
     )
+  })
+
+  it("stars only newly matched articles before advancing an automated monitor cursor", async () => {
+    const store = createStore({ due: [monitor({ monitorAction: "star" })] })
+    const matches = [
+      { articleId: "article-1", createdAt: new Date("2026-07-29T11:05:00.000Z") },
+      { articleId: "article-2", createdAt: new Date("2026-07-29T11:10:00.000Z") },
+    ]
+
+    await processDueSavedMonitors({
+      findMatches: vi.fn().mockResolvedValue(matches),
+      now,
+      settings,
+      store,
+    })
+
+    expect(store.articleState.createMany).toHaveBeenCalledWith({
+      data: matches.map((match) => ({
+        articleId: match.articleId,
+        isRead: false,
+        isStarred: true,
+        starredAt: now,
+        userId: "user-1",
+      })),
+      skipDuplicates: true,
+    })
+    expect(store.articleState.updateMany).toHaveBeenCalledWith({
+      data: { isStarred: true, starredAt: now },
+      where: {
+        articleId: { in: matches.map((match) => match.articleId) },
+        isStarred: false,
+        userId: "user-1",
+      },
+    })
   })
 
   it("does not evaluate a monitor another worker already claimed", async () => {
