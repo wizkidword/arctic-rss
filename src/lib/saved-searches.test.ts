@@ -10,8 +10,11 @@ import {
   SavedSearchError,
   savedSearchHref,
 } from "./saved-searches"
+import type { SavedSearchRecord } from "./saved-searches"
 
-function savedSearchRecord(overrides: Partial<Record<string, unknown>> = {}) {
+function savedSearchRecord(
+  overrides: Partial<SavedSearchRecord> = {}
+): SavedSearchRecord {
   return {
     collectionId: null,
     createdAt: new Date("2026-07-28T10:00:00.000Z"),
