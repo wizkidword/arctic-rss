@@ -45,6 +45,12 @@ only redacted operational results.
   attempt establishes only that the request was still blocked before the
   limiter despite that narrowly scoped Managed-Rules skip; it neither
   identifies the responsible edge control nor proves header overwrite.
+- A subsequent read-only provider settings review found Bot Fight Mode disabled
+  and Browser Integrity Check enabled. The retained event sample cannot
+  uniquely link Browser Integrity Check to the earlier requests, so this is a
+  plausible remaining edge gate rather than a causal conclusion. Its documented
+  block-before-origin behavior explains why a Managed-Rules-only skip was not a
+  sufficient proof path.
 
 ## Current classification
 
@@ -64,9 +70,11 @@ The origin mapping is complete for the current managed route. The header proof
 is still open because all three approved image-proxy requests were blocked
 before the limiter, including one made while a one-use Managed-Rules skip was
 active. Do not infer header overwrite from the HTTP 403 results or retry
-broadly. A future proof needs fresh approval for a materially different,
-edge-accepted method that can demonstrably reach the limiter, followed by the
-same redacted hashed-key existence/count check.
+broadly. The next candidate needs fresh approval for a materially different,
+edge-accepted method: a one-use, exact-query provider configuration exception
+that disables Browser Integrity Check only for the single probe, followed by
+immediate deletion and the same redacted hashed-key existence/count check. Do
+not create that exception without explicit provider-change approval.
 
 This is an evidence task, not authorization to change the tunnel, DNS,
 firewall, or application deployment.
