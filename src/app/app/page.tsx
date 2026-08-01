@@ -7,6 +7,7 @@ import { listReaderArticlePage } from "@/lib/articles"
 import { hasUserFeedSubscriptions } from "@/lib/feed-subscriptions"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
+import { listStoryClustersForArticleUser } from "@/lib/story-cluster-reader"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
 
 export default async function AppHomePage({
@@ -38,6 +39,15 @@ export default async function AppHomePage({
   const defaultView = normalizeDefaultView(settings.defaultView)
   const dateTimePreferences = normalizeDateTimePreferences(settings)
   const articleId = firstSearchParam(params.articleId)
+  const selectedArticle = articlePage.articles.find(
+    (article) => article.id === articleId
+  ) ?? articlePage.articles[0]
+  const storyClusters = selectedArticle
+    ? await listStoryClustersForArticleUser({
+        articleId: selectedArticle.id,
+        userId: session.user.id
+      })
+    : []
 
   return (
     <ReaderSurface
@@ -52,6 +62,7 @@ export default async function AppHomePage({
       markAllReadScope={{ type: "all" }}
       nextPageHref={nextPageHref("/app", articlePage.nextCursor)}
       selectedArticleId={articleId}
+      storyClusters={storyClusters}
       title="All Articles"
     />
   )
