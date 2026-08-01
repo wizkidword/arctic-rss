@@ -21,6 +21,7 @@ type DueSavedMonitor = Pick<
   | "id"
   | "monitorCursorArticleId"
   | "monitorCursorCreatedAt"
+  | "monitorAction"
   | "monitorNextRunAt"
   | "publishedAfter"
   | "publishedBefore"
@@ -31,6 +32,31 @@ type DueSavedMonitor = Pick<
 >
 
 export type SavedMonitorStore = {
+  articleState: {
+    createMany(args: {
+      data: Array<{
+        articleId: string
+        isRead: boolean
+        isStarred: boolean
+        starredAt: Date
+        userId: string
+      }>
+      skipDuplicates: true
+    }): Promise<{ count: number }>
+    updateMany(args: {
+      data: {
+        isStarred: boolean
+        starredAt: Date
+      }
+      where: {
+        articleId: {
+          in: string[]
+        }
+        isStarred: boolean
+        userId: string
+      }
+    }): Promise<{ count: number }>
+  }
   savedSearch: {
     findMany(args: Record<string, unknown>): Promise<DueSavedMonitor[]>
     updateMany(args: Record<string, unknown>): Promise<{ count: number }>
@@ -114,6 +140,7 @@ export async function processDueSavedMonitors({
       id: true,
       monitorCursorArticleId: true,
       monitorCursorCreatedAt: true,
+      monitorAction: true,
       monitorNextRunAt: true,
       publishedAfter: true,
       publishedBefore: true,
@@ -184,6 +211,12 @@ export async function processDueSavedMonitors({
       const consumedMatches = matches.slice(0, settings.matchBatchSize)
       const nextCursor = consumedMatches.at(-1) ?? cursor
       const continued = matches.length > settings.matchBatchSize
+      await applySavedMonitorAction({
+        matches: consumedMatches,
+        monitor,
+        now,
+        store,
+      })
       const complete = await completeSavedMonitorRun({
         cursor: nextCursor,
         increment: consumedMatches.length,
@@ -220,6 +253,43 @@ export async function processDueSavedMonitors({
   }
 
   return result
+}
+
+async function applySavedMonitorAction({
+  matches,
+  monitor,
+  now,
+  store,
+}: {
+  matches: SavedMonitorArticleMatch[]
+  monitor: DueSavedMonitor
+  now: Date
+  store: SavedMonitorStore
+}) {
+  if (monitor.monitorAction !== "star" || !matches.length) {
+    return
+  }
+
+  const articleIds = [...new Set(matches.map((match) => match.articleId))]
+
+  await store.articleState.createMany({
+    data: articleIds.map((articleId) => ({
+      articleId,
+      isRead: false,
+      isStarred: true,
+      starredAt: now,
+      userId: monitor.userId,
+    })),
+    skipDuplicates: true,
+  })
+  await store.articleState.updateMany({
+    data: { isStarred: true, starredAt: now },
+    where: {
+      articleId: { in: articleIds },
+      isStarred: false,
+      userId: monitor.userId,
+    },
+  })
 }
 
 async function completeSavedMonitorRun({

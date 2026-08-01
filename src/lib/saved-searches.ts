@@ -11,6 +11,8 @@ import { getPrisma } from "./db"
 const MAX_SAVED_SEARCH_DESCRIPTION_LENGTH = 500
 const MAX_SAVED_SEARCH_NAME_LENGTH = 80
 
+export type SavedSearchMonitorAction = "count" | "star"
+
 type OwnedRecord = {
   id: string
 }
@@ -24,6 +26,7 @@ export type SavedSearchRecord = {
   id: string
   monitorCursorArticleId: string | null
   monitorCursorCreatedAt: Date | null
+  monitorAction: SavedSearchMonitorAction
   monitorEnabled: boolean
   monitorLastRunAt: Date | null
   monitorNewMatchCount: number
@@ -65,6 +68,7 @@ type SavedSearchStore = {
         | "id"
         | "monitorCursorArticleId"
         | "monitorCursorCreatedAt"
+        | "monitorAction"
         | "monitorEnabled"
         | "monitorLastRunAt"
         | "monitorNewMatchCount"
@@ -261,6 +265,48 @@ export async function setSavedSearchMonitorEnabledForUserWithClient({
   }
 }
 
+export async function setSavedSearchMonitorActionForUser({
+  action,
+  savedSearchId,
+  userId,
+}: {
+  action: string
+  savedSearchId: string
+  userId: string
+}) {
+  return setSavedSearchMonitorActionForUserWithClient({
+    action,
+    savedSearchId,
+    store: getSavedSearchStore(),
+    userId,
+  })
+}
+
+export async function setSavedSearchMonitorActionForUserWithClient({
+  action,
+  savedSearchId,
+  store,
+  userId,
+}: {
+  action: string
+  savedSearchId: string
+  store: SavedSearchStore
+  userId: string
+}) {
+  if (!isSavedSearchMonitorAction(action)) {
+    throw new SavedSearchError("Saved search action is unavailable.")
+  }
+
+  const result = await store.savedSearch.updateMany({
+    data: { monitorAction: action },
+    where: { id: normalizeSavedSearchIdentifier(savedSearchId), userId },
+  })
+
+  if (!result.count) {
+    throw new SavedSearchError("Saved search not found.")
+  }
+}
+
 export async function acknowledgeSavedSearchMonitorForUser({
   savedSearchId,
   userId,
@@ -426,6 +472,10 @@ function normalizeSavedSearchIdentifier(value: string) {
   }
 
   return id
+}
+
+function isSavedSearchMonitorAction(value: string): value is SavedSearchMonitorAction {
+  return value === "count" || value === "star"
 }
 
 function normalizeDate(value: Date | undefined) {

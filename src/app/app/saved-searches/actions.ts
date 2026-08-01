@@ -8,6 +8,7 @@ import {
   acknowledgeSavedSearchMonitorForUser,
   createSavedSearchForUser,
   deleteSavedSearchForUser,
+  setSavedSearchMonitorActionForUser,
   setSavedSearchMonitorEnabledForUser,
   SavedSearchError,
 } from "@/lib/saved-searches"
@@ -92,6 +93,28 @@ export async function setSavedSearchMonitorEnabledAction(formData: FormData) {
   try {
     await setSavedSearchMonitorEnabledForUser({
       enabled: enabled === "true",
+      savedSearchId: formValue(formData, "savedSearchId"),
+      userId: session.user.id,
+    })
+  } catch (error) {
+    if (!(error instanceof SavedSearchError)) {
+      throw error
+    }
+  }
+
+  revalidatePath("/app/saved-searches")
+}
+
+export async function setSavedSearchMonitorActionAction(formData: FormData) {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized")
+  }
+
+  try {
+    await setSavedSearchMonitorActionForUser({
+      action: formValue(formData, "monitorAction"),
       savedSearchId: formValue(formData, "savedSearchId"),
       userId: session.user.id,
     })

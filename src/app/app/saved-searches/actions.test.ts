@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
       throw new Error(`REDIRECT:${path}`)
     }),
     revalidatePath: vi.fn(),
+    setSavedSearchMonitorActionForUser: vi.fn(),
     setSavedSearchMonitorEnabledForUser: vi.fn(),
   }
 })
@@ -39,6 +40,7 @@ vi.mock("@/lib/saved-searches", () => ({
   createSavedSearchForUser: mocks.createSavedSearchForUser,
   deleteSavedSearchForUser: mocks.deleteSavedSearchForUser,
   SavedSearchError: mocks.MockSavedSearchError,
+  setSavedSearchMonitorActionForUser: mocks.setSavedSearchMonitorActionForUser,
   setSavedSearchMonitorEnabledForUser: mocks.setSavedSearchMonitorEnabledForUser,
 }))
 
@@ -46,6 +48,7 @@ import {
   acknowledgeSavedSearchMonitorAction,
   createSavedSearchAction,
   deleteSavedSearchAction,
+  setSavedSearchMonitorActionAction,
   setSavedSearchMonitorEnabledAction,
 } from "./actions"
 
@@ -128,6 +131,20 @@ describe("saved search actions", () => {
       userId: "user-1",
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/saved-searches")
+  })
+
+  it("uses only the authenticated user when setting a saved monitor action", async () => {
+    const formData = new FormData()
+    formData.set("monitorAction", "star")
+    formData.set("savedSearchId", "saved-search-1")
+
+    await expect(setSavedSearchMonitorActionAction(formData)).resolves.toBeUndefined()
+
+    expect(mocks.setSavedSearchMonitorActionForUser).toHaveBeenCalledWith({
+      action: "star",
+      savedSearchId: "saved-search-1",
+      userId: "user-1",
+    })
   })
 
   it("does not reveal a missing monitor when marking results seen", async () => {

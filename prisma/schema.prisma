@@ -903,6 +903,7 @@ model SavedSearch {
   publishedAfter         DateTime?
   publishedBefore        DateTime?
   monitorEnabled         Boolean   @default(false)
+  monitorAction          String    @default("count")
   monitorNewMatchCount   Int       @default(0)
   monitorLastRunAt       DateTime?
   monitorNextRunAt       DateTime?
