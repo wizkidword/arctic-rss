@@ -51,6 +51,15 @@ only redacted operational results.
   plausible remaining edge gate rather than a causal conclusion. Its documented
   block-before-origin behavior explains why a Managed-Rules-only skip was not a
   sufficient proof path.
+- A provider Configuration Rule was unavailable in the current dashboard, so a
+  later explicitly approved proof temporarily disabled Browser Integrity Check
+  globally for only the one prepared request and restored it immediately after.
+  The forged-header request still returned HTTP 403. Redacted pre- and
+  post-checks found both the forged-IP and controlled-client hashed limiter
+  keys absent, with the aggregate anonymous image-proxy key count unchanged at
+  zero. Normal public health was healthy after restoration. This excludes
+  Browser Integrity Check as a sufficient explanation for the block, but does
+  not identify the remaining edge control or prove header overwrite.
 
 ## Current classification
 
@@ -70,11 +79,13 @@ The origin mapping is complete for the current managed route. The header proof
 is still open because all three approved image-proxy requests were blocked
 before the limiter, including one made while a one-use Managed-Rules skip was
 active. Do not infer header overwrite from the HTTP 403 results or retry
-broadly. The next candidate needs fresh approval for a materially different,
-edge-accepted method: a one-use, exact-query provider configuration exception
-that disables Browser Integrity Check only for the single probe, followed by
-immediate deletion and the same redacted hashed-key existence/count check. Do
-not create that exception without explicit provider-change approval.
+broadly. Browser Integrity Check has now been ruled out as a sufficient gate:
+the one approved request remained blocked before the limiter while that setting
+was temporarily disabled and then restored. A future proof needs fresh
+approval for a materially different, edge-accepted method that identifies and
+narrowly bypasses the remaining control before the same redacted hashed-key
+existence/count check. Do not repeat the request form or change provider
+settings without that approval.
 
 This is an evidence task, not authorization to change the tunnel, DNS,
 firewall, or application deployment.
