@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   hasUserFeedSubscriptions: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
   listReaderArticlePage: vi.fn(),
+  listStoryClustersForArticleUser: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
   }),
@@ -23,14 +24,17 @@ vi.mock("@/auth", () => ({
 vi.mock("@/components/reader-surface", () => ({
   ReaderSurface: ({
     description,
+    storyClusters,
     title,
   }: {
     description: string
+    storyClusters?: Array<{ id: string }>
     title: string
   }) => (
     <main>
       <h1>{title}</h1>
       <p>{description}</p>
+      <p data-story-clusters={storyClusters?.length ?? 0} />
     </main>
   ),
 }))
@@ -45,6 +49,10 @@ vi.mock("@/lib/articles", () => ({
 
 vi.mock("@/lib/feed-subscriptions", () => ({
   hasUserFeedSubscriptions: mocks.hasUserFeedSubscriptions,
+}))
+
+vi.mock("@/lib/story-cluster-reader", () => ({
+  listStoryClustersForArticleUser: mocks.listStoryClustersForArticleUser,
 }))
 
 vi.mock("@/lib/user-settings", () => ({
@@ -71,6 +79,7 @@ describe("AppHomePage", () => {
     mocks.hasUserFeedSubscriptions.mockResolvedValue(true)
     mocks.listArticleCollectionsForUser.mockResolvedValue([])
     mocks.listReaderArticlePage.mockResolvedValue({ articles: [], nextCursor: null })
+    mocks.listStoryClustersForArticleUser.mockResolvedValue([])
   })
 
   it("sends first-run readers to Discover until they subscribe to a feed", async () => {
@@ -95,5 +104,25 @@ describe("AppHomePage", () => {
       after: undefined,
       userId: "user-1",
     })
+  })
+
+  it("loads related coverage for the selected article", async () => {
+    mocks.listReaderArticlePage.mockResolvedValue({
+      articles: [{ id: "article-1" }, { id: "article-2" }],
+      nextCursor: null,
+    })
+    mocks.listStoryClustersForArticleUser.mockResolvedValue([{ id: "cluster-1" }])
+
+    const markup = renderToStaticMarkup(
+      await AppHomePage({
+        searchParams: Promise.resolve({ articleId: "article-2" }),
+      })
+    )
+
+    expect(mocks.listStoryClustersForArticleUser).toHaveBeenCalledWith({
+      articleId: "article-2",
+      userId: "user-1",
+    })
+    expect(markup).toContain('data-story-clusters="1"')
   })
 })
