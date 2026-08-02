@@ -5,6 +5,7 @@ import {
   getAllowedAppHosts,
   getAppOrigin,
 } from "./app-origin"
+import { LEGACY_REDIS_MIGRATION_FLAG } from "./redis-config"
 import { assertTurnstileConfiguration } from "./turnstile"
 
 export class UnsafeProductionConfigurationError extends Error {
@@ -168,21 +169,72 @@ function assertRedisUrl(
 ) {
   const workloadUrl = environment[workloadVariable]?.trim()
   const legacyUrl = environment.REDIS_URL?.trim()
-  const variable = workloadUrl ? workloadVariable : "REDIS_URL"
-  const value = workloadUrl || legacyUrl
 
-  if (!value) {
+  if (workloadUrl) {
+    return assertCredentialedUrlValue(
+      workloadUrl,
+      workloadVariable,
+      new Set(["redis:", "rediss:"]),
+      { requireUsername: false }
+    )
+  }
+
+  if (!legacyUrl) {
     throw new UnsafeProductionConfigurationError(
-      `${workloadVariable} or REDIS_URL must be configured in production.`
+      `${workloadVariable} must be configured in production.`
+    )
+  }
+
+  if (!allowsLegacyRedisMigration(environment)) {
+    throw new UnsafeProductionConfigurationError(
+      `${workloadVariable} must be configured in production; REDIS_URL requires ${LEGACY_REDIS_MIGRATION_FLAG}=true.`
     )
   }
 
   return assertCredentialedUrlValue(
-    value,
-    variable,
+    legacyUrl,
+    "REDIS_URL",
     new Set(["redis:", "rediss:"]),
     { requireUsername: false }
   )
+}
+
+function assertRedisWorkloadSeparation(environment: ProductionEnvironment) {
+  const durable = assertRedisUrl(environment, "DURABLE_REDIS_URL")
+  const ephemeral = assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
+
+  if (
+    !allowsLegacyRedisMigration(environment) &&
+    normalizeRedisEndpoint(durable, "DURABLE_REDIS_URL") ===
+      normalizeRedisEndpoint(ephemeral, "EPHEMERAL_REDIS_URL")
+  ) {
+    throw new UnsafeProductionConfigurationError(
+      "DURABLE_REDIS_URL and EPHEMERAL_REDIS_URL must not target the same Redis endpoint in production."
+    )
+  }
+}
+
+function allowsLegacyRedisMigration(environment: ProductionEnvironment) {
+  return environment[LEGACY_REDIS_MIGRATION_FLAG]?.trim().toLowerCase() === "true"
+}
+
+function normalizeRedisEndpoint(url: URL, variable: string) {
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "")
+  const database = url.pathname.replace(/^\/+/, "") || "0"
+
+  if (!hostname) {
+    throw new UnsafeProductionConfigurationError(
+      `${variable} must include a Redis hostname in production.`
+    )
+  }
+
+  if (!/^\d+$/.test(database)) {
+    throw new UnsafeProductionConfigurationError(
+      `${variable} must use a numeric Redis database in production.`
+    )
+  }
+
+  return `${url.protocol.toLowerCase()}//${hostname}:${url.port || "6379"}/${database}`
 }
 
 function assertRuntimeDatabaseUrl(environment: ProductionEnvironment) {
@@ -273,8 +325,7 @@ function assertWebConfiguration(environment: ProductionEnvironment) {
   ])
   assertWebOrigins(environment)
   assertRuntimeDatabaseUrl(environment)
-  assertRedisUrl(environment, "DURABLE_REDIS_URL")
-  assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
+  assertRedisWorkloadSeparation(environment)
   assertRequiredSecret(environment, "AUTH_SECRET", 32)
   assertTurnstileConfiguration(environment)
 }
@@ -289,6 +340,10 @@ function assertWorkerConfiguration(
 
   if (role === "worker-all" || role === "worker-chat-events") {
     assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
+  }
+
+  if (role === "worker-all") {
+    assertRedisWorkloadSeparation(environment)
   }
 }
 

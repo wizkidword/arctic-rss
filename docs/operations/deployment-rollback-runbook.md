@@ -33,8 +33,11 @@ normal backup gate and a typed deployment approval have been recorded.
 2. Without printing values, add `DURABLE_REDIS_URL` and
    `EPHEMERAL_REDIS_URL` to the root-only production `.env`. Both URLs must
    use the existing `REDIS_PASSWORD`; they target `redis` and
-   `redis-ephemeral` respectively. `REDIS_URL` remains as a temporary
-   one-Redis fallback so a rollback retains a safe connection target.
+   `redis-ephemeral` respectively. `REDIS_URL` is deprecated; production
+   requires those workload-specific values and rejects a shared target unless
+   `ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION=true` is a reviewed,
+   temporary migration exception. Remove that exception and `REDIS_URL` before
+   Phase 5 begins.
 3. Confirm the new keys exist, render the staged Compose file, then start the
    data services in order. Do not start the application containers until both
    Redis health checks pass:
@@ -324,11 +327,12 @@ for key in POSTGRES_PASSWORD DATABASE_URL MIGRATE_DATABASE_URL REDIS_PASSWORD AU
     exit 1
   fi
 done
-if ! grep -q '^REDIS_URL=.' .env && \
-  ! { grep -q '^DURABLE_REDIS_URL=.' .env && grep -q '^EPHEMERAL_REDIS_URL=.' .env; }; then
-  echo 'missing Redis connection URL configuration' >&2
-  exit 1
-fi
+for key in DURABLE_REDIS_URL EPHEMERAL_REDIS_URL; do
+  if ! grep -q "^${key}=." .env; then
+    echo "missing required Redis workload key: ${key}" >&2
+    exit 1
+  fi
+done
 ```
 
 Determine whether the retired fallback was ever used without printing a

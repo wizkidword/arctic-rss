@@ -93,6 +93,78 @@ describe("production security configuration", () => {
     ).toThrow("TURNSTILE_REQUIRED requires TURNSTILE_SECRET_KEY")
   })
 
+  it("requires distinct workload-specific Redis endpoints for production web", () => {
+    expect(() =>
+      assertSecureProductionConfiguration(
+        { ...webProductionEnvironment, DURABLE_REDIS_URL: "" },
+        "web"
+      )
+    ).toThrow("DURABLE_REDIS_URL must be configured in production.")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        { ...webProductionEnvironment, EPHEMERAL_REDIS_URL: "" },
+        "web"
+      )
+    ).toThrow("EPHEMERAL_REDIS_URL must be configured in production.")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...webProductionEnvironment,
+          DURABLE_REDIS_URL: "redis://:durable-redis-password@REDIS:6379/0",
+          EPHEMERAL_REDIS_URL: "redis://:ephemeral-redis-password@redis/",
+        },
+        "web"
+      )
+    ).toThrow("must not target the same Redis endpoint")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...webProductionEnvironment,
+          DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379/0",
+          EPHEMERAL_REDIS_URL: "rediss://:ephemeral-redis-password@redis:6379/0",
+        },
+        "web"
+      )
+    ).not.toThrow()
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...webProductionEnvironment,
+          DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379/0",
+          EPHEMERAL_REDIS_URL: "redis://:ephemeral-redis-password@redis:6379/1",
+        },
+        "web"
+      )
+    ).not.toThrow()
+  })
+
+  it("permits legacy Redis only with the explicit temporary migration flag", () => {
+    const legacyEnvironment = {
+      ...webProductionEnvironment,
+      DURABLE_REDIS_URL: "",
+      EPHEMERAL_REDIS_URL: "",
+      REDIS_URL: "redis://:legacy-redis-password@redis:6379/0",
+    }
+
+    expect(() =>
+      assertSecureProductionConfiguration(legacyEnvironment, "web")
+    ).toThrow("REDIS_URL requires ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION=true")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...legacyEnvironment,
+          ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION: "true",
+        },
+        "web"
+      )
+    ).not.toThrow()
+  })
+
   it("limits an ingestion worker to its database and durable queue configuration", () => {
     const environment = {
       DATABASE_URL: webProductionEnvironment.DATABASE_URL,
@@ -121,7 +193,7 @@ describe("production security configuration", () => {
 
     expect(() =>
       assertSecureProductionConfiguration(environment, "worker-chat-events")
-    ).toThrow("EPHEMERAL_REDIS_URL or REDIS_URL must be configured")
+    ).toThrow("EPHEMERAL_REDIS_URL must be configured in production")
 
     expect(() =>
       assertSecureProductionConfiguration(
@@ -132,6 +204,19 @@ describe("production security configuration", () => {
         "worker-chat-events"
       )
     ).not.toThrow()
+  })
+
+  it("rejects a shared Redis endpoint from the all-in-one worker", () => {
+    const environment = {
+      DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379/0",
+      EPHEMERAL_REDIS_URL: "redis://:ephemeral-redis-password@redis/",
+      NODE_ENV: "production",
+    }
+
+    expect(() =>
+      assertSecureProductionConfiguration(environment, "worker-all")
+    ).toThrow("must not target the same Redis endpoint")
   })
 
   it("isolates chat gateway credentials from web, mail, AI, and tunnel secrets", () => {

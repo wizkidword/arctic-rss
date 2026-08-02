@@ -41,7 +41,9 @@ The example environment uses Docker service hostnames. For `npm run dev` on a
 host machine, change `DATABASE_URL`, `DURABLE_REDIS_URL`, and
 `EPHEMERAL_REDIS_URL` to `localhost`; use the PostgreSQL, durable-Redis, and
 ephemeral-Redis loopback ports from `.env.example`. `REDIS_URL` is retained
-only as a compatibility fallback for a staged one-Redis rollout.
+only for an explicitly flagged temporary one-Redis migration; production
+otherwise requires distinct workload-specific endpoints. Remove it before
+Phase 5 begins.
 
 ## Deployment guardrails
 

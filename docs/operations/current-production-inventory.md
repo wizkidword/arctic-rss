@@ -107,8 +107,10 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
   It uses a separate memory ceiling and `volatile-ttl` policy.
 - Queue producers, workers, queue inspection, and schedulers use
   `DURABLE_REDIS_URL`; rate limits and all chat gateway/event Redis clients use
-  `EPHEMERAL_REDIS_URL`. `REDIS_URL` remains a compatibility fallback only for
-  a staged one-Redis rollout.
+  `EPHEMERAL_REDIS_URL`. The checked-in configuration rejects `REDIS_URL`
+  fallback and matching normalized workload endpoints unless the explicit
+  temporary migration flag is set; remove the flag and legacy URL before Phase
+  5 begins. This source change is not deployment evidence.
 - The release procedure starts durable Redis, then ephemeral Redis. It
   recreates the chat gateway only when that opt-in profile was already running,
   and finally recreates web/worker containers. The monitor verifies each

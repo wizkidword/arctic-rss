@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   durableRedisConnectionOptions,
   ephemeralRedisConnectionOptions,
+  RedisConfigurationError,
 } from "./redis-config"
 
 describe("Redis workload connection configuration", () => {
@@ -30,6 +31,24 @@ describe("Redis workload connection configuration", () => {
     expect(ephemeralRedisConnectionOptions(environment).url).toBe(
       "redis://legacy:6379"
     )
+  })
+
+  it("rejects a legacy production fallback unless the temporary migration flag is set", () => {
+    const environment = {
+      NODE_ENV: "production",
+      REDIS_URL: "redis://legacy:6379",
+    }
+
+    expect(() => durableRedisConnectionOptions(environment)).toThrow(
+      RedisConfigurationError
+    )
+
+    expect(
+      durableRedisConnectionOptions({
+        ...environment,
+        ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION: "true",
+      }).url
+    ).toBe("redis://legacy:6379")
   })
 
   it("keeps the local default when no Redis URL is configured", () => {

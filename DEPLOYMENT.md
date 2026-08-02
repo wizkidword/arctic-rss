@@ -43,9 +43,11 @@ either application runtime service.
 Set `REDIS_PASSWORD` to a separate high-entropy value, then include that value
 in both `DURABLE_REDIS_URL` and `EPHEMERAL_REDIS_URL`. Durable Redis protects
 the BullMQ queue with AOF and `noeviction`; ephemeral Redis carries only
-TTL-bounded rate-limit and chat transport state. `REDIS_URL` is retained only
-as a compatibility fallback while migrating from a single Redis instance.
-Both Redis containers are loopback-bound and are never public services.
+TTL-bounded rate-limit and chat transport state. Production rejects a legacy
+`REDIS_URL` fallback or matching normalized endpoints unless the reviewed,
+temporary `ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION=true` exception is
+set. Remove that exception and `REDIS_URL` before Phase 5 begins. Both Redis
+containers are loopback-bound and are never public services.
 
 For transactional email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
 `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM`. Optional safety controls are
