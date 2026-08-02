@@ -38,7 +38,7 @@ export default async function AiDigestPage({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-heading text-xl font-semibold">
-              {digest.title || "AI Digest"}
+              {digest.title || "AI Briefing"}
             </h1>
             <Badge
               variant={
@@ -49,7 +49,7 @@ export default async function AiDigestPage({
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Stored unread digest for your Arctic RSS account.
+            Stored daily or weekly AI briefing for your Arctic RSS account.
           </p>
         </div>
         <Link
@@ -71,6 +71,7 @@ export default async function AiDigestPage({
           items: digest.items ?? [],
           model: digest.model ?? null,
           overview: digest.overview ?? null,
+          period: digest.period ?? "DAILY",
           provider: digest.provider ?? null,
           status: digest.status,
           title: digest.title ?? null,

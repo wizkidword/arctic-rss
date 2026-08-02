@@ -1,6 +1,7 @@
 # Current production inventory
 
 **Captured:** 2026-07-29
+**Updated:** 2026-07-30, after managed-tunnel reconciliation.
 **Scope:** non-secret reconciliation after the approved `74ffd3f` release.
 
 This document intentionally excludes host addresses, account names, release
@@ -43,10 +44,10 @@ those details in the private operator inventory.
   clickjacking, MIME-sniffing, referrer, and browser-permissions controls.
 - Four application/data listeners were present and all were loopback-bound;
   no public listener was observed for ports 3000, 3001, 5432, 6379, or 6380.
-  The host firewall was active. The exact current edge-to-OVH packet path is
-  intentionally recorded as pending in
-  [trusted-ingress-verification.md](trusted-ingress-verification.md), rather
-  than copied from the pre-migration tunnel snapshot.
+  The host firewall was active. The current managed-tunnel origin is mapped to
+  this application's Compose web service without recording private topology.
+  [trusted-ingress-verification.md](trusted-ingress-verification.md) retains
+  the separate, still-open runtime proof for `CF-Connecting-IP` overwrite.
 - The production database has no unfinished Prisma migrations. One historical
   rolled-back migration record remains in the ledger, while the approved
   release record reports 32 applied migrations; it is not an active migration
@@ -138,11 +139,10 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
 
 - Maintain the 30-day off-host backup retention and run the documented restore
   drill at least quarterly and after backup-format changes.
-- Reconcile the actual edge-to-OVH packet path from the private provider and
-  DNS inventory before asserting a managed-tunnel route. During this capture,
-  no named `cloudflared` service/process or running container was observed on
-  the host, while the public application remained available. This is a
-  documentation/evidence gap, not authorization to alter ingress.
+- Keep `NET-001` open only for its runtime `CF-Connecting-IP` overwrite proof.
+  The current managed-tunnel-to-Compose mapping and no-bypass DNS inventory
+  are already recorded; do not retry the blocked request form or alter ingress
+  without a new approved proof design.
 - Keep the chat gateway inactive until an explicitly approved beta activation
   and controlled WebSocket acceptance test are scheduled. CHAT-AUTH-001 and
   CHAT-REDIS-001 remain source- and CI-verified, not active-runtime verified.

@@ -1,6 +1,9 @@
 import { defaultUserSettings } from "./settings"
 import { getPrisma } from "./db"
-import { eligibleAiDigestArticleWhere } from "./ai-digests"
+import {
+  eligibleAiDigestArticleWhere,
+  type AiDigestPeriod,
+} from "./ai-digests"
 import { getAiUsagePeriodStart } from "./ai-usage"
 
 type DashboardUser = {
@@ -55,6 +58,7 @@ type DashboardDigest = {
   errorMessage: string | null
   id: string
   overview: string | null
+  period: AiDigestPeriod
   status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
   title: string | null
 }
@@ -111,7 +115,6 @@ export async function getAiDashboardWithClient({
     },
   }
   const currentTime = now()
-  const digestStart = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000)
   const usagePeriodStart = getAiUsagePeriodStart(currentTime)
   const [
     user,
@@ -119,7 +122,8 @@ export async function getAiDashboardWithClient({
     summaryCount,
     recentSummaries,
     digestArticles,
-    eligibleDigestArticleCount,
+    dailyBriefArticleCount,
+    weeklyBriefArticleCount,
     digestHistory,
   ] = await Promise.all([
     store.user.findUnique({
@@ -196,27 +200,22 @@ export async function getAiDashboardWithClient({
       },
       orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
       take: 8,
-      where: {
-        AND: [
-          activeSubscription,
-          {
-            publishedAt: {
-              gte: digestStart,
-            },
-          },
-          {
-            states: {
-              none: {
-                isRead: true,
-                userId,
-              },
-            },
-          },
-        ],
-      },
+      where: eligibleAiDigestArticleWhere(userId, {
+        now: currentTime,
+        period: "DAILY",
+      }),
     }),
     store.article.count({
-      where: eligibleAiDigestArticleWhere(userId),
+      where: eligibleAiDigestArticleWhere(userId, {
+        now: currentTime,
+        period: "DAILY",
+      }),
+    }),
+    store.article.count({
+      where: eligibleAiDigestArticleWhere(userId, {
+        now: currentTime,
+        period: "WEEKLY",
+      }),
     }),
     store.aiDigest.findMany({
       orderBy: {
@@ -229,6 +228,7 @@ export async function getAiDashboardWithClient({
         errorMessage: true,
         id: true,
         overview: true,
+        period: true,
         status: true,
         title: true,
       },
@@ -272,8 +272,8 @@ export async function getAiDashboardWithClient({
       title: article.title,
       url: article.url,
     })),
+    dailyBriefArticleCount,
     digestHistory,
-    eligibleDigestArticleCount,
     preferences: {
       aiAutoSummariesEnabled: user.settings?.aiAutoSummariesEnabled ?? false,
       dailyDigestEnabled: user.settings?.dailyDigestEnabled ?? false,
@@ -290,6 +290,7 @@ export async function getAiDashboardWithClient({
       url: summary.article.url,
     })),
     summaryCount,
+    weeklyBriefArticleCount,
     usage: {
       monthlyLimit,
       monthlyRemaining,

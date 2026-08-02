@@ -17,13 +17,16 @@ const initialState: GenerateAiDigestActionState = {
 
 export function AiDigestGenerator({
   activeDigest,
-  eligibleArticleCount,
+  dailyArticleCount,
+  weeklyArticleCount,
 }: {
   activeDigest: {
     id: string
+    period?: "DAILY" | "WEEKLY"
     status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
   } | null
-  eligibleArticleCount: number
+  dailyArticleCount: number
+  weeklyArticleCount: number
 }) {
   const [state, formAction, pending] = useActionState(
     generateAiDigestAction,
@@ -33,33 +36,56 @@ export function AiDigestGenerator({
     state.digestId
       ? {
           id: state.digestId,
+          period: state.period,
           status: "PENDING" as const,
         }
       : null
   )
-  const disabled = pending || Boolean(active) || eligibleArticleCount === 0
+  const disabled = pending || Boolean(active)
+  const activeLabel = active?.period === "WEEKLY" ? "Weekly" : "Daily"
   const buttonLabel = pending
-    ? "Starting digest"
+    ? "Starting briefing"
     : active
-      ? "Digest processing"
-      : eligibleArticleCount === 0
-        ? "No unread articles"
-        : "Generate digest"
+      ? `${activeLabel} briefing processing`
+      : "Generate briefing"
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">
-        {eligibleArticleCount} unread{" "}
-        {eligibleArticleCount === 1 ? "article" : "articles"} eligible
+        Choose a time window. Each briefing uses up to 20 recent unread stories
+        and keeps the article links and selection reasons visible.
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <Button disabled={disabled} type="submit">
+        <Button
+          disabled={disabled || dailyArticleCount === 0}
+          name="period"
+          type="submit"
+          value="DAILY"
+        >
           {pending ? (
             <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
           ) : (
             <WandSparklesIcon data-icon="inline-start" />
           )}
-          {buttonLabel}
+          {buttonLabel === "Generate briefing"
+            ? `Daily brief (${dailyArticleCount})`
+            : buttonLabel}
+        </Button>
+        <Button
+          disabled={disabled || weeklyArticleCount === 0}
+          name="period"
+          type="submit"
+          value="WEEKLY"
+          variant="outline"
+        >
+          {pending ? (
+            <LoaderCircleIcon className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <WandSparklesIcon data-icon="inline-start" />
+          )}
+          {buttonLabel === "Generate briefing"
+            ? `Weekly brief (${weeklyArticleCount})`
+            : buttonLabel}
         </Button>
         {active && (
           <Link
@@ -70,6 +96,11 @@ export function AiDigestGenerator({
           </Link>
         )}
       </div>
+      {dailyArticleCount === 0 && weeklyArticleCount === 0 && !active && (
+        <p className="text-sm text-muted-foreground">
+          No unread stories were published in the last seven days.
+        </p>
+      )}
       {state.message && (
         <p
           aria-live="polite"

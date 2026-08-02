@@ -5,7 +5,12 @@ import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
 import { enqueueAiDigest } from "@/lib/ai-digest-queue"
-import { AiDigestError, requestAiDigestForUser } from "@/lib/ai-digests"
+import {
+  AiDigestError,
+  isAiDigestPeriod,
+  requestAiDigestForUser,
+  type AiDigestPeriod,
+} from "@/lib/ai-digests"
 import {
   AiSummaryError,
   generateArticleSummaryForUser,
@@ -163,6 +168,7 @@ export type AddPodcastEpisodeToCollectionActionState = {
 export type GenerateAiDigestActionState = {
   digestId?: string
   message: string
+  period?: AiDigestPeriod
   status: "idle" | "success" | "error"
 }
 
@@ -1641,10 +1647,24 @@ export async function mergeStoryClustersAction(
 
 export async function generateAiDigestAction(
   _previousState: GenerateAiDigestActionState,
-  _formData: FormData
+  formData: FormData
 ): Promise<GenerateAiDigestActionState> {
   void _previousState
-  void _formData
+
+  const submittedPeriod = formData.get("period")
+  const period =
+    submittedPeriod === null
+      ? "DAILY"
+      : isAiDigestPeriod(submittedPeriod)
+        ? submittedPeriod
+        : null
+
+  if (!period) {
+    return {
+      message: "Choose a daily or weekly briefing.",
+      status: "error",
+    }
+  }
 
   const session = await auth()
 
@@ -1666,6 +1686,7 @@ export async function generateAiDigestAction(
 
   try {
     const digest = await requestAiDigestForUser({
+      period,
       userId: session.user.id,
     })
 
@@ -1679,8 +1700,9 @@ export async function generateAiDigestAction(
     return {
       digestId: digest.digestId,
       message: digest.existing
-        ? "Digest generation is already in progress."
-        : "Digest generation started.",
+        ? "A briefing is already in progress."
+        : `${period === "WEEKLY" ? "Weekly" : "Daily"} briefing started.`,
+      period,
       status: "success",
     }
   } catch (error) {

@@ -80,6 +80,9 @@ const mocks = vi.hoisted(() => {
     getPrisma: vi.fn(),
     getDiscoverDirectoryFeed: vi.fn(),
     getUserFeedSubscription: vi.fn(),
+    isAiDigestPeriod: vi.fn(
+      (value: unknown) => value === "DAILY" || value === "WEEKLY",
+    ),
     mergeStoryClustersForUser: vi.fn(),
     MockAiDigestError,
     MockAiSummaryError,
@@ -135,6 +138,7 @@ vi.mock("@/lib/ai-digest-queue", () => ({
 
 vi.mock("@/lib/ai-digests", () => ({
   AiDigestError: mocks.MockAiDigestError,
+  isAiDigestPeriod: mocks.isAiDigestPeriod,
   requestAiDigestForUser: mocks.requestAiDigestForUser,
 }))
 
@@ -1893,7 +1897,7 @@ describe("generateAiDigestAction", () => {
     mocks.revalidatePath.mockReset()
   })
 
-  it("creates and enqueues a digest for the signed-in user", async () => {
+  it("creates and enqueues a daily briefing for the signed-in user", async () => {
     mocks.auth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -1914,6 +1918,7 @@ describe("generateAiDigestAction", () => {
     )
 
     expect(mocks.requestAiDigestForUser).toHaveBeenCalledWith({
+      period: "DAILY",
       userId: "user-1",
     })
     expect(mocks.enqueueAiDigest).toHaveBeenCalledWith("digest-1")
@@ -1921,12 +1926,13 @@ describe("generateAiDigestAction", () => {
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       digestId: "digest-1",
-      message: "Digest generation started.",
+      message: "Daily briefing started.",
+      period: "DAILY",
       status: "success",
     })
   })
 
-  it("reuses an active digest without enqueueing duplicate work", async () => {
+  it("reuses an active briefing without enqueueing duplicate work", async () => {
     mocks.auth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -1949,7 +1955,42 @@ describe("generateAiDigestAction", () => {
     expect(mocks.enqueueAiDigest).not.toHaveBeenCalled()
     expect(result).toEqual({
       digestId: "digest-active",
-      message: "Digest generation is already in progress.",
+      message: "A briefing is already in progress.",
+      period: "DAILY",
+      status: "success",
+    })
+  })
+
+  it("starts a weekly briefing when the selected period is submitted", async () => {
+    mocks.auth.mockResolvedValue({
+      user: {
+        id: "user-1",
+      },
+    })
+    mocks.requestAiDigestForUser.mockResolvedValue({
+      digestId: "digest-weekly",
+      existing: false,
+      status: "PENDING",
+    })
+    const formData = new FormData()
+    formData.set("period", "WEEKLY")
+
+    const result = await generateAiDigestAction(
+      {
+        message: "",
+        status: "idle",
+      },
+      formData,
+    )
+
+    expect(mocks.requestAiDigestForUser).toHaveBeenCalledWith({
+      period: "WEEKLY",
+      userId: "user-1",
+    })
+    expect(result).toEqual({
+      digestId: "digest-weekly",
+      message: "Weekly briefing started.",
+      period: "WEEKLY",
       status: "success",
     })
   })

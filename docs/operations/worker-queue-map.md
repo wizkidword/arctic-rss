@@ -1,7 +1,7 @@
 # Worker and queue map
 
-This is the secret-safe Phase 0 map for the worker runtime. It documents code
-and Compose ownership; it does not authorize changing the worker topology.
+This is the secret-safe current OVH map for the worker runtime. It documents
+code and Compose ownership; it does not authorize changing the worker topology.
 
 ## Current OVH mode
 

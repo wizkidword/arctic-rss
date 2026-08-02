@@ -62,7 +62,7 @@ focused tests. The missing distinction is production acceptance evidence.
 | Moderation, holds, AI leases, and database-secret hardening | Implemented with committed migrations and focused transaction/recovery tests. | Release and migration provenance are recorded; aggregate-only anomaly queries remain a safe follow-up. |
 | WebSocket abuse, read markers, slow mode, presence, blocks, outbox, and retention | Implemented and covered by focused gateway/service tests. | Exact release is proven; non-disruptive aggregate runtime metrics remain an operational follow-up. |
 | Redis architecture and worker lifecycle | Two Redis services are live; graceful shutdown and split-worker code are present. | Fragmentation decision is documented and the monitor guard is live; split-worker cutover remains deliberately deferred. |
-| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance. Public CSP/browser-protection headers are verified; the image-proxy missing-input boundary returns `400` with `no-store`, while successful remote-image transformation remains source/CI verified. Provider evidence confirms a healthy Cloudflare Tunnel for the canonical web names, but the active connector/origin hop is not present on the observed OVH host; `NET-001` remains incomplete. |
+| Minimal images, CSP, CI gates, and trusted ingress | Source, CI controls, and runbooks are present. | The approved release records image provenance. Public CSP/browser-protection headers are verified; the image-proxy missing-input boundary returns `400` with `no-store`, while successful remote-image transformation remains source/CI verified. The current managed tunnel origin is mapped to the OVH application-host Compose web service, and provider DNS has no web bypass candidate. Three approved forged-header attempts were blocked before the limiter, including one with a one-use Managed-Rules skip, so trusted-header overwrite remains unproven; `NET-001` remains incomplete. |
 | AUTH-PERF-001, CHAT-SEQ-001, IMAGE-PROXY-001 | Implemented/decided in `origin/main`; image proxy has re-encoding tests. | Included in the exact live release; no sequence migration is planned without a new design decision. |
 
 ## Milestone 0 — Make the release gate reproducible
@@ -186,20 +186,34 @@ requires a separate explicit approval.
    compiled images.
 2. **Completed 2026-07-28.** Updated the remaining public README reference to
    the current production runbook without adding host details to the repository.
-3. Consolidate the original Phase 0 names into the current inventory,
-   backup/restore checklist, chat-gateway recovery guide, deployment rollback
-   runbook, and a concise worker/queue ownership map.
+3. **Completed 2026-07-30.** Consolidated the original Phase 0 terminology
+   into the current inventory, backup/restore checklist, chat-gateway recovery
+   guide, deployment rollback runbook, and worker/queue ownership map. The
+   current managed-tunnel mapping is recorded separately from the remaining
+   `NET-001` runtime-header proof.
 4. Revalidate an isolated restore rehearsal before its due date and at least
    quarterly thereafter. Do not reuse or modify historical failed attempts.
 5. Keep a short private evidence record for backup freshness, off-host sync,
    alert delivery, monitor state changes, and release provenance.
-6. **Observed 2026-07-29 (read-only provider/OVH cross-check).** The canonical
-   web names are proxied through a healthy Cloudflare Tunnel, while the
-   observed OVH host has no active Cloudflare connector or non-loopback web
-   listener. Keep `NET-001` open until the private connector inventory proves
-   the final OVH origin hop, trusted-header boundary, and absence of an
-   alternate DNS bypass. This evidence is not authorization to change DNS,
-   tunnels, firewall, or provider settings.
+6. **Updated 2026-07-30 (managed-tunnel recovery and controlled proofs).** The
+   current proxied public route uses a managed Cloudflare Tunnel whose healthy
+   OVH application-host connector reaches the Compose web service; the
+   current origin mapping is therefore complete without recording private
+   topology. Two separately approved forged-header image-proxy requests with
+   distinct URL forms returned HTTP 403 before reaching the limiter: the
+   forged hashed key remained absent and the aggregate anonymous image-proxy
+   key count remained zero after each. Keep `NET-001` open solely for a
+   future, freshly approved materially different runtime header proof; do not
+   retry the blocked request form broadly. A read-only provider Security Events
+   view filtered to edge-status 403 classified two of four sampled events as
+   `Block` / Managed Rules, but the probes had no retained event identifier;
+   that supports edge-side blocking without identifying the trigger or proving
+   header overwrite. A later one-use, exact-match Managed-Rules skip was
+   deployed for a single third request and deleted immediately after it also
+   returned HTTP 403 with unchanged redacted limiter measures; it does not
+   identify the remaining edge control or prove header overwrite. This evidence
+   is not authorization
+   to change DNS, tunnels, firewall, or provider settings.
 
 **Done when:** backup, restore, monitoring, rollback, and deployment facts are
 current, reproducible, and OVH-specific.

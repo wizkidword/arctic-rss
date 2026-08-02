@@ -19,11 +19,15 @@ import { AiDigestGenerator } from "./ai-digest-generator"
 describe("AiDigestGenerator", () => {
   it("renders an enabled generation action for eligible unread articles", () => {
     const markup = renderToStaticMarkup(
-      <AiDigestGenerator activeDigest={null} eligibleArticleCount={12} />
+      <AiDigestGenerator
+        activeDigest={null}
+        dailyArticleCount={12}
+        weeklyArticleCount={28}
+      />
     )
 
-    expect(markup).toContain("12 unread articles eligible")
-    expect(markup).toContain("Generate digest")
+    expect(markup).toContain("Daily brief (12)")
+    expect(markup).toContain("Weekly brief (28)")
     expect(markup).not.toContain("disabled")
   })
 
@@ -32,13 +36,15 @@ describe("AiDigestGenerator", () => {
       <AiDigestGenerator
         activeDigest={{
           id: "digest-1",
+          period: "WEEKLY",
           status: "PROCESSING",
         }}
-        eligibleArticleCount={12}
+        dailyArticleCount={12}
+        weeklyArticleCount={28}
       />
     )
 
-    expect(markup).toContain("Digest processing")
+    expect(markup).toContain("Weekly briefing processing")
     expect(markup).toContain("disabled")
     expect(markup).toContain("/app/ai/digests/digest-1")
   })

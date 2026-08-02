@@ -51,9 +51,10 @@ describe("AiDigestDetail", () => {
           ],
           model: "local-digest-v1",
           overview: "Two unread stories.",
+          period: "DAILY",
           provider: "local",
           status: "COMPLETED",
-          title: "Arctic digest - 2026-06-23",
+          title: "What matters today - 2026-06-23",
         }}
       />
     )
@@ -62,6 +63,7 @@ describe("AiDigestDetail", () => {
     expect(markup).toContain("Skim Later")
     expect(markup).toContain("Top story")
     expect(markup).toContain("Second story")
+    expect(markup).toContain("daily brief")
     expect(markup).toContain("/app/article/article-1")
   })
 })
