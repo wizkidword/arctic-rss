@@ -373,11 +373,13 @@ export async function processChatArticleIntegration({
 }
 
 export async function processPendingChatBotDeliveries({
+  assertLeaseHeld,
   environment = process.env,
   limit = 100,
   now = () => new Date(),
   store = getChatBotStore(),
 }: {
+  assertLeaseHeld?: () => void
   environment?: ChatFeatureFlagEnvironment
   limit?: number
   now?: () => Date
@@ -399,6 +401,7 @@ export async function processPendingChatBotDeliveries({
   const messages: ChatMessageWire[] = []
 
   for (const roomFeed of roomFeeds) {
+    assertLeaseHeld?.()
     const message = await drainChatRoomFeed({
       feedId: roomFeed.feedId,
       now: now(),

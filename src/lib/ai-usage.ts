@@ -587,10 +587,12 @@ export async function failAiUsageOperation({
 
 /** Releases expired reservations in bounded, idempotent batches. */
 export async function reconcileExpiredAiUsageOperations({
+  assertLeaseHeld,
   batchSize = 100,
   now = new Date(),
   store,
 }: {
+  assertLeaseHeld?: () => void
   batchSize?: number
   now?: Date
   store: AiUsageLedgerStore
@@ -612,6 +614,7 @@ export async function reconcileExpiredAiUsageOperations({
     }
 
     return reconcileExpiredAiUsageOperationsWithStore({
+      assertLeaseHeld,
       batchSize: normalizedBatchSize,
       now,
       store: transaction,
@@ -620,10 +623,12 @@ export async function reconcileExpiredAiUsageOperations({
 }
 
 async function reconcileExpiredAiUsageOperationsWithStore({
+  assertLeaseHeld,
   batchSize,
   now,
   store,
 }: {
+  assertLeaseHeld?: () => void
   batchSize: number
   now: Date
   store: AiUsageLedgerStore
@@ -643,6 +648,7 @@ async function reconcileExpiredAiUsageOperationsWithStore({
   let released = 0
 
   for (const operation of operations) {
+    assertLeaseHeld?.()
     const claimed = await claimAiUsageOperation({
       leaseOwner: `ai-reconciler:${randomUUID()}`,
       now,

@@ -108,6 +108,7 @@ export function savedMonitorSettings(
 }
 
 export async function processDueSavedMonitors({
+  assertLeaseHeld,
   findMatches = async ({ cursor, limit, monitor }: {
     cursor: SavedMonitorArticleCursor
     limit: number
@@ -123,6 +124,7 @@ export async function processDueSavedMonitors({
   settings = savedMonitorSettings(),
   store,
 }: {
+  assertLeaseHeld?: () => void
   findMatches?: (input: {
     cursor: SavedMonitorArticleCursor
     limit: number
@@ -165,6 +167,7 @@ export async function processDueSavedMonitors({
   }
 
   for (const monitor of monitors) {
+    assertLeaseHeld?.()
     if (!monitor.monitorNextRunAt) {
       result.skipped += 1
       continue

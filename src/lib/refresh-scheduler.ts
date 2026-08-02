@@ -26,12 +26,14 @@ export type RefreshScheduleResult = {
 }
 
 export async function enqueueDueFeedRefreshes({
+  assertLeaseHeld,
   batchSize,
   claimLeaseMs = DEFAULT_SCHEDULER_CLAIM_LEASE_MS,
   enqueue,
   now = new Date(),
   store,
 }: {
+  assertLeaseHeld?: () => void
   batchSize: number
   claimLeaseMs?: number
   enqueue: (feedId: string) => Promise<unknown>
@@ -39,6 +41,7 @@ export async function enqueueDueFeedRefreshes({
   store: Pick<RefreshSchedulerStore, "feed">
 }): Promise<RefreshScheduleResult> {
   return enqueueDueRefreshes({
+    assertLeaseHeld,
     batchSize,
     claimLeaseMs,
     enqueue,
@@ -48,12 +51,14 @@ export async function enqueueDueFeedRefreshes({
 }
 
 export async function enqueueDuePodcastRefreshes({
+  assertLeaseHeld,
   batchSize,
   claimLeaseMs = DEFAULT_SCHEDULER_CLAIM_LEASE_MS,
   enqueue,
   now = new Date(),
   store,
 }: {
+  assertLeaseHeld?: () => void
   batchSize: number
   claimLeaseMs?: number
   enqueue: (podcastId: string) => Promise<unknown>
@@ -61,6 +66,7 @@ export async function enqueueDuePodcastRefreshes({
   store: Pick<RefreshSchedulerStore, "podcast">
 }): Promise<RefreshScheduleResult> {
   return enqueueDueRefreshes({
+    assertLeaseHeld,
     batchSize,
     claimLeaseMs,
     enqueue,
@@ -143,12 +149,14 @@ export function schedulerSettings(
 }
 
 async function enqueueDueRefreshes({
+  assertLeaseHeld,
   batchSize,
   claimLeaseMs,
   enqueue,
   now,
   store,
 }: {
+  assertLeaseHeld?: () => void
   batchSize: number
   claimLeaseMs: number
   enqueue: (id: string) => Promise<unknown>
@@ -183,6 +191,7 @@ async function enqueueDueRefreshes({
   let enqueuedCount = 0
 
   for (const item of due) {
+    assertLeaseHeld?.()
     const claimed = await store.updateMany({
       data: {
         nextFetchAt: claimUntil,
@@ -201,6 +210,7 @@ async function enqueueDueRefreshes({
     }
 
     try {
+      assertLeaseHeld?.()
       await enqueue(item.id)
       enqueuedCount += 1
     } catch (error) {

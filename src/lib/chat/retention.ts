@@ -128,6 +128,7 @@ export function getChatRetentionSettings(
  * hold mutation.
  */
 export async function purgeExpiredChatRecords({
+  assertLeaseHeld,
   batchSize = DEFAULT_BATCH_SIZE,
   continuation,
   maxBatches = DEFAULT_MAX_BATCHES,
@@ -135,6 +136,7 @@ export async function purgeExpiredChatRecords({
   now = new Date(),
   store,
 }: {
+  assertLeaseHeld?: () => void
   batchSize?: number
   continuation?: ChatRetentionContinuation
   maxBatches?: number
@@ -162,6 +164,7 @@ export async function purgeExpiredChatRecords({
       }
 
       return purgeExpiredChatRecordsWithStore({
+        assertLeaseHeld,
         batchSize: boundedBatchSize,
         continuation,
         maxBatches: boundedMaxBatches,
@@ -181,6 +184,7 @@ export async function purgeExpiredChatRecords({
 }
 
 async function purgeExpiredChatRecordsWithStore({
+  assertLeaseHeld,
   batchSize,
   continuation,
   maxBatches,
@@ -189,6 +193,7 @@ async function purgeExpiredChatRecordsWithStore({
   startedAt,
   store,
 }: {
+  assertLeaseHeld?: () => void
   batchSize: number
   continuation?: ChatRetentionContinuation
   maxBatches: number
@@ -217,6 +222,7 @@ async function purgeExpiredChatRecordsWithStore({
   let exhausted = false
 
   while (batches < maxBatches && Date.now() - startedAt < maxRuntimeMs) {
+    assertLeaseHeld?.()
     const page = await selectRetentionPage({ batchSize, cursors, store, thresholds })
 
     if (!page.hasRecords) {

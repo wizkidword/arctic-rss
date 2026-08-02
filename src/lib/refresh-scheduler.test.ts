@@ -120,6 +120,31 @@ describe("refresh scheduler", () => {
     expect(first.duplicatePrevented + second.duplicatePrevented).toBe(1)
   })
 
+  it("stops claiming and enqueuing new refreshes after the maintenance lease is lost", async () => {
+    const store = createStore()
+    let held = true
+    const enqueue = vi.fn().mockImplementation(async () => {
+      held = false
+    })
+
+    await expect(
+      enqueueDueFeedRefreshes({
+        assertLeaseHeld: () => {
+          if (!held) {
+            throw new Error("maintenance lease lost")
+          }
+        },
+        batchSize: 100,
+        enqueue,
+        now: new Date("2026-07-13T12:00:00.000Z"),
+        store,
+      })
+    ).rejects.toThrow("maintenance lease lost")
+
+    expect(enqueue).toHaveBeenCalledOnce()
+    expect(store.feed.updateMany).toHaveBeenCalledOnce()
+  })
+
   it("clamps scheduler environment values before they reach the worker", () => {
     expect(
       schedulerSettings({

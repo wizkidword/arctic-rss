@@ -102,7 +102,7 @@ import {
   runsWorkerResponsibility,
   workerHeartbeatPath,
 } from "./mode"
-import { createMaintenanceLock } from "./maintenance-lock"
+import { createMaintenanceLock, type MaintenanceLease } from "./maintenance-lock"
 
 const workerMode = getWorkerMode()
 assertSecureProductionConfiguration(process.env, `worker-${workerMode}`)
@@ -459,8 +459,9 @@ podcastWorker?.on("failed", (job, error) => {
   )
 })
 
-async function enqueueDueFeeds() {
+async function enqueueDueFeeds(lease?: MaintenanceLease) {
   return enqueueDueFeedRefreshes({
+    assertLeaseHeld: lease?.assertHeld,
     batchSize: schedulerBatchSize,
     enqueue: enqueueFeedRefresh,
     store: prisma as unknown as Parameters<typeof enqueueDueFeedRefreshes>[0]["store"],
@@ -491,21 +492,23 @@ async function refreshFeedAndQueueChatIntegration(feedId: string) {
   return result
 }
 
-async function processPendingChatBotMessages() {
+async function processPendingChatBotMessages(lease?: MaintenanceLease) {
   return processPendingChatBotDeliveries({
+    assertLeaseHeld: lease?.assertHeld,
     limit: schedulerBatchSize,
   })
 }
 
-async function enqueueDuePodcasts() {
+async function enqueueDuePodcasts(lease?: MaintenanceLease) {
   return enqueueDuePodcastRefreshes({
+    assertLeaseHeld: lease?.assertHeld,
     batchSize: schedulerBatchSize,
     enqueue: enqueuePodcastRefresh,
     store: prisma as unknown as Parameters<typeof enqueueDuePodcastRefreshes>[0]["store"],
   })
 }
 
-async function enqueueDueSmartDigests() {
+async function enqueueDueSmartDigests(lease?: MaintenanceLease) {
   const now = new Date()
   const rules = await prisma.smartDigestRule.findMany({
     orderBy: [{ nextRunAt: "asc" }, { createdAt: "asc" }],
@@ -523,6 +526,7 @@ async function enqueueDueSmartDigests() {
   })
 
   for (const rule of rules) {
+    lease?.assertHeld()
     if (!rule.nextRunAt) {
       continue
     }
@@ -548,6 +552,16 @@ let chatRetentionFailureCount = 0
 
 function schedulerErrorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : "unknown error"
+}
+
+async function runLeaseAwareMaintenance<T>(
+  lease: MaintenanceLease | undefined,
+  operation: () => Promise<T>
+) {
+  lease?.assertHeld()
+  const result = await operation()
+  lease?.assertHeld()
+  return result
 }
 
 async function runTrackedRefresh<
@@ -598,7 +612,7 @@ async function runTrackedRefresh<
   }
 }
 
-async function schedulerTick() {
+async function schedulerTick(lease?: MaintenanceLease) {
   if (schedulerRunning) {
     return
   }
@@ -618,16 +632,16 @@ async function schedulerTick() {
       aiOperationReconciliationResult,
       savedMonitorResult,
     ] = await Promise.allSettled([
-      enqueueDueFeeds(),
-      enqueueDuePodcasts(),
-      enqueueDueSmartDigests(),
-      enqueuePendingSmartDigestEmails(),
-      processPendingChatBotMessages(),
-      runChatRetention(),
-      runAuthTokenMaintenance(),
-      runSecurityEventMaintenance(),
-      runAiOperationReconciliation(),
-      runSavedMonitors(),
+      runLeaseAwareMaintenance(lease, () => enqueueDueFeeds(lease)),
+      runLeaseAwareMaintenance(lease, () => enqueueDuePodcasts(lease)),
+      runLeaseAwareMaintenance(lease, () => enqueueDueSmartDigests(lease)),
+      runLeaseAwareMaintenance(lease, () => enqueuePendingSmartDigestEmails(lease)),
+      runLeaseAwareMaintenance(lease, () => processPendingChatBotMessages(lease)),
+      runLeaseAwareMaintenance(lease, () => runChatRetention(lease)),
+      runLeaseAwareMaintenance(lease, runAuthTokenMaintenance),
+      runLeaseAwareMaintenance(lease, runSecurityEventMaintenance),
+      runLeaseAwareMaintenance(lease, () => runAiOperationReconciliation(lease)),
+      runLeaseAwareMaintenance(lease, () => runSavedMonitors(lease)),
     ])
 
     if (feedResult.status === "fulfilled") {
@@ -801,7 +815,7 @@ function runSchedulerTick() {
   }
 
   schedulerTickPromise = (maintenanceLock
-    ? maintenanceLock.run(schedulerTick).then((result) => {
+    ? maintenanceLock.run((lease) => schedulerTick(lease)).then((result) => {
         if (!result.acquired) {
           console.warn(
             JSON.stringify({
@@ -822,7 +836,7 @@ function runSchedulerTick() {
   return schedulerTickPromise
 }
 
-async function runChatRetention() {
+async function runChatRetention(lease?: MaintenanceLease) {
   if (!getChatFeatureFlags().enabled) {
     return { disabled: true }
   }
@@ -835,6 +849,7 @@ async function runChatRetention() {
 
   nextChatRetentionAt = now + chatRetentionIntervalMs
   const result = await purgeExpiredChatRecords({
+    assertLeaseHeld: lease?.assertHeld,
     batchSize: chatRetentionSettings.batchSize,
     continuation: chatRetentionContinuation,
     maxBatches: chatRetentionSettings.maxBatches,
@@ -851,7 +866,7 @@ async function runChatRetention() {
   return result
 }
 
-async function enqueuePendingSmartDigestEmails() {
+async function enqueuePendingSmartDigestEmails(lease?: MaintenanceLease) {
   const runs = await prisma.digestRun.findMany({
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
@@ -864,6 +879,7 @@ async function enqueuePendingSmartDigestEmails() {
   })
 
   for (const run of runs) {
+    lease?.assertHeld()
     await enqueueSmartDigestEmail(run.id)
   }
 
@@ -911,15 +927,17 @@ async function runSecurityEventMaintenance() {
   })
 }
 
-async function runAiOperationReconciliation() {
+async function runAiOperationReconciliation(lease?: MaintenanceLease) {
   return reconcileExpiredAiUsageOperations({
+    assertLeaseHeld: lease?.assertHeld,
     batchSize: schedulerBatchSize,
     store: prisma as unknown as Parameters<typeof reconcileExpiredAiUsageOperations>[0]["store"],
   })
 }
 
-async function runSavedMonitors() {
+async function runSavedMonitors(lease?: MaintenanceLease) {
   return processDueSavedMonitors({
+    assertLeaseHeld: lease?.assertHeld,
     settings: savedMonitorSchedulerSettings,
     store: prisma as unknown as Parameters<typeof processDueSavedMonitors>[0]["store"],
   })
