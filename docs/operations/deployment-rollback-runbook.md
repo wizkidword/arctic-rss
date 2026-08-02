@@ -364,17 +364,17 @@ sessions and has its own runbook.
 ## Rollback
 
 1. Keep the currently running failed release and its logs for diagnosis.
-2. Restore the prior app directory or prior known-good image.
-3. Recreate only the restored application services:
-
-   ```bash
-   cd "$APP_DIR"
-   docker compose up -d --no-deps --force-recreate web worker
-   docker compose ps
-   curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/live
-   curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/health
-   ```
-
+2. Use the approval-gated
+   [`rollback-approved-release.ps1`](approved-release-command.md#deterministic-code-rollback)
+   with the private release record created for the failed release. Select the
+   record's **prior** topology, not its failed topology. Its dry run validates
+   the retained source, exact prior image tags, and complete manifest rollback
+   service list before it can connect to the VPS.
+3. Do not substitute a copied `web worker` Compose command: split and
+   chat-enabled topologies require a different complete rollback list. The
+   approved command retains the failed source, removes stale application
+   services, recreates every selected rollback service without migrations or a
+   build, and checks recorded image tags plus local/public health.
 4. If the release included a schema change, do not roll application code back
    across an incompatible schema. Restore the matching database backup or use a
    reviewed forward repair.

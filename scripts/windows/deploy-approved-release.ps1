@@ -189,6 +189,20 @@ function Get-ReleaseTopology {
   $applicationServices = @($knownServices | Where-Object {
     $_ -notin @("postgres", "redis", "redis-ephemeral", "migrate", "cloudflared")
   })
+  $topologyCatalog = @(
+    $manifest.topologies.PSObject.Properties | ForEach-Object {
+      $catalogName = [string]$_.Name
+      $catalogServices = @($_.Value.releaseServices | ForEach-Object { [string]$_ } | Sort-Object)
+      if ($catalogName -notmatch "^(all-in-one|all-in-one-with-chat|split|split-with-chat)$" -or $catalogServices.Count -eq 0 -or @($catalogServices | Where-Object { $_ -notmatch "^[a-z0-9-]+$" -or $knownServices -notcontains $_ }).Count -gt 0) {
+        throw "The topology manifest has an invalid release-service catalog entry."
+      }
+
+      "$catalogName|$($catalogServices -join ',')"
+    }
+  )
+  if ($topologyCatalog.Count -ne 4 -or @($topologyCatalog | Select-Object -Unique).Count -ne 4) {
+    throw "The topology manifest has an ambiguous release-service catalog."
+  }
 
   return [pscustomobject]@{
     Name = $Name
@@ -197,6 +211,7 @@ function Get-ReleaseTopology {
     RollbackServices = @($topology.rollbackServices | ForEach-Object { [string]$_ })
     RequiredHealthServices = @($topology.requiredHealthServices | ForEach-Object { [string]$_ })
     ApplicationServices = $applicationServices
+    TopologyCatalog = $topologyCatalog
   }
 }
 
@@ -783,6 +798,7 @@ try {
 
   $remoteScript = @'
 set -euo pipefail
+commit='__COMMIT__'
 short_sha='__SHORT_SHA__'
 archive='/tmp/arctic-rss-__SHORT_SHA__.tar.gz'
 expected_hash='__ARCHIVE_HASH__'
@@ -801,14 +817,17 @@ topology_profiles_b64='__TOPOLOGY_PROFILES_BASE64__'
 topology_release_services_b64='__TOPOLOGY_RELEASE_SERVICES_BASE64__'
 topology_health_services_b64='__TOPOLOGY_HEALTH_SERVICES_BASE64__'
 topology_application_services_b64='__TOPOLOGY_APPLICATION_SERVICES_BASE64__'
+topology_catalog_b64='__TOPOLOGY_CATALOG_BASE64__'
 
 mapfile -t topology_profiles < <(printf '%s' "$topology_profiles_b64" | base64 -d)
 mapfile -t topology_release_services < <(printf '%s' "$topology_release_services_b64" | base64 -d)
 mapfile -t topology_health_services < <(printf '%s' "$topology_health_services_b64" | base64 -d)
 mapfile -t topology_application_services < <(printf '%s' "$topology_application_services_b64" | base64 -d)
+mapfile -t topology_catalog < <(printf '%s' "$topology_catalog_b64" | base64 -d)
 test "${#topology_profiles[@]}" -gt 0
 test "${#topology_release_services[@]}" -gt 0
 test "${#topology_health_services[@]}" -gt 0
+test "${#topology_catalog[@]}" -gt 0
 compose_profile_args=()
 for profile in "${topology_profiles[@]}"; do
   test -n "$profile"
@@ -829,9 +848,53 @@ test ! -e "$stage"
 test ! -e "$previous"
 test -f "$live/.env"
 
+# Capture the exact topology and images that are live before creating a
+# rollback candidate.  The catalog comes from the checked-in manifest rather
+# than a second, hand-maintained shell list.
+active_application_services=()
+while IFS= read -r service; do
+  case "$service" in
+    postgres|redis|redis-ephemeral|migrate|cloudflared) ;;
+    '') ;;
+    *) active_application_services+=("$service") ;;
+  esac
+done < <(sudo -n docker ps --filter "label=com.docker.compose.project=$compose_project" --format '{{.Label "com.docker.compose.service"}}' | sort -u)
+test "${#active_application_services[@]}" -gt 0
+active_signature="$(printf '%s\n' "${active_application_services[@]}" | sort -u | paste -sd, -)"
+previous_topology=""
+for catalog_entry in "${topology_catalog[@]}"; do
+  catalog_name="${catalog_entry%%|*}"
+  catalog_signature="${catalog_entry#*|}"
+  if [ "$active_signature" = "$catalog_signature" ]; then
+    test -z "$previous_topology"
+    previous_topology="$catalog_name"
+  fi
+done
+test -n "$previous_topology"
+
+previous_commit=""
+metadata_file="$live/.arctic-rss-release.json"
+if test -f "$metadata_file"; then
+  previous_commit="$(sudo -n sed -nE 's/^[[:space:]]*"commit"[[:space:]]*:[[:space:]]*"([a-f0-9]{40})"[[:space:]]*,?[[:space:]]*$/\1/p' "$metadata_file")"
+  metadata_topology="$(sudo -n sed -nE 's/^[[:space:]]*"topology"[[:space:]]*:[[:space:]]*"([a-z0-9-]+)"[[:space:]]*,?[[:space:]]*$/\1/p' "$metadata_file")"
+  test "$metadata_topology" = "$previous_topology"
+else
+  previous_commit="$(sudo -n git -C "$live" rev-parse HEAD 2>/dev/null || true)"
+fi
+[[ "$previous_commit" =~ ^[a-f0-9]{40}$ ]]
+
+previous_images=()
+for service in "${active_application_services[@]}"; do
+  container_name="app-$service-1"
+  image_name="$(sudo -n docker inspect -f '{{.Config.Image}}' "$container_name")"
+  test -n "$image_name"
+  previous_images+=("$service=$image_name")
+done
+
 sudo -n install -d -m 755 "$stage"
 sudo -n tar -xzf "$archive" -C "$stage"
 test -f "$stage/ops/systemd/60-arctic-rss-log-retention.conf"
+printf '{\n  "schemaVersion": 1,\n  "commit": "%s",\n  "topology": "%s"\n}\n' "$commit" "$topology_name" | sudo -n tee "$stage/.arctic-rss-release.json" >/dev/null
 sudo -n install -m 600 -o root -g root "$live/.env" "$stage/.env"
 # Compose reads the image variables from the staged environment file. Keep the
 # tag immutable so a loaded archive cannot alter the still-live source before
@@ -970,6 +1033,9 @@ test "$monitor_result" = success
 test "$monitor_status" = 0
 
 printf 'PREVIOUS_RELEASE=%s\n' "$previous"
+printf 'PREVIOUS_COMMIT=%s\n' "$previous_commit"
+printf 'PREVIOUS_TOPOLOGY=%s\n' "$previous_topology"
+printf 'PREVIOUS_IMAGES=%s\n' "${previous_images[*]}"
 printf 'TOPOLOGY=%s\n' "$topology_name"
 printf 'TOPOLOGY_HEALTH=%s\n' "${topology_health[*]}"
 printf 'MIGRATION_STATUS=%s\n' "$migration_status"
@@ -989,9 +1055,13 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
   $topologyReleaseServicesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.ReleaseServices -join "`n")))
   $topologyHealthServicesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.RequiredHealthServices -join "`n")))
   $topologyApplicationServicesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.ApplicationServices -join "`n")))
-  $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__IMAGE_ARCHIVE_HASH__', $offHostImages.ArchiveHash).Replace('__OFFHOST_IMAGES_BASE64__', $offHostImagesPayload).Replace('__RELEASE_IMAGE_ENVIRONMENT_BASE64__', $releaseImageEnvironmentPayload).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost).Replace('__TOPOLOGY_NAME__', $releaseTopology.Name).Replace('__TOPOLOGY_PROFILES_BASE64__', $topologyProfilesPayload).Replace('__TOPOLOGY_RELEASE_SERVICES_BASE64__', $topologyReleaseServicesPayload).Replace('__TOPOLOGY_HEALTH_SERVICES_BASE64__', $topologyHealthServicesPayload).Replace('__TOPOLOGY_APPLICATION_SERVICES_BASE64__', $topologyApplicationServicesPayload)
+  $topologyCatalogPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.TopologyCatalog -join "`n")))
+  $remoteScript = $remoteScript.Replace('__COMMIT__', $commit).Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__IMAGE_ARCHIVE_HASH__', $offHostImages.ArchiveHash).Replace('__OFFHOST_IMAGES_BASE64__', $offHostImagesPayload).Replace('__RELEASE_IMAGE_ENVIRONMENT_BASE64__', $releaseImageEnvironmentPayload).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost).Replace('__TOPOLOGY_NAME__', $releaseTopology.Name).Replace('__TOPOLOGY_PROFILES_BASE64__', $topologyProfilesPayload).Replace('__TOPOLOGY_RELEASE_SERVICES_BASE64__', $topologyReleaseServicesPayload).Replace('__TOPOLOGY_HEALTH_SERVICES_BASE64__', $topologyHealthServicesPayload).Replace('__TOPOLOGY_APPLICATION_SERVICES_BASE64__', $topologyApplicationServicesPayload).Replace('__TOPOLOGY_CATALOG_BASE64__', $topologyCatalogPayload)
   $stageOutput = Invoke-RemoteScript -Config $config -Script $remoteScript
   $previousRelease = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_RELEASE"
+  $previousCommit = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_COMMIT"
+  $previousTopology = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_TOPOLOGY"
+  $previousImages = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_IMAGES"
   $deployedTopology = Get-ReleaseMarker -Output $stageOutput -Name "TOPOLOGY"
   $topologyHealth = Get-ReleaseMarker -Output $stageOutput -Name "TOPOLOGY_HEALTH"
   $migrationStatus = Get-ReleaseMarker -Output $stageOutput -Name "MIGRATION_STATUS"
@@ -1032,6 +1102,9 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
     loginHttpStatus = $loginStatus
     migrationStatus = $migrationStatus
     previousRelease = $previousRelease
+    previousCommit = $previousCommit
+    previousTopology = $previousTopology
+    previousImageTags = @($previousImages -split ' ' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     topology = $deployedTopology
     topologyHealth = $topologyHealth
     publicHealth = $publicHealth

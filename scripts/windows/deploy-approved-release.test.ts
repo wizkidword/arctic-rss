@@ -133,4 +133,18 @@ describe("approved release command", () => {
     expect(script).toContain("topology_application_services")
     expect(script).toContain("TOPOLOGY_HEALTH")
   })
+
+  it("captures the exact prior topology, commit, and application image tags for rollback", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain("TopologyCatalog = $topologyCatalog")
+    expect(script).toContain("topology_catalog_b64=")
+    expect(script).toContain('docker ps --filter "label=com.docker.compose.project=$compose_project"')
+    expect(script).toContain(".arctic-rss-release.json")
+    expect(script).toContain("PREVIOUS_COMMIT")
+    expect(script).toContain("PREVIOUS_TOPOLOGY")
+    expect(script).toContain("PREVIOUS_IMAGES")
+    expect(script).toContain("previousImageTags = @($previousImages -split ' '")
+    expect(script).toContain('[[ "$previous_commit" =~ ^[a-f0-9]{40}$ ]]')
+  })
 })

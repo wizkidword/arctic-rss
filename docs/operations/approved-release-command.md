@@ -90,3 +90,37 @@ It writes a non-secret JSON release record to the configured private local
 directory. Schema-changing releases still require a reviewed migration and a
 forward-fix plan; do not use the retained source directory alone to roll code
 back across an incompatible database change.
+
+## Deterministic code rollback
+
+`scripts/windows/rollback-approved-release.ps1` restores the exact prior
+release named by one of those private release records. It is a separate,
+owner-approved production action; it never runs migrations, rebuilds images,
+or deletes data volumes.
+
+Run its local-only record and manifest preflight first:
+
+```powershell
+pwsh -File .\scripts\windows\rollback-approved-release.ps1 `
+  -ConfigurationPath "C:\Users\you\.arctic-rss\release-config.json" `
+  -ReleaseRecordPath "C:\Users\you\AppData\Local\ArcticRSS\release-records\release.json" `
+  -Topology all-in-one `
+  -DryRun
+```
+
+`-Topology` names the **prior topology being restored**, not the failed
+release's topology. The record must include that topology, a retained prior
+source directory, and the exact prior image tag for every rollback service.
+The command validates that the retained source renders those same services and
+tags before it moves either release directory.
+
+When a rollback is expressly approved, omit `-DryRun`, add `-Approve`, and
+type `ROLLBACK <failed-release-short-sha>` exactly. The command retains the
+failed source directory under the release root, removes application services
+that are not part of the restored topology, recreates every manifest-selected
+rollback service without building, verifies the recorded image tags, health,
+journald logging, local health, and public health. It refuses an ambiguous,
+incomplete, or legacy release record rather than guessing a topology.
+
+Code rollback is not a database rollback. For an incompatible schema change,
+restore a matching verified backup or use a reviewed forward repair instead.

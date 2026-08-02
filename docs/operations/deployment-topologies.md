@@ -48,6 +48,7 @@ split-worker profile.
 - Add a service, profile, or worker responsibility first to
   `ops/topologies.json`, then update Compose and run `npm run topology:validate`.
 
-The approval-gated Windows release procedure remains the only production
-deployment mechanism. Its Phase 2 follow-up will consume these selected
-service lists directly; this document does not authorize a topology cutover.
+The approval-gated Windows release and rollback procedures consume these
+selected service lists directly. A rollback selects the prior topology stored
+in its private release record and is still a separately approved production
+action; this document does not authorize a topology cutover.
