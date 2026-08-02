@@ -4,10 +4,11 @@
 
 ### Status
 
-Partially complete. The canonical topology model, explicit Compose activation,
-CI matrix, validation, operator documentation, approval-gated release
-selection, and deterministic rollback command are implemented and locally
-verified. CI has not yet run the topology matrix for these unpushed commits.
+Complete. The canonical topology model, explicit Compose activation, CI matrix,
+validation, operator documentation, approval-gated release selection, and
+deterministic rollback command are implemented and verified locally and in the
+[full CI workflow](https://github.com/wizkidword/arctic-rss/actions/runs/30760608750)
+for commit `2a079b6`.
 
 ### Baseline
 
@@ -71,12 +72,15 @@ None. `migrate` remains unprofiled and is required by every declared topology.
   split workers.
 - Focused topology, Compose, and chat-gate Vitest suite — 12 passed.
 - `npm run typecheck` — passed.
-- `npm test` — 1,063 passed, 3 skipped.
+- `npm test` — 1,064 passed, 3 skipped.
 - `npm run lint` — no errors; two pre-existing unused-argument warnings in
   `src/app/app/actions.ts`.
 - Focused release, rollback, and topology tests — 17 passed.
 - PowerShell parser check and Git Bash `-n` check of the normalized embedded
   remote script — passed.
+- GitHub Actions CI workflow `30760608750` — passed: quality/migrations/unit
+  tests, browser smoke (3 passed), both isolated Compose topology gates,
+  container scan/SBOM, static analysis, secret scan, and dependency audit.
 
 ### Evidence
 
@@ -93,8 +97,6 @@ None. `migrate` remains unprofiled and is required by every declared topology.
 
 ### Remaining risks
 
-- CI topology jobs will run on the next pushed commit; local validation did not
-  start the full production-like application topology.
 - Production topology selection and rollout remain separately owner-approved.
 
 ### Rollback
@@ -105,5 +107,5 @@ with a split-worker profile.
 
 ### Next phase gate
 
-Fail. Verify the CI topology matrix on a pushed commit before closing Phase 2
-or beginning Phase 3.
+Pass. The CI topology matrix verified all-in-one-with-chat and split-with-chat
+independently with no simultaneous worker ownership. Phase 3 may begin.
