@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   addDiscoverSubredditToRedditTopic: vi.fn(),
+  notifyAccountSecurityChange: vi.fn(),
   getPrisma: vi.fn(),
   importDiscoverOpml: vi.fn(),
   enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
@@ -27,6 +28,10 @@ vi.mock("@/lib/db", () => ({
   getPrisma: mocks.getPrisma,
 }))
 
+vi.mock("@/lib/chat/security-events", () => ({
+  notifyAccountSecurityChange: mocks.notifyAccountSecurityChange,
+}))
+
 vi.mock("@/lib/discover-directory-import", () => ({
   importDiscoverOpml: mocks.importDiscoverOpml,
 }))
@@ -48,6 +53,7 @@ vi.mock("@/lib/rate-limit", () => ({
 
 import {
   addDiscoverSubredditAction,
+  disableUserAction,
   importDiscoverOpmlAction,
   revokeUserSessionsAction,
   updateDiscoverCategoryMetadataAction,
@@ -339,6 +345,107 @@ describe("revokeUserSessionsAction", () => {
     expect(result).toEqual({
       message: "Revoked all active sessions for reader@example.com.",
       status: "success",
+    })
+  })
+})
+
+describe("disableUserAction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("requires a fresh administrator session", async () => {
+    mocks.requireFreshAdmin.mockResolvedValue(null)
+
+    const result = await disableUserAction(initialState(), formData("user-1"))
+
+    expect(result).toEqual({
+      message: "Only administrators can disable user accounts.",
+      status: "error",
+    })
+    expect(mocks.getPrisma).not.toHaveBeenCalled()
+  })
+
+  it("disables a standard user, revokes the session version, and writes an audit event", async () => {
+    const transaction = {
+      adminAuditLog: {
+        create: vi.fn().mockResolvedValue({}),
+      },
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          disabledAt: null,
+          email: "reader@example.com",
+          id: "user-1",
+          role: "USER",
+        }),
+        update: vi.fn().mockResolvedValue({
+          authVersion: 4,
+          email: "reader@example.com",
+          id: "user-1",
+        }),
+      },
+    }
+    const prisma = {
+      $transaction: vi.fn(async (callback) => callback(transaction)),
+    }
+    mocks.getPrisma.mockReturnValue(prisma)
+    mocks.requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
+
+    const result = await disableUserAction(initialState(), formData("user-1"))
+
+    expect(transaction.user.findUnique).toHaveBeenCalledWith({
+      select: { disabledAt: true, email: true, id: true, role: true },
+      where: { id: "user-1" },
+    })
+    expect(transaction.user.update).toHaveBeenCalledWith({
+      data: {
+        authVersion: { increment: 1 },
+        disabledAt: expect.any(Date),
+      },
+      select: { authVersion: true, email: true, id: true },
+      where: { id: "user-1" },
+    })
+    expect(transaction.adminAuditLog.create).toHaveBeenCalledWith({
+      data: {
+        action: "USER_DISABLED",
+        adminUserId: "admin-1",
+        metadata: { source: "admin-dashboard" },
+        targetId: "user-1",
+        targetType: "User",
+      },
+    })
+    expect(mocks.notifyAccountSecurityChange).toHaveBeenCalledWith({
+      authVersion: 4,
+      reason: "account_disabled",
+      userId: "user-1",
+    })
+    expect(result).toEqual({
+      message: "Disabled reader@example.com and revoked all active sessions.",
+      status: "success",
+    })
+  })
+
+  it("does not disable another administrator account", async () => {
+    const transaction = {
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          disabledAt: null,
+          email: "other-admin@example.com",
+          id: "admin-2",
+          role: "ADMIN",
+        }),
+      },
+    }
+    mocks.getPrisma.mockReturnValue({
+      $transaction: vi.fn(async (callback) => callback(transaction)),
+    })
+    mocks.requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
+
+    const result = await disableUserAction(initialState(), formData("admin-2"))
+
+    expect(result).toEqual({
+      message: "Administrator accounts cannot be disabled from this dashboard.",
+      status: "error",
     })
   })
 })

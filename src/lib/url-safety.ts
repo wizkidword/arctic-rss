@@ -546,6 +546,12 @@ async function fetchWithPinnedAddress(
     "accept" | "ifModifiedSince" | "ifNoneMatch" | "userAgent"
   >
 ): Promise<PinnedFetchResponse> {
+  const fixtureTarget = e2eFixtureTarget(url)
+
+  if (fixtureTarget) {
+    return fetchE2eFixture(fixtureTarget, signal, options)
+  }
+
   const dispatcher = new Agent({
     bodyTimeout: timeoutMs,
     connectTimeout: timeoutMs,
@@ -585,6 +591,65 @@ async function fetchWithPinnedAddress(
   } catch (error) {
     await dispatcher.destroy().catch(() => undefined)
     throw error
+  }
+}
+
+// This route is deliberately narrower than an SSRF allowlist: DNS validation
+// still happens before this point, and only the exact synthetic E2E hostname
+// can be redirected to the loopback fixture server when the test flag is set.
+function e2eFixtureTarget(url: URL) {
+  if (process.env.ARCTIC_RSS_E2E_FIXTURES !== "1") {
+    return null
+  }
+
+  const fixtureHost = process.env.ARCTIC_RSS_E2E_FEED_HOST?.trim().toLowerCase()
+
+  if (!fixtureHost || normalizeHostname(url.hostname) !== fixtureHost) {
+    return null
+  }
+
+  const fixtureOrigin = process.env.ARCTIC_RSS_E2E_FEED_ORIGIN?.trim()
+
+  if (!fixtureOrigin) {
+    throw new FeedFetchError("The E2E feed fixture origin is not configured.")
+  }
+
+  let origin: URL
+
+  try {
+    origin = new URL(fixtureOrigin)
+  } catch {
+    throw new FeedFetchError("The E2E feed fixture origin is invalid.")
+  }
+
+  if (origin.protocol !== "http:" || origin.hostname !== "127.0.0.1") {
+    throw new FeedFetchError("The E2E feed fixture origin must be loopback HTTP.")
+  }
+
+  return new URL(`${url.pathname}${url.search}`, origin)
+}
+
+async function fetchE2eFixture(
+  target: URL,
+  signal: AbortSignal,
+  options: Pick<
+    SafeFetchOptions,
+    "accept" | "ifModifiedSince" | "ifNoneMatch" | "userAgent"
+  >
+): Promise<PinnedFetchResponse> {
+  const response = (await undiciFetch(target, {
+    headers: requestHeaders(options),
+    redirect: "manual",
+    signal,
+  })) as unknown as FetchResponse
+
+  return {
+    response,
+    dispose: async () => {
+      if (response.body && !response.bodyUsed) {
+        await response.body.cancel().catch(() => undefined)
+      }
+    },
   }
 }
 

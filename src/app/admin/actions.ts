@@ -54,6 +54,18 @@ export type RevokeUserSessionsActionState = {
   status: "idle" | "success" | "error"
 }
 
+export type DisableUserActionState = {
+  message: string
+  status: "idle" | "success" | "error"
+}
+
+class DisableUserError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "DisableUserError"
+  }
+}
+
 export async function importDiscoverOpmlAction(
   _previousState: ImportDiscoverOpmlActionState,
   formData: FormData
@@ -301,6 +313,116 @@ export async function revokeUserSessionsAction(
 
     return {
       message: "Arctic RSS could not revoke those sessions.",
+      status: "error",
+    }
+  }
+}
+
+export async function disableUserAction(
+  _previousState: DisableUserActionState,
+  formData: FormData
+): Promise<DisableUserActionState> {
+  const admin = await requireFreshAdmin().catch(() => null)
+
+  if (!admin) {
+    return {
+      message: "Only administrators can disable user accounts.",
+      status: "error",
+    }
+  }
+
+  const targetUserId = String(formData.get("targetUserId") ?? "").trim()
+
+  if (!targetUserId) {
+    return {
+      message: "Choose a user account to disable.",
+      status: "error",
+    }
+  }
+
+  try {
+    const target = await getPrisma().$transaction(async (transaction) => {
+      const existingUser = await transaction.user.findUnique({
+        select: {
+          disabledAt: true,
+          email: true,
+          id: true,
+          role: true,
+        },
+        where: { id: targetUserId },
+      })
+
+      if (!existingUser) {
+        throw new DisableUserError("That user account no longer exists.")
+      }
+
+      if (existingUser.id === admin.id) {
+        throw new DisableUserError("You cannot disable your own administrator account.")
+      }
+
+      if (existingUser.role === "ADMIN") {
+        throw new DisableUserError(
+          "Administrator accounts cannot be disabled from this dashboard."
+        )
+      }
+
+      if (existingUser.disabledAt) {
+        throw new DisableUserError("That user account is already disabled.")
+      }
+
+      const user = await transaction.user.update({
+        where: { id: existingUser.id },
+        data: {
+          authVersion: { increment: 1 },
+          disabledAt: new Date(),
+        },
+        select: {
+          authVersion: true,
+          email: true,
+          id: true,
+        },
+      })
+
+      await transaction.adminAuditLog.create({
+        data: {
+          action: "USER_DISABLED",
+          adminUserId: admin.id,
+          metadata: {
+            source: "admin-dashboard",
+          },
+          targetId: user.id,
+          targetType: "User",
+        },
+      })
+
+      return user
+    })
+
+    await notifyAccountSecurityChange({
+      authVersion: target.authVersion,
+      reason: "account_disabled",
+      userId: target.id,
+    })
+
+    revalidatePath("/admin")
+    refresh()
+
+    return {
+      message: `Disabled ${target.email} and revoked all active sessions.`,
+      status: "success",
+    }
+  } catch (error) {
+    if (error instanceof DisableUserError) {
+      return {
+        message: error.message,
+        status: "error",
+      }
+    }
+
+    console.error("Failed to disable user account.", error)
+
+    return {
+      message: "Arctic RSS could not disable that user account.",
       status: "error",
     }
   }

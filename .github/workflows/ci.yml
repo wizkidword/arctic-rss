@@ -68,8 +68,26 @@ jobs:
         run: npm run build
 
   browser-smoke:
-    name: Browser smoke test
+    name: Browser smoke and reader journeys
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.10-alpine3.23
+        env:
+          POSTGRES_DB: arctic_rss
+          POSTGRES_PASSWORD: csp-e2e-database-password
+          POSTGRES_USER: csp_e2e
+        options: >-
+          --health-cmd "pg_isready -U csp_e2e -d arctic_rss"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      E2E_DATABASE_URL: postgresql://csp_e2e:csp-e2e-database-password@localhost:5432/arctic_rss?schema=public
+      E2E_DURABLE_REDIS_URL: redis://:csp-e2e-redis-password@localhost:6379
+      E2E_EPHEMERAL_REDIS_URL: redis://:csp-e2e-redis-password@localhost:6380
     steps:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -82,12 +100,33 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Start isolated durable and ephemeral Redis services
+        run: |
+          docker run --detach --name arctic-rss-e2e-durable-redis --publish 6379:6379 redis:7.4.9-alpine3.21 redis-server --appendonly yes --requirepass csp-e2e-redis-password
+          docker run --detach --name arctic-rss-e2e-ephemeral-redis --publish 6380:6379 redis:7.4.9-alpine3.21 redis-server --save "" --requirepass csp-e2e-redis-password
+          docker exec arctic-rss-e2e-durable-redis redis-cli --no-auth-warning -a csp-e2e-redis-password ping
+          docker exec arctic-rss-e2e-ephemeral-redis redis-cli --no-auth-warning -a csp-e2e-redis-password ping
+      - name: Apply browser-test migrations
+        run: DATABASE_URL="$E2E_DATABASE_URL" npm run prisma:deploy
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Build production application for browser verification
         run: npm run build
-      - name: Run browser smoke test against the production server
-        run: E2E_PRODUCTION=1 npm run test:e2e
+      - name: Run browser smoke and authenticated reader journeys against the production server
+        run: E2E_PRODUCTION=1 ARCTIC_RSS_E2E_AUTHENTICATED=1 npm run test:e2e
+      - name: Capture Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          if-no-files-found: ignore
+          name: browser-test-artifacts
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+      - name: Stop isolated Redis services
+        if: always()
+        run: docker rm --force arctic-rss-e2e-durable-redis arctic-rss-e2e-ephemeral-redis || true
 
   dependency-review:
     name: Dependency review

@@ -6,10 +6,10 @@ import { listArticleCollectionsForUser } from "@/lib/article-collections"
 import { getReaderCounts } from "@/lib/articles"
 import { getCurrentBulkReadJobForUser } from "@/lib/bulk-read-jobs"
 import { isChatEnabled } from "@/lib/chat/feature-flags"
-import { getPrisma } from "@/lib/db"
 import { listDiscoverInterestNavigation } from "@/lib/discover-interests"
 import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
 import { listUserFolders } from "@/lib/folders"
+import { AuthorizationError, requireFreshUser } from "@/lib/authorization"
 import { normalizeDisplayMode, normalizeThemePreference } from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
 
@@ -24,6 +24,14 @@ export default async function AuthenticatedAppLayout({
     redirect("/login")
   }
 
+  const currentUser = await requireFreshUser(session).catch((error: unknown) => {
+    if (error instanceof AuthorizationError) {
+      redirect("/login")
+    }
+
+    throw error
+  })
+
   const [
     articleCollections,
     feedSubscriptions,
@@ -32,7 +40,6 @@ export default async function AuthenticatedAppLayout({
     settings,
     discoverInterests,
     bulkReadJob,
-    userVerification,
   ] = await Promise.all([
     listArticleCollectionsForUser(session.user.id),
     listUserFeedSubscriptions(session.user.id),
@@ -41,10 +48,6 @@ export default async function AuthenticatedAppLayout({
     getOrCreateUserSettings(session.user.id),
     listDiscoverInterestNavigation(),
     getCurrentBulkReadJobForUser(session.user.id),
-    getPrisma().user.findUnique({
-      where: { id: session.user.id },
-      select: { emailVerified: true },
-    }),
   ])
 
   return (
@@ -57,7 +60,7 @@ export default async function AuthenticatedAppLayout({
       feedSubscriptions={feedSubscriptions}
       folders={folders}
       readerCounts={readerCounts}
-      showEmailVerificationReminder={!userVerification?.emailVerified}
+      showEmailVerificationReminder={!currentUser.emailVerified}
       themePreference={normalizeThemePreference(settings.theme)}
       user={session.user}
     >

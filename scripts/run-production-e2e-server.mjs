@@ -15,7 +15,16 @@ await copyDirectoryIfPresent(
   path.join(standaloneRoot, "public")
 )
 
-const server = spawn(process.execPath, [path.join(standaloneRoot, "server.js")], {
+const serverArguments = [path.join(standaloneRoot, "server.js")]
+
+if (process.env.ARCTIC_RSS_E2E_FIXTURES === "1") {
+  serverArguments.unshift(
+    "--require",
+    path.join(workspaceRoot, "scripts", "e2e", "feed-fixture-network.cjs")
+  )
+}
+
+const server = spawn(process.execPath, serverArguments, {
   cwd: standaloneRoot,
   env: process.env,
   stdio: "inherit",

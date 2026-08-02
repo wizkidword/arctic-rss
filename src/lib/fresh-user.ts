@@ -1,5 +1,3 @@
-import { cache } from "react"
-
 import { getPrisma } from "@/lib/db"
 
 export type FreshUser = {
@@ -28,22 +26,20 @@ export function createRequestFreshUserResolver(loadUser: FreshUserLoader) {
   }
 }
 
-const getRequestFreshUserResolver = cache(() =>
-  createRequestFreshUserResolver((userId) =>
-    getPrisma().user.findUnique({
-      where: { id: userId },
-      select: {
-        authVersion: true,
-        disabledAt: true,
-        emailVerified: true,
-        id: true,
-        plan: true,
-        role: true,
-      },
-    })
-  )
-)
-
 export function getFreshUserState(userId: string) {
-  return getRequestFreshUserResolver()(userId)
+  // This check runs from Auth.js callbacks as well as request handlers. React's
+  // cache is request-scoped only in a Server Component render and can otherwise
+  // retain a stale account state in a long-lived process. Revocation must query
+  // the authoritative user record for every protected request.
+  return getPrisma().user.findUnique({
+    where: { id: userId },
+    select: {
+      authVersion: true,
+      disabledAt: true,
+      emailVerified: true,
+      id: true,
+      plan: true,
+      role: true,
+    },
+  })
 }

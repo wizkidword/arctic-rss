@@ -107,7 +107,9 @@ export async function notifyAccountSecurityChange(
   const event = createAccountSecurityEvent(input)
 
   try {
-    await (suppliedPublisher ?? getAccountSecurityEventPublisher()).publish(
+    const accountSecurityPublisher =
+      suppliedPublisher ?? (await getAccountSecurityEventPublisher())
+    await accountSecurityPublisher.publish(
       CHAT_ACCOUNT_SECURITY_EVENT_CHANNEL,
       JSON.stringify(event)
     )
@@ -131,7 +133,7 @@ export async function notifyAccountSecurityChange(
   }
 }
 
-function getAccountSecurityEventPublisher() {
+async function getAccountSecurityEventPublisher() {
   if (!publisher || publisher.status === "end") {
     publisher = new Redis(ephemeralRedisConnectionOptions().url, {
       connectTimeout: 1_000,
@@ -143,6 +145,10 @@ function getAccountSecurityEventPublisher() {
     publisher.on("error", () => {
       // Callers report a redacted structured failure and authorization fails closed.
     })
+  }
+
+  if (publisher.status === "wait") {
+    await publisher.connect()
   }
 
   return publisher

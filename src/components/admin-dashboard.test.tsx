@@ -41,6 +41,10 @@ vi.mock("@/components/admin-discover-subreddit-form", () => ({
   ),
 }))
 
+vi.mock("@/components/admin-disable-user-button", () => ({
+  AdminDisableUserButton: () => <button type="button">Disable user</button>,
+}))
+
 import {
   AdminDashboardSnapshot as AdminDashboard,
   adminPageHref,

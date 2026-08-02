@@ -124,6 +124,14 @@ describe("chat gateway authentication", () => {
       revalidateChatGatewayAuthorization({
         environment,
         identity,
+        store: userStore({ disabledAt: new Date() }),
+      })
+    ).rejects.toMatchObject({ code: "invalid" } satisfies Partial<ChatGatewayAuthenticationError>)
+
+    await expect(
+      revalidateChatGatewayAuthorization({
+        environment,
+        identity,
         store: userStore({ chatBetaAccess: { revokedAt: new Date() } }),
       })
     ).rejects.toMatchObject({ code: "invalid" } satisfies Partial<ChatGatewayAuthenticationError>)

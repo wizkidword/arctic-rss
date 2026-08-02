@@ -21,6 +21,7 @@ import {
 import { AdminDiscoverCategoryMetadataForm } from "@/components/admin-discover-category-metadata-form"
 import { AdminDiscoverImportForm } from "@/components/admin-discover-import-form"
 import { AdminDiscoverSubredditForm } from "@/components/admin-discover-subreddit-form"
+import { AdminDisableUserButton } from "@/components/admin-disable-user-button"
 import { AdminRevokeSessionsButton } from "@/components/admin-revoke-sessions-button"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -400,10 +401,10 @@ function UsersSection({
       <SectionHeader badge={`${users.length} shown`} icon={UsersIcon} title="Users" />
       {users.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-left text-sm">
+          <table className="w-full min-w-[1080px] text-left text-sm">
             <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
               <tr>
-                <TableHeading>User</TableHeading><TableHeading>Access</TableHeading><TableHeading>Subscriptions</TableHeading><TableHeading>AI usage</TableHeading><TableHeading>Joined</TableHeading><TableHeading>Last logged in</TableHeading><TableHeading>Status</TableHeading><TableHeading>Sessions</TableHeading>
+                <TableHeading>User</TableHeading><TableHeading>Access</TableHeading><TableHeading>Subscriptions</TableHeading><TableHeading>AI usage</TableHeading><TableHeading>Joined</TableHeading><TableHeading>Last logged in</TableHeading><TableHeading>Status</TableHeading><TableHeading>Sessions</TableHeading><TableHeading>Account</TableHeading>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -417,6 +418,7 @@ function UsersSection({
                   <TableCell>{formatLastLogin(user.lastLoginAt)}</TableCell>
                   <TableCell><Badge variant={user.disabledAt ? "destructive" : "outline"}>{user.disabledAt ? "Disabled" : "Active"}</Badge></TableCell>
                   <TableCell><AdminRevokeSessionsButton userId={user.id} /></TableCell>
+                  <TableCell>{user.disabledAt || user.role === "ADMIN" ? <span className="text-xs text-muted-foreground">{user.disabledAt ? "Disabled" : "Protected"}</span> : <AdminDisableUserButton userId={user.id} />}</TableCell>
                 </tr>
               ))}
             </tbody>

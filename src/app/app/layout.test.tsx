@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   listDiscoverInterestNavigation: vi.fn(),
   listUserFeedSubscriptions: vi.fn(),
   listUserFolders: vi.fn(),
+  requireFreshUser: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
   }),
@@ -22,6 +23,11 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/auth", () => ({
   auth: mocks.auth,
+}))
+
+vi.mock("@/lib/authorization", () => ({
+  AuthorizationError: class AuthorizationError extends Error {},
+  requireFreshUser: mocks.requireFreshUser,
 }))
 
 vi.mock("@/components/app-shell", () => ({
@@ -100,6 +106,9 @@ describe("AuthenticatedAppLayout", () => {
         id: "user-1",
       },
     })
+    mocks.requireFreshUser.mockResolvedValue({
+      emailVerified: new Date("2026-07-02T12:00:00.000Z"),
+    })
     mocks.getReaderCounts.mockResolvedValue({
       allCount: 0,
       starredCount: 0,
@@ -108,13 +117,6 @@ describe("AuthenticatedAppLayout", () => {
     mocks.getCurrentBulkReadJobForUser.mockResolvedValue(null)
     mocks.listUserFeedSubscriptions.mockResolvedValue([])
     mocks.listUserFolders.mockResolvedValue([])
-    mocks.getPrisma.mockReturnValue({
-      user: {
-        findUnique: vi.fn(async () => ({
-          emailVerified: new Date("2026-07-02T12:00:00.000Z"),
-        })),
-      },
-    })
     mocks.listArticleCollectionsForUser.mockResolvedValue([
       {
         articleCount: 2,
@@ -141,6 +143,9 @@ describe("AuthenticatedAppLayout", () => {
     )
 
     expect(mocks.getOrCreateUserSettings).toHaveBeenCalledWith("user-1")
+    expect(mocks.requireFreshUser).toHaveBeenCalledWith({
+      user: { id: "user-1" },
+    })
     expect(mocks.listArticleCollectionsForUser).toHaveBeenCalledWith("user-1")
     expect(mocks.listDiscoverInterestNavigation).toHaveBeenCalled()
     expect(markup).toContain('data-theme-preference="DARK"')
