@@ -106,9 +106,13 @@ jobs:
           fail-on-severity: high
 
   chat-release-gates:
-    name: Compose-backed chat release gates
+    name: Compose-backed chat release gates (${{ matrix.topology }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        topology: [all-in-one-with-chat, split-with-chat]
     steps:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -137,26 +141,31 @@ jobs:
             -e 's#AUTH_URL=http://localhost:3000#AUTH_URL=https://arcticrss.test#' \
             -e 's/ARCTIC_IRC_ENABLED=false/ARCTIC_IRC_ENABLED=true/' \
             .env
-      - name: Start the full web, worker, Redis, database, and chat topology
+      - name: Validate selected topology and Compose services
+        run: npm run topology:validate -- --topology ${{ matrix.topology }}
+      - name: Start the selected web, worker, Redis, database, and chat topology
         run: >-
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml
-          --profile chat --profile split-workers up --build --detach --wait --wait-timeout 300
-      - name: Verify live Compose CSP and chat readiness
-        run: node scripts/ci/assert-compose-chat-release-gates.mjs
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} --
+          up --build --detach --wait --wait-timeout 300
+      - name: Verify selected worker ownership, CSP, and chat readiness
+        run: |
+          node scripts/ci/assert-running-topology.mjs ${{ matrix.topology }}
+          node scripts/ci/assert-compose-chat-release-gates.mjs
       - name: Verify chat gateway recovery after ephemeral Redis restart
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers restart redis-ephemeral
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- restart redis-ephemeral
+          node scripts/ci/assert-running-topology.mjs ${{ matrix.topology }}
           node scripts/ci/assert-compose-chat-release-gates.mjs --after-redis-restart
       - name: Run authenticated, real-time, worker, retention, and CSP release gates
         run: npm run test:chat:release-gates
       - name: Capture Compose status on failure
         if: failure()
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers ps
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers logs --no-color chat-gateway
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- ps
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- logs --no-color chat-gateway
       - name: Stop Compose topology
         if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile chat --profile split-workers down --volumes --remove-orphans
+        run: node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- down --volumes --remove-orphans
 
   dependency-audit:
     name: Installed dependency audit
@@ -235,8 +244,7 @@ jobs:
             -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
             .env
           docker compose config -q
-          docker compose --profile chat config -q
-          docker compose --profile split-workers config -q
+          npm run topology:validate
           npm run compose:verify-env
           docker info --format '{{range .Plugins.Log}}{{println .}}{{end}}' | grep -qx journald
           rm .env

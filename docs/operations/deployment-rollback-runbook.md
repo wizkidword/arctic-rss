@@ -6,8 +6,10 @@ reviewed target commit are mandatory first.
 
 ## Current deployment constraints
 
-- The active deployment is Docker Compose with web, worker, PostgreSQL, Redis,
-  and a one-shot migration service.
+- The active deployment is Docker Compose with web, PostgreSQL, durable Redis,
+  ephemeral Redis, a one-shot migration service, and exactly one selected
+  worker topology. See [deployment-topologies.md](deployment-topologies.md)
+  for the authoritative profile and service list.
 - Public traffic reaches the loopback-bound web service through a separately
   managed Cloudflare connector.
 - The deployed source directory is not a Git checkout, so use a reviewed source
@@ -51,7 +53,7 @@ normal backup gate and a typed deployment approval have been recorded.
    ```
 
 4. If the opt-in chat gateway is active, recreate it next. Then recreate web
-   and worker. Verify local/public health and the monitor service. Use the
+   and every application service in the selected topology. Verify local/public health and the monitor service. Use the
    Redis checks in [rate-limit-turnstile-runbook.md](rate-limit-turnstile-runbook.md)
    to confirm AOF/`noeviction` on durable Redis and no AOF/`volatile-ttl` on
    ephemeral Redis.
@@ -66,10 +68,11 @@ delete `redis-data` as part of a code rollback.
 
 ## WORKER-ARCH-001 split-worker rollout
 
-The default `worker` remains `WORKER_MODE=all` for a compatibility-first
-release. The reviewed `split-workers` Compose profile adds five isolated
-services, each with its own CPU/memory cap, heartbeat, restart policy, and
-graceful shutdown:
+The all-in-one `worker` is selected only by the `all-in-one` profile. The
+reviewed `split-workers` profile adds four isolated services, each with its own
+CPU/memory cap, heartbeat, restart policy, and graceful shutdown. The
+chat-event worker is selected only by `chat-workers`, which is used with the
+chat-enabled split topology:
 
 - `worker-ingestion`: feed and podcast refreshes plus article extraction.
 - `worker-ai-mail`: AI/smart digest processing and email delivery.
@@ -82,29 +85,31 @@ graceful shutdown:
 
 Do not enable the profile in the same step as the code deployment. First
 observe the existing `worker` memory and queue backlog after the code release.
-At a separately approved cutover, stop the all-in-one worker before starting
-the profile so no queue has two intentional owners:
+At a separately approved cutover, validate the topology first and stop the
+all-in-one worker before starting split workers so no queue has two intentional
+owners:
 
 ```bash
 cd "$APP_DIR"
-docker compose stop worker
-docker compose rm -f worker
+docker compose --profile all-in-one stop worker
+docker compose --profile all-in-one rm -f worker
 docker compose --profile split-workers up -d \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-chat-events
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance
 docker compose ps
 ```
 
-Verify the five independent Docker health checks, the administrator queue
-backlog, worker-mode startup logs, and the host monitor. If any capacity or
+For a chat-enabled split deployment, add `--profile chat-workers` and include
+`worker-chat-events`. Verify the selected independent Docker health checks, the
+administrator queue backlog, worker-mode startup logs, and the host monitor. If any capacity or
 queue-ownership concern appears, stop the split services and recreate the
 safe compatibility worker:
 
 ```bash
 docker compose --profile split-workers stop \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-chat-events
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance
 docker compose --profile split-workers rm -f \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-chat-events
-docker compose up -d --no-deps --force-recreate worker
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance
+docker compose --profile all-in-one up -d --no-deps --force-recreate worker
 ```
 
 Do not activate both forms as a steady state. BullMQ may safely coordinate

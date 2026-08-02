@@ -217,6 +217,7 @@ services:
 
   worker:
     <<: *worker-runtime
+    profiles: ["all-in-one"]
     cpus: 0.75
     mem_limit: 1g
     pids_limit: 256
@@ -392,7 +393,7 @@ services:
 
   worker-chat-events:
     <<: *worker-runtime
-    profiles: ["split-workers"]
+    profiles: ["chat-workers"]
     cpus: 0.35
     mem_limit: 384m
     pids_limit: 128

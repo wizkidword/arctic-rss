@@ -92,15 +92,16 @@ The app runs at [http://localhost:3000](http://localhost:3000).
 Copy `.env.example` to `.env`, then start the stack:
 
 ```bash
-docker compose up --build
+docker compose --profile all-in-one up --build
 ```
 
 Services:
 
 - `web`: Next.js app on port `3000`
-- `worker`: background feed refresh worker
-- `worker-*`: optional `split-workers` profile for isolated ingestion,
-  AI/mail, imports, maintenance, and chat-event responsibilities
+- `worker`: all-in-one background worker, selected only by the `all-in-one`
+  profile
+- `worker-*`: split-worker services selected by `split-workers`; the chat
+  event worker also requires `chat-workers`
 - `postgres`: PostgreSQL database
 - `redis`: durable BullMQ queue Redis with AOF and `noeviction`
 - `redis-ephemeral`: disposable Redis for rate limits, chat presence, replay,
@@ -111,8 +112,14 @@ Services:
 To run with Cloudflare Tunnel:
 
 ```bash
-docker compose --profile tunnel up --build
+docker compose --profile all-in-one --profile tunnel up --build
 ```
+
+Select one supported topology before using Compose. The complete profiles and
+service ownership rules are in
+[the deployment topology reference](docs/operations/deployment-topologies.md).
+Validate them with `npm run topology:validate`; do not combine `all-in-one`
+with the split-worker profiles.
 
 Production is served through Cloudflare at
 [https://arcticrss.com](https://arcticrss.com). See
@@ -159,6 +166,7 @@ npm run prisma:generate
 npm run prisma:migrate
 npm run prisma:deploy
 npm run worker
+npm run topology:validate
 ```
 
 ## Product status

@@ -24,7 +24,7 @@ small vertical slice. Do not begin several roadmap items at once.
 | 2 | Reader automation | Builds on saved-search/query semantics to reduce routine triage. | Not started |
 | 3 | Story comparison | Helps readers understand coverage across sources instead of only consuming a chronological feed. | In progress: source signal foundation only |
 | 4 | Better briefings | Improves the value of the existing AI and digest foundations. | Not started |
-| 5 | Podcast transcripts | Extends the podcast experience from playback to research and recall. | Not started |
+| 5 | Podcast transcripts | Extends the podcast experience from playback to research and recall. | In progress: publisher-supplied transcript retrieval and reader display are implemented; abuse controls and broader polish remain planned. |
 | 6 | Capture tools | Gives users a low-friction way to bring outside reading into Arctic RSS. | Not started |
 | 7 | Shared workspaces | Adds collaboration only after individual-reader workflows are strong. | Not started |
 | 8 | API and webhooks | Exposes stable, proven concepts to other tools after their data model settles. | Not started |

@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "services": [
+    "postgres",
+    "redis",
+    "redis-ephemeral",
+    "migrate",
+    "web",
+    "worker",
+    "worker-ingestion",
+    "worker-ai-mail",
+    "worker-imports",
+    "worker-maintenance",
+    "worker-chat-events",
+    "chat-gateway",
+    "edge-proxy",
+    "cloudflared"
+  ],
+  "workerServices": [
+    "worker",
+    "worker-ingestion",
+    "worker-ai-mail",
+    "worker-imports",
+    "worker-maintenance",
+    "worker-chat-events"
+  ],
+  "tunnelVariant": {
+    "profiles": ["tunnel"],
+    "requiredEnvironment": ["CLOUDFLARE_TUNNEL_TOKEN"],
+    "requiredServices": ["cloudflared"],
+    "requiredHealthServices": ["cloudflared"],
+    "releaseServices": ["cloudflared"],
+    "rollbackServices": ["cloudflared"]
+  },
+  "topologies": {
+    "all-in-one": {
+      "profiles": ["all-in-one"],
+      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker"],
+      "optionalServices": ["cloudflared"],
+      "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL"],
+      "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
+      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker"],
+      "releaseServices": ["web", "worker"],
+      "rollbackServices": ["web", "worker"],
+      "workerOwnership": {
+        "ingestion": "worker",
+        "ai-mail": "worker",
+        "imports": "worker",
+        "maintenance": "worker",
+        "chat-events": "worker"
+      },
+      "chatEnabled": false
+    },
+    "all-in-one-with-chat": {
+      "profiles": ["all-in-one", "chat"],
+      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker", "chat-gateway", "edge-proxy"],
+      "optionalServices": ["cloudflared"],
+      "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL", "ARCTIC_IRC_TOKEN_SECRET"],
+      "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
+      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker", "chat-gateway", "edge-proxy"],
+      "releaseServices": ["web", "worker", "chat-gateway", "edge-proxy"],
+      "rollbackServices": ["web", "worker", "chat-gateway", "edge-proxy"],
+      "workerOwnership": {
+        "ingestion": "worker",
+        "ai-mail": "worker",
+        "imports": "worker",
+        "maintenance": "worker",
+        "chat-events": "worker"
+      },
+      "chatEnabled": true
+    },
+    "split": {
+      "profiles": ["split-workers"],
+      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance"],
+      "optionalServices": ["cloudflared"],
+      "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL"],
+      "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
+      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance"],
+      "releaseServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance"],
+      "rollbackServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance"],
+      "workerOwnership": {
+        "ingestion": "worker-ingestion",
+        "ai-mail": "worker-ai-mail",
+        "imports": "worker-imports",
+        "maintenance": "worker-maintenance"
+      },
+      "chatEnabled": false
+    },
+    "split-with-chat": {
+      "profiles": ["split-workers", "chat-workers", "chat"],
+      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "optionalServices": ["cloudflared"],
+      "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL", "ARCTIC_IRC_TOKEN_SECRET"],
+      "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
+      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "releaseServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "rollbackServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "workerOwnership": {
+        "ingestion": "worker-ingestion",
+        "ai-mail": "worker-ai-mail",
+        "imports": "worker-imports",
+        "maintenance": "worker-maintenance",
+        "chat-events": "worker-chat-events"
+      },
+      "chatEnabled": true
+    }
+  }
+}

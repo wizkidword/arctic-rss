@@ -6,10 +6,12 @@ private operator inventory outside this repository.
 
 ## Runtime model
 
-The production Compose project contains `web`, `worker`, `postgres`, `redis`,
-and a one-shot `migrate` service. Public traffic reaches the loopback-bound web
-service through a separately managed Cloudflare connector. PostgreSQL and Redis
-must not be published to the Internet.
+The production Compose project contains `web`, PostgreSQL, durable Redis,
+ephemeral Redis, and a one-shot `migrate` service plus exactly one selected
+worker topology. Public traffic reaches the loopback-bound web service through
+a separately managed Cloudflare connector. PostgreSQL and Redis must not be
+published to the Internet. The canonical topology source and service lists are
+documented in [deployment topologies](docs/operations/deployment-topologies.md).
 
 The application has two health boundaries:
 
@@ -62,11 +64,13 @@ Before every production change:
    verified before deployment.
 4. Stage the archive beside the active release and copy the existing `.env`
    into it with mode 0600.
-5. Run `docker compose config -q` in the staged release.
-6. Build `web`, `worker`, and `migrate`, then run the one-shot `migrate`
-   service before the release swap.
+5. Select one supported topology, run `npm run topology:validate` in the
+   reviewed local/CI checkout, and run `docker compose` configuration
+   validation in the staged release.
+6. Build the selected topology's application images and `migrate`, then run
+   the one-shot `migrate` service before the release swap.
 7. Move the old release aside as the rollback candidate, activate the staged
-   release, and recreate only `web` and `worker`.
+   release, and recreate every application service in the selected topology.
 8. Verify Docker health, internal `/api/live`, internal `/api/health`, public
    `/api/health`, `/login`, and the changed user flow.
 
@@ -91,7 +95,8 @@ later release.
 ## Rollback
 
 1. Keep the failed release, logs, and matching backup for diagnosis.
-2. Restore the previous release directory and recreate `web` and `worker`.
+2. Restore the previous release directory and recreate every rollback service
+   in the selected topology.
 3. If the failed release changed the schema, do not roll code backward across
    an incompatible schema. Restore the matching database backup or use a
    reviewed forward repair.
@@ -104,3 +109,4 @@ later release.
 - [Backup and restore checklist](docs/operations/backup-restore-checklist.md)
 - [Migration baseline](docs/operations/migration-baseline-runbook.md)
 - [Canonical origin and proxy](docs/operations/canonical-origin-proxy-runbook.md)
+- [Supported deployment topologies](docs/operations/deployment-topologies.md)

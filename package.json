@@ -35,6 +35,7 @@
     "test:chat:release-gates": "vitest run scripts/build-runtime.test.ts scripts/ci/assert-compose-chat-release-gates.test.ts services/chat-gateway/gateway.test.ts services/chat-gateway/native-chat.test.ts services/chat-gateway/redis-recovery.test.ts src/components/irc/irc-client-shell.test.tsx src/lib/ai-usage.test.ts src/lib/bulk-read-jobs.test.ts src/lib/chat/blocks.test.ts src/lib/chat/event-outbox.test.ts src/lib/chat/gateway-auth.test.ts src/lib/chat/legal-holds.test.ts src/lib/chat/moderation.test.ts src/lib/chat/presence.test.ts src/lib/chat/retention.test.ts src/lib/chat/room-service.test.ts src/lib/content-security-policy.test.ts worker/shutdown.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:production:server": "node scripts/run-production-e2e-server.mjs",
+    "topology:validate": "node scripts/ci/validate-topology.mjs",
     "typecheck": "tsc --noEmit",
     "worker": "tsx worker/index.ts"
   },
