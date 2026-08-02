@@ -2,6 +2,7 @@ import { defineConfig } from "playwright/test";
 
 const usesProductionServer = process.env.E2E_PRODUCTION === "1";
 const productionServerEnvironment = {
+  ARCTIC_RSS_TOPOLOGY: "all-in-one",
   APP_ORIGIN: "https://localhost:3000",
   AUTH_SECRET: "csp-e2e-auth-secret-with-at-least-thirty-two-bytes",
   AUTH_URL: "https://localhost:3000",

@@ -7,6 +7,7 @@ describe("production browser-smoke configuration", () => {
     const config = await readFile("playwright.config.ts", "utf8")
 
     expect(config).toContain("const productionServerEnvironment")
+    expect(config).toContain('ARCTIC_RSS_TOPOLOGY: "all-in-one"')
     expect(config).not.toContain("MIGRATE_DATABASE_URL:")
     expect(config).not.toContain("POSTGRES_PASSWORD:")
     expect(config).not.toContain("REDIS_PASSWORD:")
