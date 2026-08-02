@@ -13,7 +13,7 @@ describe("approved release command", () => {
     expect(script).toContain('sudo -n docker load --input "$image_archive" >/dev/null')
     expect(script).toContain('run --rm --no-deps -T migrate')
     expect(script).not.toContain('run --rm --no-deps --no-build -T migrate')
-    expect(script).toContain('up -d --no-deps --no-build --force-recreate web worker')
+    expect(script).toContain('live_compose up -d --no-deps --no-build --force-recreate "${topology_release_services[@]}"')
     expect(script).not.toContain(' --profile chat build migrate web worker chat-gateway')
   })
 
@@ -57,9 +57,9 @@ describe("approved release command", () => {
     expect(script).toContain('migration_status="verified"')
     expect(script).toContain("printf 'MIGRATION_STATUS=%s\\n' \"$migration_status\"")
     expect(script).toContain('docker inspect -f \'{{.Image}}\' app-web-1')
-    expect(script).toContain('docker inspect -f \'{{.Image}}\' app-worker-1')
-    expect(script).toContain('docker inspect -f \'{{.Image}}\' app-chat-gateway-1')
-    expect(script).toContain('docker inspect -f \'{{.Image}}\' app-edge-proxy-1')
+    expect(script).toContain("worker_image_entries+=(\"$service=$service_image\")")
+    expect(script).toContain('chat_gateway_image="$(sudo -n docker inspect')
+    expect(script).toContain('edge_proxy_image="$(sudo -n docker inspect')
     expect(script).toContain('migrationStatus = $migrationStatus')
     expect(script).toContain('webImage = $webImage')
     expect(script).toContain('workerImage = $workerImage')
@@ -67,6 +67,8 @@ describe("approved release command", () => {
     expect(script).toContain('edgeProxyHealth = $edgeProxyHealth')
     expect(script).toContain('edgeProxyImage = $edgeProxyImage')
     expect(script).toContain('localImageArchiveSha256 = $offHostImages.ArchiveHash')
+    expect(script).toContain('topology = $deployedTopology')
+    expect(script).toContain('topologyHealth = $topologyHealth')
   })
 
   it("uses the dedicated local build root and checks OVH disk headroom before backup", async () => {
@@ -115,5 +117,20 @@ describe("approved release command", () => {
     expect(script.indexOf("MIGRATION_OWNERSHIP_PRECHECK=passed")).toBeLessThan(
       script.indexOf("arctic-rss-backup.service"),
     )
+  })
+
+  it("requires a manifest-defined topology and applies only its profiles and services", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain('[ValidateSet("all-in-one", "all-in-one-with-chat", "split", "split-with-chat")]')
+    expect(script).toContain("function Get-ReleaseTopology")
+    expect(script).toContain('Invoke-LocalCheck -Label "Validating selected topology"')
+    expect(script).toContain('$releaseTopology = Get-ReleaseTopology -Name $Topology')
+    expect(script).toContain("topology_profiles_b64=")
+    expect(script).toContain("stage_compose()")
+    expect(script).toContain("live_compose()")
+    expect(script).toContain("selected_service()")
+    expect(script).toContain("topology_application_services")
+    expect(script).toContain("TOPOLOGY_HEALTH")
   })
 })

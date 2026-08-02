@@ -28,7 +28,8 @@ yet picked up Docker's PATH update.
 
 ```powershell
 pwsh -File .\scripts\windows\deploy-approved-release.ps1 `
-  -ConfigurationPath "$HOME\.arctic-rss\release-config.json"
+  -ConfigurationPath "$HOME\.arctic-rss\release-config.json" `
+  -Topology all-in-one
 ```
 
 The preflight fetches `origin/main`, refuses uncommitted work or a stale local
@@ -49,18 +50,24 @@ or contacting the VPS.
 ```powershell
 pwsh -File .\scripts\windows\deploy-approved-release.ps1 `
   -ConfigurationPath "$HOME\.arctic-rss\release-config.json" `
+  -Topology all-in-one `
   -Approve
 ```
 
-The command then requires the operator to type `DEPLOY <short-sha>`. It creates
-an exact local source workspace, builds the migration, web, worker, and
-chat-gateway images for `linux/amd64`, and retains one transfer archive under
-`LocalBuildRoot`. Before it begins a backup, it confirms OVH has enough free
-space for the transferred archive and loaded layers. It then verifies the
-source and image SHA-256 values locally and on the VPS, loads the finished
-images without running a VPS build, applies and verifies committed Prisma
-migrations, retains the previous source directory, recreates only web and
-worker, and verifies local/public health, login, and the monitor service.
+The command requires one supported `-Topology` value: `all-in-one`,
+`all-in-one-with-chat`, `split`, or `split-with-chat`. It validates that choice
+against the checked-in manifest before reaching the VPS and prints the selected
+application services. The command then requires the operator to type
+`DEPLOY <short-sha>`. It creates an exact local source workspace, builds only
+the selected topology's migration and application images for `linux/amd64`,
+and retains one transfer archive under `LocalBuildRoot`. Before it begins a
+backup, it confirms OVH has enough free space for the transferred archive and
+loaded layers. It then verifies source and image SHA-256 values locally and on
+the VPS, loads the finished images without a VPS build, applies and verifies
+committed Prisma migrations, retains the previous source directory, recreates
+every selected application service, removes stale application workers or chat
+services, and verifies selected-service, local/public health, login, and the
+monitor service.
 
 The image archive is intentionally retained on the local build drive for a
 short-lived recovery/retry path. Review it before removing it; the release

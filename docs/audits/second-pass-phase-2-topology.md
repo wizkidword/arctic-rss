@@ -5,10 +5,10 @@
 ### Status
 
 Partially complete. The canonical topology model, explicit Compose activation,
-CI matrix, validation, and operator documentation are implemented and locally
-verified. The separately approval-gated Windows release runner still needs to
-consume the manifest's release and rollback lists before this phase can be
-closed.
+CI matrix, validation, operator documentation, and approval-gated release
+selection are implemented and locally verified. A companion deterministic
+rollback command still needs to consume the manifest's rollback list before
+this phase can be closed.
 
 ### Baseline
 
@@ -29,6 +29,11 @@ closed.
   `worker-chat-events` behind `chat-workers`.
 - Changed the chat CI job to a two-topology matrix. Each job starts its own
   selected profile set and rejects an unexpected worker service.
+- Made `deploy-approved-release.ps1` require a named topology, validate it
+  locally, build only its application images, recreate its complete release
+  list, remove stale application workers/chat services, and record its
+  selected service health without changing its backup, off-host build, or
+  `DEPLOY <short-sha>` gates.
 - Updated deployment, rollback, project, README, topology, and roadmap
   documentation to reflect explicit selection and completed publisher-supplied
   transcript work.
@@ -42,9 +47,10 @@ The validator uses `.env.example` only and does not read production values.
 ### Operational impact
 
 `docker compose up` no longer starts an application worker by default. Local,
-CI, and future owner-approved deployment commands must select a named topology.
+CI, and the owner-approved release command must select a named topology.
 `npm run topology:validate` verifies the manifest against rendered Compose
-services before a topology change.
+services before a topology change. The release record now identifies the
+selected topology and redacted selected-service health results.
 
 ### Database/migration impact
 
@@ -59,9 +65,12 @@ None. `migrate` remains unprofiled and is required by every declared topology.
   split workers.
 - Focused topology, Compose, and chat-gate Vitest suite — 12 passed.
 - `npm run typecheck` — passed.
-- `npm test` — 1,059 passed, 3 skipped.
+- `npm test` — 1,060 passed, 3 skipped.
 - `npm run lint` — no errors; two pre-existing unused-argument warnings in
   `src/app/app/actions.ts`.
+- Focused `deploy-approved-release` and topology tests — 14 passed.
+- PowerShell parser check and Git Bash `-n` check of the normalized embedded
+  remote script — passed.
 
 ### Evidence
 
@@ -70,14 +79,15 @@ None. `migrate` remains unprofiled and is required by every declared topology.
 - `scripts/ci/validate-topology.mjs`
 - `scripts/ci/compose-topology.mjs`
 - `scripts/ci/assert-running-topology.mjs`
+- `scripts/windows/deploy-approved-release.ps1`
 - `.github/workflows/ci.yml`
 - `docs/operations/deployment-topologies.md`
 
 ### Remaining risks
 
-- `scripts/windows/deploy-approved-release.ps1` still has its historical
-  all-in-one release/rollback service list. It must be made topology-aware and
-  statically tested before a split production rollout.
+- A companion approval-gated rollback command must consume the manifest's
+  `rollbackServices` list and selected prior image tags before a split
+  production rollback can be claimed deterministic.
 - CI topology jobs will run on the next pushed commit; local validation did not
   start the full production-like application topology.
 - Production topology selection and rollout remain separately owner-approved.
@@ -90,6 +100,5 @@ with a split-worker profile.
 
 ### Next phase gate
 
-Fail. Complete manifest-driven release and rollback selection, then verify the
-CI topology matrix on a pushed commit before closing Phase 2 or beginning
-Phase 3.
+Fail. Complete manifest-driven rollback selection, then verify the CI topology
+matrix on a pushed commit before closing Phase 2 or beginning Phase 3.

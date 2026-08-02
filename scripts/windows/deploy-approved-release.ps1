@@ -3,6 +3,10 @@ param(
   [Parameter(Mandatory)]
   [string]$ConfigurationPath,
 
+  [Parameter(Mandatory)]
+  [ValidateSet("all-in-one", "all-in-one-with-chat", "split", "split-with-chat")]
+  [string]$Topology,
+
   [ValidateRange(1, 120)]
   [int]$CiTimeoutMinutes = 30,
 
@@ -135,6 +139,67 @@ function Get-ReleaseConfiguration {
   }
 }
 
+function Get-ReleaseTopology {
+  param([Parameter(Mandatory)][string]$Name)
+
+  $manifestPath = Join-Path $PSScriptRoot "..\..\ops\topologies.json"
+  if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw "The topology manifest was not found."
+  }
+
+  $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  if ($manifest.schemaVersion -ne 1) {
+    throw "The topology manifest uses an unsupported schema version."
+  }
+
+  $topologyProperty = $manifest.topologies.PSObject.Properties[$Name]
+  if ($null -eq $topologyProperty) {
+    throw "The selected topology is not defined in the topology manifest."
+  }
+
+  $topology = $topologyProperty.Value
+  $requiredProperties = @(
+    "profiles",
+    "releaseServices",
+    "rollbackServices",
+    "requiredHealthServices",
+    "requiredServices"
+  )
+  foreach ($property in $requiredProperties) {
+    $value = @($topology.$property | ForEach-Object { [string]$_ })
+    if ($value.Count -eq 0 -or @($value | Where-Object { $_ -notmatch "^[a-z0-9-]+$" }).Count -gt 0) {
+      throw "The topology manifest has an invalid $property list for $Name."
+    }
+  }
+
+  $knownServices = @($manifest.services | ForEach-Object { [string]$_ })
+  $workerServices = @($manifest.workerServices | ForEach-Object { [string]$_ })
+  $requiredServices = @($topology.requiredServices | ForEach-Object { [string]$_ })
+  $activeWorkers = @($requiredServices | Where-Object { $workerServices -contains $_ })
+  if ($activeWorkers.Count -eq 0 -or (($activeWorkers -contains "worker") -and $activeWorkers.Count -gt 1)) {
+    throw "The selected topology has ambiguous worker ownership."
+  }
+
+  foreach ($service in @($topology.releaseServices) + @($topology.rollbackServices) + @($topology.requiredHealthServices)) {
+    if ($knownServices -notcontains $service -or $requiredServices -notcontains $service) {
+      throw "The selected topology references a service that is not required by the topology."
+    }
+  }
+
+  $applicationServices = @($knownServices | Where-Object {
+    $_ -notin @("postgres", "redis", "redis-ephemeral", "migrate", "cloudflared")
+  })
+
+  return [pscustomobject]@{
+    Name = $Name
+    Profiles = @($topology.profiles | ForEach-Object { [string]$_ })
+    ReleaseServices = @($topology.releaseServices | ForEach-Object { [string]$_ })
+    RollbackServices = @($topology.rollbackServices | ForEach-Object { [string]$_ })
+    RequiredHealthServices = @($topology.requiredHealthServices | ForEach-Object { [string]$_ })
+    ApplicationServices = $applicationServices
+  }
+}
+
 function Invoke-RemoteScript {
   param(
     [Parameter(Mandatory)][pscustomobject]$Config,
@@ -215,7 +280,8 @@ function New-OffHostReleaseImages {
     [Parameter(Mandatory)][string]$DockerExecutable,
     [Parameter(Mandatory)][string]$Commit,
     [Parameter(Mandatory)][string]$ShortSha,
-    [Parameter(Mandatory)][pscustomobject]$BuildSettings
+    [Parameter(Mandatory)][pscustomobject]$BuildSettings,
+    [Parameter(Mandatory)][pscustomobject]$Topology
   )
 
   $workspaceRoot = Join-Path $Config.LocalBuildRoot "build-workspace"
@@ -268,7 +334,35 @@ function New-OffHostReleaseImages {
     EdgeProxy = "edge-proxy"
   }
 
-  foreach ($name in $images.Keys) {
+  $serviceImageNames = @{
+    "migrate" = "Migrate"
+    "web" = "Web"
+    "worker" = "Worker"
+    "worker-ingestion" = "Worker"
+    "worker-ai-mail" = "Worker"
+    "worker-imports" = "Worker"
+    "worker-maintenance" = "Worker"
+    "worker-chat-events" = "Worker"
+    "chat-gateway" = "ChatGateway"
+    "edge-proxy" = "EdgeProxy"
+  }
+  $selectedImageNames = [System.Collections.Generic.List[string]]::new()
+  foreach ($service in @("migrate") + @($Topology.ReleaseServices)) {
+    $imageName = $serviceImageNames[$service]
+    if ([string]::IsNullOrWhiteSpace($imageName)) {
+      throw "Topology $($Topology.Name) does not have a build image for $service."
+    }
+    if (-not $selectedImageNames.Contains($imageName)) {
+      $selectedImageNames.Add($imageName)
+    }
+  }
+
+  $selectedImages = [ordered]@{}
+  foreach ($name in $selectedImageNames) {
+    $selectedImages[$name] = $images[$name]
+  }
+
+  foreach ($name in $selectedImages.Keys) {
     $imageBuildOutput = Invoke-LocalCheck -Label "Building $name image locally" -FilePath $DockerExecutable -Arguments @(
       "build", "--platform", "linux/amd64", "--file", (Join-Path $sourceDirectory "Dockerfile"),
       "--target", $buildTargets[$name], "--tag", $images[$name],
@@ -279,7 +373,7 @@ function New-OffHostReleaseImages {
     $imageBuildOutput | Out-Host
   }
 
-  $imageSaveArguments = @("image", "save", "--output", $imageArchive) + @($images.Values)
+  $imageSaveArguments = @("image", "save", "--output", $imageArchive) + @($selectedImages.Values)
   $imageArchiveOutput = Invoke-LocalCheck -Label "Creating transfer-ready image archive" -FilePath $DockerExecutable -Arguments $imageSaveArguments
   $imageArchiveOutput | Out-Host
 
@@ -292,9 +386,9 @@ function New-OffHostReleaseImages {
     ArchivePath = $imageArchive
     ArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $imageArchive).Hash.ToLowerInvariant()
     ArchiveBytes = $archiveInfo.Length
-    Images = @($images.Values)
+    Images = @($selectedImages.Values)
     ImageEnvironment = @(
-      $images.Keys | ForEach-Object {
+      $selectedImages.Keys | ForEach-Object {
         "$($imageEnvironmentVariables[$_])=$($images[$_])"
       }
     )
@@ -507,6 +601,7 @@ foreach ($command in "git", "gh", "npm", "npx", "ssh", "scp", "curl.exe", "tar.e
 }
 
 $config = Get-ReleaseConfiguration -Path $ConfigurationPath
+$releaseTopology = Get-ReleaseTopology -Name $Topology
 $dockerExecutable = Get-DockerExecutable
 $workingTree = @(& git status --porcelain)
 if ($workingTree.Count -ne 0) {
@@ -521,6 +616,7 @@ if ($commit -ne $originMain) {
 }
 
 Invoke-LocalCheck -Label "Checking patch integrity" -FilePath "git" -Arguments @("diff", "--check")
+Invoke-LocalCheck -Label "Validating selected topology" -FilePath "npm" -Arguments @("run", "topology:validate", "--", "--topology", $releaseTopology.Name)
 Invoke-LocalCheck -Label "Running unit tests" -FilePath "npm" -Arguments @("test")
 Invoke-LocalCheck -Label "Checking TypeScript" -FilePath "npm" -Arguments @("run", "typecheck")
 Invoke-LocalCheck -Label "Running lint" -FilePath "npm" -Arguments @("run", "lint")
@@ -546,6 +642,8 @@ $migrationOwnershipTargets = Get-MigrationOwnershipTargets -MigrationsDirectory 
 
 Write-Host "Target commit: $commit"
 Write-Host "GitHub CI: $($ci.Url)"
+Write-Host "Selected topology: $($releaseTopology.Name)"
+Write-Host "Release services: $($releaseTopology.ReleaseServices -join ', ')"
 
 if ($DryRun) {
   Write-Host "Dry run passed. No archive, backup, upload, or production mutation was performed."
@@ -646,7 +744,7 @@ printf 'MIGRATION_OWNERSHIP_PRECHECK=passed\n'
 }
 
 $buildSettings = Get-RemotePublicBuildSettings -Config $config
-$offHostImages = New-OffHostReleaseImages -Config $config -DockerExecutable $dockerExecutable -Commit $commit -ShortSha $shortSha -BuildSettings $buildSettings
+$offHostImages = New-OffHostReleaseImages -Config $config -DockerExecutable $dockerExecutable -Commit $commit -ShortSha $shortSha -BuildSettings $buildSettings -Topology $releaseTopology
 Assert-RemoteImageCapacity -Config $config -ImageArchiveBytes $offHostImages.ArchiveBytes
 
 $backupOutput = Invoke-RemoteScript -Config $config -Script @'
@@ -698,6 +796,30 @@ stage="$release_root/staging/$short_sha"
 previous="$release_root/previous-$short_sha"
 compose_project='__COMPOSE_PROJECT__'
 canonical_host='__CANONICAL_HOST__'
+topology_name='__TOPOLOGY_NAME__'
+topology_profiles_b64='__TOPOLOGY_PROFILES_BASE64__'
+topology_release_services_b64='__TOPOLOGY_RELEASE_SERVICES_BASE64__'
+topology_health_services_b64='__TOPOLOGY_HEALTH_SERVICES_BASE64__'
+topology_application_services_b64='__TOPOLOGY_APPLICATION_SERVICES_BASE64__'
+
+mapfile -t topology_profiles < <(printf '%s' "$topology_profiles_b64" | base64 -d)
+mapfile -t topology_release_services < <(printf '%s' "$topology_release_services_b64" | base64 -d)
+mapfile -t topology_health_services < <(printf '%s' "$topology_health_services_b64" | base64 -d)
+mapfile -t topology_application_services < <(printf '%s' "$topology_application_services_b64" | base64 -d)
+test "${#topology_profiles[@]}" -gt 0
+test "${#topology_release_services[@]}" -gt 0
+test "${#topology_health_services[@]}" -gt 0
+compose_profile_args=()
+for profile in "${topology_profiles[@]}"; do
+  test -n "$profile"
+  compose_profile_args+=(--profile "$profile")
+done
+stage_compose() {
+  sudo -n docker compose -p "$compose_project" --project-directory "$stage" "${compose_profile_args[@]}" "$@"
+}
+live_compose() {
+  sudo -n docker compose -p "$compose_project" --project-directory "$live" "${compose_profile_args[@]}" "$@"
+}
 
 actual_hash="$(sha256sum "$archive" | awk '{print $1}')"
 test "$actual_hash" = "$expected_hash"
@@ -716,8 +838,8 @@ sudo -n install -m 600 -o root -g root "$live/.env" "$stage/.env"
 # the release has passed migrations and health checks.
 sudo -n sed -i -E '/^(MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE|EDGE_PROXY_IMAGE)=/d' "$stage/.env"
 printf '%s' "$release_image_environment_b64" | base64 -d | sudo -n tee -a "$stage/.env" >/dev/null
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" config -q
-compose_images="$(sudo -n docker compose -p "$compose_project" --project-directory "$stage" --profile chat config --images)"
+stage_compose config -q
+compose_images="$(stage_compose config --images)"
 sudo -n docker load --input "$image_archive" >/dev/null
 while IFS= read -r image_name; do
   [ -n "$image_name" ] || continue
@@ -739,8 +861,8 @@ sudo -n journalctl --vacuum-time=30d
 # `docker compose run` does not support `--no-build` on the OVH Compose
 # version. It never builds unless `--build` is explicitly supplied, so these
 # remain off-host-image-only while staying compatible with that runtime.
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate </dev/null
-sudo -n docker compose -p "$compose_project" --project-directory "$stage" run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
+stage_compose run --rm --no-deps -T migrate </dev/null
+stage_compose run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
 migration_status="verified"
 sudo -n mv "$live" "$previous"
 sudo -n mv "$stage" "$live"
@@ -762,65 +884,79 @@ test "$postgres_health" = healthy
 test "$redis_health" = healthy
 test "$redis_ephemeral_health" = healthy
 
-# A running chat gateway holds its own fail-closed Redis clients for token
-# replay protection. Recreate it after Redis so fresh browser sessions do not
-# authenticate against a stale client connection. Do not start chat when it
-# was intentionally inactive before the release.
-chat_gateway_health="not-running"
-chat_gateway_image="not-running"
-edge_proxy_health="not-running"
-edge_proxy_image="not-running"
-chat_gateway_was_running="$(sudo -n docker inspect -f '{{.State.Running}}' app-chat-gateway-1 2>/dev/null || true)"
-if [ "$chat_gateway_was_running" = true ]; then
-  sudo -n docker compose -p "$compose_project" --project-directory "$live" --profile chat up -d --no-deps --no-build --force-recreate chat-gateway
-
-  for attempt in $(seq 1 18); do
-    chat_gateway_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-chat-gateway-1)"
-    if [ "$chat_gateway_health" = healthy ]; then
-      break
-    fi
-    sleep 5
+# The selected topology is authoritative. Remove only stale application
+# containers before recreating its complete release service list; PostgreSQL
+# and both Redis workloads retain their existing containers and volumes.
+all_profile_args=(--profile all-in-one --profile split-workers --profile chat-workers --profile chat)
+selected_service() {
+  local candidate="$1"
+  for service in "${topology_release_services[@]}"; do
+    [ "$service" = "$candidate" ] && return 0
   done
+  return 1
+}
+for service in "${topology_application_services[@]}"; do
+  if ! selected_service "$service"; then
+    sudo -n docker compose -p "$compose_project" --project-directory "$live" "${all_profile_args[@]}" stop "$service" >/dev/null 2>&1 || true
+    sudo -n docker compose -p "$compose_project" --project-directory "$live" "${all_profile_args[@]}" rm -f "$service" >/dev/null 2>&1 || true
+  fi
+done
 
-  test "$chat_gateway_health" = healthy
-  chat_gateway_image="$(sudo -n docker inspect -f '{{.Image}}' app-chat-gateway-1)"
-
-  sudo -n docker compose -p "$compose_project" --project-directory "$live" --profile chat up -d --no-deps --no-build --force-recreate edge-proxy
-  for attempt in $(seq 1 18); do
-    edge_proxy_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-edge-proxy-1)"
-    if [ "$edge_proxy_health" = healthy ]; then
-      break
-    fi
-    sleep 5
-  done
-
-  test "$edge_proxy_health" = healthy
-  edge_proxy_image="$(sudo -n docker inspect -f '{{.Image}}' app-edge-proxy-1)"
-fi
-
-sudo -n docker compose -p "$compose_project" --project-directory "$live" up -d --no-deps --no-build --force-recreate web worker
+live_compose up -d --no-deps --no-build --force-recreate "${topology_release_services[@]}"
 
 for attempt in $(seq 1 18); do
-  web_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-web-1)"
-  worker_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-worker-1)"
-  if [ "$web_health" = healthy ] && [ "$worker_health" = healthy ]; then
-    break
-  fi
+  topology_healthy=true
+  for service in "${topology_health_services[@]}"; do
+    container_name="app-$service-1"
+    health=$(sudo -n docker inspect -f '{{.State.Health.Status}}' "$container_name" 2>/dev/null || true)
+    if [ "$health" != healthy ]; then
+      topology_healthy=false
+      break
+    fi
+  done
+  [ "$topology_healthy" = true ] && break
   sleep 5
 done
 
-test "$web_health" = healthy
-test "$worker_health" = healthy
-
-web_image="$(sudo -n docker inspect -f '{{.Image}}' app-web-1)"
-worker_image="$(sudo -n docker inspect -f '{{.Image}}' app-worker-1)"
-
-for container in app-postgres-1 app-redis-1 app-redis-ephemeral-1 app-web-1 app-worker-1; do
-  test "$(sudo -n docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$container")" = journald
+topology_health=()
+for service in "${topology_health_services[@]}"; do
+  container_name="app-$service-1"
+  health=$(sudo -n docker inspect -f '{{.State.Health.Status}}' "$container_name")
+  test "$health" = healthy
+  topology_health+=("$service=$health")
+  logging_driver=$(sudo -n docker inspect -f '{{.HostConfig.LogConfig.Type}}' "$container_name")
+  test "$logging_driver" = journald
 done
-if [ "$edge_proxy_health" = healthy ]; then
-  test "$(sudo -n docker inspect -f '{{.HostConfig.LogConfig.Type}}' app-edge-proxy-1)" = journald
-fi
+
+web_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-web-1)"
+web_image="$(sudo -n docker inspect -f '{{.Image}}' app-web-1)"
+worker_health_entries=()
+worker_image_entries=()
+chat_gateway_health="not-selected"
+chat_gateway_image="not-selected"
+edge_proxy_health="not-selected"
+edge_proxy_image="not-selected"
+for service in "${topology_release_services[@]}"; do
+  case "$service" in
+    worker*)
+      container_name="app-$service-1"
+      service_health=$(sudo -n docker inspect -f '{{.State.Health.Status}}' "$container_name")
+      service_image=$(sudo -n docker inspect -f '{{.Image}}' "$container_name")
+      worker_health_entries+=("$service=$service_health")
+      worker_image_entries+=("$service=$service_image")
+      ;;
+    chat-gateway)
+      chat_gateway_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-chat-gateway-1)"
+      chat_gateway_image="$(sudo -n docker inspect -f '{{.Image}}' app-chat-gateway-1)"
+      ;;
+    edge-proxy)
+      edge_proxy_health="$(sudo -n docker inspect -f '{{.State.Health.Status}}' app-edge-proxy-1)"
+      edge_proxy_image="$(sudo -n docker inspect -f '{{.Image}}' app-edge-proxy-1)"
+      ;;
+  esac
+done
+worker_health="${worker_health_entries[*]}"
+worker_image="${worker_image_entries[*]}"
 
 local_health="$(curl -fsS -H "Host: $canonical_host" http://127.0.0.1:3000/api/health)"
 local_live="$(curl -fsS http://127.0.0.1:3000/api/live)"
@@ -834,6 +970,8 @@ test "$monitor_result" = success
 test "$monitor_status" = 0
 
 printf 'PREVIOUS_RELEASE=%s\n' "$previous"
+printf 'TOPOLOGY=%s\n' "$topology_name"
+printf 'TOPOLOGY_HEALTH=%s\n' "${topology_health[*]}"
 printf 'MIGRATION_STATUS=%s\n' "$migration_status"
 printf 'WEB_HEALTH=%s\n' "$web_health"
 printf 'WEB_IMAGE=%s\n' "$web_image"
@@ -847,9 +985,15 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
 '@
   $offHostImagesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.Images -join "`n")))
   $releaseImageEnvironmentPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.ImageEnvironment -join "`n")))
-  $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__IMAGE_ARCHIVE_HASH__', $offHostImages.ArchiveHash).Replace('__OFFHOST_IMAGES_BASE64__', $offHostImagesPayload).Replace('__RELEASE_IMAGE_ENVIRONMENT_BASE64__', $releaseImageEnvironmentPayload).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost)
+  $topologyProfilesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.Profiles -join "`n")))
+  $topologyReleaseServicesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.ReleaseServices -join "`n")))
+  $topologyHealthServicesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.RequiredHealthServices -join "`n")))
+  $topologyApplicationServicesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.ApplicationServices -join "`n")))
+  $remoteScript = $remoteScript.Replace('__SHORT_SHA__', $shortSha).Replace('__ARCHIVE_HASH__', $archiveHash).Replace('__IMAGE_ARCHIVE_HASH__', $offHostImages.ArchiveHash).Replace('__OFFHOST_IMAGES_BASE64__', $offHostImagesPayload).Replace('__RELEASE_IMAGE_ENVIRONMENT_BASE64__', $releaseImageEnvironmentPayload).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost).Replace('__TOPOLOGY_NAME__', $releaseTopology.Name).Replace('__TOPOLOGY_PROFILES_BASE64__', $topologyProfilesPayload).Replace('__TOPOLOGY_RELEASE_SERVICES_BASE64__', $topologyReleaseServicesPayload).Replace('__TOPOLOGY_HEALTH_SERVICES_BASE64__', $topologyHealthServicesPayload).Replace('__TOPOLOGY_APPLICATION_SERVICES_BASE64__', $topologyApplicationServicesPayload)
   $stageOutput = Invoke-RemoteScript -Config $config -Script $remoteScript
   $previousRelease = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_RELEASE"
+  $deployedTopology = Get-ReleaseMarker -Output $stageOutput -Name "TOPOLOGY"
+  $topologyHealth = Get-ReleaseMarker -Output $stageOutput -Name "TOPOLOGY_HEALTH"
   $migrationStatus = Get-ReleaseMarker -Output $stageOutput -Name "MIGRATION_STATUS"
   $webHealth = Get-ReleaseMarker -Output $stageOutput -Name "WEB_HEALTH"
   $webImage = Get-ReleaseMarker -Output $stageOutput -Name "WEB_IMAGE"
@@ -888,6 +1032,8 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
     loginHttpStatus = $loginStatus
     migrationStatus = $migrationStatus
     previousRelease = $previousRelease
+    topology = $deployedTopology
+    topologyHealth = $topologyHealth
     publicHealth = $publicHealth
     chatGatewayHealth = $chatGatewayHealth
     chatGatewayImage = $chatGatewayImage
