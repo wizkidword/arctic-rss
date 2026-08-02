@@ -17,6 +17,13 @@ describe("approved release command", () => {
     expect(script).not.toContain(' --profile chat build migrate web worker chat-gateway')
   })
 
+  it("requires the current browser coverage CI job before releasing", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain('"Browser smoke and reader journeys"')
+    expect(script).not.toContain('"Browser smoke test"')
+  })
+
   it("keeps uploaded release images isolated from the live Compose image tags", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 

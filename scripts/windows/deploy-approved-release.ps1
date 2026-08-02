@@ -567,7 +567,7 @@ function Wait-ForSuccessfulCi {
 
   $requiredJobs = @(
     "Quality, migrations, and unit tests",
-    "Browser smoke test",
+    "Browser smoke and reader journeys",
     "Secret scan",
     "Static analysis",
     "Installed dependency audit",
