@@ -104,9 +104,8 @@ import {
 } from "./mode"
 import { createMaintenanceLock } from "./maintenance-lock"
 
-assertSecureProductionConfiguration()
-
 const workerMode = getWorkerMode()
+assertSecureProductionConfiguration(process.env, `worker-${workerMode}`)
 const heartbeatPath = workerHeartbeatPath(workerMode)
 const maintenanceLock = runsWorkerResponsibility(workerMode, "maintenance")
   ? createMaintenanceLock()

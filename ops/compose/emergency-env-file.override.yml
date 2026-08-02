@@ -1,0 +1,22 @@
+# Emergency compatibility override only. It restores the former broad .env
+# injection for a one-off owner-approved rollback; do not use it for normal
+# releases or add real values to this file.
+services:
+  migrate:
+    env_file: [.env]
+  web:
+    env_file: [.env]
+  worker:
+    env_file: [.env]
+  worker-ingestion:
+    env_file: [.env]
+  worker-ai-mail:
+    env_file: [.env]
+  worker-imports:
+    env_file: [.env]
+  worker-maintenance:
+    env_file: [.env]
+  worker-chat-events:
+    env_file: [.env]
+  chat-gateway:
+    env_file: [.env]

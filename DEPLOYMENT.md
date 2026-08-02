@@ -26,6 +26,12 @@ printing them. The file must be owned by the deployment account and mode 0600.
 It must never be committed, copied to a workstation, included in release
 archives, or pasted into tickets.
 
+Compose uses `.env` only for interpolation. Each service receives a reviewed
+explicit allowlist from `docker-compose.yml`; do not add `env_file` to a
+service. Run `npm run compose:verify-env` after changing service configuration
+and consult [the service secret matrix](docs/operations/service-secret-matrix.md)
+before rotating or adding a variable.
+
 Use distinct PostgreSQL credentials for `DATABASE_URL` and
 `MIGRATE_DATABASE_URL`: the runtime account needs only normal application data
 access, while the migration account owns the schema and is used solely by the

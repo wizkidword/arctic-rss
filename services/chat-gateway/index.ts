@@ -31,6 +31,7 @@ import {
   refreshChatPresence,
 } from "../../src/lib/chat/presence"
 import { getPrisma } from "../../src/lib/db"
+import { assertSecureProductionConfiguration } from "../../src/lib/production-security"
 import { ephemeralRedisConnectionOptions } from "../../src/lib/redis-config"
 import { enforceRateLimit } from "../../src/lib/rate-limit"
 
@@ -75,6 +76,8 @@ export async function createProductionChatGateway(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   { exit = (code: number) => process.exit(code) }: { exit?: (code: number) => never | void } = {}
 ): Promise<{ close: () => Promise<void>; gateway: ChatGateway; port: number }> {
+  assertSecureProductionConfiguration(environment, "chat-gateway")
+
   const logger = createChatGatewayLogger()
   const presenceTelemetry = createChatPresenceTelemetry((event, metrics) => {
     const fields = Object.fromEntries(

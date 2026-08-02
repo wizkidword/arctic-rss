@@ -5,154 +5,176 @@ import {
   UnsafeProductionConfigurationError,
 } from "./production-security"
 
+const webProductionEnvironment = {
+  APP_ORIGIN: "https://arcticrss.com",
+  AUTH_SECRET: "production-auth-secret-that-is-at-least-32-bytes",
+  AUTH_URL: "https://arcticrss.com",
+  DATABASE_URL:
+    "postgresql://arctic_runtime:runtime-password@postgres:5432/arctic_rss?schema=public",
+  DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379",
+  EPHEMERAL_REDIS_URL:
+    "redis://:ephemeral-redis-password@redis-ephemeral:6379",
+  NODE_ENV: "production",
+  REQUIRE_EMAIL_VERIFICATION: "true",
+} as const
+
 describe("production security configuration", () => {
-  const secureProductionEnvironment = {
-    APP_ORIGIN: "https://arcticrss.com",
-    AUTH_URL: "https://arcticrss.com",
-    AUTH_SECRET: "production-auth-secret-that-is-at-least-32-bytes",
-    DATABASE_URL:
-      "postgresql://arctic_runtime:runtime-password@postgres:5432/arctic_rss?schema=public",
-    MIGRATE_DATABASE_URL:
-      "postgresql://arctic_migrate:migration-password@postgres:5432/arctic_rss?schema=public",
-    NODE_ENV: "production",
-    POSTGRES_PASSWORD: "postgres-container-password",
-    REDIS_PASSWORD: "redis-container-password",
-    REDIS_URL: "redis://:redis-container-password@redis:6379",
-    REQUIRE_EMAIL_VERIFICATION: "true",
-  } as const
-
-  it("rejects disabled email verification in production", () => {
+  it("accepts the web environment without migration or infrastructure secrets", () => {
     expect(() =>
-      assertSecureProductionConfiguration({
-        NODE_ENV: "production",
-        REQUIRE_EMAIL_VERIFICATION: "false",
-      })
-    ).toThrow(UnsafeProductionConfigurationError)
-  })
-
-  it("rejects the retired admin email allowlist in production", () => {
-    expect(() =>
-      assertSecureProductionConfiguration({
-        ADMIN_EMAILS: "owner@example.com",
-        NODE_ENV: "production",
-        REQUIRE_EMAIL_VERIFICATION: "true",
-      })
-    ).toThrow(UnsafeProductionConfigurationError)
-  })
-
-  it("accepts the secure production configuration", () => {
-    expect(() =>
-      assertSecureProductionConfiguration(secureProductionEnvironment)
+      assertSecureProductionConfiguration(webProductionEnvironment, "web")
     ).not.toThrow()
   })
 
-  it("requires a canonical HTTPS origin and matching Auth.js URL in production", () => {
+  it("rejects disabled email verification and a retired admin allowlist for web", () => {
     expect(() =>
-      assertSecureProductionConfiguration({
-        AUTH_URL: "https://arcticrss.com",
-        NODE_ENV: "production",
-        REQUIRE_EMAIL_VERIFICATION: "true",
-      })
+      assertSecureProductionConfiguration(
+        { ...webProductionEnvironment, REQUIRE_EMAIL_VERIFICATION: "false" },
+        "web"
+      )
     ).toThrow(UnsafeProductionConfigurationError)
 
     expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        AUTH_URL: "https://attacker.example",
-      })
+      assertSecureProductionConfiguration(
+        { ...webProductionEnvironment, ADMIN_EMAILS: "owner@example.com" },
+        "web"
+      )
+    ).toThrow(UnsafeProductionConfigurationError)
+  })
+
+  it("requires a canonical HTTPS origin and matching Auth.js URL for web", () => {
+    expect(() =>
+      assertSecureProductionConfiguration(
+        { ...webProductionEnvironment, AUTH_URL: "https://attacker.example" },
+        "web"
+      )
     ).toThrow("AUTH_URL must match APP_ORIGIN")
 
     expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        APP_ORIGIN: "http://arcticrss.com",
-        AUTH_URL: "http://arcticrss.com",
-      })
+      assertSecureProductionConfiguration(
+        {
+          ...webProductionEnvironment,
+          APP_ORIGIN: "http://arcticrss.com",
+          AUTH_URL: "http://arcticrss.com",
+        },
+        "web"
+      )
     ).toThrow("APP_ORIGIN must use HTTPS")
   })
 
-  it("rejects a required but incomplete Turnstile configuration", () => {
-    expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        TURNSTILE_REQUIRED: "true",
-      })
-    ).toThrow("TURNSTILE_REQUIRED requires TURNSTILE_SECRET_KEY")
+  it("rejects migration, database-container, and tunnel secrets in web", () => {
+    for (const variable of [
+      "CLOUDFLARE_TUNNEL_TOKEN",
+      "MIGRATE_DATABASE_URL",
+      "POSTGRES_PASSWORD",
+      "REDIS_PASSWORD",
+    ]) {
+      expect(() =>
+        assertSecureProductionConfiguration(
+          { ...webProductionEnvironment, [variable]: "unexpected-secret" },
+          "web"
+        )
+      ).toThrow(`${variable} must not be present for the web service.`)
+    }
   })
 
-  it("rejects placeholders and known insecure defaults for required secrets", () => {
+  it("rejects placeholders and incomplete Turnstile configuration for web", () => {
     expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        POSTGRES_PASSWORD: "postgres",
-      })
-    ).toThrow("POSTGRES_PASSWORD must not use a placeholder or known insecure default")
-
-    expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        AUTH_SECRET: "CHANGE_ME_GENERATE_A_32_BYTE_SECRET",
-      })
+      assertSecureProductionConfiguration(
+        { ...webProductionEnvironment, AUTH_SECRET: "CHANGE_ME_AUTH_SECRET" },
+        "web"
+      )
     ).toThrow("AUTH_SECRET must not use a placeholder or known insecure default")
 
     expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        REDIS_URL: "redis://:CHANGE_ME_REDIS_PASSWORD@redis:6379",
-      })
-    ).toThrow("REDIS_URL must not use a placeholder or known insecure default")
+      assertSecureProductionConfiguration(
+        { ...webProductionEnvironment, TURNSTILE_REQUIRED: "true" },
+        "web"
+      )
+    ).toThrow("TURNSTILE_REQUIRED requires TURNSTILE_SECRET_KEY")
   })
 
-  it("requires password-protected runtime services and compatible database URLs", () => {
-    expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        REDIS_URL: "redis://redis:6379",
-      })
-    ).toThrow("REDIS_URL must include a password")
+  it("limits an ingestion worker to its database and durable queue configuration", () => {
+    const environment = {
+      DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
+      NODE_ENV: "production",
+    }
 
     expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        MIGRATE_DATABASE_URL:
-          "postgresql://arctic_migrate:migration-password@postgres:5432/other_database?schema=public",
-      })
-    ).toThrow("DATABASE_URL and MIGRATE_DATABASE_URL must target the same database and schema")
+      assertSecureProductionConfiguration(environment, "worker-ingestion")
+    ).not.toThrow()
 
     expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        REDIS_PASSWORD: "a-different-redis-password",
-      })
-    ).toThrow("REDIS_URL password must match REDIS_PASSWORD")
+      assertSecureProductionConfiguration(
+        { ...environment, AUTH_GOOGLE_SECRET: "unexpected-secret" },
+        "worker-ingestion"
+      )
+    ).toThrow("AUTH_GOOGLE_SECRET must not be present for the worker-ingestion service.")
   })
 
-  it("validates each workload-specific Redis URL when configured", () => {
-    expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        DURABLE_REDIS_URL: "redis://:redis-container-password@redis:6379",
-        EPHEMERAL_REDIS_URL:
-          "redis://:different-ephemeral-password@redis-ephemeral:6379",
-      })
-    ).toThrow("EPHEMERAL_REDIS_URL password must match REDIS_PASSWORD")
+  it("requires ephemeral Redis only for worker roles that publish chat events", () => {
+    const environment = {
+      DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
+      NODE_ENV: "production",
+    }
 
     expect(() =>
-      assertSecureProductionConfiguration({
-        ...secureProductionEnvironment,
-        DURABLE_REDIS_URL: "redis://:redis-container-password@redis:6379",
-        EPHEMERAL_REDIS_URL:
-          "redis://:redis-container-password@redis-ephemeral:6379",
-      })
+      assertSecureProductionConfiguration(environment, "worker-chat-events")
+    ).toThrow("EPHEMERAL_REDIS_URL or REDIS_URL must be configured")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...environment,
+          EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
+        },
+        "worker-chat-events"
+      )
     ).not.toThrow()
   })
 
-  it("allows a non-production test configuration", () => {
+  it("isolates chat gateway credentials from web, mail, AI, and tunnel secrets", () => {
+    const environment = {
+      APP_ORIGIN: "https://arcticrss.com",
+      ARCTIC_IRC_TOKEN_SECRET: "chat-token-secret-that-is-at-least-32-bytes",
+      DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
+      NODE_ENV: "production",
+    }
+
+    expect(() =>
+      assertSecureProductionConfiguration(environment, "chat-gateway")
+    ).not.toThrow()
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        { ...environment, OPENAI_API_KEY: "unexpected-secret" },
+        "chat-gateway"
+      )
+    ).toThrow("OPENAI_API_KEY must not be present for the chat-gateway service.")
+  })
+
+  it("rejects unknown roles and permits non-production test environments", () => {
+    expect(() =>
+      assertSecureProductionConfiguration(webProductionEnvironment, "unknown-role")
+    ).toThrow("ARCTIC_RSS_SERVICE_ROLE must be one of")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        { NODE_ENV: "test", REQUIRE_EMAIL_VERIFICATION: "false" },
+        "unknown-role"
+      )
+    ).not.toThrow()
+  })
+
+  it("uses web validation by default even when a role environment variable is misconfigured", () => {
     expect(() =>
       assertSecureProductionConfiguration({
-        NODE_ENV: "test",
-        REQUIRE_EMAIL_VERIFICATION: "false",
+        ...webProductionEnvironment,
+        ARCTIC_RSS_SERVICE_ROLE: "worker-ingestion",
+        MIGRATE_DATABASE_URL: "postgresql://unexpected-migration-url",
       })
-    ).not.toThrow()
+    ).toThrow("MIGRATE_DATABASE_URL must not be present for the web service.")
   })
 })

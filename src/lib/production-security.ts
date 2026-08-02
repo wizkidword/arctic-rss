@@ -14,6 +14,20 @@ export class UnsafeProductionConfigurationError extends Error {
   }
 }
 
+export const PRODUCTION_SERVICE_ROLES = [
+  "chat-gateway",
+  "web",
+  "worker-ai-mail",
+  "worker-all",
+  "worker-chat-events",
+  "worker-imports",
+  "worker-ingestion",
+  "worker-maintenance",
+] as const
+
+export type ProductionServiceRole = (typeof PRODUCTION_SERVICE_ROLES)[number]
+type ProductionEnvironment = Readonly<Record<string, string | undefined>>
+
 const REQUIRED_SECRET_VALUES = new Set([
   "change_me",
   "example",
@@ -24,8 +38,28 @@ const REQUIRED_SECRET_VALUES = new Set([
   "secret",
 ])
 
+const WORKER_ROLES = new Set<ProductionServiceRole>([
+  "worker-ai-mail",
+  "worker-all",
+  "worker-chat-events",
+  "worker-imports",
+  "worker-ingestion",
+  "worker-maintenance",
+])
+
+const WORKER_FORBIDDEN_VARIABLES = [
+  "AUTH_GOOGLE_ID",
+  "AUTH_GOOGLE_SECRET",
+  "AUTH_SECRET",
+  "CLOUDFLARE_TUNNEL_TOKEN",
+  "MIGRATE_DATABASE_URL",
+  "POSTGRES_PASSWORD",
+  "REDIS_PASSWORD",
+  "TURNSTILE_SECRET_KEY",
+] as const
+
 function assertRequiredValue(
-  environment: NodeJS.ProcessEnv,
+  environment: ProductionEnvironment,
   variable: string
 ) {
   const value = environment[variable]?.trim()
@@ -54,7 +88,7 @@ function assertNonPlaceholderSecret(variable: string, value: string) {
 }
 
 function assertRequiredSecret(
-  environment: NodeJS.ProcessEnv,
+  environment: ProductionEnvironment,
   variable: string,
   minimumBytes = 1
 ) {
@@ -82,14 +116,17 @@ function decodeUrlCredential(url: URL, variable: string) {
 }
 
 function assertCredentialedUrl(
-  environment: NodeJS.ProcessEnv,
+  environment: ProductionEnvironment,
   variable: string,
   protocols: ReadonlySet<string>,
   { requireUsername = true }: { requireUsername?: boolean } = {}
 ) {
-  const value = assertRequiredValue(environment, variable)
-
-  return assertCredentialedUrlValue(value, variable, protocols, { requireUsername })
+  return assertCredentialedUrlValue(
+    assertRequiredValue(environment, variable),
+    variable,
+    protocols,
+    { requireUsername }
+  )
 }
 
 function assertCredentialedUrlValue(
@@ -126,7 +163,7 @@ function assertCredentialedUrlValue(
 }
 
 function assertRedisUrl(
-  environment: NodeJS.ProcessEnv,
+  environment: ProductionEnvironment,
   workloadVariable: "DURABLE_REDIS_URL" | "EPHEMERAL_REDIS_URL"
 ) {
   const workloadUrl = environment[workloadVariable]?.trim()
@@ -140,84 +177,37 @@ function assertRedisUrl(
     )
   }
 
-  return {
-    url: assertCredentialedUrlValue(
-      value,
-      variable,
-      new Set(["redis:", "rediss:"]),
-      { requireUsername: false }
-    ),
+  return assertCredentialedUrlValue(
+    value,
     variable,
-  }
+    new Set(["redis:", "rediss:"]),
+    { requireUsername: false }
+  )
 }
 
-function databaseTarget(url: URL) {
-  const databaseName = decodeURIComponent(url.pathname).replace(/^\/+/, "")
-  const schema = url.searchParams.get("schema") ?? "public"
-
-  if (!databaseName) {
-    throw new UnsafeProductionConfigurationError(
-      "Production database URLs must include a database name."
-    )
-  }
-
-  return { databaseName, schema }
-}
-
-function assertCompatibleDatabaseUrls(runtimeUrl: URL, migrationUrl: URL) {
-  const runtimeTarget = databaseTarget(runtimeUrl)
-  const migrationTarget = databaseTarget(migrationUrl)
-
-  if (
-    runtimeTarget.databaseName !== migrationTarget.databaseName ||
-    runtimeTarget.schema !== migrationTarget.schema
-  ) {
-    throw new UnsafeProductionConfigurationError(
-      "DATABASE_URL and MIGRATE_DATABASE_URL must target the same database and schema in production."
-    )
-  }
-}
-
-function assertProductionServiceSecrets(environment: NodeJS.ProcessEnv) {
-  assertRequiredSecret(environment, "POSTGRES_PASSWORD")
-
-  const runtimeDatabaseUrl = assertCredentialedUrl(
+function assertRuntimeDatabaseUrl(environment: ProductionEnvironment) {
+  return assertCredentialedUrl(
     environment,
     "DATABASE_URL",
     new Set(["postgres:", "postgresql:"])
   )
-  const migrationDatabaseUrl = assertCredentialedUrl(
-    environment,
-    "MIGRATE_DATABASE_URL",
-    new Set(["postgres:", "postgresql:"])
-  )
+}
 
-  assertCompatibleDatabaseUrls(runtimeDatabaseUrl, migrationDatabaseUrl)
-
-  const redisPassword = assertRequiredSecret(environment, "REDIS_PASSWORD")
-  const redisUrls = [
-    assertRedisUrl(environment, "DURABLE_REDIS_URL"),
-    assertRedisUrl(environment, "EPHEMERAL_REDIS_URL"),
-  ]
-
-  for (const { url, variable } of redisUrls) {
-    if (decodeUrlCredential(url, variable) !== redisPassword) {
+function assertNoSensitiveVariables(
+  environment: ProductionEnvironment,
+  role: ProductionServiceRole,
+  variables: readonly string[]
+) {
+  for (const variable of variables) {
+    if (environment[variable]?.trim()) {
       throw new UnsafeProductionConfigurationError(
-        `${variable} password must match REDIS_PASSWORD in production.`
+        `${variable} must not be present for the ${role} service.`
       )
     }
   }
-
-  assertRequiredSecret(environment, "AUTH_SECRET", 32)
 }
 
-export function assertSecureProductionConfiguration(
-  environment: NodeJS.ProcessEnv = process.env
-) {
-  if (environment.NODE_ENV !== "production") {
-    return
-  }
-
+function assertWebOrigins(environment: ProductionEnvironment) {
   if (!isEmailVerificationRequired(environment.REQUIRE_EMAIL_VERIFICATION)) {
     throw new UnsafeProductionConfigurationError(
       "REQUIRE_EMAIL_VERIFICATION must be enabled in production."
@@ -272,8 +262,98 @@ export function assertSecureProductionConfiguration(
       )
     }
   }
+}
 
-  assertProductionServiceSecrets(environment)
-
+function assertWebConfiguration(environment: ProductionEnvironment) {
+  assertNoSensitiveVariables(environment, "web", [
+    "CLOUDFLARE_TUNNEL_TOKEN",
+    "MIGRATE_DATABASE_URL",
+    "POSTGRES_PASSWORD",
+    "REDIS_PASSWORD",
+  ])
+  assertWebOrigins(environment)
+  assertRuntimeDatabaseUrl(environment)
+  assertRedisUrl(environment, "DURABLE_REDIS_URL")
+  assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
+  assertRequiredSecret(environment, "AUTH_SECRET", 32)
   assertTurnstileConfiguration(environment)
+}
+
+function assertWorkerConfiguration(
+  environment: ProductionEnvironment,
+  role: ProductionServiceRole
+) {
+  assertNoSensitiveVariables(environment, role, WORKER_FORBIDDEN_VARIABLES)
+  assertRuntimeDatabaseUrl(environment)
+  assertRedisUrl(environment, "DURABLE_REDIS_URL")
+
+  if (role === "worker-all" || role === "worker-chat-events") {
+    assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
+  }
+}
+
+function assertChatGatewayConfiguration(environment: ProductionEnvironment) {
+  assertNoSensitiveVariables(environment, "chat-gateway", [
+    "ANTHROPIC_API_KEY",
+    "AUTH_GOOGLE_ID",
+    "AUTH_GOOGLE_SECRET",
+    "AUTH_SECRET",
+    "CLOUDFLARE_TUNNEL_TOKEN",
+    "MIGRATE_DATABASE_URL",
+    "OPENAI_API_KEY",
+    "POSTGRES_PASSWORD",
+    "REDIS_PASSWORD",
+    "SMTP_PASSWORD",
+    "SMTP_USER",
+    "TURNSTILE_SECRET_KEY",
+  ])
+
+  try {
+    assertProductionAppOrigin(environment)
+  } catch (error) {
+    if (error instanceof AppOriginConfigurationError) {
+      throw new UnsafeProductionConfigurationError(error.message)
+    }
+
+    throw error
+  }
+
+  assertRuntimeDatabaseUrl(environment)
+  assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
+  assertRequiredSecret(environment, "ARCTIC_IRC_TOKEN_SECRET", 32)
+}
+
+function resolveProductionServiceRole(role: string): ProductionServiceRole {
+  if ((PRODUCTION_SERVICE_ROLES as readonly string[]).includes(role)) {
+    return role as ProductionServiceRole
+  }
+
+  throw new UnsafeProductionConfigurationError(
+    `ARCTIC_RSS_SERVICE_ROLE must be one of: ${PRODUCTION_SERVICE_ROLES.join(", ")}.`
+  )
+}
+
+export function assertSecureProductionConfiguration(
+  environment: ProductionEnvironment = process.env,
+  role = "web"
+) {
+  if (environment.NODE_ENV !== "production") {
+    return
+  }
+
+  const serviceRole = resolveProductionServiceRole(role)
+
+  if (serviceRole === "web") {
+    assertWebConfiguration(environment)
+    return
+  }
+
+  if (serviceRole === "chat-gateway") {
+    assertChatGatewayConfiguration(environment)
+    return
+  }
+
+  if (WORKER_ROLES.has(serviceRole)) {
+    assertWorkerConfiguration(environment, serviceRole)
+  }
 }

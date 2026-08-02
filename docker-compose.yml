@@ -1,3 +1,29 @@
+x-worker-runtime: &worker-runtime
+  image: ${WORKER_IMAGE:-arctic-rss-worker}
+  build:
+    context: .
+    target: worker
+  init: true
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    redis-ephemeral:
+      condition: service_healthy
+  stop_grace_period: 60s
+  command: ["node", "worker.mjs"]
+  logging:
+    driver: journald
+
 services:
   postgres:
     image: postgres:17.10-alpine3.23
@@ -77,8 +103,6 @@ services:
     build:
       context: .
       target: migrate
-    env_file:
-      - .env
     environment:
       # Production migrations use a distinct role that owns the schema. The
       # web and worker containers retain the lower-privilege DATABASE_URL.
@@ -122,8 +146,51 @@ services:
     security_opt:
       - no-new-privileges:true
     stop_grace_period: 30s
-    env_file:
-      - .env
+    environment:
+      ARCTIC_RSS_SERVICE_ROLE: web
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
+      EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
+      APP_ALLOWED_HOSTS: ${APP_ALLOWED_HOSTS:-}
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+      AUTH_URL: ${AUTH_URL:?AUTH_URL is required}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is required}
+      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
+      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_CONNECTION_TIMEOUT_MS: ${SMTP_CONNECTION_TIMEOUT_MS:-}
+      SMTP_GREETING_TIMEOUT_MS: ${SMTP_GREETING_TIMEOUT_MS:-}
+      SMTP_SOCKET_TIMEOUT_MS: ${SMTP_SOCKET_TIMEOUT_MS:-}
+      SMTP_SEND_TIMEOUT_MS: ${SMTP_SEND_TIMEOUT_MS:-}
+      SMTP_POOL_MAX_CONNECTIONS: ${SMTP_POOL_MAX_CONNECTIONS:-}
+      TURNSTILE_REQUIRED: ${TURNSTILE_REQUIRED:-false}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+      NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_DEFAULT_MODEL: ${AI_DEFAULT_MODEL:-}
+      OPENAI_SUMMARY_MODEL: ${OPENAI_SUMMARY_MODEL:-}
+      AI_DIGEST_MODEL: ${AI_DIGEST_MODEL:-}
+      STORY_COMPARISON_MODEL: ${STORY_COMPARISON_MODEL:-}
+      ARCTIC_IRC_ENABLED: ${ARCTIC_IRC_ENABLED:-false}
+      ARCTIC_IRC_BETA_ALLOWLIST_ENABLED: ${ARCTIC_IRC_BETA_ALLOWLIST_ENABLED:-false}
+      ARCTIC_IRC_GUEST_PREVIEW_ENABLED: ${ARCTIC_IRC_GUEST_PREVIEW_ENABLED:-false}
+      ARCTIC_IRC_ROOM_CREATION_ENABLED: ${ARCTIC_IRC_ROOM_CREATION_ENABLED:-false}
+      ARCTIC_IRC_DMS_ENABLED: ${ARCTIC_IRC_DMS_ENABLED:-false}
+      ARCTIC_IRC_BOT_ENABLED: ${ARCTIC_IRC_BOT_ENABLED:-false}
+      ARCTIC_IRC_EXTERNAL_ENABLED: ${ARCTIC_IRC_EXTERNAL_ENABLED:-false}
+      ARCTIC_IRC_EXTERNAL_OFTC_ENABLED: ${ARCTIC_IRC_EXTERNAL_OFTC_ENABLED:-false}
+      ARCTIC_IRC_EXTERNAL_LIBERA_ENABLED: ${ARCTIC_IRC_EXTERNAL_LIBERA_ENABLED:-false}
+      ARCTIC_IRC_TOKEN_SECRET: ${ARCTIC_IRC_TOKEN_SECRET:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -149,37 +216,54 @@ services:
       driver: journald
 
   worker:
-    image: ${WORKER_IMAGE:-arctic-rss-worker}
-    build:
-      context: .
-      target: worker
-    init: true
-    restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
-    cap_drop:
-      - ALL
+    <<: *worker-runtime
     cpus: 0.75
     mem_limit: 1g
     pids_limit: 256
-    security_opt:
-      - no-new-privileges:true
-    env_file:
-      - .env
     environment:
-      # Reserve room for native allocations below the container limit.
+      ARCTIC_RSS_SERVICE_ROLE: worker-all
       NODE_OPTIONS: "--max-old-space-size=640"
-      # The legacy all-in-one worker remains the default until an operator
-      # explicitly activates the split-workers profile after capacity review.
       WORKER_MODE: "all"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-      redis-ephemeral:
-        condition: service_healthy
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
+      EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_DEFAULT_MODEL: ${AI_DEFAULT_MODEL:-}
+      AI_DIGEST_MODEL: ${AI_DIGEST_MODEL:-}
+      AI_DIGEST_CONCURRENCY: ${AI_DIGEST_CONCURRENCY:-}
+      SMART_DIGEST_CONCURRENCY: ${SMART_DIGEST_CONCURRENCY:-}
+      SMART_DIGEST_EMAIL_CONCURRENCY: ${SMART_DIGEST_EMAIL_CONCURRENCY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_CONNECTION_TIMEOUT_MS: ${SMTP_CONNECTION_TIMEOUT_MS:-}
+      SMTP_GREETING_TIMEOUT_MS: ${SMTP_GREETING_TIMEOUT_MS:-}
+      SMTP_SOCKET_TIMEOUT_MS: ${SMTP_SOCKET_TIMEOUT_MS:-}
+      SMTP_SEND_TIMEOUT_MS: ${SMTP_SEND_TIMEOUT_MS:-}
+      SMTP_POOL_MAX_CONNECTIONS: ${SMTP_POOL_MAX_CONNECTIONS:-}
+      FEED_REFRESH_CONCURRENCY: ${FEED_REFRESH_CONCURRENCY:-}
+      FEED_SCHEDULER_BATCH_SIZE: ${FEED_SCHEDULER_BATCH_SIZE:-}
+      FEED_SCHEDULER_INTERVAL_MS: ${FEED_SCHEDULER_INTERVAL_MS:-}
+      PODCAST_REFRESH_CONCURRENCY: ${PODCAST_REFRESH_CONCURRENCY:-}
+      SAVED_MONITOR_BATCH_SIZE: ${SAVED_MONITOR_BATCH_SIZE:-}
+      SAVED_MONITOR_MATCH_BATCH_SIZE: ${SAVED_MONITOR_MATCH_BATCH_SIZE:-}
+      SAVED_MONITOR_INTERVAL_MS: ${SAVED_MONITOR_INTERVAL_MS:-}
+      AUTH_TOKEN_MAINTENANCE_BATCH_SIZE: ${AUTH_TOKEN_MAINTENANCE_BATCH_SIZE:-}
+      AUTH_TOKEN_MAINTENANCE_INTERVAL_MS: ${AUTH_TOKEN_MAINTENANCE_INTERVAL_MS:-}
+      SECURITY_EVENT_MAINTENANCE_BATCH_SIZE: ${SECURITY_EVENT_MAINTENANCE_BATCH_SIZE:-}
+      SECURITY_EVENT_MAINTENANCE_INTERVAL_MS: ${SECURITY_EVENT_MAINTENANCE_INTERVAL_MS:-}
+      CHAT_EVENT_OUTBOX_PUBLISH_INTERVAL_MS: ${CHAT_EVENT_OUTBOX_PUBLISH_INTERVAL_MS:-}
+      ARCTIC_IRC_ENABLED: ${ARCTIC_IRC_ENABLED:-false}
+      ARCTIC_IRC_BOT_ENABLED: ${ARCTIC_IRC_BOT_ENABLED:-false}
+      ARCTIC_IRC_RETENTION_BATCH_SIZE: ${ARCTIC_IRC_RETENTION_BATCH_SIZE:-}
+      ARCTIC_IRC_RETENTION_INTERVAL_MS: ${ARCTIC_IRC_RETENTION_INTERVAL_MS:-}
+      ARCTIC_IRC_RETENTION_MAX_BATCHES: ${ARCTIC_IRC_RETENTION_MAX_BATCHES:-}
+      ARCTIC_IRC_RETENTION_MAX_RUNTIME_MS: ${ARCTIC_IRC_RETENTION_MAX_RUNTIME_MS:-}
     healthcheck:
       test:
         [
@@ -192,21 +276,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
-    stop_grace_period: 60s
-    command: ["node", "worker.mjs"]
-    logging:
-      driver: journald
 
   worker-ingestion:
-    extends:
-      service: worker
+    <<: *worker-runtime
     profiles: ["split-workers"]
     cpus: 0.5
     mem_limit: 640m
     pids_limit: 192
     environment:
+      ARCTIC_RSS_SERVICE_ROLE: worker-ingestion
       NODE_OPTIONS: "--max-old-space-size=384"
-      WORKER_MODE: "ingestion"
+      WORKER_MODE: ingestion
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
+      FEED_REFRESH_CONCURRENCY: ${FEED_REFRESH_CONCURRENCY:-}
+      PODCAST_REFRESH_CONCURRENCY: ${PODCAST_REFRESH_CONCURRENCY:-}
+      ARCTIC_IRC_ENABLED: ${ARCTIC_IRC_ENABLED:-false}
+      ARCTIC_IRC_BOT_ENABLED: ${ARCTIC_IRC_BOT_ENABLED:-false}
     healthcheck:
       test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-ingestion').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
       interval: 30s
@@ -215,15 +301,36 @@ services:
       start_period: 45s
 
   worker-ai-mail:
-    extends:
-      service: worker
+    <<: *worker-runtime
     profiles: ["split-workers"]
     cpus: 0.75
     mem_limit: 768m
     pids_limit: 192
     environment:
+      ARCTIC_RSS_SERVICE_ROLE: worker-ai-mail
       NODE_OPTIONS: "--max-old-space-size=512"
-      WORKER_MODE: "ai-mail"
+      WORKER_MODE: ai-mail
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_DEFAULT_MODEL: ${AI_DEFAULT_MODEL:-}
+      AI_DIGEST_MODEL: ${AI_DIGEST_MODEL:-}
+      AI_DIGEST_CONCURRENCY: ${AI_DIGEST_CONCURRENCY:-}
+      SMART_DIGEST_CONCURRENCY: ${SMART_DIGEST_CONCURRENCY:-}
+      SMART_DIGEST_EMAIL_CONCURRENCY: ${SMART_DIGEST_EMAIL_CONCURRENCY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_CONNECTION_TIMEOUT_MS: ${SMTP_CONNECTION_TIMEOUT_MS:-}
+      SMTP_GREETING_TIMEOUT_MS: ${SMTP_GREETING_TIMEOUT_MS:-}
+      SMTP_SOCKET_TIMEOUT_MS: ${SMTP_SOCKET_TIMEOUT_MS:-}
+      SMTP_SEND_TIMEOUT_MS: ${SMTP_SEND_TIMEOUT_MS:-}
+      SMTP_POOL_MAX_CONNECTIONS: ${SMTP_POOL_MAX_CONNECTIONS:-}
     healthcheck:
       test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-ai-mail').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
       interval: 30s
@@ -232,15 +339,17 @@ services:
       start_period: 45s
 
   worker-imports:
-    extends:
-      service: worker
+    <<: *worker-runtime
     profiles: ["split-workers"]
     cpus: 0.5
     mem_limit: 768m
     pids_limit: 192
     environment:
+      ARCTIC_RSS_SERVICE_ROLE: worker-imports
       NODE_OPTIONS: "--max-old-space-size=512"
-      WORKER_MODE: "imports"
+      WORKER_MODE: imports
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
     healthcheck:
       test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-imports').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
       interval: 30s
@@ -249,15 +358,31 @@ services:
       start_period: 45s
 
   worker-maintenance:
-    extends:
-      service: worker
+    <<: *worker-runtime
     profiles: ["split-workers"]
     cpus: 0.35
     mem_limit: 384m
     pids_limit: 128
     environment:
+      ARCTIC_RSS_SERVICE_ROLE: worker-maintenance
       NODE_OPTIONS: "--max-old-space-size=256"
-      WORKER_MODE: "maintenance"
+      WORKER_MODE: maintenance
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
+      FEED_SCHEDULER_BATCH_SIZE: ${FEED_SCHEDULER_BATCH_SIZE:-}
+      FEED_SCHEDULER_INTERVAL_MS: ${FEED_SCHEDULER_INTERVAL_MS:-}
+      SAVED_MONITOR_BATCH_SIZE: ${SAVED_MONITOR_BATCH_SIZE:-}
+      SAVED_MONITOR_MATCH_BATCH_SIZE: ${SAVED_MONITOR_MATCH_BATCH_SIZE:-}
+      SAVED_MONITOR_INTERVAL_MS: ${SAVED_MONITOR_INTERVAL_MS:-}
+      AUTH_TOKEN_MAINTENANCE_BATCH_SIZE: ${AUTH_TOKEN_MAINTENANCE_BATCH_SIZE:-}
+      AUTH_TOKEN_MAINTENANCE_INTERVAL_MS: ${AUTH_TOKEN_MAINTENANCE_INTERVAL_MS:-}
+      SECURITY_EVENT_MAINTENANCE_BATCH_SIZE: ${SECURITY_EVENT_MAINTENANCE_BATCH_SIZE:-}
+      SECURITY_EVENT_MAINTENANCE_INTERVAL_MS: ${SECURITY_EVENT_MAINTENANCE_INTERVAL_MS:-}
+      ARCTIC_IRC_ENABLED: ${ARCTIC_IRC_ENABLED:-false}
+      ARCTIC_IRC_RETENTION_BATCH_SIZE: ${ARCTIC_IRC_RETENTION_BATCH_SIZE:-}
+      ARCTIC_IRC_RETENTION_INTERVAL_MS: ${ARCTIC_IRC_RETENTION_INTERVAL_MS:-}
+      ARCTIC_IRC_RETENTION_MAX_BATCHES: ${ARCTIC_IRC_RETENTION_MAX_BATCHES:-}
+      ARCTIC_IRC_RETENTION_MAX_RUNTIME_MS: ${ARCTIC_IRC_RETENTION_MAX_RUNTIME_MS:-}
     healthcheck:
       test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-maintenance').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
       interval: 30s
@@ -266,15 +391,19 @@ services:
       start_period: 45s
 
   worker-chat-events:
-    extends:
-      service: worker
+    <<: *worker-runtime
     profiles: ["split-workers"]
     cpus: 0.35
     mem_limit: 384m
     pids_limit: 128
     environment:
+      ARCTIC_RSS_SERVICE_ROLE: worker-chat-events
       NODE_OPTIONS: "--max-old-space-size=256"
-      WORKER_MODE: "chat-events"
+      WORKER_MODE: chat-events
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
+      EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
+      CHAT_EVENT_OUTBOX_PUBLISH_INTERVAL_MS: ${CHAT_EVENT_OUTBOX_PUBLISH_INTERVAL_MS:-}
     healthcheck:
       test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-chat-events').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
       interval: 30s
@@ -303,8 +432,23 @@ services:
     security_opt:
       - no-new-privileges:true
     stop_grace_period: 30s
-    env_file:
-      - .env
+    environment:
+      ARCTIC_RSS_SERVICE_ROLE: chat-gateway
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
+      ARCTIC_IRC_ENABLED: ${ARCTIC_IRC_ENABLED:-false}
+      ARCTIC_IRC_TOKEN_SECRET: ${ARCTIC_IRC_TOKEN_SECRET:?ARCTIC_IRC_TOKEN_SECRET is required}
+      ARCTIC_IRC_TOKEN_TTL_SECONDS: ${ARCTIC_IRC_TOKEN_TTL_SECONDS:-60}
+      ARCTIC_IRC_AUTHORIZATION_MAX_AGE_SECONDS: ${ARCTIC_IRC_AUTHORIZATION_MAX_AGE_SECONDS:-60}
+      ARCTIC_IRC_REDIS_DEGRADED_GRACE_SECONDS: ${ARCTIC_IRC_REDIS_DEGRADED_GRACE_SECONDS:-90}
+      ARCTIC_IRC_MAX_SOCKETS_PER_USER: ${ARCTIC_IRC_MAX_SOCKETS_PER_USER:-5}
+      ARCTIC_IRC_MAX_SOCKETS_PER_IP: ${ARCTIC_IRC_MAX_SOCKETS_PER_IP:-20}
+      ARCTIC_IRC_MAX_ROOMS_PER_SOCKET: ${ARCTIC_IRC_MAX_ROOMS_PER_SOCKET:-20}
+      ARCTIC_IRC_MAX_EVENT_PAYLOAD_BYTES: ${ARCTIC_IRC_MAX_EVENT_PAYLOAD_BYTES:-65536}
+      ARCTIC_IRC_MAX_MALFORMED_EVENTS: ${ARCTIC_IRC_MAX_MALFORMED_EVENTS:-5}
+      ARCTIC_IRC_MAX_OUTSTANDING_OPERATIONS: ${ARCTIC_IRC_MAX_OUTSTANDING_OPERATIONS:-8}
+      CHAT_GATEWAY_PORT: ${CHAT_GATEWAY_PORT:-3001}
     depends_on:
       migrate:
         condition: service_completed_successfully
