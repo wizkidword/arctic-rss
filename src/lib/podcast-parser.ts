@@ -21,6 +21,12 @@ const audioExtensions = new Set([
   ".wav",
 ])
 
+const transcriptTypeRanks = new Map([
+  ["text/vtt", 0],
+  ["application/x-subrip", 1],
+  ["text/plain", 2],
+])
+
 export type ParsedPodcastEpisode = {
   audioLengthBytes?: bigint
   audioType?: string
@@ -33,6 +39,10 @@ export type ParsedPodcastEpisode = {
   imageUrl?: string
   publishedAt?: Date
   title: string
+  transcriptLanguage?: string
+  transcriptRel?: string
+  transcriptType?: string
+  transcriptUrl?: string
   url?: string
 }
 
@@ -90,10 +100,11 @@ function parseRssPodcast(
   }
 
   const title = textValue(channel.title) ?? "Untitled Podcast"
+  const language = textValue(channel.language)
   const description =
     textValue(channel.description) ?? textValue(channel["itunes:subtitle"])
   const episodes = [...toArray(channel.item), ...toArray(rdf?.item)]
-    .map((item) => parseRssEpisode(item, feedUrl))
+    .map((item) => parseRssEpisode(item, feedUrl, language))
     .filter((episode) => episode !== null)
 
   return {
@@ -102,7 +113,7 @@ function parseRssPodcast(
     description,
     episodes,
     feedUrl,
-    language: textValue(channel.language),
+    language,
     siteUrl: normalizeOptionalUrl(textValue(channel.link), feedUrl),
     title,
   }
@@ -110,7 +121,8 @@ function parseRssPodcast(
 
 function parseRssEpisode(
   item: unknown,
-  feedUrl: string
+  feedUrl: string,
+  feedLanguage: string | undefined
 ): ParsedPodcastEpisode | null {
   const record = toRecord(item)
 
@@ -128,6 +140,7 @@ function parseRssEpisode(
   const url = normalizeOptionalUrl(textValue(record.link), feedUrl)
   const description = textValue(record.description)
   const contentHtml = textValue(record["content:encoded"])
+  const transcript = preferredTranscript(record["podcast:transcript"], feedUrl)
   const publishedAt = parseOptionalDate(
     textValue(record.pubDate) ??
       textValue(record.published) ??
@@ -155,6 +168,7 @@ function parseRssEpisode(
       imageFromMediaThumbnail(record["media:thumbnail"], feedUrl),
     publishedAt,
     title,
+    ...transcriptFields(transcript, feedLanguage),
     url,
   }
 }
@@ -170,8 +184,9 @@ function parseAtomPodcast(
   }
 
   const title = textValue(feed.title) ?? "Untitled Podcast"
+  const language = textValue(feed["@xml:lang"] ?? feed["@lang"])
   const episodes = toArray(feed.entry)
-    .map((entry) => parseAtomEpisode(entry, feedUrl))
+    .map((entry) => parseAtomEpisode(entry, feedUrl, language))
     .filter((episode) => episode !== null)
 
   return {
@@ -182,7 +197,7 @@ function parseAtomPodcast(
     description: textValue(feed.subtitle) ?? textValue(feed.summary),
     episodes,
     feedUrl,
-    language: textValue(feed["@xml:lang"] ?? feed["@lang"]),
+    language,
     siteUrl: normalizeOptionalUrl(findAtomAlternateLink(feed.link), feedUrl),
     title,
   }
@@ -190,7 +205,8 @@ function parseAtomPodcast(
 
 function parseAtomEpisode(
   entry: unknown,
-  feedUrl: string
+  feedUrl: string,
+  feedLanguage: string | undefined
 ): ParsedPodcastEpisode | null {
   const record = toRecord(entry)
 
@@ -208,6 +224,7 @@ function parseAtomEpisode(
   const url = normalizeOptionalUrl(findAtomAlternateLink(record.link), feedUrl)
   const description = textValue(record.summary)
   const contentHtml = textValue(record.content)
+  const transcript = preferredTranscript(record["podcast:transcript"], feedUrl)
   const publishedAt = parseOptionalDate(
     textValue(record.published) ?? textValue(record.updated)
   )
@@ -228,6 +245,7 @@ function parseAtomEpisode(
       imageFromMediaThumbnail(record["media:thumbnail"], feedUrl),
     publishedAt,
     title,
+    ...transcriptFields(transcript, feedLanguage),
     url,
   }
 }
@@ -267,6 +285,55 @@ function findAudioAtomEnclosure(value: unknown, feedUrl: string) {
   }
 
   return undefined
+}
+
+function preferredTranscript(value: unknown, feedUrl: string) {
+  return toArray(value)
+    .map((item) => {
+      const record = toRecord(item)
+      const type = normalizeTranscriptType(textValue(record?.["@type"]))
+      const url = normalizeOptionalUrl(textValue(record?.["@url"]), feedUrl)
+
+      if (!type || !url) {
+        return undefined
+      }
+
+      return {
+        language: textValue(record?.["@language"]),
+        rel: textValue(record?.["@rel"])?.toLowerCase(),
+        type,
+        url,
+      }
+    })
+    .filter((transcript): transcript is NonNullable<typeof transcript> => Boolean(transcript))
+    .sort((left, right) => transcriptTypeRanks.get(left.type)! - transcriptTypeRanks.get(right.type)!)[0]
+}
+
+function normalizeTranscriptType(value: string | undefined) {
+  const type = value?.toLowerCase().split(";", 1)[0]?.trim()
+
+  return type && transcriptTypeRanks.has(type) ? type : undefined
+}
+
+function transcriptFields(
+  transcript:
+    | {
+        language?: string
+        rel?: string
+        type: string
+        url: string
+      }
+    | undefined,
+  feedLanguage: string | undefined
+) {
+  return transcript
+    ? {
+        transcriptLanguage: transcript.language ?? feedLanguage,
+        transcriptRel: transcript.rel,
+        transcriptType: transcript.type,
+        transcriptUrl: transcript.url,
+      }
+    : {}
 }
 
 function parseDuration(value: string | undefined) {

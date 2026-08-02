@@ -148,6 +148,32 @@ describe("refreshPodcastWithClient", () => {
     expect(store.$transaction).toHaveBeenCalledTimes(1)
   })
 
+  it("clears stale transcript metadata when the feed stops advertising it", async () => {
+    const store = createStore()
+    store.podcastEpisode.findMany.mockResolvedValue([{ externalId: "ep-1" }])
+
+    await refreshPodcastWithClient({
+      podcastId: "podcast-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: podcastXml,
+        url: new URL("https://example.com/podcast.xml"),
+      }),
+      store,
+    })
+
+    expect(store.podcastEpisode.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          transcriptLanguage: null,
+          transcriptRel: null,
+          transcriptType: null,
+          transcriptUrl: null,
+        }),
+      })
+    )
+  })
+
   it("uses stored validators and skips parsing after a 304 response", async () => {
     const store = createStore()
     store.podcast.findUnique.mockResolvedValue({

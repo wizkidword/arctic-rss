@@ -577,22 +577,26 @@ model PodcastSubscription {
 }
 
 model PodcastEpisode {
-  id               String    @id @default(cuid())
-  podcastId        String
-  externalId       String
-  title            String
-  url              String?
-  description      String?
-  contentHtml      String?
-  contentText      String?
-  audioUrl         String
-  audioType        String?
-  audioLengthBytes BigInt?
-  durationSeconds  Int?
-  imageUrl         String?
-  publishedAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  podcastId          String
+  externalId         String
+  title              String
+  url                String?
+  description        String?
+  contentHtml        String?
+  contentText        String?
+  audioUrl           String
+  audioType          String?
+  audioLengthBytes   BigInt?
+  durationSeconds    Int?
+  imageUrl           String?
+  transcriptUrl      String?
+  transcriptType     String?
+  transcriptLanguage String?
+  transcriptRel      String?
+  publishedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   podcast         Podcast                 @relation(fields: [podcastId], references: [id], onDelete: Cascade)
   states          PodcastEpisodeState[]
