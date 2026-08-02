@@ -132,6 +132,8 @@ describe("approved release command", () => {
     expect(script).toContain("selected_service()")
     expect(script).toContain("topology_application_services")
     expect(script).toContain("TOPOLOGY_HEALTH")
+    expect(script).toContain('ARCTIC_RSS_TOPOLOGY="$topology_name"')
+    expect(script).toContain('ARCTIC_RSS_BUILD_SHA="$commit"')
   })
 
   it("captures the exact prior topology, commit, and application image tags for rollback", async () => {

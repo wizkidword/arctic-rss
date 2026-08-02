@@ -52,3 +52,9 @@ The approval-gated Windows release and rollback procedures consume these
 selected service lists directly. A rollback selects the prior topology stored
 in its private release record and is still a separately approved production
 action; this document does not authorize a topology cutover.
+
+The release commands also inject the selected manifest name as
+`ARCTIC_RSS_TOPOLOGY` and the reviewed commit as `ARCTIC_RSS_BUILD_SHA`.
+These variables let readiness validate the same selected topology and attach a
+non-secret version to durable worker heartbeats; do not replace them with a
+manually guessed service list.

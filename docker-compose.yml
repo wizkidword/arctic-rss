@@ -148,6 +148,10 @@ services:
     stop_grace_period: 30s
     environment:
       ARCTIC_RSS_SERVICE_ROLE: web
+      # The approved release command injects the manifest-selected topology.
+      # The all-in-one default keeps direct local Compose use deterministic.
+      ARCTIC_RSS_TOPOLOGY: ${ARCTIC_RSS_TOPOLOGY:-all-in-one}
+      FEED_SCHEDULER_INTERVAL_MS: ${FEED_SCHEDULER_INTERVAL_MS:-60000}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
@@ -226,6 +230,7 @@ services:
       ARCTIC_RSS_SERVICE_ROLE: worker-all
       NODE_OPTIONS: "--max-old-space-size=640"
       WORKER_MODE: "all"
+      ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
@@ -290,6 +295,7 @@ services:
       ARCTIC_RSS_SERVICE_ROLE: worker-ingestion
       NODE_OPTIONS: "--max-old-space-size=384"
       WORKER_MODE: ingestion
+      ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       FEED_REFRESH_CONCURRENCY: ${FEED_REFRESH_CONCURRENCY:-}
@@ -313,6 +319,7 @@ services:
       ARCTIC_RSS_SERVICE_ROLE: worker-ai-mail
       NODE_OPTIONS: "--max-old-space-size=512"
       WORKER_MODE: ai-mail
+      ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
@@ -351,6 +358,7 @@ services:
       ARCTIC_RSS_SERVICE_ROLE: worker-imports
       NODE_OPTIONS: "--max-old-space-size=512"
       WORKER_MODE: imports
+      ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
     healthcheck:
@@ -370,6 +378,7 @@ services:
       ARCTIC_RSS_SERVICE_ROLE: worker-maintenance
       NODE_OPTIONS: "--max-old-space-size=256"
       WORKER_MODE: maintenance
+      ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       FEED_SCHEDULER_BATCH_SIZE: ${FEED_SCHEDULER_BATCH_SIZE:-}
@@ -403,6 +412,7 @@ services:
       ARCTIC_RSS_SERVICE_ROLE: worker-chat-events
       NODE_OPTIONS: "--max-old-space-size=256"
       WORKER_MODE: chat-events
+      ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}

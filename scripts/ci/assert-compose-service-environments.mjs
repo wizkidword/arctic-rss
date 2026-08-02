@@ -61,7 +61,7 @@ const infrastructureSecrets = [
   "REDIS_PASSWORD",
 ]
 
-assertPresent("web", ["ARCTIC_RSS_SERVICE_ROLE", "DATABASE_URL"])
+assertPresent("web", ["ARCTIC_RSS_SERVICE_ROLE", "ARCTIC_RSS_TOPOLOGY", "DATABASE_URL"])
 assertAbsent("web", infrastructureSecrets)
 
 assertPresent("worker-ingestion", ["ARCTIC_RSS_SERVICE_ROLE", "DATABASE_URL", "DURABLE_REDIS_URL"])

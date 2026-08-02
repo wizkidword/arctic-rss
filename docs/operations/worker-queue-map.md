@@ -11,9 +11,12 @@ code and Compose ownership; it does not authorize changing the worker topology.
   it alongside the all-in-one worker without an approved capacity review and
   release.
 - Every mode writes its own heartbeat under `/tmp`; Compose marks it unhealthy
-  after 90 seconds without one. SIGINT and SIGTERM pause intake, wait for
-  active work up to the configured grace period, then close workers, queues,
-  event publishers, the maintenance lock, and Prisma.
+  after 90 seconds without one. It also writes a 90-second durable Redis TTL
+  heartbeat with its mode, container instance ID, release SHA, and timestamp
+  so the web readiness check can detect a missing cross-container owner.
+  SIGINT and SIGTERM pause intake, wait for active work up to the configured
+  grace period, then close workers, queues, event publishers, the maintenance
+  lock, heartbeat connection, and Prisma.
 
 ## Queue ownership
 
@@ -39,7 +42,8 @@ durable-Redis lease, so concurrent maintenance workers skip rather than run
 the same schedule twice. Its work includes due feed/podcast refresh enqueueing,
 auth-token and security-event cleanup, AI-operation lease reconciliation,
 saved-monitor processing, bounded chat retention, and pending smart-digest
-email enqueueing.
+email enqueueing. A durable maintenance-tick record is refreshed only after
+all of those scheduler operations succeed while the lease remains held.
 
 `chat-events` also runs the transactional chat-event outbox publisher. The
 publisher leases and retries rows from PostgreSQL before publishing versioned,

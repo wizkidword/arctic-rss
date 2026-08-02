@@ -6,6 +6,7 @@ import {
 } from "./production-security"
 
 const webProductionEnvironment = {
+  ARCTIC_RSS_TOPOLOGY: "all-in-one",
   APP_ORIGIN: "https://arcticrss.com",
   AUTH_SECRET: "production-auth-secret-that-is-at-least-32-bytes",
   AUTH_URL: "https://arcticrss.com",
@@ -23,6 +24,17 @@ describe("production security configuration", () => {
     expect(() =>
       assertSecureProductionConfiguration(webProductionEnvironment, "web")
     ).not.toThrow()
+  })
+
+  it("requires the manifest-selected topology for production web", () => {
+    const environment = {
+      ...webProductionEnvironment,
+      ARCTIC_RSS_TOPOLOGY: undefined,
+    }
+
+    expect(() =>
+      assertSecureProductionConfiguration(environment, "web")
+    ).toThrow("ARCTIC_RSS_TOPOLOGY must be configured in production.")
   })
 
   it("rejects disabled email verification and a retired admin allowlist for web", () => {

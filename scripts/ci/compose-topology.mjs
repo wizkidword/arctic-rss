@@ -11,7 +11,10 @@ const topology = resolveTopology(readTopologyManifest(), topologyName, { tunnel 
 const result = spawnSync(
   "docker",
   ["compose", "-f", "docker-compose.yml", "-f", "docker-compose.ci.yml", ...composeProfileArguments(topology), ...composeArguments],
-  { stdio: "inherit" }
+  {
+    env: { ...process.env, ARCTIC_RSS_TOPOLOGY: topology.name },
+    stdio: "inherit",
+  }
 )
 
 if (result.error) {

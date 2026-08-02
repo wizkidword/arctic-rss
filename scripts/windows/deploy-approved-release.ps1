@@ -834,10 +834,10 @@ for profile in "${topology_profiles[@]}"; do
   compose_profile_args+=(--profile "$profile")
 done
 stage_compose() {
-  sudo -n docker compose -p "$compose_project" --project-directory "$stage" "${compose_profile_args[@]}" "$@"
+  sudo -n env ARCTIC_RSS_TOPOLOGY="$topology_name" ARCTIC_RSS_BUILD_SHA="$commit" docker compose -p "$compose_project" --project-directory "$stage" "${compose_profile_args[@]}" "$@"
 }
 live_compose() {
-  sudo -n docker compose -p "$compose_project" --project-directory "$live" "${compose_profile_args[@]}" "$@"
+  sudo -n env ARCTIC_RSS_TOPOLOGY="$topology_name" ARCTIC_RSS_BUILD_SHA="$commit" docker compose -p "$compose_project" --project-directory "$live" "${compose_profile_args[@]}" "$@"
 }
 
 actual_hash="$(sha256sum "$archive" | awk '{print $1}')"
@@ -960,8 +960,8 @@ selected_service() {
 }
 for service in "${topology_application_services[@]}"; do
   if ! selected_service "$service"; then
-    sudo -n docker compose -p "$compose_project" --project-directory "$live" "${all_profile_args[@]}" stop "$service" >/dev/null 2>&1 || true
-    sudo -n docker compose -p "$compose_project" --project-directory "$live" "${all_profile_args[@]}" rm -f "$service" >/dev/null 2>&1 || true
+    sudo -n env ARCTIC_RSS_TOPOLOGY="$topology_name" ARCTIC_RSS_BUILD_SHA="$commit" docker compose -p "$compose_project" --project-directory "$live" "${all_profile_args[@]}" stop "$service" >/dev/null 2>&1 || true
+    sudo -n env ARCTIC_RSS_TOPOLOGY="$topology_name" ARCTIC_RSS_BUILD_SHA="$commit" docker compose -p "$compose_project" --project-directory "$live" "${all_profile_args[@]}" rm -f "$service" >/dev/null 2>&1 || true
   fi
 done
 

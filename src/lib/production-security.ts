@@ -6,6 +6,7 @@ import {
   getAppOrigin,
 } from "./app-origin"
 import { LEGACY_REDIS_MIGRATION_FLAG } from "./redis-config"
+import { assertRuntimeTopology } from "./runtime-topology"
 import { assertTurnstileConfiguration } from "./turnstile"
 
 export class UnsafeProductionConfigurationError extends Error {
@@ -400,6 +401,7 @@ export function assertSecureProductionConfiguration(
 
   if (serviceRole === "web") {
     assertWebConfiguration(environment)
+    assertRuntimeTopology(environment)
     return
   }
 

@@ -18,8 +18,12 @@ The application has two health boundaries:
 - `GET /api/live` is a loopback-only liveness probe. It confirms the web
   process can answer a request and is used by Docker health checks.
 - `GET /api/health` is a minimal public-safe readiness probe. It performs
-  deadline-bound checks of PostgreSQL and Redis and returns only `ok` or
-  `degraded`.
+  deadline-bound checks of PostgreSQL, durable Redis, ephemeral Redis,
+  topology-required worker and maintenance heartbeats, bounded queue health,
+  and the selected chat gateway. It returns only `ok` or `degraded`.
+
+See [readiness and redacted diagnostics](docs/operations/readiness-and-doctor.md)
+for its internal contract and the safe `npm run doctor` operator report.
 
 ## Environment
 

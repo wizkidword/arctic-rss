@@ -257,6 +257,7 @@ release_root='__RELEASE_ROOT__'
 compose_project='__COMPOSE_PROJECT__'
 canonical_host='__CANONICAL_HOST__'
 topology_name='__TOPOLOGY_NAME__'
+previous_commit='__PREVIOUS_COMMIT__'
 topology_profiles_b64='__TOPOLOGY_PROFILES_BASE64__'
 topology_rollback_services_b64='__TOPOLOGY_ROLLBACK_SERVICES_BASE64__'
 topology_health_services_b64='__TOPOLOGY_HEALTH_SERVICES_BASE64__'
@@ -284,7 +285,7 @@ for profile in "${topology_profiles[@]}"; do
   profile_args+=(--profile "$profile")
 done
 previous_compose() {
-  sudo -n docker compose -p "$compose_project" --project-directory "$previous" "${profile_args[@]}" "$@"
+  sudo -n env ARCTIC_RSS_TOPOLOGY="$topology_name" ARCTIC_RSS_BUILD_SHA="$previous_commit" docker compose -p "$compose_project" --project-directory "$previous" "${profile_args[@]}" "$@"
 }
 
 previous_compose config -q
@@ -318,12 +319,12 @@ sudo -n mv "$previous" "$current"
 all_profile_args=(--profile all-in-one --profile split-workers --profile chat-workers --profile chat)
 for service in "${topology_application_services[@]}"; do
   if ! selected_service "$service"; then
-    sudo -n docker compose -p "$compose_project" --project-directory "$current" "${all_profile_args[@]}" stop "$service" >/dev/null 2>&1 || true
-    sudo -n docker compose -p "$compose_project" --project-directory "$current" "${all_profile_args[@]}" rm -f "$service" >/dev/null 2>&1 || true
+    sudo -n env ARCTIC_RSS_TOPOLOGY="$topology_name" ARCTIC_RSS_BUILD_SHA="$previous_commit" docker compose -p "$compose_project" --project-directory "$current" "${all_profile_args[@]}" stop "$service" >/dev/null 2>&1 || true
+    sudo -n env ARCTIC_RSS_TOPOLOGY="$topology_name" ARCTIC_RSS_BUILD_SHA="$previous_commit" docker compose -p "$compose_project" --project-directory "$current" "${all_profile_args[@]}" rm -f "$service" >/dev/null 2>&1 || true
   fi
 done
 
-sudo -n docker compose -p "$compose_project" --project-directory "$current" "${profile_args[@]}" up -d --no-deps --no-build --force-recreate "${topology_rollback_services[@]}"
+sudo -n env ARCTIC_RSS_TOPOLOGY="$topology_name" ARCTIC_RSS_BUILD_SHA="$previous_commit" docker compose -p "$compose_project" --project-directory "$current" "${profile_args[@]}" up -d --no-deps --no-build --force-recreate "${topology_rollback_services[@]}"
 
 for image_entry in "${previous_image_tags[@]}"; do
   service="${image_entry%%=*}"
@@ -366,7 +367,7 @@ printf 'FAILED_TOPOLOGY=__FAILED_TOPOLOGY__\n'
 printf 'RESTORED_TOPOLOGY=%s\n' "$topology_name"
 printf 'TOPOLOGY_HEALTH=%s\n' "${topology_health[*]}"
 '@
-$remoteScript = $remoteScript.Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__PREVIOUS_RELEASE__', $record.PreviousRelease).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost).Replace('__TOPOLOGY_NAME__', $topology.Name).Replace('__TOPOLOGY_PROFILES_BASE64__', $profilesPayload).Replace('__TOPOLOGY_ROLLBACK_SERVICES_BASE64__', $rollbackServicesPayload).Replace('__TOPOLOGY_HEALTH_SERVICES_BASE64__', $healthServicesPayload).Replace('__TOPOLOGY_APPLICATION_SERVICES_BASE64__', $applicationServicesPayload).Replace('__PREVIOUS_IMAGE_TAGS_BASE64__', $previousImageTagsPayload).Replace('__FAILED_TOPOLOGY__', $record.FailedTopology).Replace('__SHORT_SHA__', $shortSha)
+$remoteScript = $remoteScript.Replace('__APP_DIRECTORY__', $config.AppDirectory).Replace('__PREVIOUS_RELEASE__', $record.PreviousRelease).Replace('__PREVIOUS_COMMIT__', $record.PreviousCommit).Replace('__RELEASE_ROOT__', $config.ReleaseRoot).Replace('__COMPOSE_PROJECT__', $config.ComposeProject).Replace('__CANONICAL_HOST__', $config.CanonicalHost).Replace('__TOPOLOGY_NAME__', $topology.Name).Replace('__TOPOLOGY_PROFILES_BASE64__', $profilesPayload).Replace('__TOPOLOGY_ROLLBACK_SERVICES_BASE64__', $rollbackServicesPayload).Replace('__TOPOLOGY_HEALTH_SERVICES_BASE64__', $healthServicesPayload).Replace('__TOPOLOGY_APPLICATION_SERVICES_BASE64__', $applicationServicesPayload).Replace('__PREVIOUS_IMAGE_TAGS_BASE64__', $previousImageTagsPayload).Replace('__FAILED_TOPOLOGY__', $record.FailedTopology).Replace('__SHORT_SHA__', $shortSha)
 $output = Invoke-RemoteScript -Config $config -Script $remoteScript
 $failedRelease = Get-RollbackMarker -Output $output -Name "FAILED_RELEASE"
 $failedTopology = Get-RollbackMarker -Output $output -Name "FAILED_TOPOLOGY"

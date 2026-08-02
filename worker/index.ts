@@ -2,6 +2,7 @@ import "dotenv/config"
 
 import { getHeapStatistics } from "node:v8"
 import { Worker } from "bullmq"
+import Redis from "ioredis"
 
 import { cleanupExpiredAuthTokens } from "../src/lib/auth-token-maintenance"
 import {
@@ -90,6 +91,9 @@ import {
 import { processSmartDigestRule } from "../src/lib/smart-digest-processing"
 import {
   clearWorkerHeartbeat,
+  maintenanceTickMaxAgeMs,
+  writeDurableMaintenanceTick,
+  writeDurableWorkerHeartbeat,
   writeWorkerHeartbeat,
 } from "../src/lib/worker-health"
 import {
@@ -107,6 +111,17 @@ import { createMaintenanceLock, type MaintenanceLease } from "./maintenance-lock
 const workerMode = getWorkerMode()
 assertSecureProductionConfiguration(process.env, `worker-${workerMode}`)
 const heartbeatPath = workerHeartbeatPath(workerMode)
+const heartbeatInstanceId = process.env.HOSTNAME?.trim() || `worker-${process.pid}`
+const heartbeatVersion = process.env.ARCTIC_RSS_BUILD_SHA?.trim() || "unknown"
+const durableHeartbeatStore = new Redis(durableRedisConnectionOptions().url, {
+  connectTimeout: 2_000,
+  enableOfflineQueue: false,
+  maxRetriesPerRequest: 0,
+  retryStrategy: () => null,
+})
+durableHeartbeatStore.on("error", () => {
+  // The retry loop below records a redacted operational error without secrets.
+})
 const maintenanceLock = runsWorkerResponsibility(workerMode, "maintenance")
   ? createMaintenanceLock()
   : undefined
@@ -614,7 +629,7 @@ async function runTrackedRefresh<
 
 async function schedulerTick(lease?: MaintenanceLease) {
   if (schedulerRunning) {
-    return
+    return false
   }
 
   schedulerRunning = true
@@ -804,6 +819,19 @@ async function schedulerTick(lease?: MaintenanceLease) {
         )}`
       )
     }
+
+    return [
+      feedResult,
+      podcastResult,
+      smartDigestResult,
+      smartDigestEmailResult,
+      chatBotResult,
+      chatRetentionResult,
+      maintenanceResult,
+      securityEventMaintenanceResult,
+      aiOperationReconciliationResult,
+      savedMonitorResult,
+    ].every((result) => result.status === "fulfilled")
   } finally {
     schedulerRunning = false
   }
@@ -815,7 +843,7 @@ function runSchedulerTick() {
   }
 
   schedulerTickPromise = (maintenanceLock
-    ? maintenanceLock.run((lease) => schedulerTick(lease)).then((result) => {
+    ? maintenanceLock.run((lease) => schedulerTick(lease)).then(async (result) => {
         if (!result.acquired) {
           console.warn(
             JSON.stringify({
@@ -823,9 +851,41 @@ function runSchedulerTick() {
               outcome: "skipped",
             })
           )
+          return
         }
+
+        if (!result.value) {
+          console.error("[worker] maintenance tick completed with failed operations")
+          return
+        }
+
+        await writeDurableMaintenanceTick({
+          client: durableHeartbeatStore,
+          instanceId: heartbeatInstanceId,
+          mode: workerMode,
+          timestamp: Date.now(),
+          ttlMs: maintenanceTickMaxAgeMs({
+            FEED_SCHEDULER_INTERVAL_MS: String(schedulerIntervalMs),
+          }),
+          version: heartbeatVersion,
+        })
       })
-    : schedulerTick())
+    : schedulerTick().then(async (succeeded) => {
+        if (!succeeded) {
+          return
+        }
+
+        await writeDurableMaintenanceTick({
+          client: durableHeartbeatStore,
+          instanceId: heartbeatInstanceId,
+          mode: workerMode,
+          timestamp: Date.now(),
+          ttlMs: maintenanceTickMaxAgeMs({
+            FEED_SCHEDULER_INTERVAL_MS: String(schedulerIntervalMs),
+          }),
+          version: heartbeatVersion,
+        })
+      }))
     .catch((error) => {
       console.error(`[worker] scheduler tick failed: ${schedulerErrorMessage(error)}`)
     })
@@ -995,9 +1055,22 @@ if (chatOutboxPublisher) {
 }
 
 function recordWorkerHeartbeat() {
+  const timestamp = Date.now()
+
   writeWorkerHeartbeat({ path: heartbeatPath }).catch((error) => {
     console.error(
       `[worker] could not update health heartbeat: ${schedulerErrorMessage(error)}`
+    )
+  })
+  writeDurableWorkerHeartbeat({
+    client: durableHeartbeatStore,
+    instanceId: heartbeatInstanceId,
+    mode: workerMode,
+    timestamp,
+    version: heartbeatVersion,
+  }).catch((error) => {
+    console.error(
+      `[worker] could not update durable health heartbeat: ${schedulerErrorMessage(error)}`
     )
   })
 }
@@ -1024,6 +1097,7 @@ function shutdown() {
           closeChatArticleIntegrationQueue(),
           closeChatRoomEventPublisher(),
           maintenanceLock?.close() ?? Promise.resolve(),
+          closeDurableHeartbeatStore(),
         ])
         await clearWorkerHeartbeat({ path: heartbeatPath }).catch((error) => {
           console.error(
@@ -1052,6 +1126,14 @@ function shutdown() {
   }
 
   return shutdownPromise
+}
+
+async function closeDurableHeartbeatStore() {
+  try {
+    await durableHeartbeatStore.quit()
+  } catch {
+    durableHeartbeatStore.disconnect()
+  }
 }
 
 installWorkerSignalHandlers({

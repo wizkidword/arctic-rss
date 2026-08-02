@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "doctor": "tsx scripts/doctor.ts",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "chat:bootstrap": "tsx scripts/bootstrap-chat-rooms.ts",
     "chat:beta": "tsx scripts/manage-chat-beta-access.ts",
