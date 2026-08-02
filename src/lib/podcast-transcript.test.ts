@@ -46,6 +46,18 @@ describe("parsePodcastTranscript", () => {
       { text: "Second paragraph." },
     ])
   })
+
+  it("uses the shared sanitizer for publisher-supplied caption text", () => {
+    expect(
+      parsePodcastTranscript(
+        "00:00:01.000 --> 00:00:02.000\nVisible <v Host>caption</v> <script>alert('no')</script>\n\n00:00:03.000 --> 00:00:04.000\nUnclosed <script",
+        "text/vtt"
+      )
+    ).toEqual([
+      { endSeconds: 2, startSeconds: 1, text: "Visible caption" },
+      { endSeconds: 4, startSeconds: 3, text: "Unclosed script" },
+    ])
+  })
 })
 
 describe("getPodcastEpisodeTranscriptForUser", () => {

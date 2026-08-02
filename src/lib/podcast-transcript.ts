@@ -1,3 +1,5 @@
+import sanitizeHtml from "sanitize-html"
+
 import { getPrisma } from "./db"
 import { normalizeHttpUrl, safeFetchText, type SafeFetchTextResult } from "./url-safety"
 
@@ -192,7 +194,12 @@ function parseTimestamp(value: string) {
 }
 
 function normalizeCueText(value: string) {
-  return value.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim()
+  return sanitizeHtml(value, {
+    allowedAttributes: {},
+    allowedTags: [],
+  })
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function normalizePodcastTranscriptType(value: string | null | undefined) {
