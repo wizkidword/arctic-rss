@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react"
 import Link from "next/link"
 
 import { PodcastEpisodeActions } from "@/components/podcast-episode-actions"
+import { PodcastTranscript } from "@/components/podcast-transcript"
 import { type ArticleCollectionPickerItem } from "@/lib/article-collections"
 import type { PodcastHomeEpisode } from "@/lib/podcasts"
 import { buttonVariants } from "@/components/ui/button"
@@ -94,9 +95,17 @@ export function PodcastEpisodeList({
             aria-label={`Stream ${episode.title}`}
             className="mt-3 w-full"
             controls
+            id={`podcast-audio-${episode.episodeId}`}
             preload="none"
             src={episode.audioUrl}
           />
+          {episode.transcript ? (
+            <PodcastTranscript
+              audioElementId={`podcast-audio-${episode.episodeId}`}
+              episodeId={episode.episodeId}
+              transcript={episode.transcript}
+            />
+          ) : null}
         </article>
       ))}
       {nextPageHref ? (

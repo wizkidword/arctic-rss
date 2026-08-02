@@ -71,6 +71,56 @@ describe("parsePodcastFeed", () => {
     })
   })
 
+  it("selects the preferred publisher transcript format", () => {
+    const podcast = parsePodcastFeed(
+      `<rss xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel><title>Show</title><language>en</language><item>
+        <title>Episode</title>
+        <enclosure url="https://cdn.example.com/episode.mp3" type="audio/mpeg" />
+        <podcast:transcript url="transcript.txt" type="text/plain" />
+        <podcast:transcript url="transcript.srt" type="application/x-subrip" language="es" />
+        <podcast:transcript url="transcript.vtt" type="text/vtt" language="fr" rel="captions" />
+      </item></channel></rss>`,
+      "https://example.com/podcasts/feed.xml"
+    )
+
+    expect(podcast.episodes[0]).toMatchObject({
+      transcriptLanguage: "fr",
+      transcriptRel: "captions",
+      transcriptType: "text/vtt",
+      transcriptUrl: "https://example.com/podcasts/transcript.vtt",
+    })
+  })
+
+  it("uses the feed language for publisher transcripts without one", () => {
+    const podcast = parsePodcastFeed(
+      `<rss xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel><title>Show</title><language>en-us</language><item>
+        <title>Episode</title>
+        <enclosure url="https://cdn.example.com/episode.mp3" type="audio/mpeg" />
+        <podcast:transcript url="https://example.com/transcript.txt" type="text/plain" />
+      </item></channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(podcast.episodes[0]).toMatchObject({
+      transcriptLanguage: "en-us",
+      transcriptType: "text/plain",
+      transcriptUrl: "https://example.com/transcript.txt",
+    })
+  })
+
+  it("ignores unsupported publisher transcript formats", () => {
+    const podcast = parsePodcastFeed(
+      `<rss xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel><title>Show</title><item>
+        <title>Episode</title>
+        <enclosure url="https://cdn.example.com/episode.mp3" type="audio/mpeg" />
+        <podcast:transcript url="https://example.com/transcript.html" type="text/html" />
+      </item></channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(podcast.episodes[0]).not.toHaveProperty("transcriptUrl")
+  })
+
   it("rejects missing type enclosures with non-audio extensions", () => {
     expect(() =>
       parsePodcastFeed(

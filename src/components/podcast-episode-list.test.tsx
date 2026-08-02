@@ -38,6 +38,7 @@ describe("PodcastEpisodeList", () => {
             podcastTitle: "Example Podcast",
             publishedAt: new Date("2026-01-01T00:00:00.000Z"),
             title: "Episode 1",
+            transcript: null,
             url: "https://example.com/episode-1",
           },
         ]}

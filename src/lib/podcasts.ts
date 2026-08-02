@@ -254,6 +254,15 @@ function mapEpisode(
     podcastTitle: episode.podcast.title,
     publishedAt: episode.publishedAt,
     title: episode.title,
+    transcript:
+      episode.transcriptUrl && episode.transcriptType
+        ? {
+            language: episode.transcriptLanguage,
+            rel: episode.transcriptRel,
+            type: episode.transcriptType,
+            url: episode.transcriptUrl,
+          }
+        : null,
     url: episode.url,
   }
 }

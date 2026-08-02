@@ -314,6 +314,10 @@ function episodeUpdateData(episode: ParsedPodcastEpisode) {
     imageUrl: episode.imageUrl,
     publishedAt: episode.publishedAt,
     title: episode.title,
+    transcriptLanguage: episode.transcriptLanguage ?? null,
+    transcriptRel: episode.transcriptRel ?? null,
+    transcriptType: episode.transcriptType ?? null,
+    transcriptUrl: episode.transcriptUrl ?? null,
     url: episode.url,
   })
 }
