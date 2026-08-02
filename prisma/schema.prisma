@@ -102,6 +102,11 @@ enum AiDigestStatus {
   FAILED
 }
 
+enum AiDigestPeriod {
+  DAILY
+  WEEKLY
+}
+
 enum AiDigestSection {
   MUST_READ
   SKIM_LATER
@@ -812,6 +817,7 @@ model AiDigest {
   id           String         @id @default(cuid())
   userId       String
   status       AiDigestStatus @default(PENDING)
+  period       AiDigestPeriod @default(DAILY)
   title        String?
   overview     String?
   provider     String?
@@ -830,6 +836,7 @@ model AiDigest {
 
   @@index([userId, createdAt])
   @@index([userId, status])
+  @@index([userId, period, createdAt])
 }
 
 model AiDigestItem {

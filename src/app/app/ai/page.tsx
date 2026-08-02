@@ -36,14 +36,16 @@ export default async function AiPage() {
       <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-heading text-xl font-semibold">AI Summaries</h1>
+            <h1 className="font-heading text-xl font-semibold">
+              AI Summaries & Briefings
+            </h1>
             <Badge variant="secondary">
               {dashboard.summaryCount}{" "}
               {dashboard.summaryCount === 1 ? "summary" : "summaries"}
             </Badge>
           </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Review generated summaries, monthly usage, and digest candidates.
+            Review generated summaries, monthly usage, and what matters now.
           </p>
         </div>
       </section>
@@ -110,13 +112,23 @@ export default async function AiPage() {
         <div className="mb-4 flex items-center gap-2">
           <CalendarDaysIcon className="size-4 text-muted-foreground" />
           <h2 className="font-heading text-base font-medium">
-            Generate unread digest
+            What matters
           </h2>
         </div>
         <AiDigestGenerator
           activeDigest={dashboard.activeDigest}
-          eligibleArticleCount={dashboard.eligibleDigestArticleCount}
+          dailyArticleCount={dashboard.dailyBriefArticleCount}
+          weeklyArticleCount={dashboard.weeklyBriefArticleCount}
         />
+        <p className="mt-3 text-sm text-muted-foreground">
+          Want an automatic, topic-specific watch instead?{" "}
+          <Link
+            className="underline-offset-4 hover:underline"
+            href="/app/smart-digests"
+          >
+            Set up a Smart Digest.
+          </Link>
+        </p>
       </section>
 
       <section className="rounded-lg border bg-card">
@@ -125,11 +137,12 @@ export default async function AiPage() {
             <div className="flex items-center gap-2">
               <CalendarDaysIcon className="size-4 text-muted-foreground" />
               <h2 className="font-heading text-base font-medium">
-                Unread digest candidates
+                Today&apos;s briefing candidates
               </h2>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Recent unread stories from active subscriptions.
+              Recent unread stories from active subscriptions, limited to the
+              last 24 hours.
             </p>
           </div>
           <Badge
@@ -187,11 +200,11 @@ export default async function AiPage() {
             <div className="flex items-center gap-2">
               <HistoryIcon className="size-4 text-muted-foreground" />
               <h2 className="font-heading text-base font-medium">
-                Digest history
+                Briefing history
               </h2>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Stored unread digests for this account.
+              Stored daily and weekly AI briefings for this account.
             </p>
           </div>
           <Badge variant="secondary">{dashboard.digestHistory.length}</Badge>
@@ -239,7 +252,7 @@ export default async function AiPage() {
           </div>
         ) : (
           <p className="p-4 text-sm text-muted-foreground">
-            No generated digests yet.
+            No generated briefings yet.
           </p>
         )}
       </section>

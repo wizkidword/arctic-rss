@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   AiDigestError,
+  aiDigestPeriodStart,
   createLocalDigestProvider,
   createOpenAiDigestProvider,
   getAiDigestProvider,
@@ -119,7 +120,9 @@ function createStore(): AiDigestStore {
       }),
       findFirst: vi.fn().mockResolvedValue(null),
       findUnique: vi.fn().mockResolvedValue({
+        createdAt: new Date("2026-06-23T13:00:00.000Z"),
         id: "digest-1",
+        period: "DAILY",
         status: "PENDING",
         user: {
           aiMonthlyLimit: 100,
@@ -323,9 +326,10 @@ describe("AI digest provider", () => {
         url: `https://example.com/${index + 1}`,
       })),
       generatedAt: new Date("2026-06-23T13:00:00.000Z"),
+      period: "DAILY",
     })
 
-    expect(result.title).toBe("Arctic digest - 2026-06-23")
+    expect(result.title).toBe("What matters today - 2026-06-23")
     expect(result.items).toHaveLength(7)
     expect(
       result.items.slice(0, 5).every((item) => item.section === "MUST_READ"),
@@ -391,6 +395,7 @@ describe("AI digest provider", () => {
         },
       ],
       generatedAt: new Date("2026-06-23T13:00:00.000Z"),
+      period: "WEEKLY",
     })
 
     expect(fetcher).toHaveBeenCalledWith(
@@ -402,6 +407,7 @@ describe("AI digest provider", () => {
     expect(request?.signal).toBeInstanceOf(AbortSignal)
     expect(body.max_output_tokens).toBe(4000)
     expect(body.input[0].content).toContain("untrusted publisher data")
+    expect(body.input[1].content).toContain('"briefingPeriod":"WEEKLY"')
     expect(result).toEqual({
       inputTokens: 120,
       items: [
@@ -444,35 +450,62 @@ describe("AI digest requests", () => {
 
   it("creates a pending digest when unread articles and usage remain", async () => {
     const store = createStore()
+    const requestedAt = new Date("2026-06-23T13:00:00.000Z")
 
     const result = await requestAiDigestWithClient({
+      now: () => requestedAt,
       store,
       userId: "user-1",
     })
 
     expect(store.article.count).toHaveBeenCalledWith({
-      where: expect.objectContaining({
-        feed: {
-          subscriptions: {
-            some: {
-              isPaused: false,
-              userId: "user-1",
+      where: {
+        AND: expect.arrayContaining([
+          expect.objectContaining({
+            feed: {
+              subscriptions: {
+                some: {
+                  isPaused: false,
+                  userId: "user-1",
+                },
+              },
             },
-          },
-        },
-        states: {
-          none: {
-            isRead: true,
-            userId: "user-1",
-          },
+          }),
+          expect.objectContaining({
+            OR: expect.arrayContaining([
+              {
+                publishedAt: {
+                  gte: new Date("2026-06-22T13:00:00.000Z"),
+                },
+              },
+            ]),
+          }),
+        ]),
+      },
+    })
+    expect(store.aiDigest.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          period: "DAILY",
+          status: "PENDING",
+          userId: "user-1",
         },
       }),
-    })
+    )
     expect(result).toEqual({
       digestId: "digest-1",
       existing: false,
       status: "PENDING",
     })
+  })
+
+  it("uses a seven-day window for a weekly briefing", () => {
+    expect(
+      aiDigestPeriodStart({
+        now: new Date("2026-06-23T13:00:00.000Z"),
+        period: "WEEKLY",
+      }),
+    ).toEqual(new Date("2026-06-16T13:00:00.000Z"))
   })
 
   it("does not consume allowance until the worker is ready to call a provider", async () => {
@@ -518,6 +551,13 @@ describe("AI digest processing", () => {
 
   it("stores generated items and records one usage unit", async () => {
     const store = createStore()
+    vi.mocked(store.aiDigest.findUnique).mockResolvedValue({
+      createdAt: new Date("2026-06-23T13:00:00.000Z"),
+      id: "digest-1",
+      period: "WEEKLY",
+      status: "PENDING",
+      userId: "user-1",
+    })
     const provider: AiDigestProvider = {
       generate: vi.fn().mockResolvedValue({
         inputTokens: 1_000,
@@ -557,13 +597,31 @@ describe("AI digest processing", () => {
         orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
         take: 20,
         where: expect.objectContaining({
-          states: {
-            none: {
-              isRead: true,
-              userId: "user-1",
-            },
-          },
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              states: {
+                none: {
+                  isRead: true,
+                  userId: "user-1",
+                },
+              },
+            }),
+            expect.objectContaining({
+              OR: expect.arrayContaining([
+                {
+                  publishedAt: {
+                    gte: new Date("2026-06-16T13:00:00.000Z"),
+                  },
+                },
+              ]),
+            }),
+          ]),
         }),
+      }),
+    )
+    expect(provider.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        period: "WEEKLY",
       }),
     )
     expect(store.aiDigestItem.createMany).toHaveBeenCalledWith({
@@ -616,7 +674,7 @@ describe("AI digest processing", () => {
 
     expect(store.aiDigest.update).toHaveBeenLastCalledWith({
       data: {
-        errorMessage: expect.stringMatching(/^Digest generation failed\./),
+        errorMessage: expect.stringMatching(/^Briefing generation failed\./),
         status: "FAILED",
       },
       where: {
@@ -638,9 +696,10 @@ describe("AI digest lookup", () => {
       items: [],
       model: "local-digest-v1",
       overview: "Two unread stories.",
+      period: "DAILY",
       provider: "local",
       status: "COMPLETED",
-      title: "Arctic digest - 2026-06-23",
+      title: "What matters today - 2026-06-23",
       userId: "user-1",
     })
 

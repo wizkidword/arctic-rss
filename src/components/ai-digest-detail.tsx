@@ -32,6 +32,7 @@ type DigestDetail = {
   items: DigestItem[]
   model: string | null
   overview: string | null
+  period: "DAILY" | "WEEKLY"
   provider: string | null
   status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
   title: string | null
@@ -43,18 +44,20 @@ const digestDateFormatter = new Intl.DateTimeFormat("en", {
 })
 
 export function AiDigestDetail({ digest }: { digest: DigestDetail }) {
+  const periodLabel = digest.period === "WEEKLY" ? "weekly" : "daily"
+
   if (digest.status === "PENDING" || digest.status === "PROCESSING") {
     return (
       <section className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2">
           <Clock3Icon className="size-4 text-muted-foreground" />
           <h2 className="font-heading text-base font-medium">
-            Digest processing
+            {periodLabel[0]?.toUpperCase() + periodLabel.slice(1)} briefing processing
           </h2>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          Arctic RSS is grouping your newest unread articles. Refresh this page
-          in a moment to see the completed digest.
+          Arctic RSS is grouping your newest unread articles from this {periodLabel}
+          window. Refresh this page in a moment to see the completed briefing.
         </p>
       </section>
     )
@@ -66,11 +69,11 @@ export function AiDigestDetail({ digest }: { digest: DigestDetail }) {
         <div className="flex items-center gap-2 text-destructive">
           <AlertCircleIcon className="size-4" />
           <h2 className="font-heading text-base font-medium">
-            Digest generation failed
+            Briefing generation failed
           </h2>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          {digest.errorMessage || "Arctic RSS could not generate this digest."}
+          {digest.errorMessage || "Arctic RSS could not generate this briefing."}
         </p>
       </section>
     )
@@ -87,6 +90,7 @@ export function AiDigestDetail({ digest }: { digest: DigestDetail }) {
     <div className="flex flex-col gap-4">
       <section className="rounded-lg border bg-card p-4">
         <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{periodLabel} brief</Badge>
           <Badge variant="secondary">{digest.articleCount} articles</Badge>
           {digest.provider && digest.model && (
             <Badge variant="outline">
@@ -95,7 +99,7 @@ export function AiDigestDetail({ digest }: { digest: DigestDetail }) {
           )}
         </div>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-          {digest.overview || "Your unread digest is ready."}
+          {digest.overview || `Your ${periodLabel} briefing is ready.`}
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           Generated{" "}

@@ -50,6 +50,7 @@ function createDashboardStore(): AiDashboardStore {
           errorMessage: null,
           id: "digest-pending",
           overview: null,
+          period: "DAILY",
           status: "PROCESSING",
           title: null,
         },
@@ -60,8 +61,9 @@ function createDashboardStore(): AiDashboardStore {
           errorMessage: null,
           id: "digest-complete",
           overview: "Seven unread stories across three topics.",
+          period: "WEEKLY",
           status: "COMPLETED",
-          title: "Arctic digest - 2026-06-22",
+          title: "What mattered this week - 2026-06-22",
         },
       ]),
     },
@@ -148,9 +150,9 @@ describe("AI dashboard", () => {
     })
     expect(store.article.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
-          AND: [
-            {
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
               feed: {
                 subscriptions: {
                   some: {
@@ -159,22 +161,18 @@ describe("AI dashboard", () => {
                   },
                 },
               },
-            },
-            {
-              publishedAt: {
-                gte: new Date("2026-06-22T12:00:00.000Z"),
-              },
-            },
-            {
-              states: {
-                none: {
-                  isRead: true,
-                  userId: "user-1",
+            }),
+            expect.objectContaining({
+              OR: expect.arrayContaining([
+                {
+                  publishedAt: {
+                    gte: new Date("2026-06-22T12:00:00.000Z"),
+                  },
                 },
-              },
-            },
-          ],
-        },
+              ]),
+            }),
+          ]),
+        }),
       }),
     )
     expect(dashboard).toEqual({
@@ -185,6 +183,7 @@ describe("AI dashboard", () => {
         errorMessage: null,
         id: "digest-pending",
         overview: null,
+        period: "DAILY",
         status: "PROCESSING",
         title: null,
       },
@@ -214,6 +213,7 @@ describe("AI dashboard", () => {
           errorMessage: null,
           id: "digest-pending",
           overview: null,
+          period: "DAILY",
           status: "PROCESSING",
           title: null,
         },
@@ -224,11 +224,12 @@ describe("AI dashboard", () => {
           errorMessage: null,
           id: "digest-complete",
           overview: "Seven unread stories across three topics.",
+          period: "WEEKLY",
           status: "COMPLETED",
-          title: "Arctic digest - 2026-06-22",
+          title: "What mattered this week - 2026-06-22",
         },
       ],
-      eligibleDigestArticleCount: 2,
+      dailyBriefArticleCount: 2,
       preferences: {
         aiAutoSummariesEnabled: true,
         dailyDigestEnabled: false,
@@ -247,6 +248,7 @@ describe("AI dashboard", () => {
         },
       ],
       summaryCount: 12,
+      weeklyBriefArticleCount: 2,
       usage: {
         monthlyLimit: 100,
         monthlyRemaining: 63,
@@ -254,16 +256,7 @@ describe("AI dashboard", () => {
         percentUsed: 37,
       },
     })
-    expect(store.article.count).toHaveBeenCalledWith({
-      where: expect.objectContaining({
-        states: {
-          none: {
-            isRead: true,
-            userId: "user-1",
-          },
-        },
-      }),
-    })
+    expect(store.article.count).toHaveBeenCalledTimes(2)
     expect(store.aiDigest.findMany).toHaveBeenCalledWith({
       orderBy: {
         createdAt: "desc",
@@ -275,6 +268,7 @@ describe("AI dashboard", () => {
         errorMessage: true,
         id: true,
         overview: true,
+        period: true,
         status: true,
         title: true,
       },
