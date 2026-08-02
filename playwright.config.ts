@@ -9,10 +9,6 @@ const productionServerEnvironment = {
     "postgresql://csp_e2e:csp-e2e-database-password@localhost:5432/arctic_rss?schema=public",
   DURABLE_REDIS_URL: "redis://:csp-e2e-redis-password@localhost:6379",
   EPHEMERAL_REDIS_URL: "redis://:csp-e2e-redis-password@localhost:6380",
-  MIGRATE_DATABASE_URL:
-    "postgresql://csp_e2e:csp-e2e-database-password@localhost:5432/arctic_rss?schema=public",
-  POSTGRES_PASSWORD: "csp-e2e-postgres-password",
-  REDIS_PASSWORD: "csp-e2e-redis-password",
   REQUIRE_EMAIL_VERIFICATION: "true",
 };
 
