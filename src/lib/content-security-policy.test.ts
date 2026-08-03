@@ -14,6 +14,9 @@ describe("content security policy", () => {
     expect(policy).toContain("'nonce-nonce-value'")
     expect(policy).toContain("'strict-dynamic'")
     expect(policy).toContain(
+      "frame-src https://www.youtube-nocookie.com https://challenges.cloudflare.com"
+    )
+    expect(policy).toContain(
       "report-uri /api/csp-report"
     )
     expect(policy).not.toContain("unsafe-eval")

@@ -28,7 +28,7 @@ export function buildContentSecurityPolicy(
     "font-src 'self'",
     "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com",
     "media-src 'self' https:",
-    "frame-src https://www.youtube-nocookie.com",
+    "frame-src https://www.youtube-nocookie.com https://challenges.cloudflare.com",
     "manifest-src 'self'",
     "worker-src 'self' blob:",
     "upgrade-insecure-requests",
