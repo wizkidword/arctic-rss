@@ -11,6 +11,10 @@ const hasAuthenticatedFixtures =
   process.env.ARCTIC_RSS_E2E_AUTHENTICATED === "1"
 
 test.describe("authenticated reader journeys", () => {
+  // These journeys share an authenticated fixture database. Run them in order so
+  // a mutating admin action is not delayed by unrelated fixture traffic.
+  test.describe.configure({ mode: "serial" })
+
   test.skip(
     !hasAuthenticatedFixtures,
     "Authenticated reader fixtures are enabled only for the production E2E job."
