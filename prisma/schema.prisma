@@ -313,52 +313,52 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  accounts                Account[]
-  sessions                Session[]
-  settings                UserSettings?
-  folders                 Folder[]
-  subscriptions           FeedSubscription[]
-  podcastSubscriptions    PodcastSubscription[]
-  articleStates           ArticleState[]
-  podcastEpisodeStates    PodcastEpisodeState[]
-  bulkReadJobs            BulkReadJob[]
-  articleCollections      ArticleCollection[]
-  aiUsageLogs             AiUsageLog[]
-  aiUsagePeriods          AiUsagePeriod[]
-  aiOperations            AiOperation[]
-  aiDigests               AiDigest[]
-  smartDigestRules        SmartDigestRule[]
-  smartDigests            SmartDigest[]
-  savedSearches           SavedSearch[]
-  storyClusters           StoryCluster[]
-  importJobs              ImportJob[]
-  bugReports              BugReport[]
-  featureSuggestions      FeatureSuggestion[]
-  adminAuditLogs          AdminAuditLog[]          @relation("AdminAuditActor")
-  planQuota               UserPlanQuota?
-  securityEvents          SecurityEvent[]
-  passwordResetTokens     PasswordResetToken[]
-  emailVerificationTokens EmailVerificationToken[]
+  accounts                          Account[]
+  sessions                          Session[]
+  settings                          UserSettings?
+  folders                           Folder[]
+  subscriptions                     FeedSubscription[]
+  podcastSubscriptions              PodcastSubscription[]
+  articleStates                     ArticleState[]
+  podcastEpisodeStates              PodcastEpisodeState[]
+  bulkReadJobs                      BulkReadJob[]
+  articleCollections                ArticleCollection[]
+  aiUsageLogs                       AiUsageLog[]
+  aiUsagePeriods                    AiUsagePeriod[]
+  aiOperations                      AiOperation[]
+  aiDigests                         AiDigest[]
+  smartDigestRules                  SmartDigestRule[]
+  smartDigests                      SmartDigest[]
+  savedSearches                     SavedSearch[]
+  storyClusters                     StoryCluster[]
+  importJobs                        ImportJob[]
+  bugReports                        BugReport[]
+  featureSuggestions                FeatureSuggestion[]
+  adminAuditLogs                    AdminAuditLog[]                    @relation("AdminAuditActor")
+  planQuota                         UserPlanQuota?
+  securityEvents                    SecurityEvent[]
+  passwordResetTokens               PasswordResetToken[]
+  emailVerificationTokens           EmailVerificationToken[]
   accountDeletionConfirmationTokens AccountDeletionConfirmationToken[]
-  chatProfile             ChatProfile?
-  chatBetaAccess          ChatBetaAccess?          @relation("ChatBetaAccessUser")
-  chatPolicyAcceptance    ChatPolicyAcceptance?
-  grantedChatBetaAccess   ChatBetaAccess[]         @relation("ChatBetaAccessGrantor")
-  createdChatRooms        ChatRoom[]               @relation("ChatRoomCreator")
-  chatRoomMemberships     ChatRoomMember[]
-  sentChatMessages        ChatMessage[]            @relation("ChatMessageSender")
-  deletedChatMessages     ChatMessage[]            @relation("ChatMessageDeletedBy")
-  createdChatBlocks       ChatBlock[]              @relation("ChatBlockCreator")
-  receivedChatBlocks      ChatBlock[]              @relation("ChatBlockTarget")
-  createdChatRoomBans     ChatRoomBan[]            @relation("ChatRoomBanCreator")
-  receivedChatRoomBans    ChatRoomBan[]            @relation("ChatRoomBanTarget")
-  createdChatReports      ChatReport[]             @relation("ChatReportCreator")
-  targetedChatReports     ChatReport[]             @relation("ChatReportTarget")
-  assignedChatReports     ChatReport[]             @relation("ChatReportAssignee")
-  createdChatRoomFeeds    ChatRoomFeed[]           @relation("ChatRoomFeedCreator")
-  chatAuditActions        ChatAuditLog[]           @relation("ChatAuditActor")
-  chatAuditTargets        ChatAuditLog[]           @relation("ChatAuditTarget")
-  externalIrcIdentities   ExternalIrcIdentity[]
+  chatProfile                       ChatProfile?
+  chatBetaAccess                    ChatBetaAccess?                    @relation("ChatBetaAccessUser")
+  chatPolicyAcceptance              ChatPolicyAcceptance?
+  grantedChatBetaAccess             ChatBetaAccess[]                   @relation("ChatBetaAccessGrantor")
+  createdChatRooms                  ChatRoom[]                         @relation("ChatRoomCreator")
+  chatRoomMemberships               ChatRoomMember[]
+  sentChatMessages                  ChatMessage[]                      @relation("ChatMessageSender")
+  deletedChatMessages               ChatMessage[]                      @relation("ChatMessageDeletedBy")
+  createdChatBlocks                 ChatBlock[]                        @relation("ChatBlockCreator")
+  receivedChatBlocks                ChatBlock[]                        @relation("ChatBlockTarget")
+  createdChatRoomBans               ChatRoomBan[]                      @relation("ChatRoomBanCreator")
+  receivedChatRoomBans              ChatRoomBan[]                      @relation("ChatRoomBanTarget")
+  createdChatReports                ChatReport[]                       @relation("ChatReportCreator")
+  targetedChatReports               ChatReport[]                       @relation("ChatReportTarget")
+  assignedChatReports               ChatReport[]                       @relation("ChatReportAssignee")
+  createdChatRoomFeeds              ChatRoomFeed[]                     @relation("ChatRoomFeedCreator")
+  chatAuditActions                  ChatAuditLog[]                     @relation("ChatAuditActor")
+  chatAuditTargets                  ChatAuditLog[]                     @relation("ChatAuditTarget")
+  externalIrcIdentities             ExternalIrcIdentity[]
 }
 
 model UserPlanQuota {
@@ -433,14 +433,14 @@ model EmailVerificationToken {
 // A short-lived, one-time proof that an OAuth-only user still controls the
 // verified email address for this account. Only a SHA-256 digest is stored.
 model AccountDeletionConfirmationToken {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
-  tokenHash   String   @unique
+  tokenHash   String    @unique
   authVersion Int
-  purpose     String   @default("ACCOUNT_DELETION")
+  purpose     String    @default("ACCOUNT_DELETION")
   expiresAt   DateTime
   usedAt      DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
