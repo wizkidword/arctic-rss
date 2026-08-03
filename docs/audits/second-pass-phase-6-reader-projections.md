@@ -2,8 +2,9 @@
 
 ## Status
 
-Implemented locally; release verification is pending the remaining Phase 6
-authenticated-shell work.
+Implemented locally. The associated authenticated-shell split is recorded in
+`second-pass-phase-6-app-shell-hydration.md`; release verification remains
+pending representative runtime measurements and a separately approved release.
 
 ## Baseline
 
@@ -55,6 +56,5 @@ representative disposable database before Phase 6 is marked complete.
 ## Remaining Phase 6 work
 
 - Capture database and render measurements on representative seeded data.
-- Move structural authenticated-shell rendering to server components with
-  narrowly scoped client islands.
-- Measure bundle and hydration changes before and after that shell split.
+- Verify the complete Phase 6 change on an approved staging or production
+  release after the runtime baseline is available.

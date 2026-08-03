@@ -1,23 +1,14 @@
-"use client"
-
-import { ReactNode, SVGProps, useEffect, useState } from "react"
+import type { ReactNode, SVGProps } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { signOut } from "next-auth/react"
 import {
   BookmarkIcon,
-  BugIcon,
   CompassIcon,
   DownloadIcon,
-  FileTextIcon,
   FolderIcon,
   HeadphonesIcon,
-  HelpCircleIcon,
   HomeIcon,
   InboxIcon,
-  LightbulbIcon,
-  LogOutIcon,
-  MailIcon,
   MenuIcon,
   MessageCircleIcon,
   SearchIcon,
@@ -27,23 +18,16 @@ import {
 } from "lucide-react"
 
 import { AddFeedSheet } from "@/components/add-feed-sheet"
-import { AdminAccountLink } from "@/components/admin-account-link"
-import { BugReportDialog } from "@/components/bug-report-dialog"
+import {
+  AppShellAccountMenu,
+  type ShellAccountUser,
+} from "@/components/app-shell-account-menu"
+import { AppShellHelpMenu } from "@/components/app-shell-help-menu"
+import { AppShellThemeController } from "@/components/app-shell-theme-controller"
 import { BulkReadProgress } from "@/components/bulk-read-progress"
 import { EmailVerificationReminder } from "@/components/email-verification-reminder"
 import { FeedNavContextMenu } from "@/components/feed-nav-context-menu"
-import { FeatureSuggestionDialog } from "@/components/feature-suggestion-dialog"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { buttonVariants } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -56,19 +40,8 @@ import { Button } from "@/components/ui/button"
 import type { ThemePreference } from "@/lib/settings"
 import type { DisplayMode } from "@/lib/settings"
 import type { BulkReadJobProgress } from "@/lib/bulk-read-jobs"
-import { legalLinks } from "@/lib/legal-links"
 import { isDarkThemePreference } from "@/lib/settings"
-import {
-  applyThemePreferenceToDocument,
-  subscribeToSystemThemeChanges,
-} from "@/lib/theme-dom"
 import { cn } from "@/lib/utils"
-
-type ShellUser = {
-  email?: string | null
-  name?: string | null
-  role?: string | null
-}
 
 type ShellFeedSubscription = {
   faviconUrl: string | null
@@ -82,7 +55,6 @@ type ShellFeedSubscription = {
   title: string
   unreadCount: number
 }
-
 type ShellReaderCounts = {
   allCount: number
   starredCount: number
@@ -117,8 +89,6 @@ const secondaryNav = [
   { href: "/app/settings", label: "Settings", icon: SettingsIcon },
 ]
 
-const supportEmailAddress = "support@arcticrss.com"
-const supportMailtoHref = `mailto:${supportEmailAddress}?subject=Arctic%20RSS%20Support`
 const kofiHref = "https://ko-fi.com/arcticrss"
 
 function KofiIcon(props: SVGProps<SVGSVGElement>) {
@@ -145,88 +115,6 @@ function KofiIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
-
-function initialsFor(user: ShellUser) {
-  const source = user.name || user.email || "AR"
-
-  return source
-    .split(/[\s@._-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("")
-}
-
-function HelpMenu() {
-  const [bugReportOpen, setBugReportOpen] = useState(false)
-  const [featureSuggestionOpen, setFeatureSuggestionOpen] = useState(false)
-
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              className={cn(
-                buttonVariants({ variant: "ghost" }),
-                "h-8 w-full justify-start gap-2 px-2 text-muted-foreground"
-              )}
-              type="button"
-              variant="ghost"
-            />
-          }
-        >
-          <HelpCircleIcon data-icon="inline-start" />
-          <span className="truncate">Help</span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Help</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => setBugReportOpen(true)}>
-              <BugIcon data-icon="inline-start" />
-              Report a bug
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFeatureSuggestionOpen(true)}>
-              <LightbulbIcon data-icon="inline-start" />
-              Suggest a feature
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              render={
-                <a
-                  href={supportMailtoHref}
-                  rel="noreferrer"
-                  target="_blank"
-                />
-              }
-            >
-              <MailIcon data-icon="inline-start" />
-              Contact support
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {legalLinks.map((item) => (
-              <DropdownMenuItem
-                key={item.href}
-                render={<Link href={item.href} />}
-              >
-                <FileTextIcon data-icon="inline-start" />
-                {item.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <BugReportDialog
-        onOpenChange={setBugReportOpen}
-        open={bugReportOpen}
-      />
-      <FeatureSuggestionDialog
-        onOpenChange={setFeatureSuggestionOpen}
-        open={featureSuggestionOpen}
-      />
-    </>
-  )
-}
-
 function ReaderNav({
   articleCollections,
   chatEnabled = false,
@@ -345,7 +233,11 @@ function ReaderNav({
             {feedSubscriptions.length}
           </span>
         </div>
-        {!guestMode && <AddFeedSheet folders={folders} />}
+        {!guestMode && (
+          <AddFeedSheet
+            folders={folders.map(({ id, name }) => ({ id, name }))}
+          />
+        )}
         <Link
           href={discoverFeedsHref}
           className={cn(
@@ -363,7 +255,14 @@ function ReaderNav({
             feedSubscriptions.map((subscription) => (
               <FeedNavContextMenu
                 key={subscription.id}
-                subscription={subscription}
+                subscription={{
+                  feedId: subscription.feedId,
+                  id: subscription.id,
+                  lastError: subscription.lastError,
+                  siteUrl: subscription.siteUrl,
+                  title: subscription.title,
+                  unreadCount: subscription.unreadCount,
+                }}
               />
             ))
           ) : (
@@ -550,7 +449,7 @@ function ReaderNav({
             <span className="truncate">{item.label}</span>
           </Link>
         ))}
-      <HelpMenu />
+      <AppShellHelpMenu />
       <a
         className={cn(
           buttonVariants({ variant: "outline", size: "sm" }),
@@ -566,60 +465,6 @@ function ReaderNav({
         </span>
       </a>
     </nav>
-  )
-}
-
-function AccountMenu({
-  compact = false,
-  user,
-}: {
-  compact?: boolean
-  user: ShellUser
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label={
-              compact
-                ? `Account menu for ${user.name || user.email || "reader"}`
-                : undefined
-            }
-            className="h-auto min-w-0 justify-start p-2"
-            variant="ghost"
-          />
-        }
-      >
-        <Avatar size="sm">
-          <AvatarFallback>{initialsFor(user)}</AvatarFallback>
-        </Avatar>
-        {!compact && (
-          <span className="min-w-0 flex-1 text-left">
-            <span className="block truncate text-sm font-medium">
-              {user.name || "Arctic Reader"}
-            </span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {user.email}
-            </span>
-          </span>
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Account</DropdownMenuLabel>
-          <DropdownMenuItem>{user.role === "ADMIN" ? "Admin" : "Reader"}</DropdownMenuItem>
-          <AdminAccountLink role={user.role} />
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
-            <LogOutIcon data-icon="inline-start" />
-            Log out
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }
 
@@ -678,7 +523,7 @@ export function AppShell({
   readerCounts: ShellReaderCounts
   showEmailVerificationReminder?: boolean
   themePreference: ThemePreference
-  user: ShellUser
+  user: ShellAccountUser
 }) {
   const isMinimal = displayMode === "MINIMAL"
   const homeHref = guestMode ? "/guest" : "/app"
@@ -695,7 +540,7 @@ export function AppShell({
       data-reader-theme={themePreference.toLowerCase()}
       data-theme-preference={themePreference.toLowerCase()}
     >
-      <ThemeController themePreference={themePreference} />
+      <AppShellThemeController themePreference={themePreference} />
       {!isMinimal && (
         <aside className="fixed inset-y-0 left-0 hidden w-64 border-r bg-sidebar p-3 lg:flex lg:flex-col">
           <Link href={homeHref} className="mb-4 flex items-center gap-2 px-2 py-1.5">
@@ -721,7 +566,11 @@ export function AppShell({
             readerCounts={readerCounts}
           />
           <div className="mt-auto">
-            {guestMode ? <GuestAccountMenu /> : <AccountMenu user={user} />}
+            {guestMode ? (
+              <GuestAccountMenu />
+            ) : (
+              <AppShellAccountMenu user={user} />
+            )}
           </div>
         </aside>
       )}
@@ -761,7 +610,7 @@ export function AppShell({
           {guestMode ? (
             <GuestAccountMenu compact />
           ) : (
-            <AccountMenu compact user={user} />
+            <AppShellAccountMenu compact user={user} />
           )}
         </div>
       </header>
@@ -799,24 +648,4 @@ export function AppShell({
       </main>
     </div>
   )
-}
-
-function ThemeController({
-  themePreference,
-}: {
-  themePreference: ThemePreference
-}) {
-  useEffect(() => {
-    applyThemePreferenceToDocument(themePreference)
-
-    if (themePreference !== "SYSTEM") {
-      return
-    }
-
-    return subscribeToSystemThemeChanges(() => {
-      applyThemePreferenceToDocument(themePreference)
-    })
-  }, [themePreference])
-
-  return null
 }
