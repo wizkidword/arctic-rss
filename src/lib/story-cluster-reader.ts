@@ -21,6 +21,7 @@ import { getPrisma } from "./db"
 export const STORY_CLUSTER_READER_WINDOW_SIZE = 50
 const STORY_CLUSTER_VERSION_LOOKUP_LIMIT = 12
 const MAX_VISIBLE_STORY_CLUSTERS_PER_ARTICLE = 3
+const MAX_VISIBLE_STORY_CLUSTERS_PER_PAGE = 24
 
 export type StoryClusterPresentationMember = {
   articleId: string
@@ -236,6 +237,26 @@ export async function listStoryClustersForArticleUser({
   })
 }
 
+/**
+ * Loads active, explained groups that overlap a reader page. The caller still
+ * decides how to present the articles; this function never removes a source
+ * or treats a stored cluster as a hidden duplicate.
+ */
+export async function listStoryClustersForArticlesUser({
+  articleIds,
+  userId
+}: {
+  articleIds: string[]
+  userId: string
+}): Promise<StoryClusterPresentation[]> {
+  return listStoryClustersForArticlesUserWithClient({
+    articleIds,
+    loadArticles: listReaderArticlesByIdsForUser,
+    store: getPrisma() as unknown as StoryClusterReaderStore,
+    userId
+  })
+}
+
 export async function listStoryClustersForArticleUserWithClient({
   articleId,
   loadArticles,
@@ -247,12 +268,41 @@ export async function listStoryClustersForArticleUserWithClient({
   store: StoryClusterReaderStore
   userId: string
 }): Promise<StoryClusterPresentation[]> {
-  const normalizedArticleId = articleId.trim()
+  return listStoryClustersForArticlesUserWithClient({
+    articleIds: [articleId],
+    loadArticles,
+    maxResults: MAX_VISIBLE_STORY_CLUSTERS_PER_ARTICLE,
+    store,
+    userId
+  })
+}
+
+export async function listStoryClustersForArticlesUserWithClient({
+  articleIds,
+  loadArticles,
+  maxResults = MAX_VISIBLE_STORY_CLUSTERS_PER_PAGE,
+  store,
+  userId
+}: {
+  articleIds: string[]
+  loadArticles: ReaderArticleLoader
+  maxResults?: number
+  store: StoryClusterReaderStore
+  userId: string
+}): Promise<StoryClusterPresentation[]> {
+  const normalizedArticleIds = [
+    ...new Set(articleIds.map((articleId) => articleId.trim()))
+  ].filter(Boolean)
   const normalizedUserId = userId.trim()
 
-  if (!normalizedArticleId || !normalizedUserId) {
+  if (!normalizedArticleIds.length || !normalizedUserId) {
     return []
   }
+
+  const articleIdFilter =
+    normalizedArticleIds.length === 1
+      ? normalizedArticleIds[0]
+      : { in: normalizedArticleIds }
 
   const versions = await store.storyClusterVersion.findMany({
     orderBy: [{ cluster: { updatedAt: "desc" } }, { version: "desc" }],
@@ -316,7 +366,10 @@ export async function listStoryClustersForArticleUserWithClient({
       },
       version: true
     },
-    take: STORY_CLUSTER_VERSION_LOOKUP_LIMIT,
+    take:
+      normalizedArticleIds.length === 1
+        ? STORY_CLUSTER_VERSION_LOOKUP_LIMIT
+        : MAX_VISIBLE_STORY_CLUSTERS_PER_PAGE,
     where: {
       cluster: {
         status: "ACTIVE",
@@ -324,7 +377,7 @@ export async function listStoryClustersForArticleUserWithClient({
       },
       members: {
         some: {
-          articleId: normalizedArticleId
+          articleId: articleIdFilter
         }
       }
     }
@@ -333,7 +386,7 @@ export async function listStoryClustersForArticleUserWithClient({
     .filter(
       (version) => version.version === version.cluster.currentVersionNumber
     )
-    .slice(0, MAX_VISIBLE_STORY_CLUSTERS_PER_ARTICLE)
+    .slice(0, maxResults)
 
   if (!currentVersions.length) {
     return []

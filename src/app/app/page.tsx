@@ -11,7 +11,10 @@ import {
 import { hasUserFeedSubscriptions } from "@/lib/feed-subscriptions"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
-import { listStoryClustersForArticleUser } from "@/lib/story-cluster-reader"
+import {
+  listStoryClustersForArticleUser,
+  listStoryClustersForArticlesUser,
+} from "@/lib/story-cluster-reader"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
 
 export default async function AppHomePage({
@@ -45,18 +48,25 @@ export default async function AppHomePage({
     listArticleCollectionsForUser(session.user.id),
   ])
   const articleId = firstSearchParam(params.articleId)
-  const readerView = await loadReaderArticleView({
-    articleIds: articlePage.articles.map((article) => article.id),
-    defaultView,
-    displayMode,
-    selectedArticleId: articleId,
-    userId: session.user.id,
-  })
+  const articleIds = articlePage.articles.map((article) => article.id)
+  const [readerView, inlineStoryClusters] = await Promise.all([
+    loadReaderArticleView({
+      articleIds,
+      defaultView,
+      displayMode,
+      selectedArticleId: articleId,
+      userId: session.user.id,
+    }),
+    listStoryClustersForArticlesUser({
+      articleIds,
+      userId: session.user.id,
+    }),
+  ])
   const selectedArticle = readerView.selectedArticle
   const storyClusters = selectedArticle
     ? await listStoryClustersForArticleUser({
         articleId: selectedArticle.id,
-        userId: session.user.id
+        userId: session.user.id,
       })
     : []
 
@@ -72,6 +82,7 @@ export default async function AppHomePage({
       emptyMessage="Add or refresh a feed to start filling the reader."
       markAllReadScope={{ type: "all" }}
       nextPageHref={nextPageHref("/app", articlePage.nextCursor)}
+      inlineStoryClusters={inlineStoryClusters}
       riverArticles={readerView.riverArticles}
       selectedArticle={selectedArticle ?? undefined}
       selectedArticleId={articleId}

@@ -10,7 +10,9 @@ import {
 } from "@/components/article-context-menu"
 import { ArticleSourceIcon } from "@/components/article-source-icon"
 import { ArticleReadTracker } from "@/components/article-read-tracker"
+import { StoryClusterDismissButton } from "@/components/story-cluster-dismiss-button"
 import { StoryClusterPanel } from "@/components/story-cluster-panel"
+import { StoryClusterSplitButton } from "@/components/story-cluster-split-button"
 import {
   ArticleStateControls,
   MarkAllReadButton,
@@ -61,6 +63,7 @@ export function ReaderSurface({
   emptyMessage,
   markAllReadScope,
   nextPageHref,
+  inlineStoryClusters,
   readOnlyActionReason,
   riverArticles,
   selectedArticle: selectedArticleDetail,
@@ -80,6 +83,7 @@ export function ReaderSurface({
   emptyMessage: string
   markAllReadScope?: ArticleReadScope
   nextPageHref?: string
+  inlineStoryClusters?: StoryClusterPresentation[]
   readOnlyActionReason?: string
   riverArticles?: ReaderArticle[]
   selectedArticle?: ReaderArticle
@@ -157,6 +161,7 @@ export function ReaderSurface({
         displayMode,
         emptyMessage,
         hasExplicitSelection: Boolean(explicitlySelectedArticle),
+        inlineStoryClusters,
         readOnlyActionReason,
         riverArticles,
         selectedArticle,
@@ -188,6 +193,7 @@ function renderReaderView({
   displayMode,
   emptyMessage,
   hasExplicitSelection,
+  inlineStoryClusters,
   readOnlyActionReason,
   riverArticles,
   selectedArticle,
@@ -203,6 +209,7 @@ function renderReaderView({
   displayMode: DisplayMode
   emptyMessage: string
   hasExplicitSelection: boolean
+  inlineStoryClusters?: StoryClusterPresentation[]
   readOnlyActionReason?: string
   riverArticles?: ReaderArticle[]
   selectedArticle: ReaderArticle | undefined
@@ -244,6 +251,8 @@ function renderReaderView({
       </section>
     )
   }
+
+  const articleListRows = storyClusterListRows(articles, inlineStoryClusters)
 
   if (defaultView === "CARD") {
     return (
@@ -291,19 +300,34 @@ function renderReaderView({
           <CardDescription>Newest stored items first</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
-          {articles.map((article) => (
-            <ArticleListItem
-              article={article}
-              articleCollections={articleCollections}
-              basePath={basePath}
-              compact={defaultView === "COMPACT"}
-              currentCollection={currentCollection}
-              dateTimePreferences={dateTimePreferences}
-              key={article.id}
-              readOnlyActionReason={readOnlyActionReason}
-              selected={article.id === selectedArticle?.id}
-            />
-          ))}
+          {articleListRows.map((row) =>
+            row.cluster ? (
+              <InlineStoryClusterListItem
+                article={row.article}
+                articleCollections={articleCollections}
+                basePath={basePath}
+                cluster={row.cluster}
+                compact={defaultView === "COMPACT"}
+                currentCollection={currentCollection}
+                dateTimePreferences={dateTimePreferences}
+                key={row.article.id}
+                readOnlyActionReason={readOnlyActionReason}
+                selected={row.article.id === selectedArticle?.id}
+              />
+            ) : (
+              <ArticleListItem
+                article={row.article}
+                articleCollections={articleCollections}
+                basePath={basePath}
+                compact={defaultView === "COMPACT"}
+                currentCollection={currentCollection}
+                dateTimePreferences={dateTimePreferences}
+                key={row.article.id}
+                readOnlyActionReason={readOnlyActionReason}
+                selected={row.article.id === selectedArticle?.id}
+              />
+            )
+          )}
         </CardContent>
       </Card>
       <ArticleReaderCard
@@ -324,6 +348,7 @@ function ArticleListItem({
   article,
   articleCollections,
   basePath,
+  className,
   compact,
   currentCollection,
   dateTimePreferences,
@@ -333,6 +358,7 @@ function ArticleListItem({
   article: ReaderArticleListItem
   articleCollections: ArticleCollectionPickerItem[]
   basePath: string
+  className?: string
   compact: boolean
   currentCollection?: ActiveArticleCollection
   dateTimePreferences: DateTimePreferences
@@ -345,6 +371,7 @@ function ArticleListItem({
       collections={articleCollections}
       className={cn(
         "flex items-start gap-3 rounded-lg border bg-background p-3 transition-colors hover:bg-muted",
+        className,
         selected && "bg-muted",
         compact && "p-2"
       )}
@@ -384,6 +411,175 @@ function ArticleListItem({
       )}
     </ArticleContextMenu>
   )
+}
+
+function InlineStoryClusterListItem({
+  article,
+  articleCollections,
+  basePath,
+  cluster,
+  compact,
+  currentCollection,
+  dateTimePreferences,
+  readOnlyActionReason,
+  selected,
+}: {
+  article: ReaderArticleListItem
+  articleCollections: ArticleCollectionPickerItem[]
+  basePath: string
+  cluster: StoryClusterPresentation
+  compact: boolean
+  currentCollection?: ActiveArticleCollection
+  dateTimePreferences: DateTimePreferences
+  readOnlyActionReason?: string
+  selected: boolean
+}) {
+  const sources = cluster.members
+    .slice()
+    .sort((left, right) => {
+      const leftTime = left.publishedAt ? new Date(left.publishedAt).getTime() : 0
+      const rightTime = right.publishedAt ? new Date(right.publishedAt).getTime() : 0
+
+      return rightTime - leftTime || left.title.localeCompare(right.title)
+    })
+  const sourceCount = sources.length
+
+  return (
+    <div className="overflow-hidden rounded-lg border bg-background">
+      <ArticleListItem
+        article={article}
+        articleCollections={articleCollections}
+        basePath={basePath}
+        className="rounded-none border-0"
+        compact={compact}
+        currentCollection={currentCollection}
+        dateTimePreferences={dateTimePreferences}
+        readOnlyActionReason={readOnlyActionReason}
+        selected={selected}
+      />
+      <details className="group border-t bg-muted/20">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted/45 focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+          <span className="font-medium text-foreground">
+            {sourceCount} {sourceCount === 1 ? "source" : "sources"} reporting this story
+          </span>
+          <span className="group-open:hidden">Show sources</span>
+          <span className="hidden group-open:inline">Hide sources</span>
+        </summary>
+        <div className="flex flex-col gap-3 border-t px-3 py-3 text-sm">
+          <p className="text-xs leading-5 text-muted-foreground">
+            Grouped because: {cluster.reasons.map(storyClusterReasonLabel).join("; ")}. Every source remains available.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {sources.map((source) => (
+              <li className="rounded-md border bg-background p-2" key={source.articleId}>
+                <Link
+                  className="block font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  href={articleSelectionHref(basePath, source.articleId)}
+                >
+                  {source.title}
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {source.feedTitle}
+                  {source.publishedAt
+                    ? ` - ${formatArticleDateTime(
+                        new Date(source.publishedAt),
+                        dateTimePreferences
+                      )}`
+                    : ""}
+                </p>
+                {sourceCount > 2 ? (
+                  <StoryClusterSplitButton
+                    articleId={article.id}
+                    clusterId={cluster.id}
+                    memberArticleId={source.articleId}
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {sourceCount > 2
+              ? "Separate a source when it does not belong in this story."
+              : "Dismiss this grouping if these sources should stay separate."}
+          </p>
+          <StoryClusterDismissButton articleId={article.id} clusterId={cluster.id} />
+        </div>
+      </details>
+    </div>
+  )
+}
+
+type StoryClusterListRow = {
+  article: ReaderArticleListItem
+  cluster?: StoryClusterPresentation
+}
+
+function storyClusterListRows(
+  articles: ReaderArticleListItem[],
+  clusters: StoryClusterPresentation[] | undefined
+): StoryClusterListRow[] {
+  if (!clusters?.length) {
+    return articles.map((article) => ({ article }))
+  }
+
+  const articlePosition = new Map(
+    articles.map((article, index) => [article.id, index])
+  )
+  const candidates = clusters
+    .map((cluster) => ({
+      cluster,
+      articles: articles.filter((article) =>
+        cluster.members.some((member) => member.articleId === article.id)
+      ),
+    }))
+    .filter((candidate) => candidate.articles.length > 1)
+    .sort((left, right) => {
+      const leftPosition = articlePosition.get(left.articles[0]?.id ?? "") ?? 0
+      const rightPosition = articlePosition.get(right.articles[0]?.id ?? "") ?? 0
+
+      return leftPosition - rightPosition || right.articles.length - left.articles.length
+    })
+  const hiddenArticleIds = new Set<string>()
+  const clusterByPrimaryArticleId = new Map<string, StoryClusterPresentation>()
+
+  for (const candidate of candidates) {
+    const availableArticles = candidate.articles.filter(
+      (article) => !hiddenArticleIds.has(article.id)
+    )
+
+    if (availableArticles.length < 2) {
+      continue
+    }
+
+    const primaryArticle = availableArticles[0]
+    clusterByPrimaryArticleId.set(primaryArticle.id, candidate.cluster)
+    availableArticles.forEach((article) => hiddenArticleIds.add(article.id))
+  }
+
+  return articles.flatMap((article) => {
+    const cluster = clusterByPrimaryArticleId.get(article.id)
+
+    if (cluster) {
+      return [{ article, cluster }]
+    }
+
+    return hiddenArticleIds.has(article.id) ? [] : [{ article }]
+  })
+}
+
+function storyClusterReasonLabel(
+  reason: StoryClusterPresentation["reasons"][number]
+) {
+  const labels = {
+    CANONICAL_URL: "the same original link",
+    NORMALIZED_TITLE: "matching headlines",
+    PUBLICATION_TIME_WINDOW: "publication within 72 hours",
+    SHARED_NAMED_ENTITIES: "shared named people, places, or organizations",
+    SOURCE_DUPLICATION: "the same source coverage",
+    TEXT_SIMILARITY: "similar article text",
+  } satisfies Record<StoryClusterPresentation["reasons"][number], string>
+
+  return labels[reason]
 }
 
 function CardArticleGrid({

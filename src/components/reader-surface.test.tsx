@@ -28,6 +28,18 @@ vi.mock("@/components/story-cluster-panel", () => ({
   ),
 }))
 
+vi.mock("@/components/story-cluster-dismiss-button", () => ({
+  StoryClusterDismissButton: ({ clusterId }: { clusterId: string }) => (
+    <button data-dismiss-story-cluster={clusterId}>Dismiss group</button>
+  ),
+}))
+
+vi.mock("@/components/story-cluster-split-button", () => ({
+  StoryClusterSplitButton: ({ memberArticleId }: { memberArticleId: string }) => (
+    <button data-split-story-source={memberArticleId}>Separate source</button>
+  ),
+}))
+
 vi.mock("@/components/article-context-menu", () => ({
   ArticleActionToolbar: ({
     article,
@@ -418,6 +430,51 @@ describe("ReaderSurface display modes", () => {
     expect(markup).toContain('data-story-article="article-2"')
     expect(markup).toContain('data-story-clusters="1"')
     expect(markup).not.toContain('data-story-article="article-1"')
+  })
+
+  it("collapses saved story groups in the classic article list without hiding their sources", () => {
+    const markup = renderToStaticMarkup(
+      <ReaderSurface
+        articles={articles}
+        basePath="/app"
+        defaultView="CLASSIC"
+        displayMode="THREE_PANE"
+        description="All articles"
+        emptyMessage="No articles."
+        inlineStoryClusters={[
+          {
+            analysis: null,
+            id: "cluster-1",
+            members: [
+              {
+                articleId: "article-1",
+                feedTitle: "Example Feed",
+                memberId: "member-1",
+                publishedAt: "2026-07-28T10:00:00.000Z",
+                title: "First unread article",
+                url: "https://example.com/first-unread",
+              },
+              {
+                articleId: "article-2",
+                feedTitle: "Example Feed",
+                memberId: "member-2",
+                publishedAt: "2026-07-28T11:00:00.000Z",
+                title: "Second unread article",
+                url: "https://example.com/second-unread",
+              },
+            ],
+            reasons: ["NORMALIZED_TITLE"],
+          },
+        ]}
+        title="All Articles"
+      />
+    )
+
+    expect(markup.match(/data-inline-actions="true"/g) ?? []).toHaveLength(1)
+    expect(markup).toContain("2 sources reporting this story")
+    expect(markup).toContain("Grouped because: matching headlines.")
+    expect(markup).toContain('href="/app?articleId=article-2"')
+    expect(markup).toContain('data-dismiss-story-cluster="cluster-1"')
   })
 
   it("embeds YouTube videos inline for selected YouTube articles", () => {

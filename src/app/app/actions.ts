@@ -1357,7 +1357,9 @@ export async function evaluateStoryClusterAction(
       }
     }
 
+    revalidateArticleListPaths()
     revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
+    refresh()
 
     return {
       message: result.created
@@ -1488,7 +1490,9 @@ export async function dismissStoryClusterAction(
       }
     }
 
+    revalidateArticleListPaths()
     revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
+    refresh()
 
     return {
       message: "Related-coverage group dismissed. Your original articles are unchanged.",
@@ -1556,7 +1560,9 @@ export async function splitStoryClusterMemberAction(
       }
     }
 
+    revalidateArticleListPaths()
     revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
+    refresh()
 
     return {
       message: "Source separated from the related-coverage group. Original articles are unchanged.",
@@ -1624,7 +1630,9 @@ export async function mergeStoryClustersAction(
       }
     }
 
+    revalidateArticleListPaths()
     revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
+    refresh()
 
     return {
       message: "Related-coverage groups merged. Original articles are unchanged.",

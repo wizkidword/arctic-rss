@@ -1638,7 +1638,9 @@ describe("evaluateStoryClusterAction", () => {
       articleId: "article-1",
       userId: "user-1",
     })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Related coverage is ready.",
       status: "success",
@@ -1723,7 +1725,9 @@ describe("dismissStoryClusterAction", () => {
       clusterId: "cluster-1",
       userId: "user-1",
     })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Related-coverage group dismissed. Your original articles are unchanged.",
       status: "success",
@@ -1789,7 +1793,9 @@ describe("splitStoryClusterMemberAction", () => {
       memberArticleId: "article-2",
       userId: "user-1",
     })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Source separated from the related-coverage group. Original articles are unchanged.",
       status: "success",
@@ -1856,7 +1862,9 @@ describe("mergeStoryClustersAction", () => {
       secondClusterId: "cluster-2",
       userId: "user-1",
     })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/article/article-1")
+    expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
       message: "Related-coverage groups merged. Original articles are unchanged.",
       status: "success",

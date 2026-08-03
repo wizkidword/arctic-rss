@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   listReaderArticlePage: vi.fn(),
   loadReaderArticleView: vi.fn(),
   listStoryClustersForArticleUser: vi.fn(),
+  listStoryClustersForArticlesUser: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
   }),
@@ -25,16 +26,19 @@ vi.mock("@/auth", () => ({
 vi.mock("@/components/reader-surface", () => ({
   ReaderSurface: ({
     description,
+    inlineStoryClusters,
     storyClusters,
     title,
   }: {
     description: string
+    inlineStoryClusters?: Array<{ id: string }>
     storyClusters?: Array<{ id: string }>
     title: string
   }) => (
     <main>
       <h1>{title}</h1>
       <p>{description}</p>
+      <p data-inline-story-clusters={inlineStoryClusters?.length ?? 0} />
       <p data-story-clusters={storyClusters?.length ?? 0} />
     </main>
   ),
@@ -56,6 +60,7 @@ vi.mock("@/lib/feed-subscriptions", () => ({
 
 vi.mock("@/lib/story-cluster-reader", () => ({
   listStoryClustersForArticleUser: mocks.listStoryClustersForArticleUser,
+  listStoryClustersForArticlesUser: mocks.listStoryClustersForArticlesUser,
 }))
 
 vi.mock("@/lib/user-settings", () => ({
@@ -93,6 +98,7 @@ describe("AppHomePage", () => {
       })
     )
     mocks.listStoryClustersForArticleUser.mockResolvedValue([])
+    mocks.listStoryClustersForArticlesUser.mockResolvedValue([])
   })
 
   it("sends first-run readers to Discover until they subscribe to a feed", async () => {
@@ -125,6 +131,12 @@ describe("AppHomePage", () => {
       articles: [{ id: "article-1" }, { id: "article-2" }],
       nextCursor: null,
     })
+    mocks.listStoryClustersForArticlesUser.mockResolvedValue([
+      {
+        id: "cluster-1",
+        members: [{ articleId: "article-2" }],
+      },
+    ])
     mocks.listStoryClustersForArticleUser.mockResolvedValue([{ id: "cluster-1" }])
 
     const markup = renderToStaticMarkup(
@@ -133,6 +145,10 @@ describe("AppHomePage", () => {
       })
     )
 
+    expect(mocks.listStoryClustersForArticlesUser).toHaveBeenCalledWith({
+      articleIds: ["article-1", "article-2"],
+      userId: "user-1",
+    })
     expect(mocks.listStoryClustersForArticleUser).toHaveBeenCalledWith({
       articleId: "article-2",
       userId: "user-1",
@@ -145,5 +161,6 @@ describe("AppHomePage", () => {
       userId: "user-1",
     })
     expect(markup).toContain('data-story-clusters="1"')
+    expect(markup).toContain('data-inline-story-clusters="1"')
   })
 })

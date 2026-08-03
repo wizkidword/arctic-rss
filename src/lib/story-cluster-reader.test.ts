@@ -4,6 +4,7 @@ import { type ReaderArticle } from "./articles"
 import {
   evaluateStoryClustersForArticleUserWithDependencies,
   listStoryClustersForArticleUserWithClient,
+  listStoryClustersForArticlesUserWithClient,
   STORY_CLUSTER_READER_WINDOW_SIZE
 } from "./story-cluster-reader"
 
@@ -80,6 +81,33 @@ describe("story cluster reader evaluation", () => {
 })
 
 describe("story cluster reader presentation", () => {
+  it("loads active groups that overlap a reader page with one bounded query", async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+
+    await expect(
+      listStoryClustersForArticlesUserWithClient({
+        articleIds: ["article-1", "article-2", "article-1"],
+        loadArticles: vi.fn(),
+        store: { storyClusterVersion: { findMany } },
+        userId: "user-1"
+      })
+    ).resolves.toEqual([])
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 24,
+        where: expect.objectContaining({
+          cluster: { status: "ACTIVE", userId: "user-1" },
+          members: {
+            some: {
+              articleId: { in: ["article-1", "article-2"] }
+            }
+          }
+        })
+      })
+    )
+  })
+
   it("returns only current clusters whose members remain visible to the user", async () => {
     const store = {
       storyClusterVersion: {
