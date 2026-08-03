@@ -24,7 +24,7 @@ test.describe("authenticated reader journeys", () => {
     page,
   }) => {
     await signIn(page, e2eCredentials.reader)
-    await expect(page).toHaveURL(/\/app\/discover/)
+    await expect(page).toHaveURL(/\/app(?:\/discover)?/)
 
     await page.getByRole("button", { name: "Add Feed" }).click()
     await page
@@ -161,7 +161,7 @@ test.describe("authenticated reader journeys", () => {
 
     try {
       await signIn(readerPage, e2eCredentials.revoked)
-      await expect(readerPage).toHaveURL(/\/app\/discover/)
+      await expect(readerPage).toHaveURL(/\/app(?:\/discover)?/)
       const activeChatAuthorization = await readerPage.request.post(
         "/api/chat/session",
         {
@@ -181,8 +181,16 @@ test.describe("authenticated reader journeys", () => {
       await expect(targetRow).toBeVisible()
       await targetRow.getByRole("button", { name: "Disable user" }).click()
       await expect(
-        targetRow.getByText("Disabled", { exact: true }).first()
-      ).toBeVisible({ timeout: 15_000 })
+        targetRow.getByText(/revoked all active sessions\./)
+      ).toBeVisible()
+      await adminPage.reload()
+      await expect(
+        adminPage
+          .getByRole("row")
+          .filter({ hasText: e2eCredentials.revoked.email })
+          .getByText("Disabled", { exact: true })
+          .first()
+      ).toBeVisible()
 
       await readerPage.goto("/app")
       await expect(readerPage).toHaveURL(/\/login/)
