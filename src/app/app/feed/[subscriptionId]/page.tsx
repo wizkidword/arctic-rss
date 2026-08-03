@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation"
 
 import { auth } from "@/auth"
+import { FeedPauseButton } from "@/components/feed-pause-button"
 import { FeedRefreshButton } from "@/components/feed-refresh-button"
 import { FeedUnsubscribeButton } from "@/components/feed-unsubscribe-button"
 import { ReaderSurface } from "@/components/reader-surface"
@@ -13,7 +14,11 @@ import {
 } from "@/lib/articles"
 import { getUserFeedSubscription } from "@/lib/feed-subscriptions"
 import { normalizeDefaultView } from "@/lib/preferences"
-import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
+import {
+  formatArticleDateTime,
+  normalizeDateTimePreferences,
+  normalizeDisplayMode,
+} from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
 
 export default async function FeedPage({
@@ -45,6 +50,7 @@ export default async function FeedPage({
   const defaultView = normalizeDefaultView(settings.defaultView)
   const dateTimePreferences = normalizeDateTimePreferences(settings)
   const displayMode = normalizeDisplayMode(settings.displayMode)
+  const feedHealth = feedHealthSummary(subscription, dateTimePreferences)
   const articlePage = await listReaderArticlePage({
     after: firstSearchParam(query.after),
     feedId: subscription.feedId,
@@ -85,10 +91,31 @@ export default async function FeedPage({
       title={title}
       toolbar={
         <>
-          <Badge variant={subscription.feed.lastError ? "destructive" : "secondary"}>
-            {subscription.feed.lastError ? "Needs attention" : "Subscribed"}
+          <Badge
+            variant={
+              subscription.isPaused
+                ? "outline"
+                : subscription.feed.lastError
+                  ? "destructive"
+                  : "secondary"
+            }
+          >
+            {subscription.isPaused
+              ? "Paused"
+              : subscription.feed.lastError
+                ? "Needs attention"
+                : "Subscribed"}
           </Badge>
-          <FeedRefreshButton subscriptionId={subscription.id} />
+          <span className="max-w-56 text-xs leading-5 text-muted-foreground">
+            {feedHealth}
+          </span>
+          {!subscription.isPaused ? (
+            <FeedRefreshButton subscriptionId={subscription.id} />
+          ) : null}
+          <FeedPauseButton
+            isPaused={subscription.isPaused}
+            subscriptionId={subscription.id}
+          />
           <FeedUnsubscribeButton
             feedTitle={title}
             subscriptionId={subscription.id}
@@ -105,4 +132,32 @@ function firstSearchParam(value: string | string[] | undefined) {
 
 function nextPageHref(path: string, cursor: string | null) {
   return cursor ? `${path}?after=${encodeURIComponent(cursor)}` : undefined
+}
+
+function feedHealthSummary(
+  subscription: {
+    feed: {
+      lastError: string | null
+      lastSuccessfulFetchAt: Date | null
+    }
+    isPaused: boolean
+  },
+  dateTimePreferences: Parameters<typeof formatArticleDateTime>[1]
+) {
+  if (subscription.isPaused) {
+    return "This feed is paused. New articles will not be fetched until you resume it."
+  }
+
+  if (subscription.feed.lastError) {
+    return "A recent refresh needs attention. Reload the feed to try again, or pause it while you decide what to do."
+  }
+
+  if (subscription.feed.lastSuccessfulFetchAt) {
+    return `Last refreshed ${formatArticleDateTime(
+      subscription.feed.lastSuccessfulFetchAt,
+      dateTimePreferences
+    )}.`
+  }
+
+  return "Waiting for the first successful refresh."
 }

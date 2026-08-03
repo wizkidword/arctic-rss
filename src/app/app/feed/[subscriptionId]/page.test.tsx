@@ -59,6 +59,16 @@ vi.mock("@/components/feed-refresh-button", () => ({
   ),
 }))
 
+vi.mock("@/components/feed-pause-button", () => ({
+  FeedPauseButton: ({
+    isPaused,
+    subscriptionId,
+  }: {
+    isPaused: boolean
+    subscriptionId: string
+  }) => <span>{isPaused ? "Resume" : "Pause"} {subscriptionId}</span>,
+}))
+
 vi.mock("@/components/feed-unsubscribe-button", () => ({
   FeedUnsubscribeButton: ({
     feedTitle,
@@ -95,11 +105,13 @@ describe("FeedPage", () => {
         description: "Feed description",
         feedUrl: "https://example.com/feed.xml",
         lastError: null,
+        lastSuccessfulFetchAt: null,
         siteUrl: "https://example.com",
         title: "Example Feed",
       },
       feedId: "feed-1",
       id: "subscription-1",
+      isPaused: false,
     })
     mocks.getOrCreateUserSettings.mockResolvedValue({
       defaultView: "EXPANDED",
@@ -123,6 +135,36 @@ describe("FeedPage", () => {
     )
 
     expect(markup).toContain("Refresh subscription-1")
+    expect(markup).toContain("Pause subscription-1")
     expect(markup).toContain("Unsubscribe Example Feed subscription-1")
+  })
+
+  it("makes a paused feed status and resume control clear", async () => {
+    mocks.getUserFeedSubscription.mockResolvedValue({
+      customTitle: null,
+      feed: {
+        description: "Feed description",
+        feedUrl: "https://example.com/feed.xml",
+        lastError: "upstream unavailable",
+        lastSuccessfulFetchAt: new Date("2026-06-28T12:00:00.000Z"),
+        siteUrl: "https://example.com",
+        title: "Example Feed",
+      },
+      feedId: "feed-1",
+      id: "subscription-1",
+      isPaused: true,
+    })
+
+    const markup = renderToStaticMarkup(
+      await FeedPage({
+        params: Promise.resolve({ subscriptionId: "subscription-1" }),
+        searchParams: Promise.resolve({}),
+      })
+    )
+
+    expect(markup).toContain("Paused")
+    expect(markup).toContain("Resume subscription-1")
+    expect(markup).not.toContain("Refresh subscription-1")
+    expect(markup).toContain("New articles will not be fetched until you resume it.")
   })
 })

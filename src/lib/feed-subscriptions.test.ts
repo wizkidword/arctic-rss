@@ -10,6 +10,7 @@ const {
   deleteMany,
   discoverFeedFromUrl,
   feedSubscriptionCreate,
+  feedSubscriptionUpdateMany,
   folderCreate,
   feedDelete,
   feedFindUnique,
@@ -31,6 +32,7 @@ const {
   deleteMany: vi.fn(),
   discoverFeedFromUrl: vi.fn(),
   feedSubscriptionCreate: vi.fn(),
+  feedSubscriptionUpdateMany: vi.fn(),
   folderCreate: vi.fn(),
   feedDelete: vi.fn(),
   feedFindUnique: vi.fn(),
@@ -70,6 +72,7 @@ vi.mock("./db", () => ({
       deleteMany,
       findFirst,
       findMany,
+      updateMany: feedSubscriptionUpdateMany,
     },
     folder: {
       create: folderCreate,
@@ -94,6 +97,7 @@ import {
   FeedSubscriptionError,
   hasUserFeedSubscriptions,
   listUserFeedSubscriptions,
+  setFeedSubscriptionPaused,
   subscribeToFeed,
   unsubscribeFromFeed,
 } from "./feed-subscriptions"
@@ -109,6 +113,7 @@ describe("feed subscriptions", () => {
     deleteMany.mockReset()
     discoverFeedFromUrl.mockReset()
     feedSubscriptionCreate.mockReset()
+    feedSubscriptionUpdateMany.mockReset()
     folderCreate.mockReset()
     feedDelete.mockReset()
     feedFindUnique.mockReset()
@@ -173,6 +178,7 @@ describe("feed subscriptions", () => {
           faviconUrl: null,
           feedUrl: "https://example.com/feed.xml",
           lastError: null,
+          lastSuccessfulFetchAt: null,
           siteUrl: "https://example.com",
           title: "Example Feed",
         },
@@ -210,6 +216,7 @@ describe("feed subscriptions", () => {
         id: "subscription-1",
         isPaused: false,
         lastError: null,
+        lastSuccessfulFetchAt: null,
         siteUrl: "https://example.com",
         title: "Example Feed",
         unreadCount: 3,
@@ -224,6 +231,7 @@ describe("feed subscriptions", () => {
         faviconUrl: null,
         feedUrl: `https://example.com/feed-${index}.xml`,
         lastError: null,
+        lastSuccessfulFetchAt: null,
         siteUrl: null,
         title: `Feed ${index}`,
       },
@@ -247,6 +255,38 @@ describe("feed subscriptions", () => {
       "user-1",
       subscriptions.map((subscription) => subscription.feedId)
     )
+  })
+
+  it("pauses only the current user's selected feed subscription", async () => {
+    feedSubscriptionUpdateMany.mockResolvedValue({ count: 1 })
+
+    await expect(
+      setFeedSubscriptionPaused({
+        isPaused: true,
+        subscriptionId: "subscription-1",
+        userId: "user-1",
+      })
+    ).resolves.toEqual({ isPaused: true, subscriptionId: "subscription-1" })
+
+    expect(feedSubscriptionUpdateMany).toHaveBeenCalledWith({
+      data: { isPaused: true },
+      where: {
+        id: "subscription-1",
+        userId: "user-1",
+      },
+    })
+  })
+
+  it("does not update a feed subscription outside the current user", async () => {
+    feedSubscriptionUpdateMany.mockResolvedValue({ count: 0 })
+
+    await expect(
+      setFeedSubscriptionPaused({
+        isPaused: false,
+        subscriptionId: "subscription-other-user",
+        userId: "user-1",
+      })
+    ).rejects.toThrow("That feed subscription was not found.")
   })
 
   it("unsubscribes only the current user's subscription", async () => {

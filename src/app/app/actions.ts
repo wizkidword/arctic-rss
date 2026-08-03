@@ -51,6 +51,7 @@ import { FeedRefreshError, refreshFeed } from "@/lib/feed-refresh"
 import {
   FeedSubscriptionError,
   getUserFeedSubscription,
+  setFeedSubscriptionPaused,
   subscribeToFeed,
   unsubscribeFromFeed,
 } from "@/lib/feed-subscriptions"
@@ -110,6 +111,11 @@ export type SubscribeDirectoryFeedActionState = {
 }
 
 export type RefreshFeedActionState = {
+  message: string
+  status: "idle" | "success" | "error"
+}
+
+export type SetFeedPausedActionState = {
   message: string
   status: "idle" | "success" | "error"
 }
@@ -543,6 +549,13 @@ export async function refreshFeedAction(
     }
   }
 
+  if (subscription.isPaused) {
+    return {
+      message: "Resume this feed before reloading it.",
+      status: "error",
+    }
+  }
+
   const rateLimit = await enforceRateLimit({
     action: "feed_discovery",
     userId: session.user.id,
@@ -588,6 +601,71 @@ export async function refreshFeedAction(
 
     return {
       message: "Arctic RSS could not refresh that feed.",
+      status: "error",
+    }
+  }
+}
+
+export async function setFeedPausedAction(
+  _previousState: SetFeedPausedActionState,
+  formData: FormData
+): Promise<SetFeedPausedActionState> {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    return {
+      message: "You need to sign in before changing a feed.",
+      status: "error",
+    }
+  }
+
+  const subscriptionId = String(formData.get("subscriptionId") ?? "").trim()
+  const isPaused = String(formData.get("isPaused") ?? "") === "true"
+
+  if (!subscriptionId) {
+    return {
+      message: "Choose a feed to update.",
+      status: "error",
+    }
+  }
+
+  const rateLimit = await enforceRateLimit({
+    action: "feed_discovery",
+    userId: session.user.id,
+  })
+
+  if (!rateLimit.allowed) {
+    return { message: getRateLimitErrorMessage(), status: "error" }
+  }
+
+  try {
+    await setFeedSubscriptionPaused({
+      isPaused,
+      subscriptionId,
+      userId: session.user.id,
+    })
+
+    revalidatePath("/app", "layout")
+    revalidateArticleListPaths()
+    revalidatePath(`/app/feed/${encodeURIComponent(subscriptionId)}`)
+    refresh()
+
+    return {
+      message: isPaused
+        ? "Feed paused. New articles will stay out of your reader until you resume it."
+        : "Feed resumed. Reload it when you are ready to fetch the latest articles.",
+      status: "success",
+    }
+  } catch (error) {
+    if (error instanceof FeedSubscriptionError) {
+      return {
+        message: error.message,
+        status: "error",
+      }
+    }
+
+    return {
+      message: "Arctic RSS could not update that feed.",
       status: "error",
     }
   }

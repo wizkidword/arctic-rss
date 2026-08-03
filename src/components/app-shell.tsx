@@ -51,6 +51,7 @@ type ShellFeedSubscription = {
   id: string
   isPaused: boolean
   lastError: string | null
+  lastSuccessfulFetchAt: Date | null
   siteUrl: string | null
   title: string
   unreadCount: number
@@ -289,7 +290,9 @@ function ReaderNav({
                 subscription={{
                   feedId: subscription.feedId,
                   id: subscription.id,
+                  isPaused: subscription.isPaused,
                   lastError: subscription.lastError,
+                  lastSuccessfulFetchAt: subscription.lastSuccessfulFetchAt,
                   siteUrl: subscription.siteUrl,
                   title: subscription.title,
                   unreadCount: subscription.unreadCount,

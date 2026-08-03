@@ -17,6 +17,8 @@ import {
   CheckCheckIcon,
   ExternalLinkIcon,
   GlobeIcon,
+  PauseIcon,
+  PlayIcon,
   RefreshCwIcon,
   RssIcon,
   Trash2Icon,
@@ -26,6 +28,8 @@ import {
   markAllReadAction,
   refreshFeedAction,
   type RefreshFeedActionState,
+  setFeedPausedAction,
+  type SetFeedPausedActionState,
   type UnsubscribeFeedActionState,
   unsubscribeFeedAction,
 } from "@/app/app/actions"
@@ -40,7 +44,9 @@ import { cn } from "@/lib/utils"
 export type FeedNavContextMenuSubscription = {
   feedId: string
   id: string
+  isPaused: boolean
   lastError: string | null
+  lastSuccessfulFetchAt: Date | null
   siteUrl: string | null
   title: string
   unreadCount: number
@@ -57,6 +63,11 @@ const refreshInitialState: RefreshFeedActionState = {
 }
 
 const unsubscribeInitialState: UnsubscribeFeedActionState = {
+  message: "",
+  status: "idle",
+}
+
+const setFeedPausedInitialState: SetFeedPausedActionState = {
   message: "",
   status: "idle",
 }
@@ -163,6 +174,16 @@ export function FeedNavContextMenu({
     })
   }
 
+  function runSetFeedPaused() {
+    setMenuPosition(null)
+    startTransition(() => {
+      const formData = new FormData()
+      formData.set("isPaused", String(!subscription.isPaused))
+      formData.set("subscriptionId", subscription.id)
+      void setFeedPausedAction(setFeedPausedInitialState, formData)
+    })
+  }
+
   function openUnsubscribeDialog() {
     setMenuPosition(null)
     setUnsubscribeOpen(true)
@@ -188,12 +209,14 @@ export function FeedNavContextMenu({
       {subscription.unreadCount > 0 && (
         <span className="text-xs tabular-nums">{subscription.unreadCount}</span>
       )}
-      {subscription.lastError && (
+      {subscription.isPaused ? (
+        <span className="text-xs text-muted-foreground">Paused</span>
+      ) : subscription.lastError ? (
         <span
           aria-label="Feed needs attention"
           className="size-1.5 rounded-full bg-destructive"
         />
-      )}
+      ) : null}
     </Link>
   )
 
@@ -211,6 +234,10 @@ export function FeedNavContextMenu({
               role="menu"
               style={menuStyle(menuPosition)}
             >
+              <p className="px-2 py-1 text-xs leading-5 text-muted-foreground">
+                {feedHealthSummary(subscription)}
+              </p>
+              <div className="-mx-1 my-1 h-px bg-border" role="separator" />
               <button
                 className={menuItemClass}
                 onClick={runMarkFeedRead}
@@ -220,14 +247,25 @@ export function FeedNavContextMenu({
                 <CheckCheckIcon />
                 Mark feed as read
               </button>
+              {!subscription.isPaused ? (
+                <button
+                  className={menuItemClass}
+                  onClick={runRefreshFeed}
+                  role="menuitem"
+                  type="button"
+                >
+                  <RefreshCwIcon />
+                  Reload feed
+                </button>
+              ) : null}
               <button
                 className={menuItemClass}
-                onClick={runRefreshFeed}
+                onClick={runSetFeedPaused}
                 role="menuitem"
                 type="button"
               >
-                <RefreshCwIcon />
-                Reload feed
+                {subscription.isPaused ? <PlayIcon /> : <PauseIcon />}
+                {subscription.isPaused ? "Resume feed" : "Pause feed"}
               </button>
               <div className="-mx-1 my-1 h-px bg-border" role="separator" />
               <Link
@@ -281,11 +319,11 @@ export function FeedNavContextMenu({
                     type="button"
                   >
                     <AlertCircleIcon />
-                    Check error
+                    View refresh guidance
                   </button>
                   {showFeedError && (
                     <p className="px-2 pb-1 text-xs leading-5 text-destructive">
-                      {subscription.lastError}
+                      Arctic RSS could not refresh this feed recently. Try reloading it, or pause it while you decide what to do.
                     </p>
                   )}
                 </>
@@ -317,6 +355,25 @@ export function FeedNavContextMenu({
       </AlertDialog>
     </>
   )
+}
+
+function feedHealthSummary(subscription: FeedNavContextMenuSubscription) {
+  if (subscription.isPaused) {
+    return "Paused. New articles will not be fetched until you resume this feed."
+  }
+
+  if (subscription.lastError) {
+    return "Needs attention. A recent refresh did not finish."
+  }
+
+  if (subscription.lastSuccessfulFetchAt) {
+    return `Last refreshed ${new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(subscription.lastSuccessfulFetchAt)}.`
+  }
+
+  return "Waiting for the first successful refresh."
 }
 
 function clampMenuToViewport(x: number, y: number) {

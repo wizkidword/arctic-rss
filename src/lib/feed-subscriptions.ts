@@ -31,6 +31,7 @@ export type FeedSubscriptionNavItem = {
   id: string
   isPaused: boolean
   lastError: string | null
+  lastSuccessfulFetchAt: Date | null
   siteUrl: string | null
   title: string
   unreadCount: number
@@ -78,6 +79,7 @@ export const listUserFeedSubscriptions = cache(async function listUserFeedSubscr
       id: subscription.id,
       isPaused: subscription.isPaused,
       lastError: subscription.feed.lastError,
+      lastSuccessfulFetchAt: subscription.feed.lastSuccessfulFetchAt,
       siteUrl: subscription.feed.siteUrl,
       title: subscription.customTitle || subscription.feed.title,
       unreadCount: unreadCounts.get(subscription.feedId) ?? 0,
@@ -107,6 +109,30 @@ export async function getUserFeedSubscription(
       folder: true,
     },
   })
+}
+
+export async function setFeedSubscriptionPaused({
+  isPaused,
+  subscriptionId,
+  userId,
+}: {
+  isPaused: boolean
+  subscriptionId: string
+  userId: string
+}) {
+  const update = await getPrisma().feedSubscription.updateMany({
+    data: { isPaused },
+    where: {
+      id: subscriptionId,
+      userId,
+    },
+  })
+
+  if (update.count !== 1) {
+    throw new FeedSubscriptionError("That feed subscription was not found.")
+  }
+
+  return { isPaused, subscriptionId }
 }
 
 export async function unsubscribeFromFeed({

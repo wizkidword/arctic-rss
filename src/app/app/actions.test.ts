@@ -107,6 +107,7 @@ const mocks = vi.hoisted(() => {
     enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
     revalidatePath: vi.fn(),
     setArticleReadState: vi.fn(),
+    setFeedSubscriptionPaused: vi.fn(),
     splitStoryClusterMemberForUser: vi.fn(),
     subscribeToFeed: vi.fn(),
     unsubscribeFromFeed: vi.fn(),
@@ -195,6 +196,7 @@ vi.mock("@/lib/feed-refresh", () => ({
 vi.mock("@/lib/feed-subscriptions", () => ({
   FeedSubscriptionError: mocks.MockFeedSubscriptionError,
   getUserFeedSubscription: mocks.getUserFeedSubscription,
+  setFeedSubscriptionPaused: mocks.setFeedSubscriptionPaused,
   subscribeToFeed: mocks.subscribeToFeed,
   unsubscribeFromFeed: mocks.unsubscribeFromFeed,
 }))
@@ -266,6 +268,7 @@ import {
   removeArticleFromCollectionAction,
   removePodcastEpisodeFromCollectionAction,
   refreshFeedAction,
+  setFeedPausedAction,
   subscribeDirectoryFeedAction,
   resendEmailVerificationAction,
   submitBugReportAction,
@@ -961,6 +964,85 @@ describe("refreshFeedAction", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("requires a paused feed to be resumed before reloading", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getUserFeedSubscription.mockResolvedValue({
+      feed: { lastFetchedAt: null },
+      feedId: "feed-1",
+      id: "subscription-1",
+      isPaused: true,
+    })
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      refreshFeedAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "Resume this feed before reloading it.",
+      status: "error",
+    })
+    expect(mocks.refreshFeed).not.toHaveBeenCalled()
+  })
+})
+
+describe("setFeedPausedAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.refresh.mockReset()
+    mocks.revalidatePath.mockReset()
+    mocks.setFeedSubscriptionPaused.mockReset()
+  })
+
+  it("pauses only the signed-in user's chosen feed and refreshes reader surfaces", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.setFeedSubscriptionPaused.mockResolvedValue({
+      isPaused: true,
+      subscriptionId: "subscription-1",
+    })
+    const formData = new FormData()
+    formData.set("isPaused", "true")
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      setFeedPausedAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "Feed paused. New articles will stay out of your reader until you resume it.",
+      status: "success",
+    })
+
+    expect(mocks.setFeedSubscriptionPaused).toHaveBeenCalledWith({
+      isPaused: true,
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/app/feed/subscription-1"
+    )
+    expect(mocks.refresh).toHaveBeenCalled()
+  })
+
+  it("returns a readable error when the feed cannot be changed", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.setFeedSubscriptionPaused.mockRejectedValue(
+      new mocks.MockFeedSubscriptionError("That feed subscription was not found.")
+    )
+    const formData = new FormData()
+    formData.set("isPaused", "false")
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      setFeedPausedAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "That feed subscription was not found.",
+      status: "error",
+    })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
   })
 })
 
