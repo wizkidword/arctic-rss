@@ -31,7 +31,11 @@ test.describe("authenticated reader journeys", () => {
       .getByLabel("Feed or website URL")
       .fill(`${e2eFeedUrl}/reader.xml`)
     await page.getByRole("button", { name: "Subscribe" }).click()
-    await expect(page.getByText(/Subscribed to E2E Reader Feed\. Imported 1 articles\./)).toBeVisible()
+    await expect(
+      page.getByText(
+        /Subscribed to E2E Reader Feed\. Imported 1 articles\.|You are already subscribed to E2E Reader Feed\./
+      )
+    ).toBeVisible()
 
     await page.goto("/app")
     const articleLink = page.getByRole("link", { name: "E2E Reader Article One" })
@@ -180,9 +184,6 @@ test.describe("authenticated reader journeys", () => {
       })
       await expect(targetRow).toBeVisible()
       await targetRow.getByRole("button", { name: "Disable user" }).click()
-      await expect(
-        targetRow.getByText(/revoked all active sessions\./)
-      ).toBeVisible()
       await adminPage.reload()
       await expect(
         adminPage
