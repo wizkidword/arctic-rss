@@ -32,6 +32,7 @@ describe("approved release command", () => {
     expect(script).toContain("release_image_environment_b64=")
     expect(script).toContain("MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE|EDGE_PROXY_IMAGE")
     expect(script).toContain("__RELEASE_IMAGE_ENVIRONMENT_BASE64__")
+    expect(script).toContain('(([string[]]$offHostImages.ImageEnvironment -join "`n") + "`n")')
   })
 
   it("retains and verifies stateful workloads before application services", async () => {

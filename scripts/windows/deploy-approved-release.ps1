@@ -1061,7 +1061,9 @@ printf 'EDGE_PROXY_HEALTH=%s\n' "$edge_proxy_health"
 printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
 '@
   $offHostImagesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.Images -join "`n")))
-  $releaseImageEnvironmentPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$offHostImages.ImageEnvironment -join "`n")))
+  # Preserve a terminal newline: chat topology overrides are appended to this
+  # staged environment file and must never be merged into the final image tag.
+  $releaseImageEnvironmentPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes((([string[]]$offHostImages.ImageEnvironment -join "`n") + "`n")))
   $topologyProfilesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.Profiles -join "`n")))
   $topologyReleaseServicesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.ReleaseServices -join "`n")))
   $topologyHealthServicesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string[]]$releaseTopology.RequiredHealthServices -join "`n")))
