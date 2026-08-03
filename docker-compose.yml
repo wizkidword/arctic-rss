@@ -515,8 +515,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-    # Deliberately no host `ports:` mapping. The managed tunnel is switched to
-    # this internal proxy only after the approved release has been verified.
+    # The public tunnel runs on the host network, so expose only this proxy on
+    # loopback. The gateway itself stays private to the Compose network.
+    ports:
+      - "127.0.0.1:${EDGE_PROXY_HOST_PORT:-8080}:8080"
     logging:
       driver: journald
 

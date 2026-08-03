@@ -102,9 +102,11 @@ messages are not replayed automatically.
 
 The `edge-proxy` service keeps every route on the existing web service except
 `/socket.io` and `/socket.io/`, which it forwards to the internal chat gateway
-with the WebSocket and `CF-Connecting-IP` headers preserved. After a verified
-release, point the existing managed-tunnel application at this internal proxy;
-do not add a direct gateway port or another public hostname.
+with the WebSocket and `CF-Connecting-IP` headers preserved. It publishes only
+its `8080` listener to host loopback so the host-network tunnel can reach it.
+After a verified release, point the existing managed-tunnel application at
+`http://127.0.0.1:8080`; do not add a direct gateway port or another public
+hostname.
 
 ## Verification in an approved change window
 

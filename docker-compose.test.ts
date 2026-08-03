@@ -84,7 +84,8 @@ describe("Cloudflare Tunnel Compose configuration", () => {
 
     expect(proxy).toContain('profiles: ["chat"]');
     expect(proxy).toContain("user: nginx");
-    expect(proxy).not.toMatch(/^\s+ports:/m);
+    expect(proxy).toContain("127.0.0.1:${EDGE_PROXY_HOST_PORT:-8080}:8080");
+    expect(proxy).not.toContain('"0.0.0.0:');
     expect(proxy).toContain("target: edge-proxy");
     expect(proxy).toContain("chat-gateway:");
     expect(config).toContain("location = /socket.io");
