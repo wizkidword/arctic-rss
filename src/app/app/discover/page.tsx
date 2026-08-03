@@ -255,6 +255,7 @@ export default async function DiscoverPage({
   const subscriptionUrls = subscriptions.map(
     (subscription) => subscription.feedUrl
   )
+  const isFirstRun = subscriptions.length === 0
   const pickerFolders = folders.map(({ id, name }) => ({ id, name }))
   const interestFeeds = selectedInterest
     ? listDiscoverInterestFeeds({
@@ -303,6 +304,8 @@ export default async function DiscoverPage({
         </nav>
       </section>
 
+      {isFirstRun ? <FirstRunOnboarding /> : null}
+
       <div
         aria-label="Feed directory categories"
         className="flex flex-col gap-4"
@@ -344,7 +347,11 @@ function InterestPicker({
   interests: readonly DiscoverInterestGroup[]
 }) {
   return (
-    <section aria-label="Discover interests" className="flex flex-col gap-3">
+    <section
+      aria-label="Discover interests"
+      className="flex flex-col gap-3"
+      id="discover-interests"
+    >
       <div className="flex flex-col gap-1">
         <h2 className="font-heading text-lg font-semibold">Choose Interests</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
@@ -356,6 +363,56 @@ function InterestPicker({
         {interests.map((interest) => (
           <InterestCard interest={interest} key={interest.id} />
         ))}
+      </div>
+    </section>
+  )
+}
+
+function FirstRunOnboarding() {
+  return (
+    <section
+      aria-label="Build your reader"
+      className="flex flex-col gap-4 rounded-lg border bg-card p-4 shadow-xs"
+    >
+      <div className="flex flex-col gap-1">
+        <h2 className="font-heading text-lg font-semibold">Build your reader</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Start with a few sources you trust. You can reorganize or remove them at any time.
+        </p>
+      </div>
+      <ol className="grid gap-3 text-sm md:grid-cols-3">
+        <li className="rounded-md border bg-muted/20 p-3">
+          <span className="font-medium">1. Pick starters</span>
+          <p className="mt-1 text-muted-foreground">
+            Choose up to five starter sources from the topics below.
+          </p>
+        </li>
+        <li className="rounded-md border bg-muted/20 p-3">
+          <span className="font-medium">2. Let them refresh</span>
+          <p className="mt-1 text-muted-foreground">
+            Arctic RSS will begin filling your reader with recent articles.
+          </p>
+        </li>
+        <li className="rounded-md border bg-muted/20 p-3">
+          <span className="font-medium">3. Shape the habit</span>
+          <p className="mt-1 text-muted-foreground">
+            Group feeds or save views once you know what you want to follow.
+          </p>
+        </li>
+      </ol>
+      <div className="flex flex-wrap gap-2">
+        <a
+          className={cn(buttonVariants({ size: "sm" }))}
+          href="#discover-interests"
+        >
+          Choose starter sources
+        </a>
+        <Link
+          className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
+          href="/app/settings/import-export"
+        >
+          Import OPML
+        </Link>
       </div>
     </section>
   )

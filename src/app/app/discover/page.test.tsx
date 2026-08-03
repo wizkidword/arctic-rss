@@ -266,6 +266,23 @@ describe("DiscoverPage", () => {
     expect(markup).not.toContain("2 categories")
   })
 
+  it("gives first-run readers an OPML or starter-source path", async () => {
+    mocks.listUserFeedSubscriptions.mockResolvedValue([])
+
+    const markup = renderToStaticMarkup(
+      await DiscoverPage({
+        searchParams: Promise.resolve({}),
+      })
+    )
+
+    expect(markup).toContain("Build your reader")
+    expect(markup).toContain("Choose up to five starter sources")
+    expect(markup).toContain("Let them refresh")
+    expect(markup).toContain("Shape the habit")
+    expect(markup).toContain('href="#discover-interests"')
+    expect(markup).toContain('href="/app/settings/import-export"')
+  })
+
   it("shows all feeds for the selected interest", async () => {
     const markup = renderToStaticMarkup(
       await DiscoverPage({
