@@ -170,6 +170,47 @@ describe("feed URL safety", () => {
     releaseSecond()
   })
 
+  it("layers a global outbound semaphore with per-host request limits", async () => {
+    const globalLimiter = createHostRequestLimiter(2)
+    const hostLimiter = createHostRequestLimiter(1)
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
+    let resolveFirstFetch: ((response: Response) => void) | undefined
+    const firstFetch = new Promise<Response>((resolve) => {
+      resolveFirstFetch = resolve
+    })
+    const fetchImpl = vi
+      .fn()
+      .mockImplementationOnce(async () => firstFetch)
+      .mockImplementation(async () => new Response("<rss></rss>"))
+    const fetchOptions = {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      globalRequestLimiter: globalLimiter,
+      hostRequestLimiter: hostLimiter,
+      lookup: lookup as never,
+    }
+
+    const firstRequest = safeFetchText(new URL("https://same-host.example/feed-a"), fetchOptions)
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce())
+
+    const blockedSameHost = safeFetchText(
+      new URL("https://same-host.example/feed-b"),
+      fetchOptions
+    )
+    const otherHost = safeFetchText(
+      new URL("https://other-host.example/feed"),
+      fetchOptions
+    )
+
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2))
+    await expect(otherHost).resolves.toMatchObject({ text: "<rss></rss>" })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+
+    resolveFirstFetch?.(new Response("<rss></rss>"))
+    await expect(firstRequest).resolves.toMatchObject({ text: "<rss></rss>" })
+    await expect(blockedSameHost).resolves.toMatchObject({ text: "<rss></rss>" })
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
   it("identifies Arctic RSS with the public site URL when fetching feeds", async () => {
     const fetchImpl = vi.fn(async () => new Response("<rss></rss>"))
     const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])

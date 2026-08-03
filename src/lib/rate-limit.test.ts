@@ -114,6 +114,62 @@ describe("rate limiter", () => {
     })
   })
 
+  it("applies transcript limits to both the subscriber and trusted client IP", async () => {
+    const store = createCounterStore()
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await expect(
+        enforceRateLimit(
+          {
+            action: "podcast_transcript",
+            ip: `198.51.100.${attempt + 1}`,
+            userId: "user-789",
+          },
+          { store }
+        )
+      ).resolves.toEqual({ allowed: true })
+    }
+
+    await expect(
+      enforceRateLimit(
+        { action: "podcast_transcript", ip: "198.51.100.99", userId: "user-789" },
+        { store }
+      )
+    ).resolves.toMatchObject({
+      allowed: false,
+      retryAfterSeconds: 300,
+      scope: "user",
+    })
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await expect(
+        enforceRateLimit(
+          {
+            action: "podcast_transcript",
+            ip: "198.51.100.200",
+            userId: `user-${attempt}`,
+          },
+          { store }
+        )
+      ).resolves.toEqual({ allowed: true })
+    }
+
+    await expect(
+      enforceRateLimit(
+        {
+          action: "podcast_transcript",
+          ip: "198.51.100.200",
+          userId: "user-over-ip-limit",
+        },
+        { store }
+      )
+    ).resolves.toMatchObject({
+      allowed: false,
+      retryAfterSeconds: 300,
+      scope: "ip",
+    })
+  })
+
   it("bounds native chat message sends per account", async () => {
     const store = createCounterStore()
 

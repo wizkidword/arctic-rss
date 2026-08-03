@@ -48,6 +48,7 @@ export type RateLimitAction =
   | "image_proxy"
   | "login"
   | "opml_import"
+  | "podcast_transcript"
   | "password_reset_complete"
   | "password_reset_request"
   | "signup"
@@ -197,6 +198,10 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
   ],
   opml_import: [
     { limit: 6, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
+  ],
+  podcast_transcript: [
+    { limit: 12, scope: "user", subject: inputSubject("userId"), windowMs: 5 * 60_000 },
+    { limit: 30, scope: "ip", subject: inputSubject("ip"), windowMs: 5 * 60_000 },
   ],
   password_reset_complete: [
     { limit: 12, scope: "ip", subject: inputSubject("ip"), windowMs: 60 * 60_000 },

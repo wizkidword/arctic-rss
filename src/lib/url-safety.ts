@@ -54,6 +54,7 @@ type SafeFetchOptions = {
   maxBytes?: number
   timeoutMs?: number
   totalTimeoutMs?: number
+  globalRequestLimiter?: HostRequestLimiter
   hostRequestLimiter?: HostRequestLimiter
   ifModifiedSince?: string
   ifNoneMatch?: string
@@ -329,6 +330,7 @@ export async function safeFetchBytes(
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const totalTimeoutMs = options.totalTimeoutMs ?? DEFAULT_TOTAL_TIMEOUT_MS
+  const globalRequestLimiter = options.globalRequestLimiter
   const hostRequestLimiter = options.hostRequestLimiter ?? sharedHostRequestLimiter
   const now = options.now ?? Date.now
   const deadline = now() + totalTimeoutMs
@@ -342,7 +344,8 @@ export async function safeFetchBytes(
     }
 
     const signal = AbortSignal.timeout(Math.max(1, Math.floor(remainingMs)))
-    let releaseSlot: (() => void) | undefined
+    let releaseGlobalSlot: (() => void) | undefined
+    let releaseHostSlot: (() => void) | undefined
     let dispose: () => Promise<void> = async () => undefined
 
     try {
@@ -350,7 +353,11 @@ export async function safeFetchBytes(
         assertUrlResolvesPublicly(url, lookup),
         signal
       )
-      releaseSlot = await hostRequestLimiter.acquire(normalizeHostname(url.hostname), signal)
+      releaseHostSlot = await hostRequestLimiter.acquire(
+        normalizeHostname(url.hostname),
+        signal
+      )
+      releaseGlobalSlot = await globalRequestLimiter?.acquire("global", signal)
 
       const request = options.fetchImpl
         ? {
@@ -414,7 +421,8 @@ export async function safeFetchBytes(
       throw error
     } finally {
       await dispose()
-      releaseSlot?.()
+      releaseGlobalSlot?.()
+      releaseHostSlot?.()
     }
   }
 
