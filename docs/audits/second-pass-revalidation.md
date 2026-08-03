@@ -144,3 +144,27 @@ and explicit configuration allowlists.
 No production action is authorized by this report. Before a deployment, obtain
 fresh runtime/backups/migration/topology evidence and the owner's explicit
 release approval.
+
+## Phase 11 and Phase 12 closeout — 2026-08-03
+
+The historical Phase 0 findings above were resolved in the subsequent phased
+commits. The current closeout keeps that baseline intact while recording the
+final structural refactor and release-preparation evidence.
+
+- Phase 11 moved reader and AI implementation details out of the large
+  `src/app/app/actions.ts` concentrator while retaining it as the sole Next.js
+  Server Action boundary. The focused action suite, full test suite, typecheck,
+  lint, and production build passed.
+- Phase 12 repeated disposable-database migration validation, authenticated
+  production-browser journeys, every declared topology validation, chat release
+  gates, Compose rendering against `.env.example`, the approved production
+  dependency audit, and all four production Docker image targets.
+- The local Phase 11 commit is not a production claim. The previous approved
+  `8ba573a` release remained publicly healthy during this closeout; a later
+  commit still needs publication, exact CI, a fresh dry run, and a fresh typed
+  deployment approval.
+
+See [second-pass-completion-report.md](second-pass-completion-report.md) for
+the complete verification matrix and
+[second-pass-production-rollout.md](../operations/second-pass-production-rollout.md)
+for the approval-gated operational path.
