@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getOrCreateUserSettings: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
   listReaderArticleSearchPage: vi.fn(),
+  loadReaderArticleView: vi.fn(),
   listUserFeedSubscriptions: vi.fn(),
   listUserFolders: vi.fn(),
   redirect: vi.fn((path: string) => {
@@ -41,6 +42,11 @@ vi.mock("@/components/reader-surface", () => ({
 
 vi.mock("@/lib/article-collections", () => ({
   listArticleCollectionsForUser: mocks.listArticleCollectionsForUser,
+}))
+
+vi.mock("@/lib/articles", () => ({
+  loadReaderArticleView: mocks.loadReaderArticleView,
+  readerArticlePageLimit: () => 50,
 }))
 
 vi.mock("@/lib/article-search", async (importOriginal) => ({
@@ -79,6 +85,10 @@ describe("SearchPage", () => {
     mocks.listReaderArticleSearchPage.mockResolvedValue({
       articles: [],
       nextCursor: null,
+    })
+    mocks.loadReaderArticleView.mockResolvedValue({
+      riverArticles: [],
+      selectedArticle: null,
     })
     mocks.listUserFeedSubscriptions.mockResolvedValue([
       {
@@ -120,6 +130,7 @@ describe("SearchPage", () => {
         state: "unread",
         subscriptionId: "source-1",
       }),
+      limit: 50,
       userId: "user-1",
     })
     expect(markup).toContain("Search articles")

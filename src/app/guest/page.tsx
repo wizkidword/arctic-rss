@@ -1,7 +1,10 @@
 import type { Metadata } from "next"
 
 import { ReaderSurface } from "@/components/reader-surface"
-import { listPublicReaderArticles } from "@/lib/articles"
+import {
+  getPublicReaderArticle,
+  listPublicReaderArticles,
+} from "@/lib/articles"
 
 export const dynamic = "force-dynamic"
 
@@ -38,6 +41,13 @@ export default async function GuestHomePage({
 }: GuestPageProps) {
   const params = await searchParams
   const articles = await listPublicReaderArticles({ limit: 50 })
+  const articleId = firstSearchParam(params.articleId)
+  const selectedListItem = articleId
+    ? articles.find((article) => article.id === articleId)
+    : articles[0]
+  const selectedArticle = selectedListItem
+    ? await getPublicReaderArticle({ articleId: selectedListItem.id })
+    : null
 
   return (
     <ReaderSurface
@@ -49,7 +59,8 @@ export default async function GuestHomePage({
       emptyMessage="No public preview articles are available yet. Try Discover to browse public feed sources."
       markAllReadScope={{ type: "all" }}
       readOnlyActionReason={GUEST_READ_ONLY_REASON}
-      selectedArticleId={firstSearchParam(params.articleId)}
+      selectedArticle={selectedArticle ?? undefined}
+      selectedArticleId={articleId}
       title="Browse as Guest"
     />
   )

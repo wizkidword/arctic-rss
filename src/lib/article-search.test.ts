@@ -124,7 +124,7 @@ describe("article search query", () => {
     expect(values).toContain(injectionLikeQuery)
     expect(values).toContain("%ice\\%\\_'; DROP TABLE Article; --%")
     expect(findMany).toHaveBeenCalledWith({
-      include: expect.objectContaining({
+      select: expect.objectContaining({
         states: expect.objectContaining({
           where: { userId: "user-1" },
         }),
@@ -153,6 +153,11 @@ describe("article search query", () => {
         ],
       },
     })
+    const listProjection = findMany.mock.calls[0]?.[0]?.select
+
+    expect(listProjection).not.toHaveProperty("aiSummaries")
+    expect(listProjection).not.toHaveProperty("contentHtml")
+    expect(listProjection).not.toHaveProperty("contentText")
     expect(result.articles.map((article) => article.id)).toEqual(["article-1"])
   })
 

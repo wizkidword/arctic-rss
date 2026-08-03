@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getUserFolder: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
   listReaderArticlePage: vi.fn(),
+  loadReaderArticleView: vi.fn(),
   listUserFeedSubscriptions: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NOT_FOUND")
@@ -65,6 +66,8 @@ vi.mock("@/lib/article-collections", () => ({
 
 vi.mock("@/lib/articles", () => ({
   listReaderArticlePage: mocks.listReaderArticlePage,
+  loadReaderArticleView: mocks.loadReaderArticleView,
+  readerArticlePageLimit: () => 50,
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
@@ -98,6 +101,10 @@ describe("FolderPage", () => {
       timeZone: "DEFAULT",
     })
     mocks.listReaderArticlePage.mockResolvedValue({ articles: [], nextCursor: null })
+    mocks.loadReaderArticleView.mockResolvedValue({
+      riverArticles: [],
+      selectedArticle: null,
+    })
     mocks.listArticleCollectionsForUser.mockResolvedValue([])
     mocks.listUserFeedSubscriptions.mockResolvedValue([
       {

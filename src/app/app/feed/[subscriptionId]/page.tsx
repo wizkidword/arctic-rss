@@ -6,7 +6,11 @@ import { FeedUnsubscribeButton } from "@/components/feed-unsubscribe-button"
 import { ReaderSurface } from "@/components/reader-surface"
 import { Badge } from "@/components/ui/badge"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticlePage } from "@/lib/articles"
+import {
+  listReaderArticlePage,
+  loadReaderArticleView,
+  readerArticlePageLimit,
+} from "@/lib/articles"
 import { getUserFeedSubscription } from "@/lib/feed-subscriptions"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
@@ -40,12 +44,21 @@ export default async function FeedPage({
   const title = subscription.customTitle || subscription.feed.title
   const defaultView = normalizeDefaultView(settings.defaultView)
   const dateTimePreferences = normalizeDateTimePreferences(settings)
+  const displayMode = normalizeDisplayMode(settings.displayMode)
   const articlePage = await listReaderArticlePage({
     after: firstSearchParam(query.after),
     feedId: subscription.feedId,
+    limit: readerArticlePageLimit({ defaultView, displayMode }),
     userId: session.user.id,
   })
   const articleId = firstSearchParam(query.articleId)
+  const readerView = await loadReaderArticleView({
+    articleIds: articlePage.articles.map((article) => article.id),
+    defaultView,
+    displayMode,
+    selectedArticleId: articleId,
+    userId: session.user.id,
+  })
 
   return (
     <ReaderSurface
@@ -54,7 +67,7 @@ export default async function FeedPage({
       basePath={`/app/feed/${subscription.id}`}
       dateTimePreferences={dateTimePreferences}
       defaultView={defaultView}
-      displayMode={normalizeDisplayMode(settings.displayMode)}
+      displayMode={displayMode}
       description={
         subscription.feed.description ||
         subscription.feed.siteUrl ||
@@ -66,6 +79,8 @@ export default async function FeedPage({
         `/app/feed/${subscription.id}`,
         articlePage.nextCursor
       )}
+      riverArticles={readerView.riverArticles}
+      selectedArticle={readerView.selectedArticle ?? undefined}
       selectedArticleId={articleId}
       title={title}
       toolbar={

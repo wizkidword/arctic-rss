@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   deleteArticleForUserWithClient,
+  listReaderArticlePageWithClient,
   listPublicReaderArticlesWithClient,
   markArticlesReadWithClient,
   sanitizeArticleHtml,
@@ -133,7 +134,7 @@ describe("public article previews", () => {
     })
 
     expect(store.article.findMany).toHaveBeenCalledWith({
-      include: expect.objectContaining({
+      select: expect.objectContaining({
         feed: expect.any(Object),
         states: expect.objectContaining({
           where: { userId: "__public_guest_preview__" },
@@ -197,6 +198,74 @@ describe("public article previews", () => {
       "article-first",
       "article-unique",
     ])
+  })
+})
+
+describe("reader list projections", () => {
+  it("keeps article bodies and AI detail out of default reader pages", async () => {
+    const store = {
+      article: {
+        findMany: vi.fn().mockResolvedValue([
+          createArticleRecord({
+            id: "article-list",
+            title: "List-only article",
+          }),
+        ]),
+      },
+    }
+
+    const page = await listReaderArticlePageWithClient({
+      store,
+      userId: "user-1",
+    })
+    const query = store.article.findMany.mock.calls[0]?.[0]
+
+    expect(query.select).toEqual(
+      expect.objectContaining({
+        feed: expect.any(Object),
+        id: true,
+        states: expect.any(Object),
+        summary: true,
+        title: true,
+        url: true,
+      })
+    )
+    expect(query.select).not.toHaveProperty("aiSummaries")
+    expect(query.select).not.toHaveProperty("author")
+    expect(query.select).not.toHaveProperty("contentHtml")
+    expect(query.select).not.toHaveProperty("contentText")
+    expect(page.articles[0]).not.toHaveProperty("aiSummary")
+    expect(page.articles[0]).not.toHaveProperty("contentText")
+    expect(page.articles[0]).not.toHaveProperty("sanitizedContentHtml")
+  })
+
+  it("keeps a 50-item reader payload small when source articles have rich bodies", async () => {
+    const articleBody = `<p>${"Long reader body. ".repeat(1_000)}</p>`
+    const records = Array.from({ length: 51 }, (_, index) => ({
+      ...createArticleRecord({
+        id: `article-${index}`,
+        title: `Article ${index}`,
+      }),
+      contentHtml: articleBody,
+      contentText: articleBody,
+    }))
+    const store = {
+      article: {
+        findMany: vi.fn().mockResolvedValue(records),
+      },
+    }
+
+    const page = await listReaderArticlePageWithClient({
+      limit: 50,
+      store,
+      userId: "user-1",
+    })
+    const listPayloadBytes = Buffer.byteLength(JSON.stringify(page.articles))
+    const fullPayloadBytes = Buffer.byteLength(
+      JSON.stringify(records.slice(0, 50))
+    )
+
+    expect(listPayloadBytes).toBeLessThan(fullPayloadBytes / 20)
   })
 })
 
@@ -468,6 +537,7 @@ function createArticleRecord({
     author: null,
     contentHtml: null,
     contentText: "Readable public body",
+    createdAt: new Date("2026-07-02T13:00:00.000Z"),
     feed: {
       faviconUrl: null,
       id: "feed-public",

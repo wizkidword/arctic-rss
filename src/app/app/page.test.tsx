@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   hasUserFeedSubscriptions: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
   listReaderArticlePage: vi.fn(),
+  loadReaderArticleView: vi.fn(),
   listStoryClustersForArticleUser: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
@@ -45,6 +46,8 @@ vi.mock("@/lib/article-collections", () => ({
 
 vi.mock("@/lib/articles", () => ({
   listReaderArticlePage: mocks.listReaderArticlePage,
+  loadReaderArticleView: mocks.loadReaderArticleView,
+  readerArticlePageLimit: () => 50,
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
@@ -79,6 +82,16 @@ describe("AppHomePage", () => {
     mocks.hasUserFeedSubscriptions.mockResolvedValue(true)
     mocks.listArticleCollectionsForUser.mockResolvedValue([])
     mocks.listReaderArticlePage.mockResolvedValue({ articles: [], nextCursor: null })
+    mocks.loadReaderArticleView.mockImplementation(
+      ({ articleIds, selectedArticleId }) => ({
+        riverArticles: [],
+        selectedArticle: articleIds.includes(selectedArticleId)
+          ? { id: selectedArticleId }
+          : articleIds[0]
+            ? { id: articleIds[0] }
+            : null,
+      })
+    )
     mocks.listStoryClustersForArticleUser.mockResolvedValue([])
   })
 
@@ -102,6 +115,7 @@ describe("AppHomePage", () => {
     expect(mocks.hasUserFeedSubscriptions).toHaveBeenCalledWith("user-1")
     expect(mocks.listReaderArticlePage).toHaveBeenCalledWith({
       after: undefined,
+      limit: 50,
       userId: "user-1",
     })
   })
@@ -121,6 +135,13 @@ describe("AppHomePage", () => {
 
     expect(mocks.listStoryClustersForArticleUser).toHaveBeenCalledWith({
       articleId: "article-2",
+      userId: "user-1",
+    })
+    expect(mocks.loadReaderArticleView).toHaveBeenCalledWith({
+      articleIds: ["article-1", "article-2"],
+      defaultView: "CLASSIC",
+      displayMode: "THREE_PANE",
+      selectedArticleId: "article-2",
       userId: "user-1",
     })
     expect(markup).toContain('data-story-clusters="1"')

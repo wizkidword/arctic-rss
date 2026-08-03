@@ -6,6 +6,10 @@ import { auth } from "@/auth"
 import { ReaderSurface } from "@/components/reader-surface"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
 import {
+  loadReaderArticleView,
+  readerArticlePageLimit,
+} from "@/lib/articles"
+import {
   articleSearchHref,
   ARTICLE_SEARCH_QUERY_VERSION,
   listReaderArticleSearchPage,
@@ -33,18 +37,29 @@ export default async function SearchPage({
 
   const params = await searchParams
   const filters = parseArticleSearchFilters(params)
-  const [settings, articlePage, articleCollections, subscriptions, folders] =
+  const [settings, articleCollections, subscriptions, folders] =
     await Promise.all([
       getOrCreateUserSettings(session.user.id),
-      listReaderArticleSearchPage({
-        filters,
-        userId: session.user.id,
-      }),
       listArticleCollectionsForUser(session.user.id),
       listUserFeedSubscriptions(session.user.id),
       listUserFolders(session.user.id),
     ])
   const basePath = articleSearchHref(filters, { after: filters.after })
+  const defaultView = normalizeDefaultView(settings.defaultView)
+  const displayMode = normalizeDisplayMode(settings.displayMode)
+  const articlePage = await listReaderArticleSearchPage({
+    filters,
+    limit: readerArticlePageLimit({ defaultView, displayMode }),
+    userId: session.user.id,
+  })
+  const articleId = firstSearchParam(params.articleId)
+  const readerView = await loadReaderArticleView({
+    articleIds: articlePage.articles.map((article) => article.id),
+    defaultView,
+    displayMode,
+    selectedArticleId: articleId,
+    userId: session.user.id,
+  })
 
   return (
     <ReaderSurface
@@ -52,8 +67,8 @@ export default async function SearchPage({
       articleCollections={articleCollections}
       basePath={basePath}
       dateTimePreferences={normalizeDateTimePreferences(settings)}
-      defaultView={normalizeDefaultView(settings.defaultView)}
-      displayMode={normalizeDisplayMode(settings.displayMode)}
+      defaultView={defaultView}
+      displayMode={displayMode}
       description="Search the articles available to you by topic, source, folder, date, or reading state."
       emptyMessage={
         filters.query
@@ -65,7 +80,9 @@ export default async function SearchPage({
           ? articleSearchHref(filters, { after: articlePage.nextCursor })
           : undefined
       }
-      selectedArticleId={firstSearchParam(params.articleId)}
+      riverArticles={readerView.riverArticles}
+      selectedArticle={readerView.selectedArticle ?? undefined}
+      selectedArticleId={articleId}
       title="Search"
       toolbar={
         <ArticleSearchForm

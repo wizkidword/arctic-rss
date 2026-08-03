@@ -6,7 +6,10 @@ import {
   setArticleStarredAction,
 } from "@/app/app/actions"
 import { Button } from "@/components/ui/button"
-import { type ArticleReadScope, type ReaderArticle } from "@/lib/articles"
+import {
+  type ArticleReadScope,
+  type ReaderArticleListItem,
+} from "@/lib/articles"
 import { cn } from "@/lib/utils"
 
 export function ArticleStateControls({
@@ -14,7 +17,7 @@ export function ArticleStateControls({
   readOnlyReason,
   size = "sm",
 }: {
-  article: ReaderArticle
+  article: ReaderArticleListItem
   readOnlyReason?: string
   size?: "xs" | "sm"
 }) {

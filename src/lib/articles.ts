@@ -77,14 +77,38 @@ type ArticleStateStore = {
   }
 }
 
-type PublicReaderArticleStore = {
+type PublicReaderArticleListStore = {
   article: {
     findMany(args: {
-      include: unknown
+      select: Prisma.ArticleSelect
       orderBy: Array<{ publishedAt: "desc" } | { createdAt: "desc" }>
       take: number
       where: Prisma.ArticleWhereInput
-    }): Promise<ReaderArticleRecord[]>
+    }): Promise<ReaderArticleListRecord[]>
+  }
+}
+
+type ReaderArticleListStore = {
+  article: {
+    findMany(args: {
+      orderBy: Array<
+        | { publishedAt: { nulls: "last"; sort: "desc" } }
+        | { createdAt: "desc" }
+        | { id: "desc" }
+      >
+      select: Prisma.ArticleSelect
+      take: number
+      where: Prisma.ArticleWhereInput
+    }): Promise<ReaderArticleListRecord[]>
+  }
+}
+
+type ReaderArticleListItemsStore = {
+  article: {
+    findMany(args: {
+      select: Prisma.ArticleSelect
+      where: Prisma.ArticleWhereInput
+    }): Promise<ReaderArticleListRecord[]>
   }
 }
 
@@ -103,10 +127,7 @@ export type SanitizedArticleHtml = string & {
   readonly [sanitizedArticleHtmlBrand]: true
 }
 
-export type ReaderArticle = {
-  aiSummary: ReaderArticleAiSummary | null
-  author: string | null
-  contentText: string | null
+export type ReaderArticleListItem = {
   feedFaviconUrl: string | null
   feedId: string
   feedTitle: string
@@ -115,9 +136,35 @@ export type ReaderArticle = {
   isRead: boolean
   isStarred: boolean
   publishedAt: Date | null
+  summary: string | null
+  title: string
+  url: string
+}
+
+export type ReaderArticle = ReaderArticleListItem & {
+  aiSummary: ReaderArticleAiSummary | null
+  author: string | null
+  contentText: string | null
   readAt: Date | null
   sanitizedContentHtml: SanitizedArticleHtml | null
   starredAt: Date | null
+}
+
+type ReaderArticleListRecord = {
+  createdAt: Date
+  feed: {
+    faviconUrl: string | null
+    id: string
+    title: string
+  }
+  feedId: string
+  id: string
+  imageUrl: string | null
+  publishedAt: Date | null
+  states: Array<{
+    isRead: boolean
+    isStarred: boolean
+  }>
   summary: string | null
   title: string
   url: string
@@ -139,6 +186,7 @@ type ReaderArticleRecord = {
   author: string | null
   contentHtml: string | null
   contentText: string | null
+  createdAt: Date
   feed: {
     faviconUrl: string | null
     id: string
@@ -170,6 +218,14 @@ export type ArticleListFilters = {
   unreadOnly?: boolean
   userId: string
 }
+
+export type ReaderArticleViewData = {
+  riverArticles: ReaderArticle[]
+  selectedArticle: ReaderArticle | null
+}
+
+export const RIVER_READER_DETAIL_LIMIT = 10
+export const DEFAULT_READER_PAGE_LIMIT = 50
 
 export type ArticleReadScope =
   | {
@@ -292,30 +348,6 @@ export async function listReaderArticles({
   unreadOnly = false,
   userId,
 }: ArticleListFilters): Promise<ReaderArticle[]> {
-  const page = await listReaderArticlePage({
-    after,
-    collectionId,
-    feedId,
-    folderId,
-    limit,
-    starredOnly,
-    unreadOnly,
-    userId,
-  })
-
-  return page.articles
-}
-
-export async function listReaderArticlePage({
-  after,
-  collectionId,
-  feedId,
-  folderId,
-  limit = 50,
-  starredOnly = false,
-  unreadOnly = false,
-  userId,
-}: ArticleListFilters): Promise<ReaderArticlePage> {
   const boundedLimit = pageSize(limit)
   const cursor = decodeTimeCursor(after)
   const baseWhere = articleListWhere({
@@ -333,6 +365,75 @@ export async function listReaderArticlePage({
       { createdAt: "desc" },
       { id: "desc" },
     ],
+    take: boundedLimit,
+    where: cursor
+      ? {
+          AND: [baseWhere, afterTimeCursorWhere(cursor, "publishedAt")],
+        }
+      : baseWhere,
+  })
+
+  return articles.map((article) => mapReaderArticle(article))
+}
+
+/**
+ * Lists only the metadata needed for reader navigation and cards. Full article
+ * content is loaded separately for the selected item so normal reader pages do
+ * not transfer or sanitize every stored body.
+ */
+export async function listReaderArticlePage({
+  after,
+  collectionId,
+  feedId,
+  folderId,
+  limit = 50,
+  starredOnly = false,
+  unreadOnly = false,
+  userId,
+}: ArticleListFilters): Promise<ReaderArticlePage> {
+  return listReaderArticlePageWithClient({
+    after,
+    collectionId,
+    feedId,
+    folderId,
+    limit,
+    starredOnly,
+    unreadOnly,
+    store: getPrisma() as unknown as ReaderArticleListStore,
+    userId,
+  })
+}
+
+export async function listReaderArticlePageWithClient({
+  after,
+  collectionId,
+  feedId,
+  folderId,
+  limit = 50,
+  starredOnly = false,
+  store,
+  unreadOnly = false,
+  userId,
+}: ArticleListFilters & {
+  store: ReaderArticleListStore
+}): Promise<ReaderArticlePage> {
+  const boundedLimit = pageSize(limit)
+  const cursor = decodeTimeCursor(after)
+  const baseWhere = articleListWhere({
+    collectionId,
+    feedId,
+    folderId,
+    starredOnly,
+    unreadOnly,
+    userId,
+  })
+  const articles = await store.article.findMany({
+    orderBy: [
+      { publishedAt: { nulls: "last", sort: "desc" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ],
+    select: readerArticleListSelect(userId),
     take: boundedLimit + 1,
     where: cursor
       ? {
@@ -343,12 +444,70 @@ export async function listReaderArticlePage({
   const visibleArticles = articles.slice(0, boundedLimit)
 
   return {
-    articles: visibleArticles.map((article) => mapReaderArticle(article)),
+    articles: visibleArticles.map((article) => mapReaderArticleListItem(article)),
     nextCursor:
       articles.length > boundedLimit && visibleArticles.length
         ? encodeTimeCursor(visibleArticles.at(-1)!)
         : null,
   }
+}
+
+/**
+ * Resolves the visible reader detail without allowing a query parameter to
+ * bypass the list page's authorization and filter boundary. River mode is
+ * intentionally capped at ten detailed bodies per page.
+ */
+export async function loadReaderArticleView({
+  articleIds,
+  defaultView,
+  displayMode,
+  selectedArticleId,
+  userId,
+}: {
+  articleIds: string[]
+  defaultView: string
+  displayMode: string
+  selectedArticleId?: string
+  userId: string
+}): Promise<ReaderArticleViewData> {
+  const visibleArticleIds = [...new Set(articleIds)].filter(Boolean)
+  const selectedId =
+    selectedArticleId && visibleArticleIds.includes(selectedArticleId)
+      ? selectedArticleId
+      : visibleArticleIds[0]
+  const isRiver = displayMode === "READER" || defaultView === "RIVER"
+  const detailIds = isRiver
+    ? [
+        ...new Set([
+          ...visibleArticleIds.slice(0, RIVER_READER_DETAIL_LIMIT),
+          ...(selectedId ? [selectedId] : []),
+        ]),
+      ]
+    : selectedId
+      ? [selectedId]
+      : []
+  const details = await listReaderArticlesByIdsForUser({
+    articleIds: detailIds,
+    userId,
+  })
+
+  return {
+    riverArticles: isRiver ? details : [],
+    selectedArticle:
+      details.find((article) => article.id === selectedId) ?? null,
+  }
+}
+
+export function readerArticlePageLimit({
+  defaultView,
+  displayMode,
+}: {
+  defaultView: string
+  displayMode: string
+}) {
+  return displayMode === "READER" || defaultView === "RIVER"
+    ? RIVER_READER_DETAIL_LIMIT
+    : DEFAULT_READER_PAGE_LIMIT
 }
 
 /**
@@ -368,6 +527,60 @@ export async function listReaderArticlesByIdsForUser({
     articleIds,
     store: getPrisma(),
     userId,
+  })
+}
+
+/**
+ * Hydrates search result ids into reader list metadata while preserving the
+ * same subscription and archive authorization guard as the detail loader.
+ */
+export async function listReaderArticleListItemsByIdsForUser({
+  articleIds,
+  userId,
+}: {
+  articleIds: string[]
+  userId: string
+}): Promise<ReaderArticleListItem[]> {
+  return listReaderArticleListItemsByIdsForUserWithClient({
+    articleIds,
+    store: getPrisma() as unknown as ReaderArticleListItemsStore,
+    userId,
+  })
+}
+
+export async function listReaderArticleListItemsByIdsForUserWithClient({
+  articleIds,
+  store,
+  userId,
+}: {
+  articleIds: string[]
+  store: ReaderArticleListItemsStore
+  userId: string
+}): Promise<ReaderArticleListItem[]> {
+  const uniqueArticleIds = [...new Set(articleIds)].filter(Boolean)
+
+  if (!uniqueArticleIds.length) {
+    return []
+  }
+
+  const articles = await store.article.findMany({
+    select: readerArticleListSelect(userId),
+    where: {
+      AND: [
+        { id: { in: uniqueArticleIds } },
+        notArchivedArticleWhere(userId),
+        subscribedArticleWhere(userId),
+      ],
+    },
+  })
+  const articlesById = new Map(
+    articles.map((article) => [article.id, mapReaderArticleListItem(article)])
+  )
+
+  return uniqueArticleIds.flatMap((articleId) => {
+    const article = articlesById.get(articleId)
+
+    return article ? [article] : []
   })
 }
 
@@ -422,7 +635,7 @@ export async function listPublicReaderArticles({
   return listPublicReaderArticlesWithClient({
     limit,
     publicFeedUrls,
-    store: getPrisma() as unknown as PublicReaderArticleStore,
+    store: getPrisma() as unknown as PublicReaderArticleListStore,
   })
 }
 
@@ -433,14 +646,14 @@ export async function listPublicReaderArticlesWithClient({
 }: {
   limit?: number
   publicFeedUrls: readonly string[]
-  store: PublicReaderArticleStore
-}): Promise<ReaderArticle[]> {
+  store: PublicReaderArticleListStore
+}): Promise<ReaderArticleListItem[]> {
   const boundedLimit = pageSize(limit)
   const articles = await store.article.findMany({
-    include: readerArticleInclude(PUBLIC_GUEST_PREVIEW_USER_ID),
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     // A publisher can appear in more than one Discover entry. Fetch a small
     // buffer so deduplication still leaves a useful guest preview.
+    select: readerArticleListSelect(PUBLIC_GUEST_PREVIEW_USER_ID),
     take: boundedLimit * 3,
     where: {
       feed: {
@@ -454,7 +667,7 @@ export async function listPublicReaderArticlesWithClient({
   const seenUrls = new Set<string>()
 
   return articles
-    .map((article) => mapReaderArticle(article))
+    .map((article) => mapReaderArticleListItem(article))
     .filter((article) => {
       if (seenUrls.has(article.url)) {
         return false
@@ -464,6 +677,36 @@ export async function listPublicReaderArticlesWithClient({
       return true
     })
     .slice(0, boundedLimit)
+}
+
+export async function getPublicReaderArticle({
+  articleId,
+}: {
+  articleId: string
+}): Promise<ReaderArticle | null> {
+  const directory = await getDiscoverDirectory()
+  const publicFeedUrls = [
+    ...new Set(
+      directory.feeds.flatMap((feed) => [feed.url, ...(feed.aliases ?? [])])
+    ),
+  ]
+  const article = await getPrisma().article.findFirst({
+    include: readerArticleInclude(PUBLIC_GUEST_PREVIEW_USER_ID),
+    where: {
+      AND: [
+        { id: articleId },
+        {
+          feed: {
+            feedUrl: {
+              in: publicFeedUrls,
+            },
+          },
+        },
+      ],
+    },
+  })
+
+  return article ? mapReaderArticle(article) : null
 }
 
 export async function getReaderArticleForUser({
@@ -557,7 +800,7 @@ export async function countUnreadArticlesForFeed(userId: string, feedId: string)
 }
 
 export type ReaderArticlePage = {
-  articles: ReaderArticle[]
+  articles: ReaderArticleListItem[]
   nextCursor: string | null
 }
 
@@ -816,6 +1059,36 @@ function normalizeBulletSummary(value: unknown) {
   return value.filter((bullet): bullet is string => typeof bullet === "string")
 }
 
+function readerArticleListSelect(userId: string) {
+  return {
+    feed: {
+      select: {
+        faviconUrl: true,
+        id: true,
+        title: true,
+      },
+    },
+    feedId: true,
+    createdAt: true,
+    id: true,
+    imageUrl: true,
+    publishedAt: true,
+    states: {
+      select: {
+        isRead: true,
+        isStarred: true,
+      },
+      take: 1,
+      where: {
+        userId,
+      },
+    },
+    summary: true,
+    title: true,
+    url: true,
+  } satisfies Prisma.ArticleSelect
+}
+
 function readerArticleInclude(userId: string) {
   return {
     aiSummaries: {
@@ -852,11 +1125,31 @@ function readerArticleInclude(userId: string) {
   } satisfies Prisma.ArticleInclude
 }
 
-function mapReaderArticle(article: ReaderArticleRecord): ReaderArticle {
+function mapReaderArticleListItem(
+  article: ReaderArticleListRecord
+): ReaderArticleListItem {
   const state = article.states[0]
+
+  return {
+    feedFaviconUrl: article.feed.faviconUrl,
+    feedId: article.feedId,
+    feedTitle: article.feed.title,
+    id: article.id,
+    imageUrl: imageProxyUrl(article.imageUrl),
+    isRead: state?.isRead ?? false,
+    isStarred: state?.isStarred ?? false,
+    publishedAt: article.publishedAt,
+    summary: article.summary,
+    title: article.title,
+    url: article.url,
+  }
+}
+
+function mapReaderArticle(article: ReaderArticleRecord): ReaderArticle {
   const aiSummary = article.aiSummaries[0]
 
   return {
+    ...mapReaderArticleListItem(article),
     aiSummary: aiSummary
       ? {
           bulletSummary: normalizeBulletSummary(aiSummary.bulletSummary),
@@ -873,20 +1166,9 @@ function mapReaderArticle(article: ReaderArticleRecord): ReaderArticle {
       : null,
     author: article.author,
     contentText: article.contentText,
-    feedFaviconUrl: article.feed.faviconUrl,
-    feedId: article.feedId,
-    feedTitle: article.feed.title,
-    id: article.id,
-    imageUrl: imageProxyUrl(article.imageUrl),
-    isRead: state?.isRead ?? false,
-    isStarred: state?.isStarred ?? false,
-    publishedAt: article.publishedAt,
-    readAt: state?.readAt ?? null,
+    readAt: article.states[0]?.readAt ?? null,
     sanitizedContentHtml: sanitizeArticleHtml(article.contentHtml),
-    starredAt: state?.starredAt ?? null,
-    summary: article.summary,
-    title: article.title,
-    url: article.url,
+    starredAt: article.states[0]?.starredAt ?? null,
   }
 }
 

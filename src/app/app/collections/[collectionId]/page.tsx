@@ -5,7 +5,11 @@ import { PodcastEpisodeList } from "@/components/podcast-episode-list"
 import { ReaderSurface } from "@/components/reader-surface"
 import { Badge } from "@/components/ui/badge"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticlePage } from "@/lib/articles"
+import {
+  listReaderArticlePage,
+  loadReaderArticleView,
+  readerArticlePageLimit,
+} from "@/lib/articles"
 import { listCollectionPodcastEpisodesForUser } from "@/lib/podcasts"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
@@ -26,15 +30,10 @@ export default async function CollectionPage({
 
   const { collectionId } = await params
   const query = await searchParams
-  const [collections, settings, articlePage, podcastEpisodes] =
+  const [collections, settings, podcastEpisodes] =
     await Promise.all([
     listArticleCollectionsForUser(session.user.id),
     getOrCreateUserSettings(session.user.id),
-    listReaderArticlePage({
-      after: firstSearchParam(query.after),
-      collectionId,
-      userId: session.user.id,
-    }),
     listCollectionPodcastEpisodesForUser({
       collectionId,
       userId: session.user.id,
@@ -51,6 +50,15 @@ export default async function CollectionPage({
     name: collection.name,
   }
   const dateTimePreferences = normalizeDateTimePreferences(settings)
+  const defaultView = normalizeDefaultView(settings.defaultView)
+  const displayMode = normalizeDisplayMode(settings.displayMode)
+  const articleId = firstSearchParam(query.articleId)
+  const articlePage = await listReaderArticlePage({
+    after: firstSearchParam(query.after),
+    collectionId,
+    limit: readerArticlePageLimit({ defaultView, displayMode }),
+    userId: session.user.id,
+  })
 
   if (!articlePage.articles.length && podcastEpisodes.length) {
     return (
@@ -80,6 +88,14 @@ export default async function CollectionPage({
     )
   }
 
+  const readerView = await loadReaderArticleView({
+    articleIds: articlePage.articles.map((article) => article.id),
+    defaultView,
+    displayMode,
+    selectedArticleId: articleId,
+    userId: session.user.id,
+  })
+
   return (
     <>
       <ReaderSurface
@@ -88,15 +104,17 @@ export default async function CollectionPage({
         basePath={`/app/collections/${collection.id}`}
         currentCollection={currentCollection}
         dateTimePreferences={dateTimePreferences}
-        defaultView={normalizeDefaultView(settings.defaultView)}
-        displayMode={normalizeDisplayMode(settings.displayMode)}
+        defaultView={defaultView}
+        displayMode={displayMode}
         description="Saved articles and podcast episodes in this collection."
         emptyMessage="Save articles or podcast episodes to this collection from their menus."
         nextPageHref={nextPageHref(
           `/app/collections/${collection.id}`,
           articlePage.nextCursor
         )}
-        selectedArticleId={firstSearchParam(query.articleId)}
+        riverArticles={readerView.riverArticles}
+        selectedArticle={readerView.selectedArticle ?? undefined}
+        selectedArticleId={articleId}
         title={collection.name}
         toolbar={
           <Badge variant="secondary">

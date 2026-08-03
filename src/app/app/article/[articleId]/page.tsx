@@ -6,8 +6,12 @@ import { ReaderSurface } from "@/components/reader-surface"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
 import {
   getReaderArticleForUser,
-  listReaderArticles,
+  listReaderArticlePage,
+  listReaderArticlesByIdsForUser,
+  readerArticlePageLimit,
   type ReaderArticle,
+  type ReaderArticleListItem,
+  RIVER_READER_DETAIL_LIMIT,
 } from "@/lib/articles"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
@@ -29,13 +33,10 @@ export default async function ArticleDetailPage({
 
   const { articleId } = await params
   const chatEnabled = isChatEnabled()
-  const [settings, selectedArticle, articles, articleCollections, chatRooms, storyClusters] = await Promise.all([
+  const [settings, selectedArticle, articleCollections, chatRooms, storyClusters] = await Promise.all([
     getOrCreateUserSettings(session.user.id),
     getReaderArticleForUser({
       articleId,
-      userId: session.user.id,
-    }),
-    listReaderArticles({
       userId: session.user.id,
     }),
     listArticleCollectionsForUser(session.user.id),
@@ -55,7 +56,22 @@ export default async function ArticleDetailPage({
     notFound()
   }
 
-  const readerArticles = mergeSelectedArticle(selectedArticle, articles)
+  const defaultView = normalizeDefaultView(settings.defaultView)
+  const displayMode = normalizeDisplayMode(settings.displayMode)
+  const articlePage = await listReaderArticlePage({
+    limit: readerArticlePageLimit({ defaultView, displayMode }),
+    userId: session.user.id,
+  })
+  const readerArticles = mergeSelectedArticle(selectedArticle, articlePage.articles)
+  const riverArticles =
+    displayMode === "READER" || defaultView === "RIVER"
+      ? await listReaderArticlesByIdsForUser({
+          articleIds: readerArticles
+            .slice(0, RIVER_READER_DETAIL_LIMIT)
+            .map((article) => article.id),
+          userId: session.user.id,
+        })
+      : []
 
   return (
     <ReaderSurface
@@ -63,10 +79,12 @@ export default async function ArticleDetailPage({
       articleCollections={articleCollections}
       basePath="/app"
       dateTimePreferences={normalizeDateTimePreferences(settings)}
-      defaultView={normalizeDefaultView(settings.defaultView)}
-      displayMode={normalizeDisplayMode(settings.displayMode)}
+      defaultView={defaultView}
+      displayMode={displayMode}
       description={`${selectedArticle.feedTitle} - stable article view.`}
       emptyMessage="That article is not available in your active subscriptions."
+      riverArticles={riverArticles}
+      selectedArticle={selectedArticle}
       selectedArticleId={selectedArticle.id}
       storyClusters={storyClusters}
       title="Article"
@@ -81,7 +99,7 @@ export default async function ArticleDetailPage({
 
 function mergeSelectedArticle(
   selectedArticle: ReaderArticle,
-  articles: ReaderArticle[]
+  articles: ReaderArticleListItem[]
 ) {
   if (articles.some((article) => article.id === selectedArticle.id)) {
     return articles

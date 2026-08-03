@@ -25,7 +25,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { type ArticleReadScope, type ReaderArticle } from "@/lib/articles"
+import {
+  type ArticleReadScope,
+  type ReaderArticle,
+  type ReaderArticleListItem,
+} from "@/lib/articles"
 import { imageProxyUrl } from "@/lib/image-proxy-url"
 import { type DefaultView } from "@/lib/preferences"
 import {
@@ -58,12 +62,14 @@ export function ReaderSurface({
   markAllReadScope,
   nextPageHref,
   readOnlyActionReason,
+  riverArticles,
+  selectedArticle: selectedArticleDetail,
   selectedArticleId,
   storyClusters,
   title,
   toolbar,
 }: {
-  articles: ReaderArticle[]
+  articles: ReaderArticleListItem[]
   articleCollections?: ArticleCollectionPickerItem[]
   basePath: string
   currentCollection?: ActiveArticleCollection
@@ -75,6 +81,8 @@ export function ReaderSurface({
   markAllReadScope?: ArticleReadScope
   nextPageHref?: string
   readOnlyActionReason?: string
+  riverArticles?: ReaderArticle[]
+  selectedArticle?: ReaderArticle
   selectedArticleId?: string
   storyClusters?: StoryClusterPresentation[]
   title: string
@@ -83,7 +91,10 @@ export function ReaderSurface({
   const explicitlySelectedArticle = selectedArticleId
     ? articles.find((article) => article.id === selectedArticleId)
     : undefined
-  const selectedArticle = explicitlySelectedArticle ?? articles[0]
+  const selectedListArticle = explicitlySelectedArticle ?? articles[0]
+  const selectedArticle =
+    selectedArticleDetail ??
+    (isReaderArticle(selectedListArticle) ? selectedListArticle : undefined)
   const normalizedDateTimePreferences =
     normalizeDateTimePreferences(dateTimePreferences)
   const keyboardArticles = articles.map((article) => ({
@@ -147,6 +158,7 @@ export function ReaderSurface({
         emptyMessage,
         hasExplicitSelection: Boolean(explicitlySelectedArticle),
         readOnlyActionReason,
+        riverArticles,
         selectedArticle,
         storyClusters,
         trackSelectedArticleRead:
@@ -177,12 +189,13 @@ function renderReaderView({
   emptyMessage,
   hasExplicitSelection,
   readOnlyActionReason,
+  riverArticles,
   selectedArticle,
   storyClusters,
   trackSelectedArticleRead,
 }: {
   articleCollections: ArticleCollectionPickerItem[]
-  articles: ReaderArticle[]
+  articles: ReaderArticleListItem[]
   basePath: string
   currentCollection?: ActiveArticleCollection
   dateTimePreferences: DateTimePreferences
@@ -191,6 +204,7 @@ function renderReaderView({
   emptyMessage: string
   hasExplicitSelection: boolean
   readOnlyActionReason?: string
+  riverArticles?: ReaderArticle[]
   selectedArticle: ReaderArticle | undefined
   storyClusters?: StoryClusterPresentation[]
   trackSelectedArticleRead: boolean
@@ -207,9 +221,14 @@ function renderReaderView({
   }
 
   if (displayMode === "READER" || defaultView === "RIVER") {
+    const visibleRiverArticles =
+      riverArticles?.length
+        ? riverArticles
+        : articles.filter(isReaderArticle)
+
     return (
       <section className="flex flex-col gap-4">
-        {articles.map((article) => (
+        {visibleRiverArticles.map((article) => (
           <ArticleReaderCard
             article={article}
             articleCollections={articleCollections}
@@ -311,7 +330,7 @@ function ArticleListItem({
   readOnlyActionReason,
   selected,
 }: {
-  article: ReaderArticle
+  article: ReaderArticleListItem
   articleCollections: ArticleCollectionPickerItem[]
   basePath: string
   compact: boolean
@@ -376,7 +395,7 @@ function CardArticleGrid({
   readOnlyActionReason,
   selectedArticleId,
 }: {
-  articles: ReaderArticle[]
+  articles: ReaderArticleListItem[]
   articleCollections: ArticleCollectionPickerItem[]
   basePath: string
   currentCollection?: ActiveArticleCollection
@@ -571,7 +590,7 @@ function YouTubeVideoEmbed({
 }
 
 function articleContextMenuArticle(
-  article: ReaderArticle
+  article: ReaderArticleListItem
 ): ArticleContextMenuArticle {
   return {
     feedId: article.feedId,
@@ -581,6 +600,12 @@ function articleContextMenuArticle(
     title: article.title,
     url: article.url,
   }
+}
+
+function isReaderArticle(
+  article: ReaderArticleListItem | undefined
+): article is ReaderArticle {
+  return Boolean(article && "sanitizedContentHtml" in article)
 }
 
 function ArticleBody({ article }: { article: ReaderArticle }) {

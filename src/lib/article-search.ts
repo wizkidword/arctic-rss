@@ -1,7 +1,7 @@
 import { pageSize } from "./time-cursor"
 import {
-  listReaderArticlesByIdsForUserWithClient,
-  type ReaderArticle,
+  listReaderArticleListItemsByIdsForUserWithClient,
+  type ReaderArticleListItem,
 } from "./articles"
 import {
   ARTICLE_SEARCH_QUERY_VERSION,
@@ -21,7 +21,7 @@ export {
 const MAX_SEARCH_QUERY_LENGTH = 200
 
 export type ReaderArticleSearchPage = {
-  articles: ReaderArticle[]
+  articles: ReaderArticleListItem[]
   nextCursor: string | null
 }
 
@@ -33,7 +33,7 @@ type ArticleSearchRow = {
 }
 
 type ReaderArticleSearchStore = Parameters<
-  typeof listReaderArticlesByIdsForUserWithClient
+  typeof listReaderArticleListItemsByIdsForUserWithClient
 >[0]["store"] & {
   $queryRaw<T>(
     query: TemplateStringsArray,
@@ -283,7 +283,7 @@ export async function listReaderArticleSearchPageWithClient({
     LIMIT ${boundedLimit + 1}
   `
   const visibleRows = rows.slice(0, boundedLimit)
-  const articles = await listReaderArticlesByIdsForUserWithClient({
+  const articles = await listReaderArticleListItemsByIdsForUserWithClient({
     articleIds: visibleRows.map((row) => row.id),
     store,
     userId,

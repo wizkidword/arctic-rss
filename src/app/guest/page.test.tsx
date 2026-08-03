@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  getPublicReaderArticle: vi.fn(),
   listPublicReaderArticles: vi.fn(),
 }))
 
@@ -29,6 +30,7 @@ vi.mock("@/components/reader-surface", () => ({
 }))
 
 vi.mock("@/lib/articles", () => ({
+  getPublicReaderArticle: mocks.getPublicReaderArticle,
   listPublicReaderArticles: mocks.listPublicReaderArticles,
 }))
 
@@ -39,6 +41,7 @@ describe("GuestHomePage", () => {
     mocks.listPublicReaderArticles.mockResolvedValue([
       { id: "article-1", title: "Public Article" },
     ])
+    mocks.getPublicReaderArticle.mockResolvedValue(null)
   })
 
   it("renders public reader previews in read-only guest mode", async () => {

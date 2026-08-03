@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   listArticleCollectionsForUser: vi.fn(),
   listCollectionPodcastEpisodesForUser: vi.fn(),
   listReaderArticlePage: vi.fn(),
+  loadReaderArticleView: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NOT_FOUND")
   }),
@@ -71,6 +72,8 @@ vi.mock("@/lib/article-collections", () => ({
 
 vi.mock("@/lib/articles", () => ({
   listReaderArticlePage: mocks.listReaderArticlePage,
+  loadReaderArticleView: mocks.loadReaderArticleView,
+  readerArticlePageLimit: () => 50,
 }))
 
 vi.mock("@/lib/podcasts", () => ({
@@ -116,6 +119,10 @@ describe("CollectionPage", () => {
       articles: [{ id: "article-1" }],
       nextCursor: null,
     })
+    mocks.loadReaderArticleView.mockResolvedValue({
+      riverArticles: [],
+      selectedArticle: null,
+    })
     mocks.listCollectionPodcastEpisodesForUser.mockResolvedValue([])
   })
 
@@ -132,6 +139,7 @@ describe("CollectionPage", () => {
     expect(mocks.listReaderArticlePage).toHaveBeenCalledWith({
       after: undefined,
       collectionId: "collection-read-later",
+      limit: 50,
       userId: "user-1",
     })
     expect(mocks.listCollectionPodcastEpisodesForUser).toHaveBeenCalledWith({

@@ -3,7 +3,11 @@ import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { ReaderSurface } from "@/components/reader-surface"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticlePage } from "@/lib/articles"
+import {
+  listReaderArticlePage,
+  loadReaderArticleView,
+  readerArticlePageLimit,
+} from "@/lib/articles"
 import { hasUserFeedSubscriptions } from "@/lib/feed-subscriptions"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
@@ -28,20 +32,27 @@ export default async function AppHomePage({
   }
 
   const params = await searchParams
-  const [settings, articlePage, articleCollections] = await Promise.all([
-    getOrCreateUserSettings(session.user.id),
+  const settings = await getOrCreateUserSettings(session.user.id)
+  const defaultView = normalizeDefaultView(settings.defaultView)
+  const dateTimePreferences = normalizeDateTimePreferences(settings)
+  const displayMode = normalizeDisplayMode(settings.displayMode)
+  const [articlePage, articleCollections] = await Promise.all([
     listReaderArticlePage({
       after: firstSearchParam(params.after),
+      limit: readerArticlePageLimit({ defaultView, displayMode }),
       userId: session.user.id,
     }),
     listArticleCollectionsForUser(session.user.id),
   ])
-  const defaultView = normalizeDefaultView(settings.defaultView)
-  const dateTimePreferences = normalizeDateTimePreferences(settings)
   const articleId = firstSearchParam(params.articleId)
-  const selectedArticle = articlePage.articles.find(
-    (article) => article.id === articleId
-  ) ?? articlePage.articles[0]
+  const readerView = await loadReaderArticleView({
+    articleIds: articlePage.articles.map((article) => article.id),
+    defaultView,
+    displayMode,
+    selectedArticleId: articleId,
+    userId: session.user.id,
+  })
+  const selectedArticle = readerView.selectedArticle
   const storyClusters = selectedArticle
     ? await listStoryClustersForArticleUser({
         articleId: selectedArticle.id,
@@ -56,11 +67,13 @@ export default async function AppHomePage({
       basePath="/app"
       dateTimePreferences={dateTimePreferences}
       defaultView={defaultView}
-      displayMode={normalizeDisplayMode(settings.displayMode)}
+      displayMode={displayMode}
       description="Recent articles from every active feed subscription."
       emptyMessage="Add or refresh a feed to start filling the reader."
       markAllReadScope={{ type: "all" }}
       nextPageHref={nextPageHref("/app", articlePage.nextCursor)}
+      riverArticles={readerView.riverArticles}
+      selectedArticle={selectedArticle ?? undefined}
       selectedArticleId={articleId}
       storyClusters={storyClusters}
       title="All Articles"

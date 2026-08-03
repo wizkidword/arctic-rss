@@ -3,7 +3,11 @@ import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { ReaderSurface } from "@/components/reader-surface"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticlePage } from "@/lib/articles"
+import {
+  listReaderArticlePage,
+  loadReaderArticleView,
+  readerArticlePageLimit,
+} from "@/lib/articles"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
@@ -20,15 +24,26 @@ export default async function UnreadPage({
   }
 
   const params = await searchParams
-  const [settings, articlePage, articleCollections] = await Promise.all([
-    getOrCreateUserSettings(session.user.id),
+  const settings = await getOrCreateUserSettings(session.user.id)
+  const defaultView = normalizeDefaultView(settings.defaultView)
+  const displayMode = normalizeDisplayMode(settings.displayMode)
+  const [articlePage, articleCollections] = await Promise.all([
     listReaderArticlePage({
       after: firstSearchParam(params.after),
+      limit: readerArticlePageLimit({ defaultView, displayMode }),
       unreadOnly: true,
       userId: session.user.id,
     }),
     listArticleCollectionsForUser(session.user.id),
   ])
+  const articleId = firstSearchParam(params.articleId)
+  const readerView = await loadReaderArticleView({
+    articleIds: articlePage.articles.map((article) => article.id),
+    defaultView,
+    displayMode,
+    selectedArticleId: articleId,
+    userId: session.user.id,
+  })
 
   return (
     <ReaderSurface
@@ -36,13 +51,15 @@ export default async function UnreadPage({
       articleCollections={articleCollections}
       basePath="/app/unread"
       dateTimePreferences={normalizeDateTimePreferences(settings)}
-      defaultView={normalizeDefaultView(settings.defaultView)}
-      displayMode={normalizeDisplayMode(settings.displayMode)}
+      defaultView={defaultView}
+      displayMode={displayMode}
       description="Unread articles from every active feed subscription."
       emptyMessage="No unread articles."
       markAllReadScope={{ type: "all" }}
       nextPageHref={nextPageHref("/app/unread", articlePage.nextCursor)}
-      selectedArticleId={firstSearchParam(params.articleId)}
+      riverArticles={readerView.riverArticles}
+      selectedArticle={readerView.selectedArticle ?? undefined}
+      selectedArticleId={articleId}
       title="Unread"
     />
   )

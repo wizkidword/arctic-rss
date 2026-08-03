@@ -12,9 +12,36 @@ vi.mock("./db", () => ({
   }),
 }))
 
-import { getReaderArticleForUser, listReaderArticles } from "./articles"
+import {
+  getReaderArticleForUser,
+  listReaderArticles,
+  loadReaderArticleView,
+  readerArticlePageLimit,
+  RIVER_READER_DETAIL_LIMIT,
+} from "./articles"
 
 describe("reader articles", () => {
+  it("uses the bounded page size for River and reader display modes", () => {
+    expect(
+      readerArticlePageLimit({
+        defaultView: "RIVER",
+        displayMode: "THREE_PANE",
+      })
+    ).toBe(RIVER_READER_DETAIL_LIMIT)
+    expect(
+      readerArticlePageLimit({
+        defaultView: "CLASSIC",
+        displayMode: "READER",
+      })
+    ).toBe(RIVER_READER_DETAIL_LIMIT)
+    expect(
+      readerArticlePageLimit({
+        defaultView: "CLASSIC",
+        displayMode: "THREE_PANE",
+      })
+    ).toBe(50)
+  })
+
   it("fetches a single subscribed article for stable detail routes", async () => {
     findFirst.mockResolvedValue({
       aiSummaries: [],
@@ -240,4 +267,63 @@ describe("reader articles", () => {
       })
     )
   })
+
+  it("caps River mode detail hydration while preserving an explicit selection", async () => {
+    const articleIds = Array.from({ length: 14 }, (_, index) =>
+      `article-${index + 1}`
+    )
+    findMany.mockResolvedValue(
+      articleIds.map((id) => createReaderArticleRecord(id))
+    )
+
+    const view = await loadReaderArticleView({
+      articleIds,
+      defaultView: "RIVER",
+      displayMode: "THREE_PANE",
+      selectedArticleId: "article-14",
+      userId: "user-1",
+    })
+
+    expect(findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            {
+              id: {
+                in: [
+                  ...articleIds.slice(0, RIVER_READER_DETAIL_LIMIT),
+                  "article-14",
+                ],
+              },
+            },
+          ]),
+        }),
+      })
+    )
+    expect(view.riverArticles).toHaveLength(RIVER_READER_DETAIL_LIMIT + 1)
+    expect(view.selectedArticle?.id).toBe("article-14")
+  })
 })
+
+function createReaderArticleRecord(id: string) {
+  return {
+    aiSummaries: [],
+    author: null,
+    contentHtml: `<p>${id}</p>`,
+    contentText: null,
+    createdAt: new Date("2026-07-03T12:00:00.000Z"),
+    feed: {
+      faviconUrl: null,
+      id: "feed-1",
+      title: "Example Feed",
+    },
+    feedId: "feed-1",
+    id,
+    imageUrl: null,
+    publishedAt: null,
+    states: [],
+    summary: null,
+    title: id,
+    url: `https://example.com/${id}`,
+  }
+}

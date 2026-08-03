@@ -6,7 +6,11 @@ import { ReaderSurface } from "@/components/reader-surface"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
-import { listReaderArticlePage } from "@/lib/articles"
+import {
+  listReaderArticlePage,
+  loadReaderArticleView,
+  readerArticlePageLimit,
+} from "@/lib/articles"
 import {
   listUserFeedSubscriptions,
   type FeedSubscriptionNavItem,
@@ -34,17 +38,11 @@ export default async function FolderPage({
   const [
     folder,
     settings,
-    articlePage,
     articleCollections,
     subscriptions,
   ] = await Promise.all([
     getUserFolder(session.user.id, folderId),
     getOrCreateUserSettings(session.user.id),
-    listReaderArticlePage({
-      after: firstSearchParam(query.after),
-      folderId,
-      userId: session.user.id,
-    }),
     listArticleCollectionsForUser(session.user.id),
     listUserFeedSubscriptions(session.user.id),
   ])
@@ -56,6 +54,22 @@ export default async function FolderPage({
   const folderSubscriptions = subscriptions.filter(
     (subscription) => subscription.folderId === folder.id
   )
+  const defaultView = normalizeDefaultView(settings.defaultView)
+  const displayMode = normalizeDisplayMode(settings.displayMode)
+  const articleId = firstSearchParam(query.articleId)
+  const articlePage = await listReaderArticlePage({
+    after: firstSearchParam(query.after),
+    folderId,
+    limit: readerArticlePageLimit({ defaultView, displayMode }),
+    userId: session.user.id,
+  })
+  const readerView = await loadReaderArticleView({
+    articleIds: articlePage.articles.map((article) => article.id),
+    defaultView,
+    displayMode,
+    selectedArticleId: articleId,
+    userId: session.user.id,
+  })
 
   return (
     <ReaderSurface
@@ -63,8 +77,8 @@ export default async function FolderPage({
       articleCollections={articleCollections}
       basePath={`/app/folder/${folder.id}`}
       dateTimePreferences={normalizeDateTimePreferences(settings)}
-      defaultView={normalizeDefaultView(settings.defaultView)}
-      displayMode={normalizeDisplayMode(settings.displayMode)}
+      defaultView={defaultView}
+      displayMode={displayMode}
       description={`${folder.subscriptionCount} ${
         folder.subscriptionCount === 1 ? "feed" : "feeds"
       } in this folder.`}
@@ -74,7 +88,9 @@ export default async function FolderPage({
         `/app/folder/${folder.id}`,
         articlePage.nextCursor
       )}
-      selectedArticleId={firstSearchParam(query.articleId)}
+      riverArticles={readerView.riverArticles}
+      selectedArticle={readerView.selectedArticle ?? undefined}
+      selectedArticleId={articleId}
       title={folder.name}
       toolbar={
         <>
