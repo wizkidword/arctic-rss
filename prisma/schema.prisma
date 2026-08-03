@@ -646,20 +646,23 @@ model PodcastEpisodeState {
 }
 
 model Article {
-  id           String    @id @default(cuid())
-  feedId       String
-  externalId   String
-  title        String
-  url          String
-  canonicalUrl String?
-  author       String?
-  summary      String?
-  contentHtml  String?
-  contentText  String?
-  imageUrl     String?
-  publishedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id             String                   @id @default(cuid())
+  feedId         String
+  externalId     String
+  title          String
+  url            String
+  canonicalUrl   String?
+  author         String?
+  summary        String?
+  contentHtml    String?
+  contentText    String?
+  // PostgreSQL maintains this weighted vector. Prisma intentionally treats the
+  // native type as unsupported; search queries access it through reviewed SQL.
+  searchDocument Unsupported("tsvector")? @default(dbgenerated())
+  imageUrl       String?
+  publishedAt    DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
 
   feed                Feed                    @relation(fields: [feedId], references: [id], onDelete: Cascade)
   states              ArticleState[]
@@ -673,6 +676,7 @@ model Article {
 
   @@unique([feedId, externalId])
   @@index([feedId, publishedAt])
+  @@index([searchDocument], type: Gin)
 }
 
 model ArticleState {

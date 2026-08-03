@@ -17,6 +17,7 @@
     "compose:verify-env": "node scripts/ci/assert-compose-service-environments.mjs",
     "build": "next build",
     "image-proxy:measure": "tsx scripts/measure-image-proxy.ts",
+    "search:measure": "tsx scripts/measure-article-search.ts",
     "runtime:build": "node scripts/build-runtime.mjs",
     "start": "next start",
     "lint": "eslint",

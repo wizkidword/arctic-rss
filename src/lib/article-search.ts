@@ -19,6 +19,7 @@ export {
 } from "./article-search-types"
 
 const MAX_SEARCH_QUERY_LENGTH = 200
+export const ARTICLE_SEARCH_SLOW_QUERY_THRESHOLD_MS = 250
 
 export type ReaderArticleSearchPage = {
   articles: ReaderArticleListItem[]
@@ -168,7 +169,11 @@ export async function listReaderArticleSearchPageWithClient({
   const cursor = decodeArticleSearchCursor(filters.after)
   const state = normalizeSearchState(filters.state)
   const sourcePattern = `%${escapeLikeTerm(query)}%`
-  const rows = await store.$queryRaw<ArticleSearchRow[]>`
+  const queryStartedAt = performance.now()
+  let rows: ArticleSearchRow[]
+
+  try {
+    rows = await store.$queryRaw<ArticleSearchRow[]>`
     WITH search_terms AS (
       SELECT websearch_to_tsquery('simple'::regconfig, ${query}) AS "terms"
     ),
@@ -178,11 +183,8 @@ export async function listReaderArticleSearchPageWithClient({
         "Article"."createdAt" AS "createdAt",
         "Article"."publishedAt" AS "publishedAt",
         (
-          ts_rank_cd(
-            setweight(to_tsvector('simple'::regconfig, coalesce("Article"."title", '')), 'A')
-            || setweight(to_tsvector('simple'::regconfig, coalesce("Article"."author", '')), 'B')
-            || setweight(to_tsvector('simple'::regconfig, coalesce("Article"."summary", '')), 'C')
-            || setweight(to_tsvector('simple'::regconfig, coalesce("Article"."contentText", '')), 'D'),
+          ts_rank(
+            "Article"."searchDocument",
             search_terms."terms",
             32
           )
@@ -231,12 +233,7 @@ export async function listReaderArticleSearchPageWithClient({
           OR (${state} = 'starred' AND "ArticleState"."isStarred" = true)
         )
         AND (
-          (
-            setweight(to_tsvector('simple'::regconfig, coalesce("Article"."title", '')), 'A')
-            || setweight(to_tsvector('simple'::regconfig, coalesce("Article"."author", '')), 'B')
-            || setweight(to_tsvector('simple'::regconfig, coalesce("Article"."summary", '')), 'C')
-            || setweight(to_tsvector('simple'::regconfig, coalesce("Article"."contentText", '')), 'D')
-          ) @@ search_terms."terms"
+          "Article"."searchDocument" @@ search_terms."terms"
           OR "Feed"."title" ILIKE ${sourcePattern}
           OR COALESCE("FeedSubscription"."customTitle", '') ILIKE ${sourcePattern}
           OR COALESCE("Folder"."name", '') ILIKE ${sourcePattern}
@@ -282,6 +279,21 @@ export async function listReaderArticleSearchPageWithClient({
     ORDER BY "rank" DESC, "publishedAt" DESC NULLS LAST, "createdAt" DESC, "id" DESC
     LIMIT ${boundedLimit + 1}
   `
+  } catch (error) {
+    logSlowArticleSearch({
+      durationMs: performance.now() - queryStartedAt,
+      filters,
+      outcome: "failed",
+    })
+    throw error
+  }
+
+  logSlowArticleSearch({
+    durationMs: performance.now() - queryStartedAt,
+    filters,
+    outcome: "completed",
+  })
+
   const visibleRows = rows.slice(0, boundedLimit)
   const articles = await listReaderArticleListItemsByIdsForUserWithClient({
     articleIds: visibleRows.map((row) => row.id),
@@ -296,6 +308,35 @@ export async function listReaderArticleSearchPageWithClient({
         ? encodeArticleSearchCursor(visibleRows.at(-1)!)
         : null,
   }
+}
+
+export function logSlowArticleSearch({
+  durationMs,
+  filters,
+  outcome,
+}: {
+  durationMs: number
+  filters: ArticleSearchFilters
+  outcome: "completed" | "failed"
+}) {
+  const roundedDurationMs = Math.max(0, Math.round(durationMs))
+
+  if (roundedDurationMs < ARTICLE_SEARCH_SLOW_QUERY_THRESHOLD_MS) {
+    return
+  }
+
+  console.warn(
+    JSON.stringify({
+      event: "article_search_slow_query",
+      durationMs: roundedDurationMs,
+      hasCollectionFilter: Boolean(filters.collectionId),
+      hasFolderFilter: Boolean(filters.folderId),
+      hasSourceFilter: Boolean(filters.subscriptionId),
+      outcome,
+      queryLength: normalizeSearchQuery(filters.query).length,
+      state: normalizeSearchState(filters.state),
+    })
+  )
 }
 
 function firstSearchParam(value: string | string[] | undefined) {

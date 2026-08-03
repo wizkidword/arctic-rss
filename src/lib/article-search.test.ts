@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  ARTICLE_SEARCH_SLOW_QUERY_THRESHOLD_MS,
   articleSearchHref,
   listReaderArticleSearchPageWithClient,
+  logSlowArticleSearch,
   parseArticleSearchFilters,
   savedSearchCreateHref,
 } from "./article-search"
@@ -118,7 +120,10 @@ describe("article search query", () => {
     expect(sql).toContain('"FeedSubscription"."isPaused" = false')
     expect(sql).toContain('"ArticleState"."archivedAt" IS NULL')
     expect(sql).toContain('"ArticleCollection"."userId" = ?')
-    expect(sql).toContain("to_tsvector('simple'::regconfig")
+    expect(sql).toContain('"Article"."searchDocument"')
+    expect(sql).not.toContain("to_tsvector('simple'::regconfig")
+    expect(sql).toContain("ts_rank(")
+    expect(sql).not.toContain("ts_rank_cd(")
     expect(sql).toContain('"Feed"."title" ILIKE ?')
     expect(sql).not.toContain(injectionLikeQuery)
     expect(values).toContain(injectionLikeQuery)
@@ -214,5 +219,41 @@ describe("article search query", () => {
 
     expect(result.articles.map((article) => article.id)).toEqual(["article-2"])
     expect(result.nextCursor).toMatch(/^[A-Za-z0-9_-]+$/)
+  })
+
+  it("emits a privacy-safe warning only for slow database searches", () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const filters = {
+      collectionId: "collection-1",
+      query: "private search phrase",
+      state: "starred" as const,
+      subscriptionId: "subscription-1",
+    }
+
+    logSlowArticleSearch({
+      durationMs: ARTICLE_SEARCH_SLOW_QUERY_THRESHOLD_MS - 1,
+      filters,
+      outcome: "completed",
+    })
+    logSlowArticleSearch({
+      durationMs: ARTICLE_SEARCH_SLOW_QUERY_THRESHOLD_MS + 12.6,
+      filters,
+      outcome: "failed",
+    })
+
+    expect(warning).toHaveBeenCalledTimes(1)
+    expect(warning).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "article_search_slow_query",
+        durationMs: ARTICLE_SEARCH_SLOW_QUERY_THRESHOLD_MS + 13,
+        hasCollectionFilter: true,
+        hasFolderFilter: false,
+        hasSourceFilter: true,
+        outcome: "failed",
+        queryLength: 21,
+        state: "starred",
+      })
+    )
+    expect(warning.mock.calls[0]?.[0]).not.toContain("private search phrase")
   })
 })
