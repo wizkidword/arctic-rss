@@ -143,6 +143,14 @@ describe("approved release command", () => {
     expect(script).toContain('ARCTIC_RSS_BUILD_SHA="$commit"')
   })
 
+  it("hands the fixed managed-tunnel listener to the edge proxy for chat topologies", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain('all-in-one-with-chat|split-with-chat)')
+    expect(script).toContain("/^(WEB_PORT|EDGE_PROXY_HOST_PORT)=/d")
+    expect(script).toContain("WEB_PORT=3001\\nEDGE_PROXY_HOST_PORT=3000\\n")
+  })
+
   it("captures the exact prior topology, commit, and application image tags for rollback", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 

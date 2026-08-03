@@ -901,6 +901,17 @@ sudo -n install -m 600 -o root -g root "$live/.env" "$stage/.env"
 # the release has passed migrations and health checks.
 sudo -n sed -i -E '/^(MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE|EDGE_PROXY_IMAGE)=/d' "$stage/.env"
 printf '%s' "$release_image_environment_b64" | base64 -d | sudo -n tee -a "$stage/.env" >/dev/null
+# The managed production tunnel currently has a fixed loopback origin on port
+# 3000. Chat topologies therefore reserve that listener for the edge proxy and
+# move the private web listener to 3001. This keeps every canonical browser
+# route (including /socket.io) behind the proxy without needing a provider-side
+# route change. Non-chat topologies retain their ordinary local defaults.
+case "$topology_name" in
+  all-in-one-with-chat|split-with-chat)
+    sudo -n sed -i -E '/^(WEB_PORT|EDGE_PROXY_HOST_PORT)=/d' "$stage/.env"
+    printf 'WEB_PORT=3001\nEDGE_PROXY_HOST_PORT=3000\n' | sudo -n tee -a "$stage/.env" >/dev/null
+    ;;
+esac
 stage_compose config -q
 compose_images="$(stage_compose config --images)"
 sudo -n docker load --input "$image_archive" >/dev/null

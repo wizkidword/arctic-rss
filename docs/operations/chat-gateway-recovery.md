@@ -102,11 +102,16 @@ messages are not replayed automatically.
 
 The `edge-proxy` service keeps every route on the existing web service except
 `/socket.io` and `/socket.io/`, which it forwards to the internal chat gateway
-with the WebSocket and `CF-Connecting-IP` headers preserved. It publishes only
-its `8080` listener to host loopback so the host-network tunnel can reach it.
-After a verified release, point the existing managed-tunnel application at
-`http://127.0.0.1:8080`; do not add a direct gateway port or another public
-hostname.
+with the WebSocket and `CF-Connecting-IP` headers preserved. It is always
+loopback-only; do not add a direct gateway port or another public hostname.
+
+The preferred managed-tunnel origin is `http://127.0.0.1:8080`. If the existing
+managed route is fixed at port 3000 and provider permissions cannot reconcile
+it, the approved release command uses a reviewed chat-topology handoff instead:
+the web listener moves to loopback port 3001 and the edge proxy owns loopback
+port 3000. This retains the canonical tunnel route while ensuring both reader
+and Socket.IO requests traverse the proxy. Do not make this handoff manually
+or apply it to a non-chat topology.
 
 ## Verification in an approved change window
 
@@ -117,6 +122,7 @@ sudo docker compose ps
 sudo docker exec app-chat-gateway-1 node -e "fetch('http://127.0.0.1:3001/live').then(r => { if (!r.ok) process.exit(1) })"
 sudo docker exec app-chat-gateway-1 node -e "fetch('http://127.0.0.1:3001/ready').then(r => { if (!r.ok) process.exit(1) })"
 sudo docker exec app-edge-proxy-1 wget -q -O /dev/null http://127.0.0.1:8080/api/live
+curl -fsS -H 'Host: CANONICAL_HOST' http://127.0.0.1:3000/api/health
 sudo systemctl is-active arctic-rss-monitor.timer
 ```
 
