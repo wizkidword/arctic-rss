@@ -13,6 +13,7 @@ export default function RetentionPage() {
   return (
     <LegalPageLayout
       description="Retention and deletion commitments for ArcticRSS and ArcticIRC."
+      documentIdentifiers={["retention", "account-deletion"]}
       title="Retention and Deletion"
     >
       <ApprovedPolicyDocument policy="retention" />

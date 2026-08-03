@@ -3,21 +3,25 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 
 import { getPolicyPublicationDate } from "@/lib/approved-policy"
+import { getLegalDocument, type LegalDocumentIdentifier } from "@/lib/legal-document-manifest"
 import { legalLinks } from "@/lib/legal-links"
 import { cn } from "@/lib/utils"
 
 type LegalPageLayoutProps = {
   children: ReactNode
   description: string
+  documentIdentifiers?: LegalDocumentIdentifier[]
   title: string
 }
 
 export function LegalPageLayout({
   children,
   description,
+  documentIdentifiers,
   title,
 }: LegalPageLayoutProps) {
   const publicationDate = getPolicyPublicationDate()
+  const documents = documentIdentifiers?.map((identifier) => getLegalDocument(identifier)) ?? []
 
   return (
     <main className="min-h-screen bg-[#f3fbff] text-slate-950">
@@ -58,6 +62,13 @@ export function LegalPageLayout({
             </p>
             {publicationDate ? (
               <p className="text-sm text-slate-500">Last updated: {publicationDate}</p>
+            ) : null}
+            {documents.length ? (
+              <p className="text-sm text-slate-500">
+                Policy version{documents.length === 1 ? "" : "s"}: {documents
+                  .map((document) => `${document.title} (${document.version})`)
+                  .join(" · ")}
+              </p>
             ) : null}
           </div>
           <nav

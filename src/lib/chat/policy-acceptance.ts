@@ -1,8 +1,10 @@
 import type { PrismaClient } from "@/generated/prisma/client"
 
 import { getPrisma } from "@/lib/db"
+import { CHAT_POLICY_VERSION } from "@/lib/legal-policy-versions"
 
-export const ARCTICIRC_POLICY_VERSION = "launch-policy-v1"
+// Retained for integrations that use the established ArcticIRC export name.
+export const ARCTICIRC_POLICY_VERSION = CHAT_POLICY_VERSION
 
 export type ChatPolicyAcceptanceStore = Pick<
   PrismaClient,

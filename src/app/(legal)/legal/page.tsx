@@ -1,6 +1,8 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 
+import { getLegalDocument, type LegalDocumentIdentifier } from "@/lib/legal-document-manifest"
+
 import { LegalPageLayout, PolicySection } from "../legal-page-layout"
 
 export const metadata: Metadata = {
@@ -11,35 +13,41 @@ export const metadata: Metadata = {
 const policies = [
   {
     description: "Standards for constructive, safe community discussion in ArcticIRC.",
+    documentIdentifier: "chat" as const,
     href: "/community",
     label: "Community Guidelines",
   },
   {
     description: "How Arctic RSS and ArcticIRC handle information.",
+    documentIdentifier: "privacy" as const,
     href: "/privacy",
     label: "Privacy Policy",
   },
   {
     description: "The terms that apply to Arctic RSS and ArcticIRC.",
+    documentIdentifier: "terms" as const,
     href: "/terms",
     label: "Terms of Service",
   },
   {
     description: "Browser-storage and analytics choices for Arctic RSS and ArcticIRC.",
+    documentIdentifier: "cookies" as const,
     href: "/cookies",
     label: "Cookie Policy",
   },
   {
     description: "Security practices and responsible disclosure information.",
+    documentIdentifier: "security" as const,
     href: "/security",
     label: "Security",
   },
   {
     description: "How long ArcticIRC data is kept and how deletion requests work.",
+    documentIdentifier: "retention" as const,
     href: "/retention",
     label: "Retention and Deletion",
   },
-]
+] satisfies Array<{ description: string; documentIdentifier: LegalDocumentIdentifier; href: string; label: string }>
 
 export default function LegalPage() {
   return (
@@ -65,6 +73,9 @@ export default function LegalPage() {
               </span>
               <span className="mt-2 block text-sm leading-6 text-slate-600">
                 {policy.description}
+              </span>
+              <span className="mt-2 block text-xs text-slate-500">
+                Version {getLegalDocument(policy.documentIdentifier).version}
               </span>
             </Link>
           ))}

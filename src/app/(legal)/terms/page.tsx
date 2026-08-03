@@ -11,7 +11,11 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <LegalPageLayout description="Terms that apply to Arctic RSS and ArcticIRC." title="Terms of Service">
+    <LegalPageLayout
+      description="Terms that apply to Arctic RSS and ArcticIRC."
+      documentIdentifiers={["terms"]}
+      title="Terms of Service"
+    >
       <ApprovedPolicyDocument policy="terms" />
     </LegalPageLayout>
   )

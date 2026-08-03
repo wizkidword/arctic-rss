@@ -11,7 +11,11 @@ export const metadata: Metadata = {
 
 export default function CommunityPage() {
   return (
-    <LegalPageLayout description="Community rules for ArcticIRC." title="Community Guidelines">
+    <LegalPageLayout
+      description="Community rules for ArcticIRC."
+      documentIdentifiers={["chat"]}
+      title="Community Guidelines"
+    >
       <ApprovedPolicyDocument policy="community" />
     </LegalPageLayout>
   )

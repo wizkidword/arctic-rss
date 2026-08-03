@@ -10,6 +10,11 @@ type EmailVerificationInput = {
   verificationUrl: string
 }
 
+type AccountDeletionConfirmationEmailInput = {
+  confirmationUrl: string
+  to: string
+}
+
 type WelcomeEmailInput = {
   to: string
 }
@@ -296,6 +301,40 @@ export async function sendEmailVerificationEmail({
       "<p>Use the link below to verify your email address and finish creating your account.</p>",
       `<p><a href="${verificationUrl}">Verify your email</a></p>`,
       "<p>This link expires in 24 hours. If you did not create an Arctic RSS account, you can ignore this email.</p>",
+    ].join(""),
+  }))
+
+  return { status: "sent" }
+}
+
+export async function sendAccountDeletionConfirmationEmail({
+  confirmationUrl,
+  to,
+}: AccountDeletionConfirmationEmailInput): Promise<MailResult> {
+  const transport = getSmtpTransport()
+
+  if (!transport) {
+    return { status: "not-configured", url: confirmationUrl }
+  }
+
+  await sendMailWithDeadline(transport.sendMail({
+    from: getMailFrom(),
+    to,
+    subject: "Confirm your Arctic RSS account deletion",
+    text: [
+      "You requested deletion of your Arctic RSS account.",
+      "",
+      "Use the link below to continue. You must sign in to the same account and type DELETE before anything is removed.",
+      "",
+      confirmationUrl,
+      "",
+      "This one-time link expires in 15 minutes. If you did not request deletion, you can ignore this email.",
+    ].join("\n"),
+    html: [
+      "<p>You requested deletion of your Arctic RSS account.</p>",
+      "<p>Use the link below to continue. You must sign in to the same account and type <strong>DELETE</strong> before anything is removed.</p>",
+      `<p><a href="${confirmationUrl}">Continue account deletion</a></p>`,
+      "<p>This one-time link expires in 15 minutes. If you did not request deletion, you can ignore this email.</p>",
     ].join(""),
   }))
 

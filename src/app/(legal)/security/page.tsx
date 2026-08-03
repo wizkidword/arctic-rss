@@ -11,7 +11,11 @@ export const metadata: Metadata = {
 
 export default function SecurityPage() {
   return (
-    <LegalPageLayout description="Security information for Arctic RSS and ArcticIRC." title="Security">
+    <LegalPageLayout
+      description="Security information for Arctic RSS and ArcticIRC."
+      documentIdentifiers={["security"]}
+      title="Security"
+    >
       <ApprovedPolicyDocument policy="security" />
     </LegalPageLayout>
   )

@@ -94,7 +94,7 @@ ownership models.
 | Phase 5 — authenticated browser journeys | Incomplete | E2E contains only public/CSP smoke coverage. No authenticated reader, OPML, search, settings, or revocation journey is present. |
 | Phase 6 — reader query and hydration | Confirmed | `ReaderArticle` includes full text and sanitized HTML, and list loading calls `readerArticleInclude`; list mapping sanitizes each article body. The app shell remains a broad client component. |
 | Phase 7 — transcript abuse controls | Confirmed | The authenticated transcript route calls the fetcher directly with no endpoint rate limit, global semaphore, or bounded temporary cache. Existing URL/content bounds remain in place. |
-| Phase 8 — deletion and policy versions | Confirmed | Deletion requires a password and directs Google-only users to support. Deletion records use `ARCTICIRC_POLICY_VERSION`. |
+| Phase 8 — deletion and policy versions | Implemented | Local-password deletion retains current-password reauthentication. Google-only accounts use a short-lived, one-time, auth-version-bound email confirmation with a second literal `DELETE`; deletion records now use `ACCOUNT_DELETION_POLICY_VERSION`, while the legal manifest interprets historic `launch-policy-v1` records without rewriting them. |
 | Phase 9 — search measurement | Partially implemented | The full-text migration adds GIN/trigram indexes, but the query recomputes its weighted vector and no representative `EXPLAIN (ANALYZE, BUFFERS)` report or latency target is checked in. |
 | Phase 10 — product polish | Deferred | Correctly gated behind P1 and technical remediation. No implementation starts in Phase 0. |
 | Phase 11 — structural refactoring | Deferred | No refactor should precede the behavior fixes it is meant to support. |

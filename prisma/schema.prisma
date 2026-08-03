@@ -339,6 +339,7 @@ model User {
   securityEvents          SecurityEvent[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  accountDeletionConfirmationTokens AccountDeletionConfirmationToken[]
   chatProfile             ChatProfile?
   chatBetaAccess          ChatBetaAccess?          @relation("ChatBetaAccessUser")
   chatPolicyAcceptance    ChatPolicyAcceptance?
@@ -422,6 +423,24 @@ model EmailVerificationToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+// A short-lived, one-time proof that an OAuth-only user still controls the
+// verified email address for this account. Only a SHA-256 digest is stored.
+model AccountDeletionConfirmationToken {
+  id          String   @id @default(cuid())
+  userId      String
+  tokenHash   String   @unique
+  authVersion Int
+  purpose     String   @default("ACCOUNT_DELETION")
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

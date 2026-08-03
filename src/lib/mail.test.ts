@@ -17,6 +17,7 @@ import {
   resetSmtpTransportCache,
   sendSmartDigestEmail,
   sendAdminSignupNotificationEmail,
+  sendAccountDeletionConfirmationEmail,
   sendEmailVerificationEmail,
   sendWelcomeEmail,
 } from "./mail"
@@ -67,6 +68,25 @@ describe("mail configuration", () => {
       status: "not-configured",
       url: "https://arcticrss.com/verify-email?token=test",
     })
+  })
+
+  it("sends a one-time account deletion confirmation email", async () => {
+    vi.stubEnv("SMTP_HOST", "smtp.gmail.com")
+    vi.stubEnv("SMTP_USER", "arcticrssreader@gmail.com")
+    vi.stubEnv("SMTP_PASSWORD", "app-password")
+
+    await sendAccountDeletionConfirmationEmail({
+      confirmationUrl: "https://arcticrss.com/delete-account#token=one-time-token",
+      to: "reader@example.com",
+    })
+
+    expect(mailerMocks.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: "Confirm your Arctic RSS account deletion",
+        text: expect.stringContaining("one-time-token"),
+        to: "reader@example.com",
+      })
+    )
   })
 
   it("accepts welcome emails as not configured when SMTP is missing", async () => {

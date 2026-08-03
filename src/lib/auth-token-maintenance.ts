@@ -6,7 +6,7 @@ export const DEFAULT_AUTH_TOKEN_CLEANUP_BATCH_SIZE = 100
 
 type AuthTokenMaintenanceStore = Pick<
   PrismaClient,
-  "emailVerificationToken" | "passwordResetToken"
+  "accountDeletionConfirmationToken" | "emailVerificationToken" | "passwordResetToken"
 >
 
 type AuthTokenMaintenanceDeps = {
@@ -34,7 +34,7 @@ export async function cleanupExpiredAuthTokens(
   const now = deps.now ?? new Date()
   const take = getBatchSize(deps.batchSize)
 
-  const [passwordResetTokens, emailVerificationTokens] = await Promise.all([
+  const [passwordResetTokens, emailVerificationTokens, accountDeletionConfirmationTokens] = await Promise.all([
     store.passwordResetToken.findMany({
       orderBy: { expiresAt: "asc" },
       select: { id: true },
@@ -47,9 +47,15 @@ export async function cleanupExpiredAuthTokens(
       take,
       where: { expiresAt: { lt: now } },
     }),
+    store.accountDeletionConfirmationToken.findMany({
+      orderBy: { expiresAt: "asc" },
+      select: { id: true },
+      take,
+      where: { expiresAt: { lt: now } },
+    }),
   ])
 
-  const [passwordResetResult, emailVerificationResult] = await Promise.all([
+  const [passwordResetResult, emailVerificationResult, accountDeletionConfirmationResult] = await Promise.all([
     passwordResetTokens.length
       ? store.passwordResetToken.deleteMany({
           where: {
@@ -66,9 +72,18 @@ export async function cleanupExpiredAuthTokens(
           },
         })
       : Promise.resolve({ count: 0 }),
+    accountDeletionConfirmationTokens.length
+      ? store.accountDeletionConfirmationToken.deleteMany({
+          where: {
+            expiresAt: { lt: now },
+            id: { in: accountDeletionConfirmationTokens.map((token) => token.id) },
+          },
+        })
+      : Promise.resolve({ count: 0 }),
   ])
 
   return {
+    accountDeletionConfirmationTokensDeleted: accountDeletionConfirmationResult.count,
     emailVerificationTokensDeleted: emailVerificationResult.count,
     passwordResetTokensDeleted: passwordResetResult.count,
   }

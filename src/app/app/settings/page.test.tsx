@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
+  getPrisma: vi.fn(),
   getOrCreateUserSettings: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
@@ -19,6 +20,10 @@ vi.mock("@/auth", () => ({
 
 vi.mock("@/lib/user-settings", () => ({
   getOrCreateUserSettings: mocks.getOrCreateUserSettings,
+}))
+
+vi.mock("@/lib/db", () => ({
+  getPrisma: mocks.getPrisma,
 }))
 
 import SettingsPage from "./page"
@@ -40,6 +45,9 @@ describe("SettingsPage", () => {
       theme: "ORANGE",
       timeFormat: "DEFAULT",
       timeZone: "UTC",
+    })
+    mocks.getPrisma.mockReturnValue({
+      user: { findUnique: vi.fn().mockResolvedValue({ passwordHash: "password-hash" }) },
     })
 
     const markup = renderToStaticMarkup(await SettingsPage())

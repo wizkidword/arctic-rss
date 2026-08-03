@@ -13,6 +13,7 @@ export default function CookiesPage() {
   return (
     <LegalPageLayout
       description="Cookie and browser-storage choices for Arctic RSS and ArcticIRC."
+      documentIdentifiers={["cookies"]}
       title="Cookie Policy"
     >
       <ApprovedPolicyDocument policy="cookies" />

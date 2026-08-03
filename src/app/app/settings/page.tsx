@@ -13,6 +13,7 @@ import {
   normalizeThemePreference,
 } from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
+import { getPrisma } from "@/lib/db"
 
 export default async function SettingsPage() {
   const session = await auth()
@@ -21,7 +22,13 @@ export default async function SettingsPage() {
     redirect("/login")
   }
 
-  const settings = await getOrCreateUserSettings(session.user.id)
+  const [settings, account] = await Promise.all([
+    getOrCreateUserSettings(session.user.id),
+    getPrisma().user.findUnique({
+      select: { passwordHash: true },
+      where: { id: session.user.id },
+    }),
+  ])
   const displayMode = normalizeDisplayMode(settings.displayMode)
   const themePreference = normalizeThemePreference(settings.theme)
   const dateTimePreferences = normalizeDateTimePreferences(settings)
@@ -73,7 +80,7 @@ export default async function SettingsPage() {
         <DateTimePreferenceControls preferences={dateTimePreferences} />
       </section>
 
-      <AccountDeletionControl />
+      <AccountDeletionControl hasLocalPassword={Boolean(account?.passwordHash)} />
     </div>
   )
 }

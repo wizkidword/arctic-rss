@@ -11,7 +11,11 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalPageLayout description="How Arctic RSS and ArcticIRC handle information." title="Privacy Policy">
+    <LegalPageLayout
+      description="How Arctic RSS and ArcticIRC handle information."
+      documentIdentifiers={["privacy"]}
+      title="Privacy Policy"
+    >
       <ApprovedPolicyDocument policy="privacy" />
     </LegalPageLayout>
   )

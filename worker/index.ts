@@ -960,10 +960,13 @@ async function runAuthTokenMaintenance() {
     store: prisma,
   })
   const deleted =
-    result.passwordResetTokensDeleted + result.emailVerificationTokensDeleted
+    result.passwordResetTokensDeleted +
+    result.emailVerificationTokensDeleted +
+    result.accountDeletionConfirmationTokensDeleted
 
   console.log(
     JSON.stringify({
+      accountDeletionConfirmationTokensDeleted: result.accountDeletionConfirmationTokensDeleted,
       emailVerificationTokensDeleted: result.emailVerificationTokensDeleted,
       event: "auth_token_maintenance",
       outcome: "success",
