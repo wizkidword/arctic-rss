@@ -223,7 +223,10 @@ function Invoke-RemoteScript {
 
   $target = "$($Config.SshUser)@$($Config.SshHost)"
   $output = @(
-    $Script | & ssh -o "BatchMode=yes" -i $Config.SshKeyPath $target "tr -d '\r' | bash -se" 2>&1
+    # Forward remote stderr through SSH stdout. PowerShell otherwise treats a
+    # successful remote diagnostic as a NativeCommandError before it can check
+    # SSH's exit code below. A real remote failure still returns a nonzero exit.
+    $Script | & ssh -o "BatchMode=yes" -i $Config.SshKeyPath $target "tr -d '\r' | bash -se 2>&1" 2>&1
   )
   if ($LASTEXITCODE -ne 0) {
     throw "The remote release command failed with exit code $LASTEXITCODE."

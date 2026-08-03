@@ -51,6 +51,7 @@ describe("approved release command", () => {
   it("uses a pipefail-safe journal retention assertion", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 
+    expect(script).toContain("tr -d '\\r' | bash -se 2>&1")
     expect(script).toContain(
       "systemd-analyze cat-config systemd/journald.conf | awk",
     )
