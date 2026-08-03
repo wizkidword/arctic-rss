@@ -193,7 +193,6 @@ export async function checkSystemHealthWithClients({
 function createHealthRedis(url: string) {
   const redis = new Redis(url, {
     connectTimeout: HEALTH_CHECK_TIMEOUT_MS,
-    enableOfflineQueue: false,
     maxRetriesPerRequest: 0,
     retryStrategy: () => null,
   })

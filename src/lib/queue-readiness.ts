@@ -77,7 +77,6 @@ export type QueueReadinessReport = {
 export async function inspectQueueReadiness(): Promise<QueueReadinessReport> {
   const redis = new Redis(durableRedisConnectionOptions().url, {
     connectTimeout: 2_000,
-    enableOfflineQueue: false,
     maxRetriesPerRequest: 0,
     retryStrategy: () => null,
   })
