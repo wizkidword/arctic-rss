@@ -80,6 +80,13 @@ type ShellDiscoverInterest = {
   label: string
 }
 
+type ShellNavigationItem = {
+  count: number
+  href: string
+  icon: typeof HomeIcon
+  label: string
+}
+
 const secondaryNav = [
   {
     href: "/app/settings/import-export",
@@ -115,6 +122,37 @@ function KofiIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
+
+function NavigationGroup({
+  items,
+  label,
+}: {
+  items: ShellNavigationItem[]
+  label: string
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="px-2 pt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      {items.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className={cn(
+            buttonVariants({ variant: "ghost" }),
+            "h-8 justify-start gap-2 px-2 text-muted-foreground"
+          )}
+        >
+          <item.icon data-icon="inline-start" />
+          <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+          <span className="text-xs tabular-nums">{item.count}</span>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
 function ReaderNav({
   articleCollections,
   chatEnabled = false,
@@ -137,7 +175,7 @@ function ReaderNav({
   const discoverPodcastsHref = guestMode
     ? "/guest/podcasts/discover"
     : "/app/podcasts/discover"
-  const primaryNav = guestMode
+  const readerNav: ShellNavigationItem[] = guestMode
     ? [
         {
           count: readerCounts.allCount,
@@ -165,6 +203,10 @@ function ReaderNav({
           icon: StarIcon,
           label: "Starred",
         },
+      ]
+  const briefingsNav: ShellNavigationItem[] = guestMode
+    ? []
+    : [
         {
           count: 0,
           href: "/app/search",
@@ -175,54 +217,43 @@ function ReaderNav({
           count: 0,
           href: "/app/saved-searches",
           icon: BookmarkIcon,
-          label: "Saved searches",
+          label: "Saved views",
         },
         {
           count: 0,
           href: "/app/ai",
-          label: "AI Summaries",
+          label: "AI summaries",
           icon: SparklesIcon,
         },
         {
           count: 0,
           href: "/app/smart-digests",
-          label: "Smart Digests",
+          label: "Smart digests",
           icon: SparklesIcon,
         },
+      ]
+  const listenNav: ShellNavigationItem[] = [
+    {
+      count: 0,
+      href: guestMode ? "/guest/podcasts/discover" : "/app/podcasts",
+      label: "Podcasts",
+      icon: HeadphonesIcon,
+    },
+  ]
+  const communityNav: ShellNavigationItem[] = chatEnabled && !guestMode
+    ? [
         {
           count: 0,
-          href: "/app/podcasts",
-          label: "Podcasts",
-          icon: HeadphonesIcon,
+          href: "/irc",
+          label: "Arctic IRC",
+          icon: MessageCircleIcon,
         },
-        ...(chatEnabled
-          ? [
-              {
-                count: 0,
-                href: "/irc",
-                label: "Chat",
-                icon: MessageCircleIcon,
-              },
-            ]
-          : []),
       ]
+    : []
 
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
-      {primaryNav.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={cn(
-            buttonVariants({ variant: "ghost" }),
-            "h-8 justify-start gap-2 px-2 text-muted-foreground"
-          )}
-        >
-          <item.icon data-icon="inline-start" />
-          <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-          <span className="text-xs tabular-nums">{item.count}</span>
-        </Link>
-      ))}
+      <NavigationGroup items={readerNav} label="Read" />
       <Separator className="my-2" />
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 px-2">
@@ -274,19 +305,6 @@ function ReaderNav({
           )}
         </div>
       </div>
-      <Link
-        href={discoverPodcastsHref}
-        className={cn(
-          buttonVariants({ variant: "outline", size: "sm" }),
-          "mt-2 h-7 justify-start gap-2 px-2"
-        )}
-      >
-        <CompassIcon data-icon="inline-start" />
-        <span className="min-w-0 flex-1 truncate text-left">
-          Discover Podcasts
-        </span>
-      </Link>
-      <Separator className="my-2" />
       {discoverInterests.length ? (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2 px-2">
@@ -434,6 +452,32 @@ function ReaderNav({
           ) : null}
         </div>
       </div>
+      <Separator className="my-2" />
+      {briefingsNav.length ? (
+        <>
+          <NavigationGroup items={briefingsNav} label="Briefings & Rules" />
+          <Separator className="my-2" />
+        </>
+      ) : null}
+      <NavigationGroup items={listenNav} label="Listen" />
+      <Link
+        href={discoverPodcastsHref}
+        className={cn(
+          buttonVariants({ variant: "outline", size: "sm" }),
+          "mt-2 h-7 justify-start gap-2 px-2"
+        )}
+      >
+        <CompassIcon data-icon="inline-start" />
+        <span className="min-w-0 flex-1 truncate text-left">
+          Discover Podcasts
+        </span>
+      </Link>
+      {communityNav.length ? (
+        <>
+          <Separator className="my-2" />
+          <NavigationGroup items={communityNav} label="Community" />
+        </>
+      ) : null}
       <Separator className="my-2" />
       {!guestMode &&
         secondaryNav.map((item) => (

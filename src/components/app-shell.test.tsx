@@ -197,8 +197,12 @@ describe("AppShell", () => {
     expect(markup.match(/href="\/app\/podcasts"/g) ?? []).toHaveLength(2)
     expect(markup.match(/href="\/app\/smart-digests"/g) ?? []).toHaveLength(2)
     expect(markup.match(/href="\/app\/podcasts\/discover"/g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Read</g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Briefings &amp; Rules</g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Listen</g) ?? []).toHaveLength(2)
     expect(markup.match(/>Podcasts</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Smart Digests</g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Smart digests</g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Saved views</g) ?? []).toHaveLength(2)
     expect(markup.match(/>Discover Podcasts</g) ?? []).toHaveLength(2)
     expect(markup.match(/>Discover Feeds</g) ?? []).toHaveLength(2)
     expect(markup.match(/>Wired Science/g) ?? []).toHaveLength(2)
@@ -258,6 +262,8 @@ describe("AppShell", () => {
       const wiredIndex = navSection.indexOf(">Wired Science")
       const nasaIndex = navSection.indexOf(">NASA")
       const podcastsIndex = navSection.indexOf(">Podcasts<")
+      const briefingsIndex = navSection.indexOf(">Briefings &amp; Rules<")
+      const listenIndex = navSection.indexOf(">Listen<")
       const discoverPodcastsIndex = navSection.indexOf(">Discover Podcasts<")
       const supportProjectIndex = navSection.indexOf(">Support this project<")
       const collectionsIndex = navSection.indexOf(">Collections<")
@@ -271,9 +277,11 @@ describe("AppShell", () => {
       expect(wiredIndex).toBeGreaterThan(discoverIndex)
       expect(nasaIndex).toBeGreaterThan(wiredIndex)
       expect(podcastsIndex).toBeGreaterThan(-1)
+      expect(briefingsIndex).toBeGreaterThan(readLaterIndex)
+      expect(listenIndex).toBeGreaterThan(briefingsIndex)
+      expect(podcastsIndex).toBeGreaterThan(listenIndex)
       expect(discoverPodcastsIndex).toBeGreaterThan(podcastsIndex)
-      expect(discoverPodcastsIndex).toBeGreaterThan(nasaIndex)
-      expect(generalIndex).toBeGreaterThan(discoverPodcastsIndex)
+      expect(generalIndex).toBeGreaterThan(nasaIndex)
       expect(politicsIndex).toBeGreaterThan(generalIndex)
       expect(foldersIndex).toBeGreaterThan(politicsIndex)
       expect(collectionsIndex).toBeGreaterThan(foldersIndex)
@@ -304,7 +312,7 @@ describe("AppShell", () => {
     expect(markup).toContain('class="dark min-h-screen bg-background text-foreground"')
   })
 
-  it("shows Chat only when the native chat feature is enabled", () => {
+  it("shows Arctic IRC only when the native chat feature is enabled", () => {
     const markup = renderToStaticMarkup(
       <AppShell
         articleCollections={[]}
@@ -322,7 +330,8 @@ describe("AppShell", () => {
     )
 
     expect(markup.match(/href="\/irc"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Chat</g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Community</g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Arctic IRC</g) ?? []).toHaveLength(2)
   })
 
   it("uses a collapsed navigation shell for minimal display mode", () => {
@@ -366,7 +375,7 @@ describe("AppShell", () => {
     expect(markup).toContain("Browsing as guest")
     expect(markup.match(/href="\/guest"/g) ?? []).toHaveLength(4)
     expect(markup.match(/href="\/guest\/discover"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/guest\/podcasts\/discover"/g) ?? []).toHaveLength(2)
+    expect(markup.match(/href="\/guest\/podcasts\/discover"/g) ?? []).toHaveLength(4)
     expect(markup).toContain('href="/signup"')
     expect(markup).toContain(">Create account<")
     expect(markup).not.toContain(">Log out<")
