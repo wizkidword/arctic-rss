@@ -4,28 +4,6 @@ import { refresh, revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
-import { enqueueAiDigest } from "@/lib/ai-digest-queue"
-import {
-  AiDigestError,
-  isAiDigestPeriod,
-  requestAiDigestForUser,
-  type AiDigestPeriod,
-} from "@/lib/ai-digests"
-import {
-  AiSummaryError,
-  generateArticleSummaryForUser,
-} from "@/lib/ai-summaries"
-import {
-  generateStoryClusterAnalysisForUser,
-  StoryClusterAnalysisError,
-} from "@/lib/story-cluster-analysis"
-import {
-  addPodcastEpisodeToCollection,
-  addArticleToCollection,
-  ArticleCollectionError,
-  removePodcastEpisodeFromCollection,
-  removeArticleFromCollection,
-} from "@/lib/article-collections"
 import {
   BugReportError,
   createBugReportForUser,
@@ -34,15 +12,6 @@ import {
   FeatureSuggestionError,
   createFeatureSuggestionForUser,
 } from "@/lib/feature-suggestions"
-import { updateAiPreferencesForUser } from "@/lib/ai-dashboard"
-import {
-  ArticleStateError,
-  deleteArticleForUser,
-  setArticleReadState,
-  setArticleStarredState,
-  type ArticleReadScope,
-} from "@/lib/articles"
-import { cancelBulkReadJob, startBulkRead } from "@/lib/bulk-read-jobs"
 import { getPrisma } from "@/lib/db"
 import { getDiscoverDirectoryFeed } from "@/lib/discover-directory"
 import { requestEmailVerification } from "@/lib/email-verification"
@@ -84,17 +53,18 @@ import {
   type DisplayMode,
   type ThemePreference,
 } from "@/lib/settings"
-import {
-  evaluateStoryClustersForArticleUser,
-  StoryClusterReaderError,
-} from "@/lib/story-cluster-reader"
-import {
-  dismissStoryClusterForUser,
-  mergeStoryClustersForUser,
-  splitStoryClusterMemberForUser,
-  StoryClusterControlError,
-} from "@/lib/story-cluster-controls"
 import { FeedFetchError, UnsafeUrlError } from "@/lib/url-safety"
+
+import {
+  revalidateArticleListPaths,
+  revalidateFeedSubscriptionPaths,
+  revalidateFolderPaths,
+  revalidateSettingsPaths,
+} from "./actions/revalidation"
+// Keep this module as the stable Next.js Server Action boundary. The extracted
+// modules below own the implementation details without changing client imports.
+import * as articleActions from "./actions/articles"
+import * as aiActions from "./actions/ai"
 
 const MANUAL_FEED_REFRESH_COOLDOWN_MS = 5 * 60 * 1000
 
@@ -131,52 +101,20 @@ export type ImportOpmlActionState = {
   status: "idle" | "success" | "error"
 }
 
-export type GenerateArticleSummaryActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type EvaluateStoryClusterActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type GenerateStoryClusterAnalysisActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type DismissStoryClusterActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type SplitStoryClusterMemberActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type MergeStoryClustersActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type AddArticleToCollectionActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type AddPodcastEpisodeToCollectionActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type GenerateAiDigestActionState = {
-  digestId?: string
-  message: string
-  period?: AiDigestPeriod
-  status: "idle" | "success" | "error"
-}
+export type {
+  AddArticleToCollectionActionState,
+  AddPodcastEpisodeToCollectionActionState,
+} from "./actions/articles"
+export type {
+  DismissStoryClusterActionState,
+  EvaluateStoryClusterActionState,
+  GenerateAiDigestActionState,
+  GenerateArticleSummaryActionState,
+  GenerateStoryClusterAnalysisActionState,
+  MergeStoryClustersActionState,
+  SplitStoryClusterMemberActionState,
+  UpdateAiPreferencesActionState,
+} from "./actions/ai"
 
 export type SubmitBugReportActionState = {
   message: string
@@ -184,11 +122,6 @@ export type SubmitBugReportActionState = {
 }
 
 export type SubmitFeatureSuggestionActionState = {
-  message: string
-  status: "idle" | "success" | "error"
-}
-
-export type UpdateAiPreferencesActionState = {
   message: string
   status: "idle" | "success" | "error"
 }
@@ -1022,825 +955,113 @@ export async function resendEmailVerificationAction(
   }
 }
 
-export async function setArticleReadAction(formData: FormData) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized")
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-  const isRead = String(formData.get("isRead") ?? "") === "true"
-
-  if (!articleId) {
-    throw new Error("Article is required.")
-  }
-
-  await setArticleReadState({
-    articleId,
-    isRead,
-    userId: session.user.id,
-  })
-
-  revalidateArticleListPaths()
-  refresh()
+export async function setArticleReadAction(
+  ...args: Parameters<typeof articleActions.setArticleReadAction>
+) {
+  return articleActions.setArticleReadAction(...args)
 }
 
-export async function setArticleStarredAction(formData: FormData) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized")
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-  const isStarred = String(formData.get("isStarred") ?? "") === "true"
-
-  if (!articleId) {
-    throw new Error("Article is required.")
-  }
-
-  await setArticleStarredState({
-    articleId,
-    isStarred,
-    userId: session.user.id,
-  })
-
-  revalidateArticleListPaths()
-  refresh()
+export async function setArticleStarredAction(
+  ...args: Parameters<typeof articleActions.setArticleStarredAction>
+) {
+  return articleActions.setArticleStarredAction(...args)
 }
 
-export async function deleteArticleAction(formData: FormData) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized")
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-
-  if (!articleId) {
-    throw new Error("Article is required.")
-  }
-
-  await deleteArticleForUser({
-    articleId,
-    userId: session.user.id,
-  })
-
-  revalidateArticleListPaths()
-  revalidatePath(`/app/article/${articleId}`)
-  refresh()
+export async function deleteArticleAction(
+  ...args: Parameters<typeof articleActions.deleteArticleAction>
+) {
+  return articleActions.deleteArticleAction(...args)
 }
 
-export async function markAllReadAction(formData: FormData) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized")
-  }
-
-  const scopeType = String(formData.get("scope") ?? "").trim()
-  let scope: ArticleReadScope
-
-  if (scopeType === "feed") {
-    const feedId = String(formData.get("feedId") ?? "").trim()
-
-    if (!feedId) {
-      throw new Error("Feed is required.")
-    }
-
-    scope = {
-      feedId,
-      type: "feed",
-    }
-  } else if (scopeType === "all") {
-    scope = {
-      type: "all",
-    }
-  } else if (scopeType === "folder") {
-    const folderId = String(formData.get("folderId") ?? "").trim()
-
-    if (!folderId) {
-      throw new Error("Folder is required.")
-    }
-
-    scope = {
-      folderId,
-      type: "folder",
-    }
-  } else {
-    throw new Error("Unsupported read scope.")
-  }
-
-  await startBulkRead({
-    scope,
-    userId: session.user.id,
-  })
-
-  revalidateArticleListPaths()
-  refresh()
+export async function markAllReadAction(
+  ...args: Parameters<typeof articleActions.markAllReadAction>
+) {
+  return articleActions.markAllReadAction(...args)
 }
 
-export async function cancelBulkReadAction(jobId: string) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized")
-  }
-
-  await cancelBulkReadJob({
-    jobId,
-    userId: session.user.id,
-  })
-  revalidateArticleListPaths()
-  refresh()
+export async function cancelBulkReadAction(
+  ...args: Parameters<typeof articleActions.cancelBulkReadAction>
+) {
+  return articleActions.cancelBulkReadAction(...args)
 }
 
 export async function addArticleToCollectionAction(
-  _previousState: AddArticleToCollectionActionState,
-  formData: FormData
-): Promise<AddArticleToCollectionActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before saving articles.",
-      status: "error",
-    }
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-  const collectionId =
-    String(formData.get("collectionId") ?? "").trim() || undefined
-  const collectionName = formData.has("collectionName")
-    ? String(formData.get("collectionName") ?? "")
-    : undefined
-
-  try {
-    const result = await addArticleToCollection({
-      articleId,
-      collectionId,
-      collectionName,
-      userId: session.user.id,
-    })
-    revalidateCollectionPaths(result.collectionId)
-  } catch (error) {
-    if (error instanceof ArticleCollectionError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not save that article.",
-      status: "error",
-    }
-  }
-
-  revalidateArticleListPaths()
-  refresh()
-
-  return {
-    message: "Article saved to collection.",
-    status: "success",
-  }
+  ...args: Parameters<typeof articleActions.addArticleToCollectionAction>
+) {
+  return articleActions.addArticleToCollectionAction(...args)
 }
 
-export async function removeArticleFromCollectionAction(formData: FormData) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized")
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-  const collectionId = String(formData.get("collectionId") ?? "").trim()
-
-  await removeArticleFromCollection({
-    articleId,
-    collectionId,
-    userId: session.user.id,
-  })
-
-  revalidateCollectionPaths(collectionId)
-  revalidateArticleListPaths()
-  refresh()
+export async function removeArticleFromCollectionAction(
+  ...args: Parameters<typeof articleActions.removeArticleFromCollectionAction>
+) {
+  return articleActions.removeArticleFromCollectionAction(...args)
 }
 
 export async function addPodcastEpisodeToCollectionAction(
-  _previousState: AddPodcastEpisodeToCollectionActionState,
-  formData: FormData
-): Promise<AddPodcastEpisodeToCollectionActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before saving podcast episodes.",
-      status: "error",
-    }
-  }
-
-  const episodeId = String(formData.get("episodeId") ?? "").trim()
-  const collectionId =
-    String(formData.get("collectionId") ?? "").trim() || undefined
-  const collectionName = formData.has("collectionName")
-    ? String(formData.get("collectionName") ?? "")
-    : undefined
-
-  try {
-    const result = await addPodcastEpisodeToCollection({
-      collectionId,
-      collectionName,
-      episodeId,
-      userId: session.user.id,
-    })
-    revalidateCollectionPaths(result.collectionId)
-  } catch (error) {
-    if (error instanceof ArticleCollectionError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not save that podcast episode.",
-      status: "error",
-    }
-  }
-
-  revalidatePodcastPaths()
-  refresh()
-
-  return {
-    message: "Episode saved to collection.",
-    status: "success",
-  }
+  ...args: Parameters<typeof articleActions.addPodcastEpisodeToCollectionAction>
+) {
+  return articleActions.addPodcastEpisodeToCollectionAction(...args)
 }
 
 export async function removePodcastEpisodeFromCollectionAction(
-  formData: FormData
+  ...args: Parameters<typeof articleActions.removePodcastEpisodeFromCollectionAction>
 ) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized")
-  }
-
-  const episodeId = String(formData.get("episodeId") ?? "").trim()
-  const collectionId = String(formData.get("collectionId") ?? "").trim()
-
-  await removePodcastEpisodeFromCollection({
-    collectionId,
-    episodeId,
-    userId: session.user.id,
-  })
-
-  revalidateCollectionPaths(collectionId)
-  revalidatePodcastPaths()
-  refresh()
+  return articleActions.removePodcastEpisodeFromCollectionAction(...args)
 }
 
-export async function markArticleReadOnOpen(articleId: string) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized")
-  }
-
-  try {
-    await setArticleReadState({
-      articleId,
-      isRead: true,
-      userId: session.user.id,
-    })
-  } catch (error) {
-    if (error instanceof ArticleStateError) {
-      return
-    }
-
-    throw error
-  }
+export async function markArticleReadOnOpen(
+  ...args: Parameters<typeof articleActions.markArticleReadOnOpen>
+) {
+  return articleActions.markArticleReadOnOpen(...args)
 }
 
 export async function generateArticleSummaryAction(
-  _previousState: GenerateArticleSummaryActionState,
-  formData: FormData
-): Promise<GenerateArticleSummaryActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before generating summaries.",
-      status: "error",
-    }
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-
-  if (!articleId) {
-    return {
-      message: "Choose an article to summarize.",
-      status: "error",
-    }
-  }
-
-  const rateLimit = await enforceRateLimit({
-    action: "ai_summary",
-    userId: session.user.id,
-  })
-
-  if (!rateLimit.allowed) {
-    return { message: getRateLimitErrorMessage(), status: "error" }
-  }
-
-  try {
-    const summary = await generateArticleSummaryForUser({
-      articleId,
-      userId: session.user.id,
-    })
-
-    revalidateArticleListPaths()
-    refresh()
-
-    return {
-      message: summary.fromCache ? "Summary ready." : "Summary generated.",
-      status: "success",
-    }
-  } catch (error) {
-    if (error instanceof AiSummaryError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not summarize that article.",
-      status: "error",
-    }
-  }
+  ...args: Parameters<typeof aiActions.generateArticleSummaryAction>
+) {
+  return aiActions.generateArticleSummaryAction(...args)
 }
 
 export async function evaluateStoryClusterAction(
-  _previousState: EvaluateStoryClusterActionState,
-  formData: FormData
-): Promise<EvaluateStoryClusterActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before checking related coverage.",
-      status: "error",
-    }
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-
-  if (!articleId) {
-    return {
-      message: "Choose an article before checking related coverage.",
-      status: "error",
-    }
-  }
-
-  const rateLimit = await enforceRateLimit({
-    action: "story_cluster_evaluation",
-    userId: session.user.id,
-  })
-
-  if (!rateLimit.allowed) {
-    return { message: getRateLimitErrorMessage(), status: "error" }
-  }
-
-  try {
-    const result = await evaluateStoryClustersForArticleUser({
-      articleId,
-      userId: session.user.id,
-    })
-
-    if (!result.matched) {
-      return {
-        message: "No matching coverage was found in your latest 50 visible articles.",
-        status: "success",
-      }
-    }
-
-    if (result.dismissed) {
-      return {
-        message: "You previously dismissed matching coverage for this article. Your original articles remain visible.",
-        status: "success",
-      }
-    }
-
-    revalidateArticleListPaths()
-    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
-    refresh()
-
-    return {
-      message: result.created
-        ? "Related coverage is ready."
-        : "Related coverage is already up to date.",
-      status: "success",
-    }
-  } catch (error) {
-    if (error instanceof StoryClusterReaderError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not check related coverage.",
-      status: "error",
-    }
-  }
+  ...args: Parameters<typeof aiActions.evaluateStoryClusterAction>
+) {
+  return aiActions.evaluateStoryClusterAction(...args)
 }
 
 export async function generateStoryClusterAnalysisAction(
-  _previousState: GenerateStoryClusterAnalysisActionState,
-  formData: FormData
-): Promise<GenerateStoryClusterAnalysisActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before generating a cited comparison.",
-      status: "error",
-    }
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-  const clusterId = String(formData.get("clusterId") ?? "").trim()
-
-  if (!articleId || !clusterId) {
-    return {
-      message: "Choose an available story group before generating a comparison.",
-      status: "error",
-    }
-  }
-
-  const rateLimit = await enforceRateLimit({
-    action: "story_cluster_analysis",
-    userId: session.user.id,
-  })
-
-  if (!rateLimit.allowed) {
-    return { message: getRateLimitErrorMessage(), status: "error" }
-  }
-
-  try {
-    const analysis = await generateStoryClusterAnalysisForUser({
-      clusterId,
-      userId: session.user.id,
-    })
-
-    revalidateArticleListPaths()
-    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
-    refresh()
-
-    return {
-      message: analysis.fromCache
-        ? "Cited source analysis ready."
-        : "Cited source analysis generated.",
-      status: "success",
-    }
-  } catch (error) {
-    if (error instanceof StoryClusterAnalysisError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not generate that cited comparison.",
-      status: "error",
-    }
-  }
+  ...args: Parameters<typeof aiActions.generateStoryClusterAnalysisAction>
+) {
+  return aiActions.generateStoryClusterAnalysisAction(...args)
 }
 
 export async function dismissStoryClusterAction(
-  _previousState: DismissStoryClusterActionState,
-  formData: FormData
-): Promise<DismissStoryClusterActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before dismissing related coverage.",
-      status: "error",
-    }
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-  const clusterId = String(formData.get("clusterId") ?? "").trim()
-
-  if (!articleId || !clusterId) {
-    return {
-      message: "Choose an available related-coverage group first.",
-      status: "error",
-    }
-  }
-
-  const rateLimit = await enforceRateLimit({
-    action: "story_cluster_control",
-    userId: session.user.id,
-  })
-
-  if (!rateLimit.allowed) {
-    return { message: getRateLimitErrorMessage(), status: "error" }
-  }
-
-  try {
-    const result = await dismissStoryClusterForUser({
-      clusterId,
-      userId: session.user.id,
-    })
-
-    if (!result.dismissed) {
-      return {
-        message: "This related-coverage group is already dismissed.",
-        status: "success",
-      }
-    }
-
-    revalidateArticleListPaths()
-    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
-    refresh()
-
-    return {
-      message: "Related-coverage group dismissed. Your original articles are unchanged.",
-      status: "success",
-    }
-  } catch (error) {
-    if (error instanceof StoryClusterControlError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not dismiss this related-coverage group.",
-      status: "error",
-    }
-  }
+  ...args: Parameters<typeof aiActions.dismissStoryClusterAction>
+) {
+  return aiActions.dismissStoryClusterAction(...args)
 }
 
 export async function splitStoryClusterMemberAction(
-  _previousState: SplitStoryClusterMemberActionState,
-  formData: FormData
-): Promise<SplitStoryClusterMemberActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before separating related coverage.",
-      status: "error",
-    }
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-  const clusterId = String(formData.get("clusterId") ?? "").trim()
-  const memberArticleId = String(formData.get("memberArticleId") ?? "").trim()
-
-  if (!articleId || !clusterId || !memberArticleId) {
-    return {
-      message: "Choose an available source and related-coverage group first.",
-      status: "error",
-    }
-  }
-
-  const rateLimit = await enforceRateLimit({
-    action: "story_cluster_control",
-    userId: session.user.id,
-  })
-
-  if (!rateLimit.allowed) {
-    return { message: getRateLimitErrorMessage(), status: "error" }
-  }
-
-  try {
-    const result = await splitStoryClusterMemberForUser({
-      clusterId,
-      memberArticleId,
-      userId: session.user.id,
-    })
-
-    if (!result.split) {
-      return {
-        message: "This source is already separated from the related-coverage group.",
-        status: "success",
-      }
-    }
-
-    revalidateArticleListPaths()
-    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
-    refresh()
-
-    return {
-      message: "Source separated from the related-coverage group. Original articles are unchanged.",
-      status: "success",
-    }
-  } catch (error) {
-    if (error instanceof StoryClusterControlError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not separate this source from the related-coverage group.",
-      status: "error",
-    }
-  }
+  ...args: Parameters<typeof aiActions.splitStoryClusterMemberAction>
+) {
+  return aiActions.splitStoryClusterMemberAction(...args)
 }
 
 export async function mergeStoryClustersAction(
-  _previousState: MergeStoryClustersActionState,
-  formData: FormData
-): Promise<MergeStoryClustersActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before merging related coverage.",
-      status: "error",
-    }
-  }
-
-  const articleId = String(formData.get("articleId") ?? "").trim()
-  const firstClusterId = String(formData.get("firstClusterId") ?? "").trim()
-  const secondClusterId = String(formData.get("secondClusterId") ?? "").trim()
-
-  if (!articleId || !firstClusterId || !secondClusterId) {
-    return {
-      message: "Choose two available related-coverage groups first.",
-      status: "error",
-    }
-  }
-
-  const rateLimit = await enforceRateLimit({
-    action: "story_cluster_control",
-    userId: session.user.id,
-  })
-
-  if (!rateLimit.allowed) {
-    return { message: getRateLimitErrorMessage(), status: "error" }
-  }
-
-  try {
-    const result = await mergeStoryClustersForUser({
-      firstClusterId,
-      secondClusterId,
-      userId: session.user.id,
-    })
-
-    if (!result.merged) {
-      return {
-        message: "These related-coverage groups are already merged.",
-        status: "success",
-      }
-    }
-
-    revalidateArticleListPaths()
-    revalidatePath(`/app/article/${encodeURIComponent(articleId)}`)
-    refresh()
-
-    return {
-      message: "Related-coverage groups merged. Original articles are unchanged.",
-      status: "success",
-    }
-  } catch (error) {
-    if (error instanceof StoryClusterControlError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not merge these related-coverage groups.",
-      status: "error",
-    }
-  }
+  ...args: Parameters<typeof aiActions.mergeStoryClustersAction>
+) {
+  return aiActions.mergeStoryClustersAction(...args)
 }
 
 export async function generateAiDigestAction(
-  _previousState: GenerateAiDigestActionState,
-  formData: FormData
-): Promise<GenerateAiDigestActionState> {
-  void _previousState
-
-  const submittedPeriod = formData.get("period")
-  const period =
-    submittedPeriod === null
-      ? "DAILY"
-      : isAiDigestPeriod(submittedPeriod)
-        ? submittedPeriod
-        : null
-
-  if (!period) {
-    return {
-      message: "Choose a daily or weekly briefing.",
-      status: "error",
-    }
-  }
-
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before generating a digest.",
-      status: "error",
-    }
-  }
-
-  const rateLimit = await enforceRateLimit({
-    action: "ai_digest",
-    userId: session.user.id,
-  })
-
-  if (!rateLimit.allowed) {
-    return { message: getRateLimitErrorMessage(), status: "error" }
-  }
-
-  try {
-    const digest = await requestAiDigestForUser({
-      period,
-      userId: session.user.id,
-    })
-
-    if (!digest.existing) {
-      await enqueueAiDigest(digest.digestId)
-    }
-
-    revalidatePath("/app/ai")
-    refresh()
-
-    return {
-      digestId: digest.digestId,
-      message: digest.existing
-        ? "A briefing is already in progress."
-        : `${period === "WEEKLY" ? "Weekly" : "Daily"} briefing started.`,
-      period,
-      status: "success",
-    }
-  } catch (error) {
-    if (error instanceof AiDigestError) {
-      return {
-        message: error.message,
-        status: "error",
-      }
-    }
-
-    return {
-      message: "Arctic RSS could not start that digest.",
-      status: "error",
-    }
-  }
+  ...args: Parameters<typeof aiActions.generateAiDigestAction>
+) {
+  return aiActions.generateAiDigestAction(...args)
 }
 
 export async function updateAiPreferencesAction(
-  _previousState: UpdateAiPreferencesActionState,
-  formData: FormData
-): Promise<UpdateAiPreferencesActionState> {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    return {
-      message: "You need to sign in before updating AI preferences.",
-      status: "error",
-    }
-  }
-
-  try {
-    await updateAiPreferencesForUser({
-      aiAutoSummariesEnabled: formData.has("aiAutoSummariesEnabled"),
-      dailyDigestEnabled: formData.has("dailyDigestEnabled"),
-      userId: session.user.id,
-    })
-
-    revalidatePath("/app/ai")
-    refresh()
-
-    return {
-      message: "AI preferences saved.",
-      status: "success",
-    }
-  } catch {
-    return {
-      message: "Arctic RSS could not save those AI preferences.",
-      status: "error",
-    }
-  }
+  ...args: Parameters<typeof aiActions.updateAiPreferencesAction>
+) {
+  return aiActions.updateAiPreferencesAction(...args)
 }
-
 export async function createFolderAction(formData: FormData) {
   const session = await auth()
 
@@ -1962,50 +1183,6 @@ export async function moveSubscriptionToFolderAction(formData: FormData) {
 
   revalidateFolderPaths(previousFolderId, folderId)
   refresh()
-}
-
-function revalidateArticleListPaths() {
-  // Article state only changes the three reader lists. refresh() updates the
-  // authenticated route that initiated the Server Action.
-  revalidatePath("/app")
-  revalidatePath("/app/unread")
-  revalidatePath("/app/starred")
-}
-
-function revalidatePodcastPaths() {
-  revalidatePath("/app/podcasts")
-  revalidatePath("/app/podcasts/discover")
-}
-
-function revalidateCollectionPaths(collectionId?: string) {
-  revalidatePath("/app/collections")
-
-  if (collectionId) {
-    revalidatePath(`/app/collections/${collectionId}`)
-  }
-}
-
-function revalidateFeedSubscriptionPaths(folderId?: string | null) {
-  revalidateArticleListPaths()
-  revalidateFolderPaths(folderId)
-}
-
-function revalidateFolderPaths(
-  ...folderIds: Array<string | null | undefined>
-) {
-  revalidatePath("/app/folders")
-  revalidatePath("/app/settings/import-export")
-
-  for (const folderId of new Set(folderIds)) {
-    if (folderId) {
-      revalidatePath(`/app/folder/${folderId}`)
-    }
-  }
-}
-
-function revalidateSettingsPaths() {
-  revalidatePath("/app/settings")
-  revalidatePath("/app/settings/import-export")
 }
 
 function isImportJobId(value: string) {
