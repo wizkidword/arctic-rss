@@ -130,6 +130,46 @@ describe("getPodcastEpisodeTranscriptForUser", () => {
     )
   })
 
+  it("uses a declared timed format when a publisher serves it as generic binary", async () => {
+    const fetchText = vi.fn().mockResolvedValue({
+      ...transcriptResponse(),
+      contentType: "application/octet-stream",
+    })
+
+    await expect(
+      getPodcastEpisodeTranscriptForUser({
+        cache: createCache(),
+        episodeId: "episode-1",
+        fetchText,
+        store: createStore(transcriptReference()),
+        userId: "user-1",
+      })
+    ).resolves.toMatchObject({
+      cues: [{ text: "Hello." }],
+      type: "text/vtt",
+    })
+  })
+
+  it("does not accept a generic binary response for an untimed text declaration", async () => {
+    const fetchText = vi.fn().mockResolvedValue({
+      ...transcriptResponse(),
+      contentType: "application/octet-stream",
+    })
+
+    await expect(
+      getPodcastEpisodeTranscriptForUser({
+        cache: createCache(),
+        episodeId: "episode-1",
+        fetchText,
+        store: createStore({
+          ...transcriptReference(),
+          transcriptType: "text/plain",
+        }),
+        userId: "user-1",
+      })
+    ).rejects.toMatchObject({ reason: "unsupported_format" })
+  })
+
   it("does not fetch unavailable or unsupported transcript references", async () => {
     const unavailableStore = createStore(null)
     const unavailableFetch = vi.fn()

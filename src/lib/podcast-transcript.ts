@@ -30,6 +30,11 @@ const supportedTranscriptTypes = new Set([
   "text/vtt",
 ])
 
+const timedTranscriptTypes = new Set([
+  "application/x-subrip",
+  "text/vtt",
+])
+
 const podcastTranscriptFailureReasons = new Set<PodcastTranscriptFailureReason>([
   "parse_failure",
   "oversized_response",
@@ -195,7 +200,10 @@ export async function getPodcastEpisodeTranscriptForUser({
       maxBytes: MAX_TRANSCRIPT_BYTES,
     })
 
-    if (!isSupportedPodcastTranscriptType(response.contentType)) {
+    if (!isCompatiblePodcastTranscriptResponseType({
+      declaredType: transcriptType,
+      responseType: response.contentType,
+    })) {
       throw new PodcastTranscriptError("unsupported_format")
     }
 
@@ -232,6 +240,25 @@ export async function getPodcastEpisodeTranscriptForUser({
 
 export function isSupportedPodcastTranscriptType(value: string | null | undefined) {
   return supportedTranscriptTypes.has(normalizePodcastTranscriptType(value) ?? "")
+}
+
+function isCompatiblePodcastTranscriptResponseType({
+  declaredType,
+  responseType,
+}: {
+  declaredType: string
+  responseType: string
+}) {
+  const normalizedResponseType = normalizePodcastTranscriptType(responseType)
+
+  if (isSupportedPodcastTranscriptType(normalizedResponseType)) {
+    return true
+  }
+
+  return (
+    normalizedResponseType === "application/octet-stream" &&
+    timedTranscriptTypes.has(normalizePodcastTranscriptType(declaredType) ?? "")
+  )
 }
 
 export function parsePodcastTranscript(
