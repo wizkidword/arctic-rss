@@ -1,34 +1,41 @@
-import sanitizeHtml from "sanitize-html"
-
 import { Prisma } from "../generated/prisma/client"
 import { getPrisma } from "./db"
 import { getDiscoverDirectory } from "./discover-directory"
-import { imageProxyUrl } from "./image-proxy-url"
 import { writeArticleReadStateBatches } from "./article-read-batch"
+import {
+  mapReaderArticle,
+  mapReaderArticleListItem,
+  mapStoryClusterArticle,
+  readerArticleInclude,
+  readerArticleListSelect,
+  storyClusterArticleSelect,
+  type PublicReaderArticleListStore,
+  type ReaderArticle,
+  type ReaderArticleListItem,
+  type ReaderArticleListItemsStore,
+  type ReaderArticleListStore,
+  type ReaderArticleStore,
+  type StoryClusterArticleProjection,
+  type StoryClusterArticleStore,
+} from "./articles/reader-projections"
 import {
   afterTimeCursorWhere,
   decodeTimeCursor,
   encodeTimeCursor,
   pageSize,
 } from "./time-cursor"
+export { sanitizeArticleHtml, type SanitizedArticleHtml } from "./articles/sanitization"
+export type {
+  ReaderArticle,
+  ReaderArticleAiSummary,
+  ReaderArticleListItem,
+  StoryClusterArticleProjection,
+} from "./articles/reader-projections"
 
 const PUBLIC_GUEST_PREVIEW_USER_ID = "__public_guest_preview__"
 
 type ArticleLookup = {
   id: string
-}
-
-export type ReaderArticleAiSummary = {
-  bulletSummary: string[]
-  category: string | null
-  id: string
-  keyTakeaway: string | null
-  model: string
-  provider: string
-  readingTimeSeconds: number | null
-  sentiment: string | null
-  shortSummary: string
-  tokenCount: number | null
 }
 
 type ArticleStateStore = {
@@ -77,137 +84,6 @@ type ArticleStateStore = {
   }
 }
 
-type PublicReaderArticleListStore = {
-  article: {
-    findMany(args: {
-      select: Prisma.ArticleSelect
-      orderBy: Array<{ publishedAt: "desc" } | { createdAt: "desc" }>
-      take: number
-      where: Prisma.ArticleWhereInput
-    }): Promise<ReaderArticleListRecord[]>
-  }
-}
-
-type ReaderArticleListStore = {
-  article: {
-    findMany(args: {
-      orderBy: Array<
-        | { publishedAt: { nulls: "last"; sort: "desc" } }
-        | { createdAt: "desc" }
-        | { id: "desc" }
-      >
-      select: Prisma.ArticleSelect
-      take: number
-      where: Prisma.ArticleWhereInput
-    }): Promise<ReaderArticleListRecord[]>
-  }
-}
-
-type ReaderArticleListItemsStore = {
-  article: {
-    findMany(args: {
-      select: Prisma.ArticleSelect
-      where: Prisma.ArticleWhereInput
-    }): Promise<ReaderArticleListRecord[]>
-  }
-}
-
-type ReaderArticleStore = {
-  article: {
-    findMany(args: {
-      include: Prisma.ArticleInclude
-      where: Prisma.ArticleWhereInput
-    }): Promise<ReaderArticleRecord[]>
-  }
-}
-
-declare const sanitizedArticleHtmlBrand: unique symbol
-
-export type SanitizedArticleHtml = string & {
-  readonly [sanitizedArticleHtmlBrand]: true
-}
-
-export type ReaderArticleListItem = {
-  feedFaviconUrl: string | null
-  feedId: string
-  feedTitle: string
-  id: string
-  imageUrl: string | null
-  isRead: boolean
-  isStarred: boolean
-  publishedAt: Date | null
-  summary: string | null
-  title: string
-  url: string
-}
-
-export type ReaderArticle = ReaderArticleListItem & {
-  aiSummary: ReaderArticleAiSummary | null
-  author: string | null
-  contentText: string | null
-  readAt: Date | null
-  sanitizedContentHtml: SanitizedArticleHtml | null
-  starredAt: Date | null
-}
-
-type ReaderArticleListRecord = {
-  createdAt: Date
-  feed: {
-    faviconUrl: string | null
-    id: string
-    title: string
-  }
-  feedId: string
-  id: string
-  imageUrl: string | null
-  publishedAt: Date | null
-  states: Array<{
-    isRead: boolean
-    isStarred: boolean
-  }>
-  summary: string | null
-  title: string
-  url: string
-}
-
-type ReaderArticleRecord = {
-  aiSummaries: Array<{
-    bulletSummary: unknown
-    category: string | null
-    id: string
-    keyTakeaway: string | null
-    model: string
-    provider: string
-    readingTimeSeconds: number | null
-    sentiment: string | null
-    shortSummary: string
-    tokenCount: number | null
-  }>
-  author: string | null
-  contentHtml: string | null
-  contentText: string | null
-  createdAt: Date
-  feed: {
-    faviconUrl: string | null
-    id: string
-    title: string
-  }
-  feedId: string
-  id: string
-  imageUrl: string | null
-  publishedAt: Date | null
-  states: Array<{
-    archivedAt: Date | null
-    isRead: boolean
-    isStarred: boolean
-    readAt: Date | null
-    starredAt: Date | null
-  }>
-  summary: string | null
-  title: string
-  url: string
-}
-
 export type ArticleListFilters = {
   after?: string
   collectionId?: string
@@ -245,97 +121,6 @@ export class ArticleStateError extends Error {
     super(message)
     this.name = "ArticleStateError"
   }
-}
-
-export function sanitizeArticleHtml(
-  html: string | null | undefined
-): SanitizedArticleHtml | null {
-  if (!html) {
-    return null
-  }
-
-  const sanitized = sanitizeHtml(html, {
-    allowedAttributes: {
-      a: ["href", "name", "rel", "target"],
-      blockquote: ["cite"],
-      img: ["alt", "height", "loading", "referrerpolicy", "src", "title", "width"],
-    },
-    allowedSchemes: ["http", "https", "mailto"],
-    allowedSchemesByTag: {
-      a: ["http", "https", "mailto"],
-      img: ["http", "https"],
-    },
-    allowedTags: [
-      "a",
-      "b",
-      "blockquote",
-      "br",
-      "code",
-      "em",
-      "figcaption",
-      "figure",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "hr",
-      "i",
-      "img",
-      "li",
-      "ol",
-      "p",
-      "pre",
-      "strong",
-      "ul",
-    ],
-    exclusiveFilter: (frame) =>
-      frame.tag === "img" &&
-      (isTrackingPixel(frame.attribs) || !imageProxyUrl(frame.attribs.src)),
-    transformTags: {
-      a: sanitizeHtml.simpleTransform("a", {
-        rel: "nofollow noreferrer",
-        target: "_blank",
-      }),
-      img: (tagName, attribs) => {
-        const proxiedSrc = imageProxyUrl(attribs.src)
-
-        if (!proxiedSrc) {
-          return { attribs: {}, tagName }
-        }
-
-        return {
-          attribs: {
-            ...attribs,
-            loading: "lazy",
-            referrerpolicy: "no-referrer",
-            src: proxiedSrc,
-          },
-          tagName,
-        }
-      },
-    },
-  }).trim()
-
-  return sanitized ? (sanitized as SanitizedArticleHtml) : null
-}
-
-function isTrackingPixel(attributes: Record<string, string>) {
-  const width = parseImageDimension(attributes.width)
-  const height = parseImageDimension(attributes.height)
-
-  return width !== null && height !== null && width <= 1 && height <= 1
-}
-
-function parseImageDimension(value: string | undefined) {
-  if (!value || !/^\d+(?:\.\d+)?$/.test(value)) {
-    return null
-  }
-
-  const dimension = Number(value)
-
-  return Number.isFinite(dimension) ? dimension : null
 }
 
 export async function listReaderArticles({
@@ -611,6 +396,60 @@ export async function listReaderArticlesByIdsForUserWithClient({
   })
   const articlesById = new Map(
     articles.map((article) => [article.id, mapReaderArticle(article)])
+  )
+
+  return uniqueArticleIds.flatMap((articleId) => {
+    const article = articlesById.get(articleId)
+
+    return article ? [article] : []
+  })
+}
+
+/**
+ * Loads only the metadata used by related-coverage presentation while keeping
+ * the reader's subscription and archive authorization guard at the query.
+ */
+export async function listStoryClusterArticlesByIdsForUser({
+  articleIds,
+  userId,
+}: {
+  articleIds: string[]
+  userId: string
+}): Promise<StoryClusterArticleProjection[]> {
+  return listStoryClusterArticlesByIdsForUserWithClient({
+    articleIds,
+    store: getPrisma() as unknown as StoryClusterArticleStore,
+    userId,
+  })
+}
+
+export async function listStoryClusterArticlesByIdsForUserWithClient({
+  articleIds,
+  store,
+  userId,
+}: {
+  articleIds: string[]
+  store: StoryClusterArticleStore
+  userId: string
+}): Promise<StoryClusterArticleProjection[]> {
+  const uniqueArticleIds = [...new Set(articleIds)].filter(Boolean)
+
+  if (!uniqueArticleIds.length) {
+    return []
+  }
+
+  const articles = await store.article.findMany({
+    select: storyClusterArticleSelect(),
+    where: {
+      AND: [
+        { id: { in: uniqueArticleIds } },
+        notArchivedArticleWhere(userId),
+        subscribedArticleWhere(userId),
+      ],
+    },
+  })
+  const articlesById = new Map(
+    articles.map((article) => [article.id, mapStoryClusterArticle(article)])
   )
 
   return uniqueArticleIds.flatMap((articleId) => {
@@ -1048,127 +887,6 @@ export async function markArticlesReadWithClient({
 
   return {
     markedCount: articles.length,
-  }
-}
-
-function normalizeBulletSummary(value: unknown) {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value.filter((bullet): bullet is string => typeof bullet === "string")
-}
-
-function readerArticleListSelect(userId: string) {
-  return {
-    feed: {
-      select: {
-        faviconUrl: true,
-        id: true,
-        title: true,
-      },
-    },
-    feedId: true,
-    createdAt: true,
-    id: true,
-    imageUrl: true,
-    publishedAt: true,
-    states: {
-      select: {
-        isRead: true,
-        isStarred: true,
-      },
-      take: 1,
-      where: {
-        userId,
-      },
-    },
-    summary: true,
-    title: true,
-    url: true,
-  } satisfies Prisma.ArticleSelect
-}
-
-function readerArticleInclude(userId: string) {
-  return {
-    aiSummaries: {
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        bulletSummary: true,
-        category: true,
-        id: true,
-        keyTakeaway: true,
-        model: true,
-        provider: true,
-        readingTimeSeconds: true,
-        sentiment: true,
-        shortSummary: true,
-        tokenCount: true,
-      },
-      take: 1,
-    },
-    feed: {
-      select: {
-        faviconUrl: true,
-        id: true,
-        title: true,
-      },
-    },
-    states: {
-      take: 1,
-      where: {
-        userId,
-      },
-    },
-  } satisfies Prisma.ArticleInclude
-}
-
-function mapReaderArticleListItem(
-  article: ReaderArticleListRecord
-): ReaderArticleListItem {
-  const state = article.states[0]
-
-  return {
-    feedFaviconUrl: article.feed.faviconUrl,
-    feedId: article.feedId,
-    feedTitle: article.feed.title,
-    id: article.id,
-    imageUrl: imageProxyUrl(article.imageUrl),
-    isRead: state?.isRead ?? false,
-    isStarred: state?.isStarred ?? false,
-    publishedAt: article.publishedAt,
-    summary: article.summary,
-    title: article.title,
-    url: article.url,
-  }
-}
-
-function mapReaderArticle(article: ReaderArticleRecord): ReaderArticle {
-  const aiSummary = article.aiSummaries[0]
-
-  return {
-    ...mapReaderArticleListItem(article),
-    aiSummary: aiSummary
-      ? {
-          bulletSummary: normalizeBulletSummary(aiSummary.bulletSummary),
-          category: aiSummary.category,
-          id: aiSummary.id,
-          keyTakeaway: aiSummary.keyTakeaway,
-          model: aiSummary.model,
-          provider: aiSummary.provider,
-          readingTimeSeconds: aiSummary.readingTimeSeconds,
-          sentiment: aiSummary.sentiment,
-          shortSummary: aiSummary.shortSummary,
-          tokenCount: aiSummary.tokenCount,
-        }
-      : null,
-    author: article.author,
-    contentText: article.contentText,
-    readAt: article.states[0]?.readAt ?? null,
-    sanitizedContentHtml: sanitizeArticleHtml(article.contentHtml),
-    starredAt: article.states[0]?.starredAt ?? null,
   }
 }
 

@@ -1,519 +1,32 @@
-import type { ReactNode, SVGProps } from "react"
-import Link from "next/link"
+import type { ReactNode } from "react"
 import Image from "next/image"
-import {
-  BookmarkIcon,
-  CompassIcon,
-  DownloadIcon,
-  FolderIcon,
-  HeadphonesIcon,
-  HomeIcon,
-  InboxIcon,
-  MenuIcon,
-  MessageCircleIcon,
-  SearchIcon,
-  SettingsIcon,
-  SparklesIcon,
-  StarIcon,
-} from "lucide-react"
+import Link from "next/link"
 
-import { AddFeedSheet } from "@/components/add-feed-sheet"
 import {
   AppShellAccountMenu,
   type ShellAccountUser,
 } from "@/components/app-shell-account-menu"
-import { AppShellHelpMenu } from "@/components/app-shell-help-menu"
 import { AppShellThemeController } from "@/components/app-shell-theme-controller"
 import { BulkReadProgress } from "@/components/bulk-read-progress"
 import { EmailVerificationReminder } from "@/components/email-verification-reminder"
-import { FeedNavContextMenu } from "@/components/feed-nav-context-menu"
-import { buttonVariants } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
+import { FeedNavMenuController } from "@/components/feed-nav-context-menu"
+import { MobileReaderNavigation } from "@/components/mobile-reader-navigation"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
-import type { ThemePreference } from "@/lib/settings"
-import type { DisplayMode } from "@/lib/settings"
+  ReaderNav,
+  type ShellArticleCollection,
+  type ShellDiscoverInterest,
+  type ShellFeedSubscription,
+  type ShellFolder,
+  type ShellReaderCounts,
+} from "@/components/reader-navigation"
+import { buttonVariants } from "@/components/ui/button"
 import type { BulkReadJobProgress } from "@/lib/bulk-read-jobs"
-import { isDarkThemePreference } from "@/lib/settings"
+import {
+  isDarkThemePreference,
+  type DisplayMode,
+  type ThemePreference,
+} from "@/lib/settings"
 import { cn } from "@/lib/utils"
-
-type ShellFeedSubscription = {
-  faviconUrl: string | null
-  feedId: string
-  folderId: string | null
-  folderName: string | null
-  id: string
-  isPaused: boolean
-  lastError: string | null
-  lastSuccessfulFetchAt: Date | null
-  siteUrl: string | null
-  title: string
-  unreadCount: number
-}
-type ShellReaderCounts = {
-  allCount: number
-  starredCount: number
-  unreadCount: number
-}
-
-type ShellFolder = {
-  id: string
-  name: string
-  subscriptionCount: number
-  unreadCount: number
-}
-
-type ShellArticleCollection = {
-  articleCount: number
-  id: string
-  name: string
-}
-
-type ShellDiscoverInterest = {
-  feedCount: number
-  id: string
-  label: string
-}
-
-type ShellNavigationItem = {
-  count: number
-  href: string
-  icon: typeof HomeIcon
-  label: string
-}
-
-const secondaryNav = [
-  {
-    href: "/app/settings/import-export",
-    icon: DownloadIcon,
-    label: "Import/Export",
-  },
-  { href: "/app/settings", label: "Settings", icon: SettingsIcon },
-]
-
-const kofiHref = "https://ko-fi.com/arcticrss"
-
-function KofiIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      viewBox="0 0 24 24"
-      {...props}
-    >
-      <path
-        d="M4.5 6h12.25a3 3 0 0 1 3 3v.25h.5a2.75 2.75 0 0 1 0 5.5h-.85A6 6 0 0 1 13.75 19H8a6 6 0 0 1-6-6V8.5A2.5 2.5 0 0 1 4.5 6Z"
-        fill="#29abe0"
-      />
-      <path
-        d="M19.75 11h.5a1 1 0 0 1 0 2h-.5v-2Z"
-        fill="#ffffff"
-        opacity="0.95"
-      />
-      <path
-        d="M10.75 15.2 7.5 12.1a2.05 2.05 0 0 1 2.85-2.95l.4.38.4-.38A2.05 2.05 0 0 1 14 12.1l-3.25 3.1Z"
-        fill="#ff5f5f"
-      />
-    </svg>
-  )
-}
-
-function NavigationGroup({
-  items,
-  label,
-}: {
-  items: ShellNavigationItem[]
-  label: string
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="px-2 pt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      {items.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={cn(
-            buttonVariants({ variant: "ghost" }),
-            "h-8 justify-start gap-2 px-2 text-muted-foreground"
-          )}
-        >
-          <item.icon data-icon="inline-start" />
-          <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-          <span className="text-xs tabular-nums">{item.count}</span>
-        </Link>
-      ))}
-    </div>
-  )
-}
-
-function ReaderNav({
-  articleCollections,
-  chatEnabled = false,
-  discoverInterests,
-  feedSubscriptions,
-  folders,
-  guestMode = false,
-  readerCounts,
-}: {
-  articleCollections: ShellArticleCollection[]
-  chatEnabled?: boolean
-  discoverInterests: ShellDiscoverInterest[]
-  feedSubscriptions: ShellFeedSubscription[]
-  folders: ShellFolder[]
-  guestMode?: boolean
-  readerCounts: ShellReaderCounts
-}) {
-  const appBasePath = guestMode ? "/guest" : "/app"
-  const discoverFeedsHref = `${appBasePath}/discover`
-  const discoverPodcastsHref = guestMode
-    ? "/guest/podcasts/discover"
-    : "/app/podcasts/discover"
-  const readerNav: ShellNavigationItem[] = guestMode
-    ? [
-        {
-          count: readerCounts.allCount,
-          href: "/guest",
-          icon: HomeIcon,
-          label: "All Articles",
-        },
-      ]
-    : [
-        {
-          count: readerCounts.allCount,
-          href: "/app",
-          icon: HomeIcon,
-          label: "All Articles",
-        },
-        {
-          count: readerCounts.unreadCount,
-          href: "/app/unread",
-          icon: InboxIcon,
-          label: "Unread",
-        },
-        {
-          count: readerCounts.starredCount,
-          href: "/app/starred",
-          icon: StarIcon,
-          label: "Starred",
-        },
-      ]
-  const briefingsNav: ShellNavigationItem[] = guestMode
-    ? []
-    : [
-        {
-          count: 0,
-          href: "/app/search",
-          icon: SearchIcon,
-          label: "Search",
-        },
-        {
-          count: 0,
-          href: "/app/saved-searches",
-          icon: BookmarkIcon,
-          label: "Saved views",
-        },
-        {
-          count: 0,
-          href: "/app/ai",
-          label: "AI summaries",
-          icon: SparklesIcon,
-        },
-        {
-          count: 0,
-          href: "/app/smart-digests",
-          label: "Smart digests",
-          icon: SparklesIcon,
-        },
-      ]
-  const listenNav: ShellNavigationItem[] = [
-    {
-      count: 0,
-      href: guestMode ? "/guest/podcasts/discover" : "/app/podcasts",
-      label: "Podcasts",
-      icon: HeadphonesIcon,
-    },
-  ]
-  const communityNav: ShellNavigationItem[] = chatEnabled && !guestMode
-    ? [
-        {
-          count: 0,
-          href: "/irc",
-          label: "Arctic IRC",
-          icon: MessageCircleIcon,
-        },
-      ]
-    : []
-
-  return (
-    <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
-      <NavigationGroup items={readerNav} label="Read" />
-      <Separator className="my-2" />
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2 px-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Feeds
-          </span>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {feedSubscriptions.length}
-          </span>
-        </div>
-        {!guestMode && (
-          <AddFeedSheet
-            folders={folders.map(({ id, name }) => ({ id, name }))}
-          />
-        )}
-        <Link
-          href={discoverFeedsHref}
-          className={cn(
-            buttonVariants({ variant: "outline", size: "sm" }),
-            "h-7 justify-start gap-2 px-2"
-          )}
-        >
-          <CompassIcon data-icon="inline-start" />
-          <span className="min-w-0 flex-1 truncate text-left">
-            Discover Feeds
-          </span>
-        </Link>
-        <div className="flex max-h-72 flex-col gap-1 overflow-y-auto pr-1">
-          {!guestMode && feedSubscriptions.length ? (
-            feedSubscriptions.map((subscription) => (
-              <FeedNavContextMenu
-                key={subscription.id}
-                subscription={{
-                  feedId: subscription.feedId,
-                  id: subscription.id,
-                  isPaused: subscription.isPaused,
-                  lastError: subscription.lastError,
-                  lastSuccessfulFetchAt: subscription.lastSuccessfulFetchAt,
-                  siteUrl: subscription.siteUrl,
-                  title: subscription.title,
-                  unreadCount: subscription.unreadCount,
-                }}
-              />
-            ))
-          ) : (
-            <p className="px-2 py-1 text-xs leading-5 text-muted-foreground">
-              {guestMode
-                ? "Browse Discover to preview public feeds."
-            : "Add your first feed to start filling the reader."}
-            </p>
-          )}
-        </div>
-      </div>
-      {discoverInterests.length ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2 px-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Topics
-            </span>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {discoverInterests.length}
-            </span>
-          </div>
-          <div className="flex max-h-40 flex-col gap-1 overflow-y-auto pl-3 pr-1">
-            {discoverInterests.map((interest) => (
-              <Link
-                className={cn(
-                  buttonVariants({ variant: "ghost" }),
-                  "h-7 justify-start gap-2 px-2 text-muted-foreground"
-                )}
-                href={`${discoverFeedsHref}?interest=${interest.id}`}
-                key={interest.id}
-              >
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {interest.label}
-                </span>
-                <span className="text-xs tabular-nums">
-                  {interest.feedCount}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      <Separator className="my-2" />
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2 px-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Folders
-          </span>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {folders.length}
-          </span>
-        </div>
-        {!guestMode && (
-          <Link
-            href="/app/folders"
-            className={cn(
-              buttonVariants({ variant: "outline", size: "sm" }),
-              "h-7 justify-start gap-2 px-2"
-            )}
-          >
-            <FolderIcon data-icon="inline-start" />
-            <span className="min-w-0 flex-1 truncate text-left">
-              Manage folders
-            </span>
-          </Link>
-        )}
-        {guestMode ? (
-          <p className="px-2 py-1 text-xs leading-5 text-muted-foreground">
-            Folders unlock after you create an account.
-          </p>
-        ) : null}
-        <div className="flex max-h-44 flex-col gap-1 overflow-y-auto pr-1">
-          {!guestMode && folders.length ? (
-            folders.map((folder) => (
-              <Link
-                key={folder.id}
-                href={`/app/folder/${folder.id}`}
-                className={cn(
-                  buttonVariants({ variant: "ghost" }),
-                  "h-8 justify-start gap-2 px-2 text-muted-foreground"
-                )}
-              >
-                <FolderIcon data-icon="inline-start" />
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {folder.name}
-                </span>
-                {folder.unreadCount > 0 && (
-                  <span className="text-xs tabular-nums">
-                    {folder.unreadCount}
-                  </span>
-                )}
-              </Link>
-            ))
-          ) : !guestMode ? (
-            <p className="px-2 py-1 text-xs leading-5 text-muted-foreground">
-              Group feeds as your list grows.
-            </p>
-          ) : null}
-        </div>
-      </div>
-      <Separator className="my-2" />
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2 px-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Collections
-          </span>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {articleCollections.length}
-          </span>
-        </div>
-        {!guestMode && (
-          <Link
-            href="/app/collections"
-            className={cn(
-              buttonVariants({ variant: "outline", size: "sm" }),
-              "h-7 justify-start gap-2 px-2"
-            )}
-          >
-            <BookmarkIcon data-icon="inline-start" />
-            <span className="min-w-0 flex-1 truncate text-left">
-              All collections
-            </span>
-          </Link>
-        )}
-        {guestMode ? (
-          <p className="px-2 py-1 text-xs leading-5 text-muted-foreground">
-            Create an account to save articles and episodes.
-          </p>
-        ) : null}
-        <div className="flex max-h-40 flex-col gap-1 overflow-y-auto pr-1">
-          {!guestMode && articleCollections.length ? (
-            articleCollections.map((collection) => (
-              <Link
-                key={collection.id}
-                href={`/app/collections/${collection.id}`}
-                className={cn(
-                  buttonVariants({ variant: "ghost" }),
-                  "h-8 justify-start gap-2 px-2 text-muted-foreground"
-                )}
-              >
-                <BookmarkIcon data-icon="inline-start" />
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {collection.name}
-                </span>
-                {collection.articleCount > 0 && (
-                  <span className="text-xs tabular-nums">
-                    {collection.articleCount}
-                  </span>
-                )}
-              </Link>
-            ))
-          ) : !guestMode ? (
-            <p className="px-2 py-1 text-xs leading-5 text-muted-foreground">
-              Save articles or podcast episodes for later.
-            </p>
-          ) : null}
-        </div>
-      </div>
-      <Separator className="my-2" />
-      {briefingsNav.length ? (
-        <>
-          <NavigationGroup items={briefingsNav} label="Briefings & Rules" />
-          <Separator className="my-2" />
-        </>
-      ) : null}
-      <NavigationGroup items={listenNav} label="Listen" />
-      <Link
-        href={discoverPodcastsHref}
-        className={cn(
-          buttonVariants({ variant: "outline", size: "sm" }),
-          "mt-2 h-7 justify-start gap-2 px-2"
-        )}
-      >
-        <CompassIcon data-icon="inline-start" />
-        <span className="min-w-0 flex-1 truncate text-left">
-          Discover Podcasts
-        </span>
-      </Link>
-      {communityNav.length ? (
-        <>
-          <Separator className="my-2" />
-          <NavigationGroup items={communityNav} label="Community" />
-        </>
-      ) : null}
-      <Separator className="my-2" />
-      {!guestMode &&
-        secondaryNav.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              buttonVariants({ variant: "ghost" }),
-              "h-8 justify-start gap-2 px-2 text-muted-foreground"
-            )}
-          >
-            <item.icon data-icon="inline-start" />
-            <span className="truncate">{item.label}</span>
-          </Link>
-        ))}
-      <AppShellHelpMenu />
-      <a
-        className={cn(
-          buttonVariants({ variant: "outline", size: "sm" }),
-          "h-8 justify-start gap-2 px-2"
-        )}
-        href={kofiHref}
-        rel="noreferrer"
-        target="_blank"
-      >
-        <KofiIcon className="size-4 shrink-0" data-icon="inline-start" />
-        <span className="min-w-0 flex-1 truncate text-left">
-          Support this project
-        </span>
-      </a>
-    </nav>
-  )
-}
 
 function GuestAccountMenu({ compact = false }: { compact?: boolean }) {
   return (
@@ -588,9 +101,15 @@ export function AppShell({
       data-theme-preference={themePreference.toLowerCase()}
     >
       <AppShellThemeController themePreference={themePreference} />
+      {!guestMode && feedSubscriptions.length ? (
+        <FeedNavMenuController subscriptions={feedSubscriptions} />
+      ) : null}
       {!isMinimal && (
         <aside className="fixed inset-y-0 left-0 hidden w-64 border-r bg-sidebar p-3 lg:flex lg:flex-col">
-          <Link href={homeHref} className="mb-4 flex items-center gap-2 px-2 py-1.5">
+          <Link
+            href={homeHref}
+            className="mb-4 flex items-center gap-2 px-2 py-1.5"
+          >
             <span className="flex size-8 items-center justify-center overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-border">
               <Image
                 alt=""
@@ -628,28 +147,15 @@ export function AppShell({
           !isMinimal && "lg:hidden"
         )}
       >
-        <Sheet>
-          <SheetTrigger render={<Button variant="ghost" size="icon" />}>
-            <MenuIcon />
-            <span className="sr-only">Open navigation</span>
-          </SheetTrigger>
-          <SheetContent side="left">
-            <SheetHeader>
-              <SheetTitle>Arctic RSS</SheetTitle>
-            </SheetHeader>
-            <div className="px-4">
-              <ReaderNav
-                articleCollections={articleCollections}
-                chatEnabled={chatEnabled}
-                discoverInterests={discoverInterests}
-                feedSubscriptions={feedSubscriptions}
-                folders={folders}
-                guestMode={guestMode}
-                readerCounts={readerCounts}
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
+        <MobileReaderNavigation
+          articleCollections={articleCollections}
+          chatEnabled={chatEnabled}
+          discoverInterests={discoverInterests}
+          feedSubscriptions={feedSubscriptions}
+          folders={folders}
+          guestMode={guestMode}
+          readerCounts={readerCounts}
+        />
         <Link href={homeHref} className="font-heading font-semibold">
           Arctic RSS
         </Link>
@@ -668,8 +174,8 @@ export function AppShell({
             <div className="mx-auto flex max-w-[1600px] flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
               <p>
                 <span className="font-medium">Browsing as guest.</span>{" "}
-                You can explore public feeds and podcasts, but saving,
-                starring, subscribing, and AI tools require an account.
+                You can explore public feeds and podcasts, but saving, starring,
+                subscribing, and AI tools require an account.
               </p>
               <div className="flex gap-2">
                 <Link className={buttonVariants({ size: "sm" })} href="/signup">

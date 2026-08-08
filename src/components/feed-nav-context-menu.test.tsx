@@ -31,9 +31,12 @@ vi.mock("next/link", () => ({
   ),
 }))
 
-import { FeedNavContextMenu } from "@/components/feed-nav-context-menu"
+import {
+  FeedNavMenuController,
+  type FeedNavContextMenuSubscription,
+} from "@/components/feed-nav-context-menu"
 
-const subscription = {
+const subscription: FeedNavContextMenuSubscription = {
   feedId: "feed-wired-science",
   id: "sub-wired-science",
   isPaused: false,
@@ -55,9 +58,30 @@ beforeEach(() => {
   unsubscribeFeedAction.mockReset()
 })
 
-describe("FeedNavContextMenu", () => {
+function renderMenu({
+  subscriptions = [subscription],
+}: {
+  subscriptions?: typeof subscription[]
+} = {}) {
+  return render(
+    <>
+      <FeedNavMenuController subscriptions={subscriptions} />
+      {subscriptions.map((feed) => (
+        <a
+          data-feed-nav-subscription-id={feed.id}
+          href={`/app/feed/${feed.id}`}
+          key={feed.id}
+        >
+          {feed.title}
+        </a>
+      ))}
+    </>
+  )
+}
+
+describe("FeedNavMenuController", () => {
   it("opens feed actions from a right-click on the subscribed feed", () => {
-    render(<FeedNavContextMenu subscription={subscription} />)
+    renderMenu()
 
     fireEvent.contextMenu(screen.getByRole("link", { name: /WIRED Science/ }), {
       clientX: 120,
@@ -88,7 +112,7 @@ describe("FeedNavContextMenu", () => {
 
   it("marks only the selected feed as read", async () => {
     const user = userEvent.setup()
-    render(<FeedNavContextMenu subscription={subscription} />)
+    renderMenu()
 
     fireEvent.contextMenu(screen.getByRole("link", { name: /WIRED Science/ }), {
       clientX: 120,
@@ -108,7 +132,7 @@ describe("FeedNavContextMenu", () => {
 
   it("reloads the selected feed subscription", async () => {
     const user = userEvent.setup()
-    render(<FeedNavContextMenu subscription={subscription} />)
+    renderMenu()
 
     fireEvent.contextMenu(screen.getByRole("link", { name: /WIRED Science/ }), {
       clientX: 120,
@@ -127,7 +151,7 @@ describe("FeedNavContextMenu", () => {
 
   it("pauses the selected feed subscription", async () => {
     const user = userEvent.setup()
-    render(<FeedNavContextMenu subscription={subscription} />)
+    renderMenu()
 
     fireEvent.contextMenu(screen.getByRole("link", { name: /WIRED Science/ }), {
       clientX: 120,
@@ -146,15 +170,15 @@ describe("FeedNavContextMenu", () => {
   })
 
   it("shows resume guidance instead of raw errors for a paused feed", () => {
-    render(
-      <FeedNavContextMenu
-        subscription={{
+    renderMenu({
+      subscriptions: [
+        {
           ...subscription,
           isPaused: true,
           lastError: "HTTP 503 upstream trace should stay private",
-        }}
-      />
-    )
+        },
+      ],
+    })
 
     fireEvent.contextMenu(screen.getByRole("link", { name: /WIRED Science/ }), {
       clientX: 120,
@@ -169,7 +193,7 @@ describe("FeedNavContextMenu", () => {
 
   it("opens unsubscribe confirmation instead of deleting immediately", async () => {
     const user = userEvent.setup()
-    render(<FeedNavContextMenu subscription={subscription} />)
+    renderMenu()
 
     fireEvent.contextMenu(screen.getByRole("link", { name: /WIRED Science/ }), {
       clientX: 120,
@@ -182,5 +206,45 @@ describe("FeedNavContextMenu", () => {
     expect(
       screen.getByRole("heading", { name: "Unsubscribe from WIRED Science?" })
     ).toBeTruthy()
+  })
+
+  it("uses one controller to act on the feed that was selected", async () => {
+    const user = userEvent.setup()
+    const nasa = {
+      ...subscription,
+      feedId: "feed-nasa",
+      id: "sub-nasa",
+      title: "NASA",
+    }
+    renderMenu({ subscriptions: [subscription, nasa] })
+
+    fireEvent.contextMenu(screen.getByRole("link", { name: "NASA" }), {
+      clientX: 120,
+      clientY: 160,
+    })
+
+    await user.click(screen.getByRole("menuitem", { name: "Mark feed as read" }))
+
+    await waitFor(() => {
+      expect(markAllReadAction).toHaveBeenCalledTimes(1)
+    })
+
+    const formData = markAllReadAction.mock.calls[0][0] as FormData
+    expect(formData.get("feedId")).toBe("feed-nasa")
+  })
+
+  it("supports the keyboard context-menu key and returns focus when dismissed", () => {
+    renderMenu()
+    const feedLink = screen.getByRole("link", { name: "WIRED Science" })
+    feedLink.focus()
+
+    fireEvent.keyDown(feedLink, { key: "ContextMenu" })
+
+    expect(screen.getByRole("menu", { name: "WIRED Science feed actions" })).toBeTruthy()
+
+    fireEvent.keyDown(document, { key: "Escape" })
+
+    expect(screen.queryByRole("menu", { name: "WIRED Science feed actions" })).toBeNull()
+    expect(document.activeElement).toBe(feedLink)
   })
 })

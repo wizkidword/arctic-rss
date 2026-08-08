@@ -1,8 +1,9 @@
 import {
   getReaderArticleForUser,
   listReaderArticles,
-  listReaderArticlesByIdsForUser,
-  type ReaderArticle
+  listStoryClusterArticlesByIdsForUser,
+  type ReaderArticle,
+  type StoryClusterArticleProjection,
 } from "./articles"
 import {
   STORY_CLUSTER_SIGNALS,
@@ -98,10 +99,10 @@ export type StoryClusterReaderStore = {
   }
 }
 
-type ReaderArticleLoader = (input: {
+type StoryClusterArticleLoader = (input: {
   articleIds: string[]
   userId: string
-}) => Promise<ReaderArticle[]>
+}) => Promise<StoryClusterArticleProjection[]>
 
 type StoryClusterEvaluationDependencies = {
   getReaderArticle: (input: {
@@ -231,7 +232,7 @@ export async function listStoryClustersForArticleUser({
 }): Promise<StoryClusterPresentation[]> {
   return listStoryClustersForArticleUserWithClient({
     articleId,
-    loadArticles: listReaderArticlesByIdsForUser,
+    loadArticles: listStoryClusterArticlesByIdsForUser,
     store: getPrisma() as unknown as StoryClusterReaderStore,
     userId
   })
@@ -251,7 +252,7 @@ export async function listStoryClustersForArticlesUser({
 }): Promise<StoryClusterPresentation[]> {
   return listStoryClustersForArticlesUserWithClient({
     articleIds,
-    loadArticles: listReaderArticlesByIdsForUser,
+    loadArticles: listStoryClusterArticlesByIdsForUser,
     store: getPrisma() as unknown as StoryClusterReaderStore,
     userId
   })
@@ -264,7 +265,7 @@ export async function listStoryClustersForArticleUserWithClient({
   userId
 }: {
   articleId: string
-  loadArticles: ReaderArticleLoader
+  loadArticles: StoryClusterArticleLoader
   store: StoryClusterReaderStore
   userId: string
 }): Promise<StoryClusterPresentation[]> {
@@ -285,7 +286,7 @@ export async function listStoryClustersForArticlesUserWithClient({
   userId
 }: {
   articleIds: string[]
-  loadArticles: ReaderArticleLoader
+  loadArticles: StoryClusterArticleLoader
   maxResults?: number
   store: StoryClusterReaderStore
   userId: string
@@ -440,7 +441,7 @@ function boundedReaderWindow(
 
 function presentationFromVersion(
   version: StoryClusterVersionRecord,
-  visibleArticlesById: Map<string, ReaderArticle>
+  visibleArticlesById: Map<string, StoryClusterArticleProjection>
 ): StoryClusterPresentation | null {
   const members = version.members
     .flatMap((member) => {

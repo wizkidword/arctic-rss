@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { type ReaderArticle } from "./articles"
+import {
+  type ReaderArticle,
+  type StoryClusterArticleProjection,
+} from "./articles"
 import {
   evaluateStoryClustersForArticleUserWithDependencies,
   listStoryClustersForArticleUserWithClient,
@@ -150,8 +153,8 @@ describe("story cluster reader presentation", () => {
     const loadArticles = vi
       .fn()
       .mockResolvedValue([
-        createReaderArticle("article-1", "Current article", "current"),
-        createReaderArticle("article-2", "Related article", "related")
+        createStoryClusterArticle("article-1", "Current article", "current"),
+        createStoryClusterArticle("article-2", "Related article", "related")
       ])
 
     const clusters = await listStoryClustersForArticleUserWithClient({
@@ -207,7 +210,7 @@ describe("story cluster reader presentation", () => {
       loadArticles: vi
         .fn()
         .mockResolvedValue([
-          createReaderArticle("article-1", "Current article", "current")
+          createStoryClusterArticle("article-1", "Current article", "current")
         ]),
       store: {
         storyClusterVersion: {
@@ -243,8 +246,8 @@ describe("story cluster reader presentation", () => {
       loadArticles: vi
         .fn()
         .mockResolvedValue([
-          createReaderArticle("article-1", "Current article", "current"),
-          createReaderArticle("article-2", "Related article", "related")
+          createStoryClusterArticle("article-1", "Current article", "current"),
+          createStoryClusterArticle("article-2", "Related article", "related")
         ]),
       store: {
         storyClusterVersion: {
@@ -323,5 +326,19 @@ function createReaderArticle(
     summary: null,
     title,
     url: `https://example.com/${path}`
+  }
+}
+
+function createStoryClusterArticle(
+  id: string,
+  title: string,
+  path: string
+): StoryClusterArticleProjection {
+  return {
+    feedTitle: "Example Feed",
+    id,
+    publishedAt: new Date("2026-07-28T12:00:00.000Z"),
+    title,
+    url: `https://example.com/${path}`,
   }
 }

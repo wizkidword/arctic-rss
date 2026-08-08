@@ -42,15 +42,20 @@ vi.mock("@/components/email-verification-reminder", () => ({
 }))
 
 vi.mock("@/components/feed-nav-context-menu", () => ({
-  FeedNavContextMenu: ({
-    subscription,
-  }: {
-    subscription: { id: string; title: string; unreadCount: number }
-  }) => (
-    <a href={`/app/feed/${subscription.id}`}>
-      {subscription.title}
-      {subscription.unreadCount > 0 ? subscription.unreadCount : null}
-    </a>
+  FeedNavMenuController: () => null,
+}))
+
+vi.mock("@/components/mobile-reader-navigation", () => ({
+  MobileReaderNavigation: () => <button type="button">Open navigation</button>,
+}))
+
+vi.mock("@/components/reader/navigation-link", () => ({
+  ReaderNavigationLink: ({
+    children,
+    href,
+    ...props
+  }: React.ComponentProps<"a">) => (
+    <a href={href} {...props}>{children}</a>
   ),
 }))
 
@@ -195,68 +200,68 @@ describe("AppShell", () => {
       </AppShell>
     )
 
-    expect(markup.match(/href="\/app\/discover"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/app\/podcasts"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/app\/smart-digests"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/app\/podcasts\/discover"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Read</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Briefings &amp; Rules</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Listen</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Podcasts</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Smart digests</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Saved views</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Discover Podcasts</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Discover Feeds</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Wired Science/g) ?? []).toHaveLength(2)
-    expect(markup.match(/>NASA/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/app\/feed\/subscription-wired"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/app\/feed\/subscription-nasa"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Help</g) ?? []).toHaveLength(4)
-    expect(markup.match(/>Contact support</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Report a bug</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Suggest a feature</g) ?? []).toHaveLength(2)
+    expect(markup.match(/href="\/app\/discover"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/app\/podcasts"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/app\/smart-digests"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/app\/podcasts\/discover"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Read</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Briefings &amp; Rules</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Listen</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Podcasts</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Smart digests</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Saved views</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Discover Podcasts</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Discover Feeds</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Wired Science/g) ?? []).toHaveLength(1)
+    expect(markup.match(/>NASA/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/app\/feed\/subscription-wired"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/app\/feed\/subscription-nasa"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Help</g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Contact support</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Report a bug</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Suggest a feature</g) ?? []).toHaveLength(1)
     expect(markup).toContain("Verify your email")
-    expect(markup.match(/>Legal</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Privacy Policy</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Terms of Service</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Cookie Policy</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Security</g) ?? []).toHaveLength(2)
+    expect(markup.match(/>Legal</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Privacy Policy</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Terms of Service</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Cookie Policy</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Security</g) ?? []).toHaveLength(1)
     expect(
       markup.match(
         /href="mailto:support@arcticrss\.com\?subject=Arctic%20RSS%20Support"/g
       ) ?? []
-    ).toHaveLength(2)
-    expect(markup.match(/href="\/legal"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/privacy"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/terms"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/cookies"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/security"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Support this project</g) ?? []).toHaveLength(2)
+    ).toHaveLength(1)
+    expect(markup.match(/href="\/legal"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/privacy"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/terms"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/cookies"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/security"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Support this project</g) ?? []).toHaveLength(1)
     expect(
       markup.match(/href="https:\/\/ko-fi\.com\/arcticrss"/g) ?? []
-    ).toHaveLength(2)
-    expect(markup.match(/>Collections</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>All collections</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Read Later</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Research</g) ?? []).toHaveLength(2)
+    ).toHaveLength(1)
+    expect(markup.match(/>Collections</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>All collections</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Read Later</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Research</g) ?? []).toHaveLength(1)
     expect(
       markup.match(/href="\/app\/collections\/collection-read-later"/g) ?? []
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       markup.match(/href="\/app\/collections\/collection-research"/g) ?? []
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       markup.match(/href="\/app\/discover\?interest=general"/g) ?? []
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       markup.match(/href="\/app\/discover\?interest=politics"/g) ?? []
-    ).toHaveLength(2)
+    ).toHaveLength(1)
 
     const navSections = [
       ...markup.matchAll(/<nav\b[^>]*>[\s\S]*?<\/nav>/g),
     ].map(([section]) => section)
 
-    expect(navSections).toHaveLength(2)
+    expect(navSections).toHaveLength(1)
 
     for (const navSection of navSections) {
       const addFeedIndex = navSection.indexOf(">Add Feed<")
@@ -331,9 +336,9 @@ describe("AppShell", () => {
       </AppShell>
     )
 
-    expect(markup.match(/href="\/irc"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Community</g) ?? []).toHaveLength(2)
-    expect(markup.match(/>Arctic IRC</g) ?? []).toHaveLength(2)
+    expect(markup.match(/href="\/irc"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Community</g) ?? []).toHaveLength(1)
+    expect(markup.match(/>Arctic IRC</g) ?? []).toHaveLength(1)
   })
 
   it("uses a collapsed navigation shell for minimal display mode", () => {
@@ -375,9 +380,9 @@ describe("AppShell", () => {
     )
 
     expect(markup).toContain("Browsing as guest")
-    expect(markup.match(/href="\/guest"/g) ?? []).toHaveLength(4)
-    expect(markup.match(/href="\/guest\/discover"/g) ?? []).toHaveLength(2)
-    expect(markup.match(/href="\/guest\/podcasts\/discover"/g) ?? []).toHaveLength(4)
+    expect(markup.match(/href="\/guest"/g) ?? []).toHaveLength(3)
+    expect(markup.match(/href="\/guest\/discover"/g) ?? []).toHaveLength(1)
+    expect(markup.match(/href="\/guest\/podcasts\/discover"/g) ?? []).toHaveLength(2)
     expect(markup).toContain('href="/signup"')
     expect(markup).toContain(">Create account<")
     expect(markup).not.toContain(">Log out<")

@@ -2,11 +2,11 @@
 
 import {
   type CSSProperties,
-  type KeyboardEvent,
-  type MouseEvent,
   useActionState,
+  useCallback,
   useEffect,
   useId,
+  useMemo,
   useState,
   useTransition,
 } from "react"
@@ -38,7 +38,6 @@ import {
   AlertDialogContent,
 } from "@/components/ui/alert-dialog"
 import { FeedUnsubscribeDialogContent } from "@/components/feed-unsubscribe-button"
-import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 export type FeedNavContextMenuSubscription = {
@@ -55,6 +54,11 @@ export type FeedNavContextMenuSubscription = {
 type MenuPosition = {
   x: number
   y: number
+}
+
+type FeedMenuSelection = {
+  subscription: FeedNavContextMenuSubscription
+  trigger: HTMLAnchorElement
 }
 
 const refreshInitialState: RefreshFeedActionState = {
@@ -79,39 +83,100 @@ const MENU_WIDTH = 224
 const MENU_ESTIMATED_HEIGHT = 300
 const MENU_VIEWPORT_GAP = 8
 
-export function FeedNavContextMenu({
-  className,
-  subscription,
+/**
+ * Owns one context-menu and confirmation state for every desktop and mobile
+ * feed link. Feed links themselves remain lightweight server-rendered markup.
+ */
+export function FeedNavMenuController({
+  subscriptions,
 }: {
-  className?: string
-  subscription: FeedNavContextMenuSubscription
+  subscriptions: FeedNavContextMenuSubscription[]
 }) {
-  const feedHref = `/app/feed/${subscription.id}`
-  const menuId = useId()
+  const subscriptionsById = useMemo(
+    () => new Map(subscriptions.map((subscription) => [subscription.id, subscription])),
+    [subscriptions]
+  )
+  const [selection, setSelection] = useState<FeedMenuSelection | null>(null)
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null)
-  const [unsubscribeOpen, setUnsubscribeOpen] = useState(false)
-  const [showFeedError, setShowFeedError] = useState(false)
-  const [, startTransition] = useTransition()
-  const [unsubscribeState, unsubscribeAction, unsubscribePending] =
-    useActionState(unsubscribeFeedAction, unsubscribeInitialState)
 
-  const menuOpen = menuPosition !== null
+  const dismiss = useCallback(({ restoreFocus = false }: { restoreFocus?: boolean } = {}) => {
+    const trigger = selection?.trigger
 
-  useEffect(() => {
-    if (!menuOpen) {
+    setMenuPosition(null)
+    setSelection(null)
+
+    if (restoreFocus && trigger?.isConnected) {
+      requestAnimationFrame(() => trigger.focus())
+    }
+  }, [selection])
+
+  const hideMenu = useCallback(() => {
+    setMenuPosition(null)
+  }, [])
+
+  const openMenu = useCallback((trigger: HTMLAnchorElement, x: number, y: number) => {
+    const subscriptionId = trigger.dataset.feedNavSubscriptionId
+    const subscription = subscriptionId
+      ? subscriptionsById.get(subscriptionId)
+      : undefined
+
+    if (!subscription) {
       return
     }
 
-    function closeMenu() {
-      setMenuPosition(null)
-      setShowFeedError(false)
+    setSelection({ subscription, trigger })
+    setMenuPosition(clampMenuToViewport(x, y))
+  }, [subscriptionsById])
+
+  useEffect(() => {
+    function onContextMenu(event: globalThis.MouseEvent) {
+      const trigger = feedNavTrigger(event.target)
+
+      if (!trigger) {
+        return
+      }
+
+      event.preventDefault()
+      openMenu(trigger, event.clientX, event.clientY)
+    }
+
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) {
+        return
+      }
+
+      const trigger = feedNavTrigger(event.target)
+
+      if (!trigger) {
+        return
+      }
+
+      event.preventDefault()
+      const rect = trigger.getBoundingClientRect()
+      openMenu(trigger, rect.left + 16, rect.bottom + 4)
+    }
+
+    document.addEventListener("contextmenu", onContextMenu)
+    document.addEventListener("keydown", onKeyDown)
+
+    return () => {
+      document.removeEventListener("contextmenu", onContextMenu)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [openMenu])
+
+  useEffect(() => {
+    if (!menuPosition) {
+      return
     }
 
     function closeOnEscape(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") {
-        closeMenu()
+        dismiss({ restoreFocus: true })
       }
     }
+
+    const closeMenu = () => dismiss()
 
     window.addEventListener("resize", closeMenu)
     window.addEventListener("scroll", closeMenu, true)
@@ -124,30 +189,44 @@ export function FeedNavContextMenu({
       document.removeEventListener("pointerdown", closeMenu)
       document.removeEventListener("keydown", closeOnEscape)
     }
-  }, [menuOpen])
+  }, [dismiss, menuPosition])
 
-  function openMenuAt(x: number, y: number) {
-    setMenuPosition(clampMenuToViewport(x, y))
-    setShowFeedError(false)
+  if (!selection) {
+    return null
   }
 
-  function onContextMenu(event: MouseEvent<HTMLAnchorElement>) {
-    event.preventDefault()
-    openMenuAt(event.clientX, event.clientY)
-  }
+  return (
+    <FeedNavActionMenu
+      key={selection.subscription.id}
+      onHideMenu={hideMenu}
+      menuPosition={menuPosition}
+      onDismiss={dismiss}
+      subscription={selection.subscription}
+    />
+  )
+}
 
-  function onKeyDown(event: KeyboardEvent<HTMLAnchorElement>) {
-    if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) {
-      return
-    }
-
-    event.preventDefault()
-    const rect = event.currentTarget.getBoundingClientRect()
-    openMenuAt(rect.left + 16, rect.bottom + 4)
-  }
+function FeedNavActionMenu({
+  menuPosition,
+  onDismiss,
+  onHideMenu,
+  subscription,
+}: {
+  menuPosition: MenuPosition | null
+  onDismiss: (options?: { restoreFocus?: boolean }) => void
+  onHideMenu: () => void
+  subscription: FeedNavContextMenuSubscription
+}) {
+  const feedHref = `/app/feed/${subscription.id}`
+  const menuId = useId()
+  const [unsubscribeOpen, setUnsubscribeOpen] = useState(false)
+  const [showFeedError, setShowFeedError] = useState(false)
+  const [, startTransition] = useTransition()
+  const [unsubscribeState, unsubscribeAction, unsubscribePending] =
+    useActionState(unsubscribeFeedAction, unsubscribeInitialState)
 
   function runMarkFeedRead() {
-    setMenuPosition(null)
+    onDismiss({ restoreFocus: true })
     startTransition(() => {
       const formData = new FormData()
       formData.set("scope", "feed")
@@ -157,7 +236,7 @@ export function FeedNavContextMenu({
   }
 
   function runMarkAllRead() {
-    setMenuPosition(null)
+    onDismiss({ restoreFocus: true })
     startTransition(() => {
       const formData = new FormData()
       formData.set("scope", "all")
@@ -166,7 +245,7 @@ export function FeedNavContextMenu({
   }
 
   function runRefreshFeed() {
-    setMenuPosition(null)
+    onDismiss({ restoreFocus: true })
     startTransition(() => {
       const formData = new FormData()
       formData.set("subscriptionId", subscription.id)
@@ -175,7 +254,7 @@ export function FeedNavContextMenu({
   }
 
   function runSetFeedPaused() {
-    setMenuPosition(null)
+    onDismiss({ restoreFocus: true })
     startTransition(() => {
       const formData = new FormData()
       formData.set("isPaused", String(!subscription.isPaused))
@@ -185,45 +264,22 @@ export function FeedNavContextMenu({
   }
 
   function openUnsubscribeDialog() {
-    setMenuPosition(null)
+    setShowFeedError(false)
+    onHideMenu()
     setUnsubscribeOpen(true)
   }
 
-  const link = (
-    <Link
-      aria-controls={menuOpen ? menuId : undefined}
-      aria-haspopup="menu"
-      className={cn(
-        buttonVariants({ variant: "ghost" }),
-        "h-8 justify-start gap-2 px-2 text-muted-foreground",
-        className
-      )}
-      href={feedHref}
-      onContextMenu={onContextMenu}
-      onKeyDown={onKeyDown}
-    >
-      <RssIcon data-icon="inline-start" />
-      <span className="min-w-0 flex-1 truncate text-left">
-        {subscription.title}
-      </span>
-      {subscription.unreadCount > 0 && (
-        <span className="text-xs tabular-nums">{subscription.unreadCount}</span>
-      )}
-      {subscription.isPaused ? (
-        <span className="text-xs text-muted-foreground">Paused</span>
-      ) : subscription.lastError ? (
-        <span
-          aria-label="Feed needs attention"
-          className="size-1.5 rounded-full bg-destructive"
-        />
-      ) : null}
-    </Link>
-  )
+  function onUnsubscribeOpenChange(open: boolean) {
+    setUnsubscribeOpen(open)
+
+    if (!open) {
+      onDismiss({ restoreFocus: true })
+    }
+  }
 
   return (
     <>
-      {link}
-      {typeof document !== "undefined" && menuOpen
+      {typeof document !== "undefined" && menuPosition
         ? createPortal(
             <div
               aria-label={`${subscription.title} feed actions`}
@@ -271,7 +327,7 @@ export function FeedNavContextMenu({
               <Link
                 className={menuItemClass}
                 href={feedHref}
-                onClick={() => setMenuPosition(null)}
+                onClick={() => onDismiss({ restoreFocus: true })}
                 role="menuitem"
               >
                 <RssIcon />
@@ -281,7 +337,7 @@ export function FeedNavContextMenu({
                 <a
                   className={menuItemClass}
                   href={subscription.siteUrl}
-                  onClick={() => setMenuPosition(null)}
+                  onClick={() => onDismiss({ restoreFocus: true })}
                   rel="noreferrer"
                   role="menuitem"
                   target="_blank"
@@ -290,12 +346,7 @@ export function FeedNavContextMenu({
                   Open original site
                 </a>
               ) : (
-                <button
-                  className={menuItemClass}
-                  disabled
-                  role="menuitem"
-                  type="button"
-                >
+                <button className={menuItemClass} disabled role="menuitem" type="button">
                   <GlobeIcon />
                   Open original site
                 </button>
@@ -342,7 +393,7 @@ export function FeedNavContextMenu({
             document.body
           )
         : null}
-      <AlertDialog open={unsubscribeOpen} onOpenChange={setUnsubscribeOpen}>
+      <AlertDialog open={unsubscribeOpen} onOpenChange={onUnsubscribeOpenChange}>
         <AlertDialogContent>
           <FeedUnsubscribeDialogContent
             action={unsubscribeAction}
@@ -355,6 +406,14 @@ export function FeedNavContextMenu({
       </AlertDialog>
     </>
   )
+}
+
+function feedNavTrigger(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return null
+  }
+
+  return target.closest<HTMLAnchorElement>("[data-feed-nav-subscription-id]")
 }
 
 function feedHealthSummary(subscription: FeedNavContextMenuSubscription) {

@@ -120,6 +120,10 @@ let transcriptCacheRedis: Redis | undefined
 const sharedTranscriptOutboundLimiter = createHostRequestLimiter(
   GLOBAL_TRANSCRIPT_FETCH_CONCURRENCY
 )
+const transcriptFetchesInFlight = new WeakMap<
+  PodcastTranscriptFetchText,
+  Map<string, Promise<SafeFetchTextResult>>
+>()
 
 export async function getPodcastEpisodeTranscriptForUser({
   cache,
@@ -194,10 +198,10 @@ export async function getPodcastEpisodeTranscriptForUser({
   }
 
   try {
-    const response = await fetchText(transcriptLocation, {
-      accept: "text/vtt, application/x-subrip, text/plain;q=0.9, */*;q=0.1",
-      globalRequestLimiter: outboundRequestLimiter,
-      maxBytes: MAX_TRANSCRIPT_BYTES,
+    const response = await fetchTranscriptOnce({
+      fetchText,
+      outboundRequestLimiter,
+      url: transcriptLocation,
     })
 
     if (!isCompatiblePodcastTranscriptResponseType({
@@ -240,6 +244,67 @@ export async function getPodcastEpisodeTranscriptForUser({
 
 export function isSupportedPodcastTranscriptType(value: string | null | undefined) {
   return supportedTranscriptTypes.has(normalizePodcastTranscriptType(value) ?? "")
+}
+
+function fetchTranscriptOnce({
+  fetchText,
+  outboundRequestLimiter,
+  url,
+}: {
+  fetchText: PodcastTranscriptFetchText
+  outboundRequestLimiter: HostRequestLimiter
+  url: URL
+}) {
+  const fetchesInFlight = getTranscriptFetchesInFlight(fetchText)
+  const inFlight = fetchesInFlight.get(url.href)
+
+  if (inFlight) {
+    return inFlight
+  }
+
+  const request = Promise.resolve().then(() =>
+    fetchText(url, {
+      accept: "text/vtt, application/x-subrip, text/plain;q=0.9, */*;q=0.1",
+      globalRequestLimiter: outboundRequestLimiter,
+      maxBytes: MAX_TRANSCRIPT_BYTES,
+    })
+  )
+
+  fetchesInFlight.set(url.href, request)
+
+  void request.then(
+    () => clearInFlightTranscriptFetch(fetchText, fetchesInFlight, url.href, request),
+    () => clearInFlightTranscriptFetch(fetchText, fetchesInFlight, url.href, request)
+  )
+
+  return request
+}
+
+function getTranscriptFetchesInFlight(fetchText: PodcastTranscriptFetchText) {
+  const existing = transcriptFetchesInFlight.get(fetchText)
+
+  if (existing) {
+    return existing
+  }
+
+  const requests = new Map<string, Promise<SafeFetchTextResult>>()
+  transcriptFetchesInFlight.set(fetchText, requests)
+  return requests
+}
+
+function clearInFlightTranscriptFetch(
+  fetchText: PodcastTranscriptFetchText,
+  fetchesInFlight: Map<string, Promise<SafeFetchTextResult>>,
+  url: string,
+  request: Promise<SafeFetchTextResult>
+) {
+  if (fetchesInFlight.get(url) === request) {
+    fetchesInFlight.delete(url)
+  }
+
+  if (fetchesInFlight.size === 0) {
+    transcriptFetchesInFlight.delete(fetchText)
+  }
 }
 
 function isCompatiblePodcastTranscriptResponseType({
