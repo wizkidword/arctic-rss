@@ -9,6 +9,7 @@ import {
 } from "./url-safety"
 import { nextFetchAt } from "./refresh-schedule"
 import { writeRefreshItems, type RefreshWriteStats } from "./refresh-write-batch"
+import { articleIngestionFingerprint } from "./ingestion-fingerprint"
 
 export const MAX_LINKED_ARTICLE_FETCHES = 12
 export const MAX_LINKED_ARTICLE_FETCH_CONCURRENCY = 3
@@ -31,12 +32,16 @@ type FeedRefreshStore = {
       skipDuplicates: boolean
     }): Promise<{ count: number }>
     findMany(args: {
-      select: { externalId: true; id?: true }
+      select: { externalId: true; id?: true; ingestionFingerprint?: true }
       where: {
         externalId: { in: string[] }
         feedId: string
       }
-    }): Promise<Array<{ externalId: string; id?: string }>>
+    }): Promise<Array<{
+      externalId: string
+      id?: string
+      ingestionFingerprint?: string | null
+    }>>
     update(args: {
       data: Record<string, unknown>
       where: {
@@ -173,9 +178,10 @@ export async function refreshFeedWithClient({
         metrics: {
           ...baseMetrics,
           durationMs: elapsedMs(startedAt),
+          changedCount: 0,
+          duplicateInputCount: 0,
           insertedCount: 0,
-          skippedCount: 0,
-          updatedCount: 0,
+          unchangedCount: 0,
         },
       }
     }
@@ -314,13 +320,16 @@ async function writeFeedArticles({
   store: FeedRefreshStore
 }) {
   const existing = await store.article.findMany({
-    select: { externalId: true },
+    select: { externalId: true, ingestionFingerprint: true },
     where: {
       externalId: { in: articles.map((article) => article.externalId) },
       feedId,
     },
   })
-  const existingExternalIds = new Set(existing.map((article) => article.externalId))
+  const existingByExternalId = new Map(
+    existing.map((article) => [article.externalId, article])
+  )
+  const existingExternalIds = new Set(existingByExternalId.keys())
   const candidateExternalIds = [
     ...new Set(articles.map((article) => article.externalId)),
   ].filter((externalId) => !existingExternalIds.has(externalId))
@@ -330,11 +339,20 @@ async function writeFeedArticles({
         data: items.map((article) => articleCreateData(feedId, article)),
         skipDuplicates: true,
       }),
-    findExistingExternalIds: async (externalIds) =>
+    findExistingItems: async (externalIds) =>
       externalIds
         .filter((externalId) => existingExternalIds.has(externalId))
-        .map((externalId) => ({ externalId })),
-    items: articles,
+        .map((externalId) => {
+          return {
+            externalId,
+            ingestionFingerprint:
+              existingByExternalId.get(externalId)?.ingestionFingerprint ?? null,
+          }
+        }),
+    items: articles.map((article) => ({
+      ...article,
+      ingestionFingerprint: articleIngestionFingerprint(article),
+    })),
     runUpdateBatch: (operations) => store.$transaction(operations),
     update: (article) =>
       store.article.update({
@@ -478,25 +496,31 @@ function excerpt(value: string) {
   return value.length <= 240 ? value : `${value.slice(0, 237).trimEnd()}...`
 }
 
-function articleCreateData(feedId: string, article: ParsedFeedArticle) {
+function articleCreateData(
+  feedId: string,
+  article: ParsedFeedArticle & { ingestionFingerprint: string }
+) {
   return withoutUndefined({
     ...article,
     feedId,
   })
 }
 
-function articleUpdateData(article: ParsedFeedArticle) {
-  return withoutUndefined({
-    author: article.author,
-    canonicalUrl: article.canonicalUrl,
-    contentHtml: article.contentHtml,
-    contentText: article.contentText,
-    imageUrl: article.imageUrl,
-    publishedAt: article.publishedAt,
-    summary: article.summary,
+function articleUpdateData(
+  article: ParsedFeedArticle & { ingestionFingerprint: string }
+) {
+  return {
+    author: article.author ?? null,
+    canonicalUrl: article.canonicalUrl ?? null,
+    contentHtml: article.contentHtml ?? null,
+    contentText: article.contentText ?? null,
+    imageUrl: article.imageUrl ?? null,
+    ingestionFingerprint: article.ingestionFingerprint,
+    publishedAt: article.publishedAt ?? null,
+    summary: article.summary ?? null,
     title: article.title,
     url: article.url,
-  })
+  }
 }
 
 function responseValidators(response: SafeFetchTextResult) {

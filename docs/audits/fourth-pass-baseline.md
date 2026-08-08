@@ -141,6 +141,32 @@ does not add a duplicate job after its initial XML import succeeds.
 
 No migration, production action, push, or deployment is included in this phase.
 
+## Phase 6 local changed-only persistence evidence (2026-08-08)
+
+Feed articles and podcast episodes now use a versioned SHA-256 fingerprint of
+their normalized mutable source fields. A new item is inserted. An existing
+item with the same fingerprint is not updated. A changed item, or an older row
+with a null fingerprint, receives one normal update that saves the current
+fingerprint. Optional source fields are explicitly cleared to `null` when a
+correction removes them, so stored data cannot disagree with its fingerprint.
+
+The migration is an expand-only nullable column addition with no default,
+backfill, index, generated field, or stored procedure. Its checked-in risk
+record includes the exact SQL SHA-256 and a production lock/recovery decision.
+The `ingestion:persistence:measure` script refuses every non-loopback database
+and requires an explicit disposable-database flag; it creates then removes its
+own feed and podcast fixtures while measuring initial inserts, identical
+no-op writes, corrected writes, and the PostgreSQL WAL delta.
+
+| Disposable PostgreSQL verification | Result |
+| --- | --- |
+| Schema migration | All 39 checked-in migrations, including the fingerprint expansion, applied successfully to a temporary loopback `postgres:17.10-alpine3.23` container. The container was removed after the check. |
+| First refresh equivalent | Two rows inserted (one article and one episode); 2,192 WAL bytes. |
+| Identical refresh equivalent | Zero inserted, zero changed, two unchanged; zero WAL bytes. |
+| Corrected refresh equivalent | Two rows changed (one article and one episode); 336 WAL bytes. |
+
+No migration, production action, push, or deployment is included in this phase.
+
 ## Phase 4 local account-deletion handoff evidence (2026-08-08)
 
 The final cross-device deletion confirmation now authenticates and rate-limits

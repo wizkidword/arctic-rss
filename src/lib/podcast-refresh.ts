@@ -8,6 +8,7 @@ import {
 } from "./url-safety"
 import { nextFetchAt } from "./refresh-schedule"
 import { writeRefreshItems, type RefreshWriteStats } from "./refresh-write-batch"
+import { podcastEpisodeIngestionFingerprint } from "./ingestion-fingerprint"
 
 type RefreshablePodcast = {
   consecutiveFailures: number
@@ -47,12 +48,12 @@ type PodcastRefreshStore = {
       skipDuplicates: boolean
     }): Promise<{ count: number }>
     findMany(args: {
-      select: { externalId: true }
+      select: { externalId: true; ingestionFingerprint: true }
       where: {
         externalId: { in: string[] }
         podcastId: string
       }
-    }): Promise<Array<{ externalId: string }>>
+    }): Promise<Array<{ externalId: string; ingestionFingerprint: string | null }>>
     update(args: {
       data: Record<string, unknown>
       where: {
@@ -162,9 +163,10 @@ export async function refreshPodcastWithClient({
         metrics: {
           ...baseMetrics,
           durationMs: elapsedMs(startedAt),
+          changedCount: 0,
+          duplicateInputCount: 0,
           insertedCount: 0,
-          skippedCount: 0,
-          updatedCount: 0,
+          unchangedCount: 0,
         },
         podcastId: podcast.id,
       }
@@ -312,15 +314,18 @@ async function writePodcastEpisodes({
         data: items.map((episode) => episodeCreateData(podcastId, episode)),
         skipDuplicates: true,
       }),
-    findExistingExternalIds: (externalIds) =>
+    findExistingItems: (externalIds) =>
       store.podcastEpisode.findMany({
-        select: { externalId: true },
+        select: { externalId: true, ingestionFingerprint: true },
         where: {
           externalId: { in: externalIds },
           podcastId,
         },
       }),
-    items: episodes,
+    items: episodes.map((episode) => ({
+      ...episode,
+      ingestionFingerprint: podcastEpisodeIngestionFingerprint(episode),
+    })),
     runUpdateBatch: (operations) => store.$transaction(operations),
     update: (episode) =>
       store.podcastEpisode.update({
@@ -335,31 +340,37 @@ async function writePodcastEpisodes({
   })
 }
 
-function episodeCreateData(podcastId: string, episode: ParsedPodcastEpisode) {
+function episodeCreateData(
+  podcastId: string,
+  episode: ParsedPodcastEpisode & { ingestionFingerprint: string }
+) {
   return withoutUndefined({
     ...episode,
     podcastId,
   })
 }
 
-function episodeUpdateData(episode: ParsedPodcastEpisode) {
-  return withoutUndefined({
-    audioLengthBytes: episode.audioLengthBytes,
-    audioType: episode.audioType,
+function episodeUpdateData(
+  episode: ParsedPodcastEpisode & { ingestionFingerprint: string }
+) {
+  return {
+    audioLengthBytes: episode.audioLengthBytes ?? null,
+    audioType: episode.audioType ?? null,
     audioUrl: episode.audioUrl,
-    contentHtml: episode.contentHtml,
-    contentText: episode.contentText,
-    description: episode.description,
-    durationSeconds: episode.durationSeconds,
-    imageUrl: episode.imageUrl,
-    publishedAt: episode.publishedAt,
+    contentHtml: episode.contentHtml ?? null,
+    contentText: episode.contentText ?? null,
+    description: episode.description ?? null,
+    durationSeconds: episode.durationSeconds ?? null,
+    imageUrl: episode.imageUrl ?? null,
+    ingestionFingerprint: episode.ingestionFingerprint,
+    publishedAt: episode.publishedAt ?? null,
     title: episode.title,
     transcriptLanguage: episode.transcriptLanguage ?? null,
     transcriptRel: episode.transcriptRel ?? null,
     transcriptType: episode.transcriptType ?? null,
     transcriptUrl: episode.transcriptUrl ?? null,
-    url: episode.url,
-  })
+    url: episode.url ?? null,
+  }
 }
 
 function responseValidators(response: SafeFetchTextResult) {

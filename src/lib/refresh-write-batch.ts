@@ -1,19 +1,23 @@
 export const REFRESH_WRITE_BATCH_SIZE = 100
 
 export type RefreshWriteStats = {
+  changedCount: number
+  duplicateInputCount: number
   insertedCount: number
-  skippedCount: number
-  updatedCount: number
+  unchangedCount: number
 }
 
 type RefreshItem = {
   externalId: string
+  ingestionFingerprint: string
 }
 
 type RefreshWriteBatchOptions<Item extends RefreshItem> = {
   batchSize?: number
   createMany: (items: Item[]) => Promise<{ count: number }>
-  findExistingExternalIds: (externalIds: string[]) => Promise<Array<{ externalId: string }>>
+  findExistingItems: (externalIds: string[]) => Promise<
+    Array<{ externalId: string; ingestionFingerprint: string | null }>
+  >
   items: Item[]
   runUpdateBatch?: (operations: Array<Promise<unknown>>) => Promise<unknown>
   update: (item: Item) => Promise<unknown>
@@ -21,14 +25,15 @@ type RefreshWriteBatchOptions<Item extends RefreshItem> = {
 
 /**
  * Writes parsed feed items in small, bounded database batches. New items use a
- * single createMany statement per batch; existing items retain their mutable
- * fields through a transaction batch. This avoids serial per-item upserts
- * while retaining the correction behavior of the former upsert path.
+ * single createMany statement per batch. Existing items only update when their
+ * mutable-source fingerprint differs; legacy rows without a fingerprint get a
+ * single normal update to populate it. This avoids serial per-item upserts and
+ * prevents identical refreshes from changing stored rows.
  */
 export async function writeRefreshItems<Item extends RefreshItem>({
   batchSize = REFRESH_WRITE_BATCH_SIZE,
   createMany,
-  findExistingExternalIds,
+  findExistingItems,
   items,
   runUpdateBatch,
   update,
@@ -37,28 +42,38 @@ export async function writeRefreshItems<Item extends RefreshItem>({
 
   if (uniqueItems.length === 0) {
     return {
+      changedCount: 0,
+      duplicateInputCount: items.length,
       insertedCount: 0,
-      skippedCount: items.length,
-      updatedCount: 0,
+      unchangedCount: 0,
     }
   }
 
-  const existingExternalIds = new Set(
+  const existingByExternalId = new Map(
     (
-      await findExistingExternalIds(uniqueItems.map((item) => item.externalId))
-    ).map((item) => item.externalId)
+      await findExistingItems(uniqueItems.map((item) => item.externalId))
+    ).map((item) => [item.externalId, item])
   )
-  const existingItems = uniqueItems.filter((item) =>
-    existingExternalIds.has(item.externalId)
+  const newItems = uniqueItems.filter(
+    (item) => !existingByExternalId.has(item.externalId)
   )
+  const changedItems = uniqueItems.filter((item) => {
+    const existing = existingByExternalId.get(item.externalId)
+
+    return (
+      existing !== undefined &&
+      existing.ingestionFingerprint !== item.ingestionFingerprint
+    )
+  })
+  const unchangedCount = uniqueItems.length - newItems.length - changedItems.length
   let insertedCount = 0
 
-  for (const batch of chunk(uniqueItems, batchSize)) {
+  for (const batch of chunk(newItems, batchSize)) {
     const result = await createMany(batch)
     insertedCount += result.count
   }
 
-  for (const batch of chunk(existingItems, batchSize)) {
+  for (const batch of chunk(changedItems, batchSize)) {
     const operations = batch.map((item) => update(item))
 
     if (runUpdateBatch) {
@@ -69,9 +84,10 @@ export async function writeRefreshItems<Item extends RefreshItem>({
   }
 
   return {
+    changedCount: changedItems.length,
+    duplicateInputCount: items.length - uniqueItems.length,
     insertedCount,
-    skippedCount: Math.max(0, items.length - insertedCount - existingItems.length),
-    updatedCount: existingItems.length,
+    unchangedCount,
   }
 }
 

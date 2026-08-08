@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { refreshFeedWithClient } from "./feed-refresh"
+import { articleIngestionFingerprint } from "./ingestion-fingerprint"
+import { parseFeedArticles } from "./feed-articles"
 
 const rssXml = `<?xml version="1.0"?>
 <rss version="2.0">
@@ -88,10 +90,11 @@ describe("feed refresh", () => {
     expect(result.metrics).toEqual(
       expect.objectContaining({
         conditionalHit: false,
+        changedCount: 0,
+        duplicateInputCount: 0,
         insertedCount: 1,
         parsedCount: 1,
-        skippedCount: 0,
-        updatedCount: 0,
+        unchangedCount: 0,
       })
     )
     expect(store.feed.update).toHaveBeenCalledWith({
@@ -109,7 +112,9 @@ describe("feed refresh", () => {
 
   it("updates existing feed items in a bounded transaction batch", async () => {
     const store = createStore()
-    store.article.findMany.mockResolvedValue([{ externalId: "item-1" }])
+    store.article.findMany.mockResolvedValue([
+      { externalId: "item-1", ingestionFingerprint: "outdated" },
+    ])
 
     await refreshFeedWithClient({
       feedId: "feed-1",
@@ -136,6 +141,65 @@ describe("feed refresh", () => {
       },
     })
     expect(store.$transaction).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not rewrite an article whose normalized source content is unchanged", async () => {
+    const store = createStore()
+    const [article] = parseFeedArticles(rssXml, "https://example.com/rss.xml")
+    store.article.findMany.mockResolvedValue([
+      {
+        externalId: "item-1",
+        ingestionFingerprint: articleIngestionFingerprint(article),
+      },
+    ])
+
+    const result = await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: rssXml,
+        url: new URL("https://example.com/rss.xml"),
+      }),
+      store,
+    })
+
+    expect(store.article.createMany).not.toHaveBeenCalled()
+    expect(store.article.update).not.toHaveBeenCalled()
+    expect(result.metrics).toEqual(
+      expect.objectContaining({
+        changedCount: 0,
+        insertedCount: 0,
+        unchangedCount: 1,
+      })
+    )
+  })
+
+  it("persists a corrected article only when its fingerprint changes", async () => {
+    const store = createStore()
+    const [original] = parseFeedArticles(rssXml, "https://example.com/rss.xml")
+    store.article.findMany.mockResolvedValue([
+      {
+        externalId: "item-1",
+        ingestionFingerprint: articleIngestionFingerprint(original),
+      },
+    ])
+
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: rssXml.replace("Stored Article", "Corrected Article"),
+        url: new URL("https://example.com/rss.xml"),
+      }),
+      store,
+    })
+
+    expect(store.article.createMany).not.toHaveBeenCalled()
+    expect(store.article.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ title: "Corrected Article" }),
+      })
+    )
   })
 
   it("uses stored validators and skips parsing after a 304 response", async () => {

@@ -18,6 +18,7 @@
     "compatibility:verify-legacy-redis": "node scripts/ci/assert-legacy-redis-compatibility.mjs",
     "build": "next build",
     "image-proxy:measure": "tsx scripts/measure-image-proxy.ts",
+    "ingestion:persistence:measure": "tsx scripts/measure-ingestion-persistence.ts",
     "search:measure": "tsx scripts/measure-article-search.ts",
     "runtime:build": "node scripts/build-runtime.mjs",
     "start": "next start",
