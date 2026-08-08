@@ -7,7 +7,10 @@ import {
 } from "./app-origin"
 import { LEGACY_REDIS_MIGRATION_FLAG } from "./redis-config"
 import { assertRuntimeTopology } from "./runtime-topology"
-import { getRuntimeRequiredServiceRoleEnvironment } from "./service-role-environment"
+import {
+  findUnexpectedManagedServiceRoleEnvironmentVariables,
+  getRuntimeRequiredServiceRoleEnvironment,
+} from "./service-role-environment"
 import { assertTurnstileConfiguration } from "./turnstile"
 
 export class UnsafeProductionConfigurationError extends Error {
@@ -50,17 +53,6 @@ const WORKER_ROLES = new Set<ProductionServiceRole>([
   "worker-maintenance",
 ])
 
-const WORKER_FORBIDDEN_VARIABLES = [
-  "AUTH_GOOGLE_ID",
-  "AUTH_GOOGLE_SECRET",
-  "AUTH_SECRET",
-  "CLOUDFLARE_TUNNEL_TOKEN",
-  "MIGRATE_DATABASE_URL",
-  "POSTGRES_PASSWORD",
-  "REDIS_PASSWORD",
-  "TURNSTILE_SECRET_KEY",
-] as const
-
 function assertRequiredValue(
   environment: ProductionEnvironment,
   variable: string
@@ -82,6 +74,22 @@ function assertManifestRequiredVariables(
 ) {
   for (const variable of getRuntimeRequiredServiceRoleEnvironment(role)) {
     assertRequiredValue(environment, variable)
+  }
+}
+
+function assertExactServiceRoleEnvironment(
+  environment: ProductionEnvironment,
+  role: ProductionServiceRole
+) {
+  assertManifestRequiredVariables(environment, role)
+
+  for (const variable of findUnexpectedManagedServiceRoleEnvironmentVariables(
+    environment,
+    role
+  )) {
+    throw new UnsafeProductionConfigurationError(
+      `${variable} must not be present for the ${role} service.`
+    )
   }
 }
 
@@ -256,20 +264,6 @@ function assertRuntimeDatabaseUrl(environment: ProductionEnvironment) {
   )
 }
 
-function assertNoSensitiveVariables(
-  environment: ProductionEnvironment,
-  role: ProductionServiceRole,
-  variables: readonly string[]
-) {
-  for (const variable of variables) {
-    if (environment[variable]?.trim()) {
-      throw new UnsafeProductionConfigurationError(
-        `${variable} must not be present for the ${role} service.`
-      )
-    }
-  }
-}
-
 function assertWebOrigins(environment: ProductionEnvironment) {
   if (!isEmailVerificationRequired(environment.REQUIRE_EMAIL_VERIFICATION)) {
     throw new UnsafeProductionConfigurationError(
@@ -328,13 +322,7 @@ function assertWebOrigins(environment: ProductionEnvironment) {
 }
 
 function assertWebConfiguration(environment: ProductionEnvironment) {
-  assertManifestRequiredVariables(environment, "web")
-  assertNoSensitiveVariables(environment, "web", [
-    "CLOUDFLARE_TUNNEL_TOKEN",
-    "MIGRATE_DATABASE_URL",
-    "POSTGRES_PASSWORD",
-    "REDIS_PASSWORD",
-  ])
+  assertExactServiceRoleEnvironment(environment, "web")
   assertWebOrigins(environment)
   assertRuntimeDatabaseUrl(environment)
   assertRedisWorkloadSeparation(environment)
@@ -346,8 +334,7 @@ function assertWorkerConfiguration(
   environment: ProductionEnvironment,
   role: ProductionServiceRole
 ) {
-  assertManifestRequiredVariables(environment, role)
-  assertNoSensitiveVariables(environment, role, WORKER_FORBIDDEN_VARIABLES)
+  assertExactServiceRoleEnvironment(environment, role)
   assertRuntimeDatabaseUrl(environment)
   assertRedisUrl(environment, "DURABLE_REDIS_URL")
 
@@ -361,21 +348,7 @@ function assertWorkerConfiguration(
 }
 
 function assertChatGatewayConfiguration(environment: ProductionEnvironment) {
-  assertManifestRequiredVariables(environment, "chat-gateway")
-  assertNoSensitiveVariables(environment, "chat-gateway", [
-    "ANTHROPIC_API_KEY",
-    "AUTH_GOOGLE_ID",
-    "AUTH_GOOGLE_SECRET",
-    "AUTH_SECRET",
-    "CLOUDFLARE_TUNNEL_TOKEN",
-    "MIGRATE_DATABASE_URL",
-    "OPENAI_API_KEY",
-    "POSTGRES_PASSWORD",
-    "REDIS_PASSWORD",
-    "SMTP_PASSWORD",
-    "SMTP_USER",
-    "TURNSTILE_SECRET_KEY",
-  ])
+  assertExactServiceRoleEnvironment(environment, "chat-gateway")
 
   try {
     assertProductionAppOrigin(environment)

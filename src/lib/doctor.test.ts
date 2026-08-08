@@ -8,6 +8,8 @@ import {
   parseDoctorCommand,
   type DoctorReport,
 } from "./doctor"
+import { getServiceRoleEnvironment } from "./service-role-environment"
+import { PRODUCTION_SERVICE_ROLES } from "./production-security"
 
 function healthyReport(
   overrides: Partial<DoctorReport> = {}
@@ -76,6 +78,11 @@ describe("doctor report helpers", () => {
       "DATABASE_URL",
       "DURABLE_REDIS_URL",
     ])
+    for (const role of PRODUCTION_SERVICE_ROLES) {
+      expect(DOCTOR_REQUIRED_VARIABLES[role]).toEqual(
+        getServiceRoleEnvironment(role).required
+      )
+    }
   })
 
   it("compares Redis endpoints without exposing credentials", () => {

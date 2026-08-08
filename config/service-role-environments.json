@@ -61,6 +61,38 @@
       "allowed": ["TUNNEL_TOKEN"]
     }
   },
+  "runtimeCompatibilityAliases": {
+    "web": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "migrate": [],
+    "worker-all": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "worker-ingestion": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "worker-ai-mail": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "worker-imports": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "worker-maintenance": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "worker-chat-events": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "chat-gateway": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "cloudflared": []
+  },
+  "managedAliases": [
+    "ANTHROPIC_API_KEY",
+    "ARCTICIRC_POLICY_PUBLICATION_DATE",
+    "CHAT_GATEWAY_IMAGE",
+    "CLOUDFLARE_TUNNEL_TOKEN",
+    "EDGE_PROXY_HOST_PORT",
+    "EDGE_PROXY_IMAGE",
+    "EPHEMERAL_REDIS_PORT",
+    "MIGRATE_DATABASE_URL",
+    "MIGRATE_IMAGE",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXTAUTH_URL",
+    "POSTGRES_PORT",
+    "REDIS_PORT",
+    "REDIS_URL",
+    "WEB_IMAGE",
+    "WEB_PORT",
+    "WORKER_GRACEFUL_SHUTDOWN_TIMEOUT_MS",
+    "WORKER_IMAGE"
+  ],
   "infrastructure": {
     "postgres": ["POSTGRES_DB", "POSTGRES_PASSWORD", "POSTGRES_USER"],
     "redis": ["REDIS_PASSWORD"],

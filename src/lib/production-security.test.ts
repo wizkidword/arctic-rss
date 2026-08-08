@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   assertSecureProductionConfiguration,
+  PRODUCTION_SERVICE_ROLES,
   UnsafeProductionConfigurationError,
 } from "./production-security"
 
@@ -252,6 +253,39 @@ describe("production security configuration", () => {
     ).toThrow("OPENAI_API_KEY must not be present for the chat-gateway service.")
   })
 
+  it.each(PRODUCTION_SERVICE_ROLES)(
+    "fails closed when a managed infrastructure secret is injected into %s",
+    (role) => {
+      expect(() =>
+        assertSecureProductionConfiguration(
+          { ...validProductionEnvironmentForRole(role), TUNNEL_TOKEN: "injected" },
+          role
+        )
+      ).toThrow(`TUNNEL_TOKEN must not be present for the ${role} service.`)
+    }
+  )
+
+  it("does not reject ordinary process variables while rejecting registered aliases", () => {
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...webProductionEnvironment,
+          HOME: "/home/nextjs",
+          NODE_VERSION: "24.17.0",
+          PATH: "/usr/local/bin:/usr/bin",
+        },
+        "web"
+      )
+    ).not.toThrow()
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        { ...webProductionEnvironment, CLOUDFLARE_TUNNEL_TOKEN: "injected" },
+        "web"
+      )
+    ).toThrow("CLOUDFLARE_TUNNEL_TOKEN must not be present for the web service.")
+  })
+
   it("rejects unknown roles and permits non-production test environments", () => {
     expect(() =>
       assertSecureProductionConfiguration(webProductionEnvironment, "unknown-role")
@@ -275,3 +309,30 @@ describe("production security configuration", () => {
     ).toThrow("MIGRATE_DATABASE_URL must not be present for the web service.")
   })
 })
+
+function validProductionEnvironmentForRole(
+  role: (typeof PRODUCTION_SERVICE_ROLES)[number]
+) {
+  if (role === "web") {
+    return webProductionEnvironment
+  }
+
+  if (role === "chat-gateway") {
+    return {
+      APP_ORIGIN: "https://arcticrss.com",
+      ARCTIC_IRC_TOKEN_SECRET: "chat-token-secret-that-is-at-least-32-bytes",
+      DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
+      NODE_ENV: "production",
+    }
+  }
+
+  return {
+    DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+    DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
+    ...(role === "worker-chat-events"
+      ? { EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL }
+      : {}),
+    NODE_ENV: "production",
+  }
+}

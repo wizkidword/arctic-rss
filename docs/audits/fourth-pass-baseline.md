@@ -198,3 +198,19 @@ remain literal and inert. Feed text recognizes only a small charset allowlist.
 | Static checks | Passed: TypeScript, Compose service-environment boundary, and all four topology configurations. |
 
 No migration, production action, push, or deployment is included in this phase.
+
+## Phase 7A local exact-environment evidence (2026-08-08)
+
+The service-role manifest now also records runtime-only compatibility aliases
+and every known managed deployment input. At production startup, the web,
+every worker role, and the chat gateway derive their allowlist from that one
+registry. A known variable outside the active role fails before application
+startup and names only the variable and role. Ordinary process values such as
+`PATH`, `HOME`, and the Node runtime version are deliberately outside that
+registry.
+
+Focused tests cover every manifest role and a production-startup failure for
+each application role when an infrastructure secret is injected. Compose
+environment verification and doctor required-variable reporting continue to
+read the same manifest. No credentials were changed, rotated, printed, or
+deployed.

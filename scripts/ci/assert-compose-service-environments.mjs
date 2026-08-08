@@ -5,6 +5,14 @@ import { readFileSync } from "node:fs"
 const environmentManifest = JSON.parse(
   readFileSync(new URL("../../config/service-role-environments.json", import.meta.url), "utf8")
 )
+const composeTemplate = readFileSync(
+  new URL("../../docker-compose.yml", import.meta.url),
+  "utf8"
+)
+const environmentExample = readFileSync(
+  new URL("../../.env.example", import.meta.url),
+  "utf8"
+)
 const compose = JSON.parse(
   execFileSync(
     "docker",
@@ -55,6 +63,34 @@ for (const [role, entry] of Object.entries(environmentManifest.roles)) {
   )
 }
 
+const runtimeCompatibilityAliases = environmentManifest.runtimeCompatibilityAliases
+assert.deepEqual(
+  Object.keys(runtimeCompatibilityAliases).sort(),
+  Object.keys(environmentManifest.roles).sort(),
+  "Every service role must declare its runtime compatibility aliases."
+)
+
+const managedVariableNames = new Set([
+  ...Object.values(environmentManifest.roles).flatMap((entry) => entry.allowed),
+  ...Object.values(environmentManifest.infrastructure).flat(),
+  ...environmentManifest.managedAliases,
+  ...Object.values(runtimeCompatibilityAliases).flat(),
+])
+
+for (const variable of composeVariableNames(composeTemplate)) {
+  assert.ok(
+    managedVariableNames.has(variable),
+    `Compose variable ${variable} must be registered in config/service-role-environments.json.`
+  )
+}
+
+for (const variable of environmentExampleVariableNames(environmentExample)) {
+  assert.ok(
+    managedVariableNames.has(variable),
+    `.env.example variable ${variable} must be registered in config/service-role-environments.json.`
+  )
+}
+
 for (const [serviceName, allowed] of Object.entries(environmentManifest.infrastructure)) {
   assertExactEnvironment(serviceName, allowed)
 }
@@ -69,3 +105,18 @@ assert.deepEqual(
 )
 
 console.log("Compose service environment boundaries exactly match the manifest.")
+
+function composeVariableNames(compose) {
+  return [...new Set(
+    [...compose.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g)].map((match) => match[1])
+  )]
+}
+
+function environmentExampleVariableNames(example) {
+  return [...new Set(
+    example
+      .split(/\r?\n/)
+      .map((line) => line.match(/^([A-Z][A-Z0-9_]*)=/)?.[1])
+      .filter(Boolean)
+  )]
+}
