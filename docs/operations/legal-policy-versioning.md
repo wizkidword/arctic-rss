@@ -31,3 +31,12 @@ confirmation route. The raw token is never held by the confirmation page or
 sent in the final deletion request. A user-row lock serializes new confirmation
 requests, so a replacement invalidates the earlier token. Expired tokens are
 included in the normal auth-token maintenance job.
+
+New handoff cookies use the `v2` format: a versioned payload is signed with an
+HMAC-SHA-256 key derived once from `AUTH_SECRET` using HKDF-SHA-256. The final
+confirmation route applies its authenticated user/IP rate limit before it
+parses the confirmation body or verifies a handoff. During the next-release
+compatibility window, it also accepts existing `v1` cookies until their
+original 15-minute expiry (and rejects a longer claimed lifetime); that legacy
+verification runs only after the same rate limit and uses asynchronous crypto.
+No new `v1` cookies are created.

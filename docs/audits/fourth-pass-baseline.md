@@ -140,3 +140,16 @@ does not add a duplicate job after its initial XML import succeeds.
 | Browser coverage | Not run: this isolated worktree has no configured disposable authenticated browser/database fixture. This remains required before a release claim. |
 
 No migration, production action, push, or deployment is included in this phase.
+
+## Phase 4 local account-deletion handoff evidence (2026-08-08)
+
+The final cross-device deletion confirmation now authenticates and rate-limits
+the user/IP before reading its bounded JSON body or examining the handoff
+cookie. New `v2` cookies use an HMAC-SHA-256 signing key derived once from the
+configured `AUTH_SECRET` by HKDF-SHA-256. Existing `v1` cookies remain valid
+only for their original 15-minute lifetime and are verified asynchronously,
+after the limiter; new `v1` cookies are never issued. Cookie, payload, and
+signature forms are strictly bounded and canonical before comparison.
+
+This is local source and test evidence only. It does not claim a production
+release, real-account deletion, push, or deployment.
