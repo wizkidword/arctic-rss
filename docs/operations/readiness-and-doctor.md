@@ -52,6 +52,14 @@ the snapshot age, and check duration:
 - bounded queue readiness; and
 - chat gateway readiness only for a chat-enabled topology.
 
+Feed and podcast refresh jobs remove both successful and terminally failed
+BullMQ jobs so a permanent source job ID cannot block its next legitimate
+refresh. Terminal source failures still write existing per-source database
+diagnostics and a bounded durable Redis list containing only the refresh kind
+and timestamp. Queue readiness uses that compact recent-failure evidence rather
+than retained source job records; it never exposes source IDs, job IDs, queue
+payloads, or raw errors.
+
 The detailed route does not return credentials, connection strings, queue
 payloads, job IDs, or raw dependency errors. It uses the same single-flight
 refresh as public health, so an operator refresh cannot create a duplicate

@@ -62,6 +62,7 @@ import {
   PODCAST_REFRESH_QUEUE_NAME,
   type PodcastRefreshJobData,
 } from "../src/lib/podcast-refresh-queue"
+import { recordSourceRefreshFailure } from "../src/lib/source-refresh-failures"
 import {
   enqueueDueFeedRefreshes,
   enqueueDuePodcastRefreshes,
@@ -331,6 +332,7 @@ worker?.on("failed", (job, error) => {
   console.error(
     `[worker] refresh failed for ${job?.data.feedId ?? "unknown feed"}: ${error.message}`
   )
+  recordTerminalSourceRefreshFailure("feed", job)
 })
 
 aiDigestWorker?.on("failed", (job, error) => {
@@ -395,6 +397,7 @@ podcastWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] podcast refresh failed for ${job?.data.podcastId ?? "unknown podcast"}: ${error.message}`
   )
+  recordTerminalSourceRefreshFailure("podcast", job)
 })
 
 async function enqueueDueFeeds(lease?: MaintenanceLease) {
@@ -490,6 +493,19 @@ let chatRetentionFailureCount = 0
 
 function schedulerErrorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : "unknown error"
+}
+
+function recordTerminalSourceRefreshFailure(
+  kind: "feed" | "podcast",
+  job: { attemptsMade: number; opts: { attempts?: number } } | undefined
+) {
+  if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) {
+    return
+  }
+
+  recordSourceRefreshFailure({ client: durableHeartbeatStore, kind }).catch(() => {
+    console.error(`[worker] could not record ${kind} refresh failure evidence`)
+  })
 }
 
 async function runLeaseAwareMaintenance<T>(

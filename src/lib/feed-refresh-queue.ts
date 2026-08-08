@@ -41,10 +41,7 @@ export async function enqueueFeedRefresh(
       },
       jobId: feedRefreshJobId(feedId),
       removeOnComplete: true,
-      removeOnFail: {
-        age: 24 * 60 * 60,
-        count: 1000,
-      },
+      removeOnFail: true,
       ...options,
     }
   )

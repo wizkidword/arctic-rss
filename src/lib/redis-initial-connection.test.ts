@@ -27,7 +27,7 @@ vi.mock("ioredis", () => {
       }
     })
     mget = vi.fn(async (...keys: string[]) =>
-      keys.map((key) =>
+      keys.map(() =>
         JSON.stringify({
           instanceId: "worker-1",
           mode: "all",
@@ -36,6 +36,7 @@ vi.mock("ioredis", () => {
         })
       )
     )
+    lrange = vi.fn(async () => [])
   }
 
   return { default: MockRedis }

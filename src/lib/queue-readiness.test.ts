@@ -103,6 +103,22 @@ describe("queue readiness", () => {
     expect(result).toMatchObject({ recentFailureCount: 2, ready: false })
   })
 
+  it("uses explicit source-failure evidence instead of retained source jobs", async () => {
+    const queue = reader({
+      counts: { active: 0, failed: 4, waiting: 0 },
+      failed: [{ finishedOn: now() - 100, timestamp: now() - 100 }],
+    })
+
+    const result = await inspectQueueReadinessWithClients({
+      maxRecentFailures: 1,
+      queues: [{ failureEvidence: "source", name: "feed", reader: queue }],
+      recentSourceFailureCount: 2,
+    })
+
+    expect(result).toMatchObject({ recentFailureCount: 2, ready: false })
+    expect(queue.getJobs).not.toHaveBeenCalledWith(["failed"], 0, 24, false)
+  })
+
   it("fails closed when queue metadata cannot be read", async () => {
     const queue = reader()
     vi.mocked(queue.getJobCounts).mockRejectedValue(new Error("connect ECONNREFUSED"))
