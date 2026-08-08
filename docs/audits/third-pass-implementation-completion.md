@@ -10,7 +10,7 @@
 - **Ending commit:** this documentation commit (the branch `HEAD` once it is
   created).
 - **Branch:** `codex/third-pass-stabilization`.
-- **Commits created:** 5, including this documentation commit.
+- **Commits created:** 6, including the final CodeQL remediation commit.
 - **Working tree:** expected clean after this commit, except for the
   pre-existing untracked `.npm-cache/` directory. It is not part of this work
   and was not removed or staged. `git diff --check` passed before committing.
@@ -174,7 +174,7 @@ Deferred: scheduled reader rules, a separate Today portal, unbounded bulk source
 
 | Item | Why incomplete | Code ready? | Exact owner action required | Risk of deferral / safe next step |
 | --- | --- | --- | --- | --- |
-| CI and production release | The reviewed five-commit branch is not yet pushed through CI, and no deployment approval was supplied. | Local source gates pass. | Push the branch, require CI success, then approve `DEPLOY <short-sha>`. | Do not deploy before remote CI and explicit typed approval. |
+| CI and production release | The reviewed six-commit branch is not yet through its final CI rerun, and no deployment approval was supplied. | Local source gates pass. | Push the branch, require CI success, then approve `DEPLOY <short-sha>`. | Do not deploy before remote CI and explicit typed approval. |
 | Production preflight and verification | Requires private OVH host, selected topology, real health/login checks, and operator recovery access. | Source/runbooks ready; environment not exercised. | Run the owner-approved OVH preflight and release verification. | Local success does not prove live readiness. |
 | Authenticated browser journeys | Requires disposable database/Redis/feed-fixture stack. | Tests are present. | Run the authenticated Playwright gate in CI or a compatible disposable environment. | Private reader/deletion/source workflows lack final browser confirmation. |
 | Compose runtime profiles and search benchmark | Windows Docker lacks `journald`, required by the checked-in Compose logging configuration. | Static validators and benchmark guardrails pass. | Use a compatible disposable Linux Docker host, then run selected Compose profiles and `ARCTIC_RSS_SEARCH_BENCHMARK_CONFIRM=disposable npm run search:measure`. | Do not infer runtime topology or query plans from static checks. |

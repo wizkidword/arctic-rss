@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto"
+import { randomBytes, scryptSync } from "node:crypto"
 
 import type { PrismaClient } from "@/generated/prisma/client"
 
@@ -15,6 +15,10 @@ export const ACCOUNT_DELETION_TOKEN_PURPOSE = "ACCOUNT_DELETION"
 
 const ACCOUNT_DELETION_CONFIRMATION_TOKEN_BYTES = 32
 const ACCOUNT_DELETION_CONFIRMATION_TOKEN_TTL_MS = 15 * 60 * 1000
+const ACCOUNT_DELETION_HASH_BYTES = 32
+const ACCOUNT_DELETION_HASH_COST = 16_384
+const ACCOUNT_DELETION_SUBJECT_REFERENCE_SALT = "arcticrss-account-deletion-subject-v1"
+const ACCOUNT_DELETION_TOKEN_HASH_SALT = "arcticrss-account-deletion-token-v1"
 const INVALID_CONFIRMATION_MESSAGE =
   "This deletion confirmation is invalid or expired. Request a new one from Settings."
 
@@ -149,11 +153,11 @@ export async function requireAccountDeletionReauthentication({
 }
 
 export function getDeletionSubjectReference(userId: string) {
-  return createHash("sha256").update(`arcticrss-account-deletion:${userId}`).digest("hex")
+  return deriveAccountDeletionHash(userId, ACCOUNT_DELETION_SUBJECT_REFERENCE_SALT)
 }
 
 export function hashAccountDeletionConfirmationToken(token: string) {
-  return createHash("sha256").update(token).digest("hex")
+  return deriveAccountDeletionHash(token, ACCOUNT_DELETION_TOKEN_HASH_SALT)
 }
 
 export function createAccountDeletionConfirmationToken() {
@@ -301,6 +305,13 @@ export async function requestOAuthAccountDeletionConfirmation(
   }
 
   return { status: "sent" as const }
+}
+
+function deriveAccountDeletionHash(value: string, salt: string) {
+  return scryptSync(value, salt, ACCOUNT_DELETION_HASH_BYTES, {
+    N: ACCOUNT_DELETION_HASH_COST,
+    maxmem: 64 * 1024 * 1024,
+  }).toString("hex")
 }
 
 export function parseOAuthAccountDeletionFinalConfirmation(value: unknown) {
