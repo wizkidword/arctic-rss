@@ -28,6 +28,15 @@ private operator inventory outside the repository.
 - Release archives are built from reviewed commits. The production host is not
   a Git checkout and should retain the previous release directory for rollback.
 
+## Third-pass status evidence
+
+The third-pass stabilization work records source, automated-test, browser, and
+production evidence independently in
+[the capability status record](docs/audits/third-pass-capability-status.md).
+Consult that record and the release gate before interpreting an implemented
+source feature as production-ready. Deployment still requires the operator's
+fresh typed approval and the selected-topology checks in the release runbook.
+
 ## Local development
 
 1. Copy `.env.example` to `.env` and use only local development credentials.
@@ -42,8 +51,9 @@ host machine, change `DATABASE_URL`, `DURABLE_REDIS_URL`, and
 `EPHEMERAL_REDIS_URL` to `localhost`; use the PostgreSQL, durable-Redis, and
 ephemeral-Redis loopback ports from `.env.example`. `REDIS_URL` is retained
 only for an explicitly flagged temporary one-Redis migration; production
-otherwise requires distinct workload-specific endpoints. Remove it before
-Phase 5 begins.
+otherwise requires distinct workload-specific endpoints. Remove it only using
+the owner-gated checklist in
+[the compatibility retirement record](docs/operations/legacy-redis-compatibility-retirement.md).
 
 ## Deployment guardrails
 
