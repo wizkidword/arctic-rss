@@ -2,6 +2,7 @@ import { XMLParser } from "fast-xml-parser"
 
 import { getPrisma } from "./db"
 import { enqueueFeedRefresh as enqueueFeedRefreshJob } from "./feed-refresh-queue"
+import { decodeStandardXmlEntities, safeXmlParserOptions } from "./ingestion-limits"
 import type { SourceRefreshTrigger } from "./source-refresh-queue"
 import {
   FeedSubscriptionError,
@@ -122,11 +123,9 @@ export class OpmlError extends Error {
 
 export function parseOpmlSubscriptions(opmlXml: string): OpmlSubscriptionEntry[] {
   const parser = new XMLParser({
-    allowBooleanAttributes: true,
     attributeNamePrefix: "",
-    ignoreAttributes: false,
     parseAttributeValue: false,
-    trimValues: true,
+    ...safeXmlParserOptions,
   })
   let parsed: unknown
 
@@ -495,7 +494,9 @@ function normalizeFolderName(name: string) {
 }
 
 function stringAttribute(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
+  return typeof value === "string" && value.trim()
+    ? decodeStandardXmlEntities(value).trim()
+    : undefined
 }
 
 function escapeXmlAttribute(value: string) {

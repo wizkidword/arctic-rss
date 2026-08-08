@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parsePodcastFeed, PodcastParseError } from "./podcast-parser"
+import { parsePodcastFeed, parsePodcastFeedWithMetrics, PodcastParseError } from "./podcast-parser"
 
 const podcastXml = `<?xml version="1.0"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
@@ -48,6 +48,33 @@ describe("parsePodcastFeed", () => {
         url: "https://example.com/episode-1",
       }),
     ])
+  })
+
+  it("caps podcast episodes in source order and rejects oversized external IDs", () => {
+    const episodes = Array.from(
+      { length: 1_001 },
+      (_, index) => `<item><guid>episode-${index}</guid><title>Episode ${index}</title><enclosure url="https://cdn.example.com/${index}.mp3" type="audio/mpeg" /></item>`
+    ).join("")
+    const result = parsePodcastFeedWithMetrics(
+      `<rss><channel><title>Show</title>${episodes}</channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(result.podcast.episodes).toHaveLength(1_000)
+    expect(result.podcast.episodes[999]?.externalId).toBe("episode-999")
+    expect(result.stats).toMatchObject({ parsedCount: 1_001, truncatedCount: 1 })
+  })
+
+  it("does not expand XML entities in episode fields", () => {
+    const podcast = parsePodcastFeed(
+      `<!DOCTYPE rss [<!ENTITY injected "untrusted">]><rss><channel><title>Show</title><item>
+        <guid>entity-safe</guid><title>Episode &amp; &injected;</title>
+        <enclosure url="https://cdn.example.com/episode.mp3" type="audio/mpeg" />
+      </item></channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(podcast.episodes[0]?.title).toBe("Episode & &injected;")
   })
 
   it("rejects RSS feeds without audio enclosures", () => {

@@ -52,6 +52,7 @@ type SafeFetchOptions = {
   fetchImpl?: typeof fetch
   lookup?: typeof dns.lookup
   maxBytes?: number
+  parentSignal?: AbortSignal
   timeoutMs?: number
   totalTimeoutMs?: number
   globalRequestLimiter?: HostRequestLimiter
@@ -317,7 +318,7 @@ export async function safeFetchText(
     lastModified: result.lastModified,
     notModified: result.notModified,
     status: result.status,
-    text: new TextDecoder().decode(result.bytes),
+    text: decodeSafeText(result.bytes, result.contentType),
     url: result.url,
   }
 }
@@ -343,7 +344,11 @@ export async function safeFetchBytes(
       throw new FeedFetchError("The URL request timed out.")
     }
 
-    const signal = AbortSignal.timeout(Math.max(1, Math.floor(remainingMs)))
+    const requestSignal = createRequestSignal(
+      Math.max(1, Math.floor(remainingMs)),
+      options.parentSignal
+    )
+    const { signal } = requestSignal
     let releaseGlobalSlot: (() => void) | undefined
     let releaseHostSlot: (() => void) | undefined
     let dispose: () => Promise<void> = async () => undefined
@@ -423,10 +428,93 @@ export async function safeFetchBytes(
       await dispose()
       releaseGlobalSlot?.()
       releaseHostSlot?.()
+      requestSignal.dispose()
     }
   }
 
   throw new FeedFetchError("The URL redirected too many times.")
+}
+
+export function decodeSafeText(bytes: Uint8Array, contentType: string) {
+  const charset = textCharset(bytes, contentType)
+
+  try {
+    return new TextDecoder(charset).decode(bytes)
+  } catch {
+    return new TextDecoder("utf-8").decode(bytes)
+  }
+}
+
+function textCharset(bytes: Uint8Array, contentType: string) {
+  const bomCharset = byteOrderMarkCharset(bytes)
+  if (bomCharset) {
+    return bomCharset
+  }
+
+  const contentTypeCharset = supportedCharset(contentType.match(/charset\s*=\s*["']?([^;"'\s]+)/i)?.[1])
+  if (contentTypeCharset) {
+    return contentTypeCharset
+  }
+
+  const declaration = new TextDecoder("utf-8").decode(bytes.subarray(0, 512))
+  return (
+    supportedCharset(declaration.match(/<\?xml[^>]*\bencoding\s*=\s*["']([^"']+)["']/i)?.[1]) ??
+    "utf-8"
+  )
+}
+
+function byteOrderMarkCharset(bytes: Uint8Array) {
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return "utf-8"
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return "utf-16le"
+  }
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return "utf-16be"
+  }
+  return undefined
+}
+
+function supportedCharset(value: string | undefined) {
+  switch (value?.trim().toLowerCase()) {
+    case "utf-8":
+    case "utf8":
+      return "utf-8"
+    case "utf-16le":
+    case "utf-16":
+      return "utf-16le"
+    case "utf-16be":
+      return "utf-16be"
+    case "windows-1252":
+    case "cp1252":
+      return "windows-1252"
+    case "iso-8859-1":
+    case "latin1":
+      return "iso-8859-1"
+    default:
+      return undefined
+  }
+}
+
+function createRequestSignal(timeoutMs: number, parentSignal: AbortSignal | undefined) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  const abortFromParent = () => controller.abort()
+
+  if (parentSignal?.aborted) {
+    controller.abort()
+  } else {
+    parentSignal?.addEventListener("abort", abortFromParent, { once: true })
+  }
+
+  return {
+    dispose() {
+      clearTimeout(timeout)
+      parentSignal?.removeEventListener("abort", abortFromParent)
+    },
+    signal: controller.signal,
+  }
 }
 
 export function createHostRequestLimiter(

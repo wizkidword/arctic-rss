@@ -153,3 +153,22 @@ signature forms are strictly bounded and canonical before comparison.
 
 This is local source and test evidence only. It does not claim a production
 release, real-account deletion, push, or deployment.
+
+## Phase 5 local ingestion-budget evidence (2026-08-08)
+
+Feed and podcast parsing now uses one reviewed limits module. The system retains
+source order, accepts at most 1,000 source items, rejects an oversized external
+ID rather than truncating it, limits optional fields and stored body content,
+and records count-only parse metrics. Feed discovery uses at most six attempts
+and one 30-second parent deadline, which cancels each child fetch without
+leaking host/global limiter capacity. XML entity processing is disabled;
+standard XML escapes are decoded deliberately while publisher-defined entities
+remain literal and inert. Feed text recognizes only a small charset allowlist.
+
+| Verification | Result |
+| --- | --- |
+| Hostile and ordinary parser fixtures | Passed: a two-megabyte thousand-item feed, oversized fields and IDs, entity/DOCTYPE cases, normal RSS/Atom/podcast, and OPML parsing. |
+| Fetch/discovery bounds | Passed: parent cancellation releases the limiter slot, six-attempt cap, shared discovery deadline, redirect budget, and Windows-1252 / ISO-8859-1 decoding. |
+| Static checks | Passed: TypeScript, Compose service-environment boundary, and all four topology configurations. |
+
+No migration, production action, push, or deployment is included in this phase.

@@ -1,6 +1,6 @@
 import { getPrisma } from "./db"
 import { extractReadableArticleContent } from "./article-content-extraction"
-import { parseFeedArticles, type ParsedFeedArticle } from "./feed-articles"
+import { parseFeedArticlesWithMetrics, type ParsedFeedArticle } from "./feed-articles"
 import {
   normalizeHttpUrl,
   safeFetchText,
@@ -88,6 +88,10 @@ export type RefreshMetrics = RefreshWriteStats & {
   durationMs: number
   linkedArticleRequestCount: number
   parsedCount: number
+  sourceParseContentBytes?: number
+  sourceParseFieldsTruncated?: number
+  sourceParseItemsAccepted?: number
+  sourceParseItemsTruncated?: number
   status: number
 }
 
@@ -176,9 +180,10 @@ export async function refreshFeedWithClient({
       }
     }
 
-    const parsedArticles = parseFeedArticles(response.text, response.url.href)
+    const parsed = parseFeedArticlesWithMetrics(response.text, response.url.href)
+    recordFeedParseMetrics(feed.id, parsed.stats)
     const hydrated = await hydrateLinkedArticleContent({
-      articles: parsedArticles,
+      articles: parsed.articles,
       feedUrl: feed.feedUrl,
       fetchArticleContent,
       responseUrl: response.url.href,
@@ -205,7 +210,11 @@ export async function refreshFeedWithClient({
         bytes: baseMetrics.bytes + hydrated.bytes,
         durationMs: elapsedMs(startedAt),
         linkedArticleRequestCount: hydrated.requestCount,
-        parsedCount: parsedArticles.length,
+        parsedCount: parsed.stats.parsedCount,
+        sourceParseContentBytes: parsed.stats.contentBytes,
+        sourceParseFieldsTruncated: parsed.stats.fieldsTruncated,
+        sourceParseItemsAccepted: parsed.stats.acceptedCount,
+        sourceParseItemsTruncated: parsed.stats.truncatedCount,
         ...writes,
       },
       ...(writes.newArticleIds.length ? { newArticleIds: writes.newArticleIds } : {}),
@@ -231,6 +240,36 @@ export async function refreshFeedWithClient({
 
     throw error
   }
+}
+
+function recordFeedParseMetrics(
+  sourceId: string,
+  {
+    acceptedCount,
+    contentBytes,
+    fieldsTruncated,
+    parsedCount,
+    truncatedCount,
+  }: {
+    acceptedCount: number
+    contentBytes: number
+    fieldsTruncated: number
+    parsedCount: number
+    truncatedCount: number
+  }
+) {
+  console.info(
+    JSON.stringify({
+      event: "source_parse_metrics",
+      sourceId,
+      sourceKind: "feed",
+      source_parse_content_bytes: contentBytes,
+      source_parse_fields_truncated: fieldsTruncated,
+      source_parse_items_accepted: acceptedCount,
+      source_parse_items_total: parsedCount,
+      source_parse_items_truncated: truncatedCount,
+    })
+  )
 }
 
 async function recordSuccessfulFeedFetch({

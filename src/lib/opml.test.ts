@@ -273,4 +273,18 @@ describe("OPML import", () => {
 
     expect(enqueueFeedRefresh).not.toHaveBeenCalled()
   })
+
+  it("does not expand custom entities and rejects repeated doctypes", () => {
+    const [entry] = parseOpmlSubscriptions(
+      `<!DOCTYPE opml [<!ENTITY url "https://attacker.example/feed.xml">]>
+      <opml><body><outline text="Safe &amp; &url;" xmlUrl="https://example.com/feed.xml" /></body></opml>`
+    )
+
+    expect(entry.title).toBe("Safe & &url;")
+    expect(() =>
+      parseOpmlSubscriptions(
+        "<!DOCTYPE opml><!DOCTYPE opml><opml><body><outline xmlUrl=\"https://example.com/feed.xml\" /></body></opml>"
+      )
+    ).toThrow()
+  })
 })

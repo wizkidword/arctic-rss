@@ -1,7 +1,13 @@
 import * as cheerio from "cheerio"
 import { XMLParser } from "fast-xml-parser"
 
-import { normalizeHttpUrl, safeFetchText } from "./url-safety"
+import {
+  decodeStandardXmlEntities,
+  ingestionLimits,
+  safeXmlParserOptions,
+  truncateCharacters,
+} from "./ingestion-limits"
+import { normalizeHttpUrl, safeFetchText, type SafeFetchTextOptions } from "./url-safety"
 import {
   extractYouTubeChannelIdFromHtml,
   isYouTubeHost,
@@ -10,13 +16,9 @@ import {
 } from "./youtube-feeds"
 
 const commonFeedPaths = ["/feed", "/rss", "/rss.xml", "/atom.xml", "/index.xml"]
-const MAX_DISCOVERY_FETCHES = 12
-
 const xmlParser = new XMLParser({
-  allowBooleanAttributes: true,
   attributeNamePrefix: "@",
-  ignoreAttributes: false,
-  trimValues: true,
+  ...safeXmlParserOptions,
 })
 
 export class FeedValidationError extends Error {
@@ -43,111 +45,148 @@ export type DiscoveredFeed = ParsedFeedMetadata & {
 }
 
 type FeedDiscoveryFetch = (
-  url: URL
+  url: URL,
+  options?: SafeFetchTextOptions
 ) => Promise<Awaited<ReturnType<typeof safeFetchText>>>
 
 type FeedDiscoveryOptions = {
   fetchText?: FeedDiscoveryFetch
+  limits?: Pick<IngestionDiscoveryLimits, "maxDiscoveryCandidates" | "maxDiscoveryDurationMs">
+  now?: () => number
 }
+
+type IngestionDiscoveryLimits = typeof ingestionLimits
 
 export async function discoverFeedFromUrl(
   input: string,
-  { fetchText = safeFetchText }: FeedDiscoveryOptions = {}
+  { fetchText = safeFetchText, limits = ingestionLimits, now = Date.now }: FeedDiscoveryOptions = {}
 ): Promise<DiscoveredFeed> {
+  const startedAt = performance.now()
+  const deadline = now() + limits.maxDiscoveryDurationMs
+  const controller = new AbortController()
+  let budgetExhausted = false
+  const deadlineTimer = setTimeout(() => {
+    budgetExhausted = true
+    controller.abort()
+  }, limits.maxDiscoveryDurationMs)
   let fetchesUsed = 0
   const fetchWithinBudget = async (url: URL) => {
-    if (fetchesUsed >= MAX_DISCOVERY_FETCHES) {
+    const remainingMs = deadline - now()
+    if (controller.signal.aborted || remainingMs <= 0 || fetchesUsed >= limits.maxDiscoveryCandidates) {
+      budgetExhausted = true
       throw new FeedValidationError("The feed discovery request budget was exhausted.")
     }
 
     fetchesUsed += 1
-    return fetchText(url)
+    return fetchText(url, {
+      parentSignal: controller.signal,
+      totalTimeoutMs: remainingMs,
+    })
   }
-  const startUrl = normalizeHttpUrl(input)
-  const directYouTubeFeedUrl = youtubeFeedUrlForInput(startUrl)
-
-  if (directYouTubeFeedUrl && directYouTubeFeedUrl !== startUrl.href) {
-    try {
-      const response = await fetchWithinBudget(normalizeHttpUrl(directYouTubeFeedUrl))
-      const feed = tryParseFeedXml(response.text, response.url.href)
-
-      if (feed) {
-        return {
-          ...feed,
-          feedUrl: response.url.href,
-          feedXml: response.text,
-        }
-      }
-    } catch {
-      // Fall through to the ordinary discovery flow for a helpful final error.
-    }
-  }
-
-  let firstFetchError: unknown = null
-  let firstResponse: Awaited<ReturnType<typeof safeFetchText>> | null = null
-
   try {
-    firstResponse = await fetchWithinBudget(startUrl)
-  } catch (error) {
-    firstFetchError = error
-  }
+    const startUrl = normalizeHttpUrl(input)
+    const directYouTubeFeedUrl = youtubeFeedUrlForInput(startUrl)
 
-  if (firstResponse) {
-    const directFeed = tryParseFeedXml(firstResponse.text, firstResponse.url.href)
+    if (directYouTubeFeedUrl && directYouTubeFeedUrl !== startUrl.href) {
+      try {
+        const response = await fetchWithinBudget(normalizeHttpUrl(directYouTubeFeedUrl))
+        const feed = tryParseFeedXml(response.text, response.url.href)
 
-    if (directFeed) {
-      return {
-        ...directFeed,
-        feedUrl: firstResponse.url.href,
-        feedXml: firstResponse.text,
+        if (feed) {
+          return {
+            ...feed,
+            feedUrl: response.url.href,
+            feedXml: response.text,
+          }
+        }
+      } catch {
+        // Fall through to the ordinary discovery flow for a helpful final error.
       }
     }
-  }
 
-  const candidates = extractFeedCandidatesFromHtml(
-    firstResponse?.text ?? "",
-    firstResponse?.url.href ?? startUrl.href
-  )
-  const youtubeChannelFeedUrl =
-    firstResponse &&
-    (isYouTubeHost(firstResponse.url.hostname) || isYouTubeHost(startUrl.hostname))
-      ? youtubeFeedUrlFromChannelId(
-          extractYouTubeChannelIdFromHtml(firstResponse.text) ?? ""
-        )
-      : null
-
-  for (const candidate of dedupeUrls([
-    ...(youtubeChannelFeedUrl ? [youtubeChannelFeedUrl] : []),
-    ...candidates,
-  ])) {
-    if (fetchesUsed >= MAX_DISCOVERY_FETCHES) {
-      break
-    }
+    let firstFetchError: unknown = null
+    let firstResponse: Awaited<ReturnType<typeof safeFetchText>> | null = null
 
     try {
-      const candidateUrl = normalizeHttpUrl(candidate)
-      const response = await fetchWithinBudget(candidateUrl)
-      const feed = tryParseFeedXml(response.text, response.url.href)
+      firstResponse = await fetchWithinBudget(startUrl)
+    } catch (error) {
+      firstFetchError = error
+    }
 
-      if (feed) {
+    if (firstResponse) {
+      const directFeed = tryParseFeedXml(firstResponse.text, firstResponse.url.href)
+
+      if (directFeed) {
         return {
-          ...feed,
-          feedUrl: response.url.href,
-          feedXml: response.text,
+          ...directFeed,
+          feedUrl: firstResponse.url.href,
+          feedXml: firstResponse.text,
         }
       }
-    } catch {
-      // Keep trying discovered candidates; the final error should be helpful.
     }
-  }
 
-  if (firstFetchError instanceof Error) {
-    throw firstFetchError
-  }
+    const candidates = extractFeedCandidatesFromHtml(
+      firstResponse?.text ?? "",
+      firstResponse?.url.href ?? startUrl.href
+    )
+    const youtubeChannelFeedUrl =
+      firstResponse &&
+      (isYouTubeHost(firstResponse.url.hostname) || isYouTubeHost(startUrl.hostname))
+        ? youtubeFeedUrlFromChannelId(
+            extractYouTubeChannelIdFromHtml(firstResponse.text) ?? ""
+          )
+        : null
 
-  throw new FeedValidationError(
-    "No readable RSS or Atom feed was found for that URL."
-  )
+    for (const candidate of dedupeUrls([
+      ...(youtubeChannelFeedUrl ? [youtubeChannelFeedUrl] : []),
+      ...candidates,
+    ])) {
+      if (fetchesUsed >= limits.maxDiscoveryCandidates || controller.signal.aborted || now() >= deadline) {
+        budgetExhausted = true
+        break
+      }
+
+      try {
+        const candidateUrl = normalizeHttpUrl(candidate)
+        const response = await fetchWithinBudget(candidateUrl)
+        const feed = tryParseFeedXml(response.text, response.url.href)
+
+        if (feed) {
+          return {
+            ...feed,
+            feedUrl: response.url.href,
+            feedXml: response.text,
+          }
+        }
+      } catch {
+        // Keep trying discovered candidates; the final error should be helpful.
+      }
+    }
+
+    if (controller.signal.aborted || now() >= deadline) {
+      budgetExhausted = true
+      throw new FeedValidationError("The feed discovery request budget was exhausted.")
+    }
+
+    if (firstFetchError instanceof Error) {
+      throw firstFetchError
+    }
+
+    throw new FeedValidationError(
+      "No readable RSS or Atom feed was found for that URL."
+    )
+  } finally {
+    clearTimeout(deadlineTimer)
+    console.info(
+      JSON.stringify({
+        event: "source_discovery_metrics",
+        sourceKind: "feed-discovery",
+        source_discovery_attempts: fetchesUsed,
+        source_discovery_budget_exhausted: budgetExhausted,
+        source_discovery_duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+      })
+    )
+  }
 }
 
 export function parseFeedXml(xml: string, feedUrl: string): ParsedFeedMetadata {
@@ -192,7 +231,7 @@ function parseRssFeed(parsed: Record<string, unknown>, feedUrl: string) {
     return null
   }
 
-  const title = textValue(channel.title)
+  const title = truncateCharacters(textValue(channel.title), ingestionLimits.maxTitleCharacters)
 
   if (!title) {
     return null
@@ -201,7 +240,7 @@ function parseRssFeed(parsed: Record<string, unknown>, feedUrl: string) {
   const siteUrl = normalizeOptionalUrl(textValue(channel.link), feedUrl)
 
   return {
-    description: textValue(channel.description),
+    description: truncateCharacters(textValue(channel.description), ingestionLimits.maxSummaryCharacters),
     faviconUrl: faviconFromSiteUrl(siteUrl),
     format: "rss" as const,
     language: textValue(channel.language),
@@ -217,7 +256,7 @@ function parseAtomFeed(parsed: Record<string, unknown>, feedUrl: string) {
     return null
   }
 
-  const title = textValue(feed.title)
+  const title = truncateCharacters(textValue(feed.title), ingestionLimits.maxTitleCharacters)
 
   if (!title) {
     return null
@@ -226,7 +265,7 @@ function parseAtomFeed(parsed: Record<string, unknown>, feedUrl: string) {
   const siteUrl = normalizeOptionalUrl(findAtomAlternateLink(feed.link), feedUrl)
 
   return {
-    description: textValue(feed.subtitle),
+    description: truncateCharacters(textValue(feed.subtitle), ingestionLimits.maxSummaryCharacters),
     faviconUrl: faviconFromSiteUrl(siteUrl),
     format: "atom" as const,
     language: textValue(feed["@xml:lang"] ?? feed["@lang"]),
@@ -304,7 +343,7 @@ function firstRecord(value: unknown): Record<string, unknown> | null {
 
 function textValue(value: unknown): string | undefined {
   if (typeof value === "string" || typeof value === "number") {
-    return String(value).trim() || undefined
+    return decodeStandardXmlEntities(String(value)).trim() || undefined
   }
 
   if (Array.isArray(value)) {
@@ -336,12 +375,13 @@ function findAtomAlternateLink(value: unknown) {
 }
 
 function normalizeOptionalUrl(value: string | undefined, baseUrl: string) {
-  if (!value) {
+  if (!value || value.length > ingestionLimits.maxUrlCharacters) {
     return undefined
   }
 
   try {
-    return normalizeHttpUrl(new URL(value, baseUrl).href).href
+    const normalized = normalizeHttpUrl(new URL(value, baseUrl).href).href
+    return normalized.length <= ingestionLimits.maxUrlCharacters ? normalized : undefined
   } catch {
     return undefined
   }

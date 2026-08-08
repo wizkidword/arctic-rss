@@ -106,8 +106,14 @@ describe("feed discovery helpers", () => {
       feedUrl: "https://example.com/feed",
       title: "Blocked Homepage Blog",
     })
-    expect(fetchText).toHaveBeenCalledWith(new URL("https://example.com/"))
-    expect(fetchText).toHaveBeenCalledWith(new URL("https://example.com/feed"))
+    expect(fetchText).toHaveBeenCalledWith(
+      new URL("https://example.com/"),
+      expect.objectContaining({ parentSignal: expect.any(AbortSignal) })
+    )
+    expect(fetchText).toHaveBeenCalledWith(
+      new URL("https://example.com/feed"),
+      expect.objectContaining({ parentSignal: expect.any(AbortSignal) })
+    )
   })
 
   it("limits the number of fetches used to discover a feed", async () => {
@@ -125,7 +131,28 @@ describe("feed discovery helpers", () => {
     await expect(
       discoverFeedFromUrl("https://example.com", { fetchText })
     ).rejects.toThrow("No readable RSS or Atom feed was found")
-    expect(fetchText).toHaveBeenCalledTimes(12)
+    expect(fetchText).toHaveBeenCalledTimes(6)
+  })
+
+  it("shares one deadline across slow discovery candidates", async () => {
+    const fetchText = vi.fn(
+      async (_url: URL, options?: { parentSignal?: AbortSignal }) =>
+        new Promise<SafeFetchTextResult>((_resolve, reject) => {
+          options?.parentSignal?.addEventListener(
+            "abort",
+            () => reject(new FeedFetchError("The URL request timed out.")),
+            { once: true }
+          )
+        })
+    )
+
+    await expect(
+      discoverFeedFromUrl("https://example.com", {
+        fetchText,
+        limits: { maxDiscoveryCandidates: 6, maxDiscoveryDurationMs: 5 },
+      })
+    ).rejects.toThrow("budget was exhausted")
+    expect(fetchText).toHaveBeenCalledTimes(1)
   })
 
   it("rejects non-feed XML", () => {

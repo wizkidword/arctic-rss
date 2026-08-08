@@ -1,13 +1,20 @@
 import * as cheerio from "cheerio"
 import { XMLParser } from "fast-xml-parser"
 
+import {
+  decodeStandardXmlEntities,
+  ingestionLimits,
+  isWithinUtf8ByteLimit,
+  safeXmlParserOptions,
+  truncateCharacters,
+  truncateUtf8Bytes,
+  type IngestionParseStats,
+} from "./ingestion-limits"
 import { normalizeHttpUrl } from "./url-safety"
 
 const xmlParser = new XMLParser({
-  allowBooleanAttributes: true,
   attributeNamePrefix: "@",
-  ignoreAttributes: false,
-  trimValues: true,
+  ...safeXmlParserOptions,
 })
 
 export type ParsedFeedArticle = {
@@ -24,21 +31,47 @@ export type ParsedFeedArticle = {
 }
 
 export function parseFeedArticles(xml: string, feedUrl: string): ParsedFeedArticle[] {
-  const parsed = xmlParser.parse(xml) as Record<string, unknown>
-
-  return [...parseRssArticles(parsed, feedUrl), ...parseAtomArticles(parsed, feedUrl)]
+  return parseFeedArticlesWithMetrics(xml, feedUrl).articles
 }
 
-function parseRssArticles(parsed: Record<string, unknown>, feedUrl: string) {
+export function parseFeedArticlesWithMetrics(xml: string, feedUrl: string) {
+  const parsed = xmlParser.parse(xml) as Record<string, unknown>
   const rss = toRecord(parsed.rss)
   const rdf = toRecord(parsed["rdf:RDF"])
   const channel = firstRecord(rss?.channel ?? rdf?.channel)
-  const rssItems = toArray(channel?.item)
-  const rdfItems = toArray(rdf?.item)
+  const rssItems = [...toArray(channel?.item), ...toArray(rdf?.item)]
+  const atomItems = toArray(toRecord(parsed.feed)?.entry)
+  const candidates = [
+    ...rssItems.map((item) => () => parseRssArticle(item, feedUrl)),
+    ...atomItems.map((item) => () => parseAtomArticle(item, feedUrl)),
+  ]
+  const boundedCandidates = candidates.slice(0, ingestionLimits.maxFeedItems)
+  const articles: ParsedFeedArticle[] = []
+  let remainingContentBytes = ingestionLimits.maxAggregateContentBytes
+  let fieldsTruncated = 0
 
-  return [...rssItems, ...rdfItems]
-    .map((item) => parseRssArticle(item, feedUrl))
-    .filter((article) => article !== null)
+  for (const candidate of boundedCandidates) {
+    const article = candidate()
+    if (!article) {
+      continue
+    }
+
+    const normalized = applyContentBudget(article, remainingContentBytes)
+    remainingContentBytes -= normalized.contentBytes
+    fieldsTruncated += normalized.fieldsTruncated
+    articles.push(normalized.article)
+  }
+
+  return {
+    articles,
+    stats: {
+      acceptedCount: articles.length,
+      contentBytes: ingestionLimits.maxAggregateContentBytes - remainingContentBytes,
+      fieldsTruncated,
+      parsedCount: candidates.length,
+      truncatedCount: candidates.length - boundedCandidates.length,
+    } satisfies IngestionParseStats,
+  }
 }
 
 function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | null {
@@ -48,16 +81,18 @@ function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | nu
     return null
   }
 
-  const title = plainText(textValue(record.title)) ?? "Untitled"
+  const title = boundedTitle(textValue(record.title)) ?? "Untitled"
   const url = normalizeOptionalUrl(textValue(record.link), feedUrl)
 
   if (!url) {
     return null
   }
 
-  const summary = plainText(textValue(record.description))
-  const contentHtml = textValue(record["content:encoded"]) ?? textValue(record.description)
-  const contentText = plainText(contentHtml)
+  const summary = boundedSummary(textValue(record.description))
+  const contentHtml = boundedContent(
+    textValue(record["content:encoded"]) ?? textValue(record.description)
+  )
+  const contentText = boundedContent(plainText(contentHtml))
   const imageUrl =
     imageFromMediaContent(record["media:content"], feedUrl) ??
     imageFromMediaThumbnail(record["media:thumbnail"], feedUrl) ??
@@ -70,36 +105,29 @@ function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | nu
       textValue(record.updated)
   )
 
+  const externalId =
+    textValue(record.guid) ??
+    textValue(record.id) ??
+    url ??
+    stableTitleFallback(title, publishedAt)
+  if (!isWithinUtf8ByteLimit(externalId, ingestionLimits.maxExternalIdBytes)) {
+    return null
+  }
+
   return {
-    author:
-      textValue(record["dc:creator"]) ??
-      textValue(record.creator) ??
-      textValue(record.author),
+    author: truncateCharacters(
+      textValue(record["dc:creator"]) ?? textValue(record.creator) ?? textValue(record.author),
+      ingestionLimits.maxAuthorCharacters
+    ),
     contentHtml,
     contentText,
-    externalId:
-      textValue(record.guid) ??
-      textValue(record.id) ??
-      url ??
-      stableTitleFallback(title, publishedAt),
+    externalId,
     imageUrl,
     publishedAt,
     summary,
     title,
     url,
   }
-}
-
-function parseAtomArticles(parsed: Record<string, unknown>, feedUrl: string) {
-  const feed = toRecord(parsed.feed)
-
-  if (!feed) {
-    return []
-  }
-
-  return toArray(feed.entry)
-    .map((entry) => parseAtomArticle(entry, feedUrl))
-    .filter((article) => article !== null)
 }
 
 function parseAtomArticle(entry: unknown, feedUrl: string): ParsedFeedArticle | null {
@@ -110,30 +138,36 @@ function parseAtomArticle(entry: unknown, feedUrl: string): ParsedFeedArticle | 
   }
 
   const mediaGroup = toRecord(record["media:group"])
-  const title = plainText(textValue(record.title)) ?? "Untitled"
+  const title = boundedTitle(textValue(record.title)) ?? "Untitled"
   const url = normalizeOptionalUrl(findAtomAlternateLink(record.link), feedUrl)
 
   if (!url) {
     return null
   }
 
-  const summary = plainText(
+  const summary = boundedSummary(
     textValue(record.summary) ?? textValue(mediaGroup?.["media:description"])
   )
-  const contentHtml =
+  const contentHtml = boundedContent(
     textValue(record.content) ??
-    textValue(mediaGroup?.["media:description"]) ??
-    textValue(record.summary)
-  const contentText = plainText(contentHtml)
+      textValue(mediaGroup?.["media:description"]) ??
+      textValue(record.summary)
+  )
+  const contentText = boundedContent(plainText(contentHtml))
   const publishedAt = parseOptionalDate(
     textValue(record.published) ?? textValue(record.updated)
   )
 
+  const externalId = textValue(record.id) ?? url ?? stableTitleFallback(title, publishedAt)
+  if (!isWithinUtf8ByteLimit(externalId, ingestionLimits.maxExternalIdBytes)) {
+    return null
+  }
+
   return {
-    author: atomAuthor(record.author),
+    author: truncateCharacters(atomAuthor(record.author), ingestionLimits.maxAuthorCharacters),
     contentHtml,
     contentText,
-    externalId: textValue(record.id) ?? url ?? stableTitleFallback(title, publishedAt),
+    externalId,
     imageUrl:
       imageFromMediaContent(record["media:content"], feedUrl) ??
       imageFromMediaContent(mediaGroup?.["media:content"], feedUrl) ??
@@ -173,7 +207,7 @@ function firstRecord(value: unknown): Record<string, unknown> | null {
 
 function textValue(value: unknown): string | undefined {
   if (typeof value === "string" || typeof value === "number") {
-    return String(value).trim() || undefined
+    return decodeStandardXmlEntities(String(value)).trim() || undefined
   }
 
   if (Array.isArray(value)) {
@@ -199,13 +233,57 @@ function plainText(value: string | undefined) {
   return text || undefined
 }
 
+function boundedTitle(value: string | undefined) {
+  return truncateCharacters(
+    plainText(truncateCharacters(value, ingestionLimits.maxTitleCharacters)),
+    ingestionLimits.maxTitleCharacters
+  )
+}
+
+function boundedSummary(value: string | undefined) {
+  return truncateCharacters(
+    plainText(truncateCharacters(value, ingestionLimits.maxSummaryCharacters)),
+    ingestionLimits.maxSummaryCharacters
+  )
+}
+
+function boundedContent(value: string | undefined) {
+  return truncateUtf8Bytes(value, ingestionLimits.maxContentBytesPerField)
+}
+
+function applyContentBudget(article: ParsedFeedArticle, remainingContentBytes: number) {
+  let contentBytes = 0
+  let fieldsTruncated = 0
+  const result = { ...article }
+
+  for (const field of ["contentHtml", "contentText"] as const) {
+    const value = result[field]
+    if (!value) {
+      continue
+    }
+
+    const bytes = Buffer.byteLength(value, "utf8")
+    if (bytes > remainingContentBytes) {
+      delete result[field]
+      fieldsTruncated += 1
+      continue
+    }
+
+    remainingContentBytes -= bytes
+    contentBytes += bytes
+  }
+
+  return { article: result, contentBytes, fieldsTruncated }
+}
+
 function normalizeOptionalUrl(value: string | undefined, baseUrl: string) {
-  if (!value) {
+  if (!value || value.length > ingestionLimits.maxUrlCharacters) {
     return undefined
   }
 
   try {
-    return normalizeHttpUrl(new URL(value, baseUrl).href).href
+    const normalized = normalizeHttpUrl(new URL(value, baseUrl).href).href
+    return normalized.length <= ingestionLimits.maxUrlCharacters ? normalized : undefined
   } catch {
     return undefined
   }

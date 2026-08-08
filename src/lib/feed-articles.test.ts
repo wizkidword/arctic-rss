@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parseFeedArticles } from "./feed-articles"
+import { parseFeedArticles, parseFeedArticlesWithMetrics } from "./feed-articles"
 
 describe("feed article parsing", () => {
   it("normalizes RSS items into article records", () => {
@@ -147,5 +147,87 @@ describe("feed article parsing", () => {
     )
 
     expect(article.externalId).toBe("https://example.com/no-guid")
+  })
+
+  it("keeps ordinary entities literal-safe and rejects repeated doctypes", () => {
+    const [article] = parseFeedArticles(
+      `<!DOCTYPE rss [<!ENTITY publisher "untrusted">]><rss><channel><item>
+        <guid>entity-safe</guid><title>News &amp; &publisher;</title>
+        <link>https://example.com/entity-safe</link>
+      </item></channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(article.title).toBe("News & &publisher;")
+    expect(() =>
+      parseFeedArticles(
+        "<!DOCTYPE rss><!DOCTYPE rss><rss><channel><item><link>https://example.com</link></item></channel></rss>",
+        "https://example.com/feed.xml"
+      )
+    ).toThrow()
+  })
+
+  it("caps items and fields without allowing oversized external IDs to merge records", () => {
+    const cappedItems = Array.from(
+      { length: 1_001 },
+      (_, index) => `<item><guid>item-${index}</guid><title>Item ${index}</title><link>https://example.com/${index}</link><description>${"x".repeat(2_048)}</description></item>`
+    ).join("")
+    const result = parseFeedArticlesWithMetrics(
+      `<rss><channel>${cappedItems}</channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(result.articles).toHaveLength(1_000)
+    expect(result.articles[999]?.externalId).toBe("item-999")
+    expect(result.stats).toMatchObject({ parsedCount: 1_001, truncatedCount: 1 })
+  })
+
+  it("rejects an oversized external ID and preserves the declared source order after the item cap", () => {
+    const oversizedExternalId = "x".repeat(4_097)
+    const invalidItems = Array.from(
+      { length: 1_000 },
+      (_, index) => `<item><guid>invalid-${index}</guid><title>Invalid</title></item>`
+    ).join("")
+    const result = parseFeedArticlesWithMetrics(
+      `<rss><channel><item><guid>${oversizedExternalId}</guid><title>Too large</title><link>https://example.com/too-large</link></item>
+        <item><guid>valid</guid><title>Valid</title><link>https://example.com/valid</link></item>
+        ${invalidItems}<item><guid>late-valid</guid><title>Late valid</title><link>https://example.com/late</link></item></channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(result.articles.map((article) => article.externalId)).toEqual(["valid"])
+    expect(result.stats).toMatchObject({ parsedCount: 1_003, truncatedCount: 3 })
+  })
+
+  it("bounds title and content before normalizing it", () => {
+    const [article] = parseFeedArticles(
+      `<rss><channel><item><guid>bounded</guid><title>${"t".repeat(1_200)}</title>
+        <link>https://example.com/bounded</link><content:encoded>${"x".repeat(300 * 1024)}</content:encoded>
+      </item></channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(article.title).toHaveLength(1_000)
+    expect(Buffer.byteLength(article.contentHtml ?? "", "utf8")).toBeLessThanOrEqual(256 * 1024)
+    expect(Buffer.byteLength(article.contentText ?? "", "utf8")).toBeLessThanOrEqual(256 * 1024)
+  })
+
+  it("omits later body fields when the aggregate content budget is exhausted", () => {
+    const itemBody = "x".repeat(300 * 1024)
+    const items = Array.from(
+      { length: 9 },
+      (_, index) => `<item><guid>body-${index}</guid><title>Body ${index}</title><link>https://example.com/body-${index}</link><content:encoded>${itemBody}</content:encoded></item>`
+    ).join("")
+    const result = parseFeedArticlesWithMetrics(
+      `<rss><channel>${items}</channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(result.stats).toMatchObject({
+      contentBytes: 4 * 1024 * 1024,
+      fieldsTruncated: 2,
+    })
+    expect(result.articles[8]?.contentHtml).toBeUndefined()
+    expect(result.articles[8]?.contentText).toBeUndefined()
   })
 })

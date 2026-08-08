@@ -1,6 +1,6 @@
 import { getPrisma } from "./db"
 import { fetchPodcastFeedText } from "./podcast-fetch"
-import { parsePodcastFeed, type ParsedPodcastEpisode } from "./podcast-parser"
+import { parsePodcastFeedWithMetrics, type ParsedPodcastEpisode } from "./podcast-parser"
 import {
   normalizeHttpUrl,
   type SafeFetchTextOptions,
@@ -81,6 +81,10 @@ export type PodcastRefreshMetrics = RefreshWriteStats & {
   conditionalHit: boolean
   durationMs: number
   parsedCount: number
+  sourceParseContentBytes?: number
+  sourceParseFieldsTruncated?: number
+  sourceParseItemsAccepted?: number
+  sourceParseItemsTruncated?: number
   status: number
 }
 
@@ -166,7 +170,9 @@ export async function refreshPodcastWithClient({
       }
     }
 
-    const parsedPodcast = parsePodcastFeed(response.text, response.url.href)
+    const parsed = parsePodcastFeedWithMetrics(response.text, response.url.href)
+    const parsedPodcast = parsed.podcast
+    recordPodcastParseMetrics(podcast.id, parsed.stats)
     const writes = await writePodcastEpisodes({
       episodes: parsedPodcast.episodes,
       podcastId: podcast.id,
@@ -194,7 +200,11 @@ export async function refreshPodcastWithClient({
       metrics: {
         ...baseMetrics,
         durationMs: elapsedMs(startedAt),
-        parsedCount: parsedPodcast.episodes.length,
+        parsedCount: parsed.stats.parsedCount,
+        sourceParseContentBytes: parsed.stats.contentBytes,
+        sourceParseFieldsTruncated: parsed.stats.fieldsTruncated,
+        sourceParseItemsAccepted: parsed.stats.acceptedCount,
+        sourceParseItemsTruncated: parsed.stats.truncatedCount,
         ...writes,
       },
       podcastId: podcast.id,
@@ -220,6 +230,36 @@ export async function refreshPodcastWithClient({
 
     throw error
   }
+}
+
+function recordPodcastParseMetrics(
+  sourceId: string,
+  {
+    acceptedCount,
+    contentBytes,
+    fieldsTruncated,
+    parsedCount,
+    truncatedCount,
+  }: {
+    acceptedCount: number
+    contentBytes: number
+    fieldsTruncated: number
+    parsedCount: number
+    truncatedCount: number
+  }
+) {
+  console.info(
+    JSON.stringify({
+      event: "source_parse_metrics",
+      sourceId,
+      sourceKind: "podcast",
+      source_parse_content_bytes: contentBytes,
+      source_parse_fields_truncated: fieldsTruncated,
+      source_parse_items_accepted: acceptedCount,
+      source_parse_items_total: parsedCount,
+      source_parse_items_truncated: truncatedCount,
+    })
+  )
 }
 
 async function recordSuccessfulPodcastFetch({
