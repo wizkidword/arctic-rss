@@ -3,6 +3,7 @@ import { BookmarkIcon, SearchIcon } from "lucide-react"
 import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
+import { BriefingsWorkflowGuide } from "@/components/briefings-workflow-guide"
 import { SavedSearchList } from "@/components/saved-search-list"
 import { buttonVariants } from "@/components/ui/button"
 import { listSavedSearchesForUser } from "@/lib/saved-searches"
@@ -34,6 +35,7 @@ export default async function SavedSearchesPage() {
           Open search
         </Link>
       </section>
+      <BriefingsWorkflowGuide />
       <SavedSearchList savedSearches={savedSearches} />
     </div>
   )

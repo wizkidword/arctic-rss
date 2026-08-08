@@ -59,6 +59,9 @@ export function ArticleAiSummaryPanel({
       </summary>
 
       <div className="border-t p-4">
+        <p className="text-xs leading-5 text-muted-foreground">
+          Generated from this one source article. This is AI-written help, not the publisher&apos;s wording.
+        </p>
         <form action={formAction}>
           <input name="articleId" type="hidden" value={articleId} />
           <Button

@@ -344,6 +344,34 @@ export function savedSearchHref(savedSearch: SavedSearchRecord) {
   return articleSearchHref(savedSearchFilters(savedSearch))
 }
 
+/**
+ * Opens an explicit Smart Digest draft from the part of a saved view that a
+ * digest can represent today: its topic and either one source or one folder.
+ * The destination still validates the selected sources when the user submits.
+ */
+export function smartDigestDraftHref(
+  savedSearch: Pick<
+    SavedSearchRecord,
+    "folderId" | "name" | "query" | "subscriptionId"
+  >
+) {
+  const params = new URLSearchParams({
+    include: savedSearch.query,
+    name: savedSearch.name,
+    topic: savedSearch.query,
+  })
+
+  if (savedSearch.subscriptionId) {
+    params.set("feed", savedSearch.subscriptionId)
+    params.set("sourceScope", "FEEDS")
+  } else if (savedSearch.folderId) {
+    params.set("folder", savedSearch.folderId)
+    params.set("sourceScope", "FOLDERS")
+  }
+
+  return `/app/smart-digests/new?${params.toString()}`
+}
+
 export function savedSearchFilters(
   savedSearch: Pick<
     SavedSearchRecord,

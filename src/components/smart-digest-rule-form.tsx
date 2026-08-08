@@ -30,14 +30,27 @@ export type SmartDigestRuleFormSubscription = {
 
 type SourceScope = "ALL_FEEDS" | "FOLDERS" | "FEEDS"
 
+export type SmartDigestRuleFormDraft = {
+  feedSubscriptionIds?: string[]
+  folderIds?: string[]
+  includeTerms?: string
+  name?: string
+  sourceScope?: SourceScope
+  topicPrompt?: string
+}
+
 export function SmartDigestRuleForm({
+  draft,
   folders,
   subscriptions,
 }: {
+  draft?: SmartDigestRuleFormDraft
   folders: SmartDigestRuleFormFolder[]
   subscriptions: SmartDigestRuleFormSubscription[]
 }) {
-  const [sourceScope, setSourceScope] = useState<SourceScope>("ALL_FEEDS")
+  const [sourceScope, setSourceScope] = useState<SourceScope>(
+    draft?.sourceScope ?? "ALL_FEEDS"
+  )
   const [state, formAction, pending] = useActionState(
     createSmartDigestRuleAction,
     initialState
@@ -55,6 +68,7 @@ export function SmartDigestRuleForm({
           name="name"
           required
           type="text"
+          defaultValue={draft?.name}
         />
       </label>
 
@@ -64,6 +78,7 @@ export function SmartDigestRuleForm({
           className="min-h-20 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
           name="topicPrompt"
           required
+          defaultValue={draft?.topicPrompt}
         />
       </label>
 
@@ -74,6 +89,7 @@ export function SmartDigestRuleForm({
           name="includeTerms"
           placeholder={'"Iran-U.S. conflict" sanctions nuclear'}
           required
+          defaultValue={draft?.includeTerms}
         />
       </label>
 
@@ -113,6 +129,7 @@ export function SmartDigestRuleForm({
             <label className="flex items-center gap-2 text-sm" key={folder.id}>
               <input
                 disabled={sourceScope !== "FOLDERS"}
+                defaultChecked={draft?.folderIds?.includes(folder.id)}
                 name="folderIds"
                 type="checkbox"
                 value={folder.id}
@@ -139,6 +156,7 @@ export function SmartDigestRuleForm({
             >
               <input
                 disabled={sourceScope !== "FEEDS"}
+                defaultChecked={draft?.feedSubscriptionIds?.includes(subscription.id)}
                 name="feedSubscriptionIds"
                 type="checkbox"
                 value={subscription.id}

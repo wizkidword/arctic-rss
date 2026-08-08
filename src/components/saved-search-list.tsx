@@ -8,7 +8,11 @@ import {
   setSavedSearchMonitorEnabledAction,
 } from "@/app/app/saved-searches/actions"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { savedSearchHref, type SavedSearchRecord } from "@/lib/saved-searches"
+import {
+  savedSearchHref,
+  smartDigestDraftHref,
+  type SavedSearchRecord,
+} from "@/lib/saved-searches"
 import { cn } from "@/lib/utils"
 
 export function SavedSearchList({
@@ -115,6 +119,14 @@ export function SavedSearchList({
                     Mark seen
                   </Button>
                 </form>
+              )}
+              {savedSearch.monitorEnabled && (
+                <Link
+                  className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+                  href={smartDigestDraftHref(savedSearch)}
+                >
+                  Create digest
+                </Link>
               )}
               <form action={deleteSavedSearchAction}>
                 <input name="savedSearchId" type="hidden" value={savedSearch.id} />
