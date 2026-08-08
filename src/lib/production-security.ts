@@ -7,6 +7,7 @@ import {
 } from "./app-origin"
 import { LEGACY_REDIS_MIGRATION_FLAG } from "./redis-config"
 import { assertRuntimeTopology } from "./runtime-topology"
+import { getRuntimeRequiredServiceRoleEnvironment } from "./service-role-environment"
 import { assertTurnstileConfiguration } from "./turnstile"
 
 export class UnsafeProductionConfigurationError extends Error {
@@ -73,6 +74,15 @@ function assertRequiredValue(
   }
 
   return value
+}
+
+function assertManifestRequiredVariables(
+  environment: ProductionEnvironment,
+  role: ProductionServiceRole
+) {
+  for (const variable of getRuntimeRequiredServiceRoleEnvironment(role)) {
+    assertRequiredValue(environment, variable)
+  }
 }
 
 function assertNonPlaceholderSecret(variable: string, value: string) {
@@ -318,6 +328,7 @@ function assertWebOrigins(environment: ProductionEnvironment) {
 }
 
 function assertWebConfiguration(environment: ProductionEnvironment) {
+  assertManifestRequiredVariables(environment, "web")
   assertNoSensitiveVariables(environment, "web", [
     "CLOUDFLARE_TUNNEL_TOKEN",
     "MIGRATE_DATABASE_URL",
@@ -335,6 +346,7 @@ function assertWorkerConfiguration(
   environment: ProductionEnvironment,
   role: ProductionServiceRole
 ) {
+  assertManifestRequiredVariables(environment, role)
   assertNoSensitiveVariables(environment, role, WORKER_FORBIDDEN_VARIABLES)
   assertRuntimeDatabaseUrl(environment)
   assertRedisUrl(environment, "DURABLE_REDIS_URL")
@@ -349,6 +361,7 @@ function assertWorkerConfiguration(
 }
 
 function assertChatGatewayConfiguration(environment: ProductionEnvironment) {
+  assertManifestRequiredVariables(environment, "chat-gateway")
   assertNoSensitiveVariables(environment, "chat-gateway", [
     "ANTHROPIC_API_KEY",
     "AUTH_GOOGLE_ID",

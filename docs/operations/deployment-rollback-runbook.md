@@ -16,11 +16,47 @@ reviewed target commit are mandatory first.
   archive or a deliberately introduced commit-addressable release process.
 - The migration service uses `prisma migrate deploy`; schema changes must be
   committed, reviewed Prisma migrations.
+- Before the migration service runs, the approved release script compares the
+  staged migration names with the current release and runs the dependency-free
+  migration-risk classifier for every new migration. A flagged migration must
+  have a complete record under
+  [`migration-risk`](migration-risk) before Prisma is allowed to start. This
+  is an owner-decision gate, not an automatic approval.
 - The migration service has its own Docker image. Rebuild that image from the
   staged release immediately before running it; `docker compose run migrate`
   alone may reuse an older image that cannot see a newly committed migration.
 - In shell examples, replace `CANONICAL_HOST` with the reviewed public host
   name. Do not read it by printing the production `.env`.
+
+## Migration risk procedure
+
+Run the same changed-migration classifier locally or in CI with the reviewed
+comparison base:
+
+```bash
+npm run migration:risk -- --base REVIEWED_BASE_SHA
+```
+
+The classifier deliberately produces conservative prompts for stored generated
+columns, type changes, destructive drops, non-concurrent indexes, unbounded
+data changes, direct non-null additions, unstaged foreign keys, and enum
+replacement. A safe result means no recognized high-risk pattern was found; it
+does not prove the SQL is safe for a material production table.
+
+For each flagged migration, create
+`docs/operations/migration-risk/<migration-name>.md` with all required fields:
+migration name, author/date, affected tables, row and size estimates, lock and
+rewrite risk, duration, online strategy, backfill and validation plans,
+maintenance decision, rollback and forward recovery, backup evidence, owner
+approval, and production result.
+
+Use expand-and-contract for material data changes: expand the schema, backfill
+bounded resumable batches outside the schema transaction, create or validate
+indexes and constraints through a controlled online-safe path, switch the
+application, then contract only after evidence. `CREATE INDEX CONCURRENTLY`
+cannot run inside Prisma's normal transaction; do not manually mark it applied
+until its SQL result, schema/index validity, compatible application version,
+and Prisma history are all verified.
 
 ## REDIS-ARCH-001 durable/ephemeral Redis deployment
 

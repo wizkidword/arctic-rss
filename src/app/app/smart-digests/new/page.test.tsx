@@ -80,4 +80,24 @@ describe("NewSmartDigestPage", () => {
     expect(markup).toContain("Selected feeds")
     expect(markup).toContain("Reuters")
   })
+
+  it("prefills a reviewable digest draft from a saved view", async () => {
+    const markup = renderToStaticMarkup(
+      await NewSmartDigestPage({
+        searchParams: Promise.resolve({
+          feed: "subscription-1",
+          include: "sea ice",
+          name: "Sea ice watch",
+          sourceScope: "FEEDS",
+          topic: "sea ice",
+        }),
+      })
+    )
+
+    expect(markup).toContain('value="Sea ice watch"')
+    expect(markup).toContain('name="topicPrompt" required="">sea ice</textarea>')
+    expect(markup).toContain('name="includeTerms"')
+    expect(markup).toContain('name="sourceScope" checked="" value="FEEDS"')
+    expect(markup).toContain('name="feedSubscriptionIds" checked="" value="subscription-1"')
+  })
 })

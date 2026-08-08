@@ -237,6 +237,113 @@ describe("getPodcastEpisodeTranscriptForUser", () => {
     )
   })
 
+  it("shares one in-flight outbound request for simultaneous authorized transcript reads", async () => {
+    let resolveFetch: ((value: ReturnType<typeof transcriptResponse>) => void) | undefined
+    const fetchText = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof transcriptResponse>>((resolve) => {
+          resolveFetch = resolve
+        })
+    )
+    const cache = createCache()
+    const requests = Array.from({ length: 10 }, (_, index) =>
+      getPodcastEpisodeTranscriptForUser({
+        cache,
+        episodeId: `episode-${index}`,
+        fetchText,
+        store: createStore(transcriptReference()),
+        userId: `user-${index}`,
+      })
+    )
+
+    await vi.waitFor(() => {
+      expect(fetchText).toHaveBeenCalledOnce()
+    })
+
+    resolveFetch?.(transcriptResponse())
+
+    await expect(Promise.all(requests)).resolves.toHaveLength(10)
+    expect(fetchText).toHaveBeenCalledOnce()
+  })
+
+  it("clears a failed in-flight request so a later cache miss can retry", async () => {
+    const fetchText = vi
+      .fn()
+      .mockRejectedValueOnce(new FeedFetchError("The upstream transcript is unavailable."))
+      .mockResolvedValueOnce(transcriptResponse())
+
+    await expect(
+      getPodcastEpisodeTranscriptForUser({
+        cache: createCache(),
+        episodeId: "episode-1",
+        fetchText,
+        store: createStore(transcriptReference()),
+        userId: "user-1",
+      })
+    ).rejects.toMatchObject({ reason: "upstream_unavailable" })
+
+    await expect(
+      getPodcastEpisodeTranscriptForUser({
+        cache: createCache(),
+        episodeId: "episode-2",
+        fetchText,
+        store: createStore(transcriptReference()),
+        userId: "user-2",
+      })
+    ).resolves.toMatchObject({ cues: [{ text: "Hello." }] })
+
+    expect(fetchText).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not make different transcript URLs wait for one another", async () => {
+    let resolveFirst: ((value: ReturnType<typeof transcriptResponse>) => void) | undefined
+    let resolveSecond: ((value: ReturnType<typeof transcriptResponse>) => void) | undefined
+    const fetchText = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<ReturnType<typeof transcriptResponse>>((resolve) => {
+            resolveFirst = resolve
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<ReturnType<typeof transcriptResponse>>((resolve) => {
+            resolveSecond = resolve
+          })
+      )
+
+    const first = getPodcastEpisodeTranscriptForUser({
+      cache: createCache(),
+      episodeId: "episode-1",
+      fetchText,
+      store: createStore(transcriptReference()),
+      userId: "user-1",
+    })
+    const second = getPodcastEpisodeTranscriptForUser({
+      cache: createCache(),
+      episodeId: "episode-2",
+      fetchText,
+      store: createStore({
+        ...transcriptReference(),
+        transcriptUrl: "https://publisher.example.com/another-episode.vtt",
+      }),
+      userId: "user-2",
+    })
+
+    await vi.waitFor(() => {
+      expect(fetchText).toHaveBeenCalledTimes(2)
+    })
+
+    resolveFirst?.(transcriptResponse())
+    resolveSecond?.({
+      ...transcriptResponse(),
+      url: new URL("https://publisher.example.com/another-episode.vtt"),
+    })
+
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2)
+  })
+
   it("uses a shorter negative cache for transient upstream failures", async () => {
     const cache = createCache()
     const fetchText = vi

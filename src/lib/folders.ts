@@ -91,7 +91,9 @@ export const listUserFolders = cache(async function listUserFolders(
   userId: string
 ): Promise<FolderNavItem[]> {
   const folders = await getPrisma().folder.findMany({
-    include: {
+    select: {
+      id: true,
+      name: true,
       subscriptions: {
         select: {
           feedId: true,

@@ -16,6 +16,7 @@ import {
   renameFolderAction,
 } from "@/app/app/actions"
 import { auth } from "@/auth"
+import { FeedAttentionList } from "@/components/feed-attention"
 import { FeedUnsubscribeButton } from "@/components/feed-unsubscribe-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -74,6 +75,8 @@ export default async function FoldersPage() {
           </Button>
         </form>
       </section>
+
+      <FeedAttentionList subscriptions={subscriptions} />
 
       <section className="rounded-lg border bg-card">
         <div className="flex items-center justify-between gap-3 border-b p-4">

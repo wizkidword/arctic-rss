@@ -5,6 +5,7 @@ import {
   articleSearchHref,
   listReaderArticleSearchPageWithClient,
   logSlowArticleSearch,
+  recordArticleSearchMetrics,
   parseArticleSearchFilters,
   savedSearchCreateHref,
 } from "./article-search"
@@ -188,6 +189,30 @@ describe("article search query", () => {
     expect(findMany).not.toHaveBeenCalled()
   })
 
+  it("records a timeout without exposing the search text", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
+    const timeout = Object.assign(new Error("canceling statement due to statement timeout"), {
+      code: "57014",
+    })
+    const store = {
+      $queryRaw: vi.fn().mockRejectedValue(timeout),
+      article: { findMany: vi.fn() },
+    }
+
+    await expect(
+      listReaderArticleSearchPageWithClient({
+        filters: { query: "private search phrase", state: "all" },
+        store: store as never,
+        userId: "user-1",
+      })
+    ).rejects.toBe(timeout)
+
+    expect(info).toHaveBeenCalledWith(
+      expect.stringContaining('"search_timeout_total":1')
+    )
+    expect(info.mock.calls[0]?.[0]).not.toContain("private search phrase")
+  })
+
   it("emits a bounded opaque cursor when another result page exists", async () => {
     const rows = [
       {
@@ -255,5 +280,39 @@ describe("article search query", () => {
       })
     )
     expect(warning.mock.calls[0]?.[0]).not.toContain("private search phrase")
+  })
+
+  it("emits complete privacy-safe metrics without reader or query identifiers", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
+    const filters = {
+      folderId: "folder-private",
+      publishedAfter: new Date("2026-08-01T00:00:00.000Z"),
+      query: "private search phrase",
+      state: "unread" as const,
+      subscriptionId: "subscription-private",
+    }
+
+    recordArticleSearchMetrics({
+      durationMs: 123.7,
+      filters,
+      outcome: "completed",
+      resultsCount: 4,
+      timedOut: false,
+    })
+
+    expect(info).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "article_search_metrics",
+        outcome: "completed",
+        search_duration_ms: 124,
+        search_filter_count: 4,
+        search_requests_total: 1,
+        search_results_count: 4,
+        search_timeout_total: 0,
+      })
+    )
+    expect(info.mock.calls[0]?.[0]).not.toContain("private search phrase")
+    expect(info.mock.calls[0]?.[0]).not.toContain("folder-private")
+    expect(info.mock.calls[0]?.[0]).not.toContain("subscription-private")
   })
 })

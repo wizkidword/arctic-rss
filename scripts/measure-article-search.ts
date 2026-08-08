@@ -45,6 +45,14 @@ type PlanSummary = {
   sortMethods: string[]
 }
 
+type SearchScenario = {
+  name: string
+  publishedAfter?: Date
+  publishedBefore?: Date
+  query: string
+  state: "all" | "starred" | "unread"
+}
+
 export function getArticleSearchBenchmarkConfig(
   environment: Readonly<Record<string, string | undefined>> = process.env
 ): ArticleSearchBenchmarkConfig {
@@ -134,6 +142,13 @@ async function runBenchmark(config: ArticleSearchBenchmarkConfig) {
       { name: "folder_name", query: fixture.folderTerm, state: "all" as const },
       { name: "unread_filter", query: "climate", state: "unread" as const },
       { name: "high_volume", query: "climate", state: "starred" as const },
+      {
+        name: "date_range",
+        publishedAfter: fixture.dateRangeStart,
+        publishedBefore: fixture.dateRangeEnd,
+        query: "climate",
+        state: "all" as const,
+      },
     ]
 
     const latency = Object.fromEntries(
@@ -271,6 +286,8 @@ async function seedCorpus({
   }
 
   return {
+    dateRangeEnd: new Date(1_700_000_000_000 - 7 * 24 * 60 * 60 * 1_000),
+    dateRangeStart: new Date(1_700_000_000_000 - 14 * 24 * 60 * 60 * 1_000),
     feedCount,
     feedIds,
     feedTerm,
@@ -289,17 +306,33 @@ async function measureScenario({
 }: {
   config: ArticleSearchBenchmarkConfig
   prisma: ReturnType<typeof getPrisma>
-  scenario: { name: string; query: string; state: "all" | "starred" | "unread" }
+  scenario: SearchScenario
   userId: string
 }) {
   for (let index = 0; index < 3; index += 1) {
-    await runRepresentativeSearch({ config, prisma, query: scenario.query, state: scenario.state, userId })
+    await runRepresentativeSearch({
+      config,
+      prisma,
+      publishedAfter: scenario.publishedAfter,
+      publishedBefore: scenario.publishedBefore,
+      query: scenario.query,
+      state: scenario.state,
+      userId,
+    })
   }
 
   const samples: number[] = []
   for (let index = 0; index < config.sampleCount; index += 1) {
     const startedAt = performance.now()
-    await runRepresentativeSearch({ config, prisma, query: scenario.query, state: scenario.state, userId })
+    await runRepresentativeSearch({
+      config,
+      prisma,
+      publishedAfter: scenario.publishedAfter,
+      publishedBefore: scenario.publishedBefore,
+      query: scenario.query,
+      state: scenario.state,
+      userId,
+    })
     samples.push(performance.now() - startedAt)
   }
 
@@ -309,12 +342,16 @@ async function measureScenario({
 async function runRepresentativeSearch({
   config,
   prisma,
+  publishedAfter,
+  publishedBefore,
   query,
   state,
   userId,
 }: {
   config: ArticleSearchBenchmarkConfig
   prisma: ReturnType<typeof getPrisma>
+  publishedAfter?: Date
+  publishedBefore?: Date
   query: string
   state: "all" | "starred" | "unread"
   userId: string
@@ -352,6 +389,8 @@ async function runRepresentativeSearch({
     WHERE "FeedSubscription"."userId" = ${userId}
       AND "FeedSubscription"."isPaused" = false
       AND "ArticleState"."archivedAt" IS NULL
+      AND (${publishedAfter ?? null}::timestamp IS NULL OR "Article"."publishedAt" >= ${publishedAfter ?? null})
+      AND (${publishedBefore ?? null}::timestamp IS NULL OR "Article"."publishedAt" < ${publishedBefore ?? null})
       AND (
         ${searchDocument} @@ search_terms."terms"
         OR "Feed"."title" ILIKE ${sourcePattern}
@@ -380,6 +419,7 @@ async function capturePlans({
   const searchDocument = articleSearchDocument(config.vectorMode)
   const sourcePattern = `%${fixture.feedTerm}%`
   const folderPattern = `%${fixture.folderTerm}%`
+  const dateRangeSourcePattern = `%climate%`
   const plans = await Promise.all([
     prisma.$queryRaw<Array<{ "QUERY PLAN": unknown }>>`
       EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
@@ -401,9 +441,42 @@ async function capturePlans({
       SELECT "id" FROM "Folder"
       WHERE "userId" = ${fixture.userId} AND "name" ILIKE ${folderPattern}
     `,
+    prisma.$queryRaw<Array<{ "QUERY PLAN": unknown }>>`
+      EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+      WITH search_terms AS (
+        SELECT websearch_to_tsquery('simple'::regconfig, ${"climate"}) AS "terms"
+      )
+      SELECT "Article"."id"
+      FROM "Article"
+      INNER JOIN "FeedSubscription"
+        ON "FeedSubscription"."feedId" = "Article"."feedId"
+      INNER JOIN "Feed"
+        ON "Feed"."id" = "Article"."feedId"
+      LEFT JOIN "Folder"
+        ON "Folder"."id" = "FeedSubscription"."folderId"
+        AND "Folder"."userId" = "FeedSubscription"."userId"
+      LEFT JOIN "ArticleState"
+        ON "ArticleState"."articleId" = "Article"."id"
+        AND "ArticleState"."userId" = ${fixture.userId}
+      CROSS JOIN search_terms
+      WHERE "FeedSubscription"."userId" = ${fixture.userId}
+        AND "FeedSubscription"."isPaused" = false
+        AND "ArticleState"."archivedAt" IS NULL
+        AND "Article"."publishedAt" >= ${fixture.dateRangeStart}
+        AND "Article"."publishedAt" < ${fixture.dateRangeEnd}
+        AND (
+          "Article"."searchDocument" @@ search_terms."terms"
+          OR "Feed"."title" ILIKE ${dateRangeSourcePattern}
+          OR COALESCE("FeedSubscription"."customTitle", '') ILIKE ${dateRangeSourcePattern}
+          OR COALESCE("Folder"."name", '') ILIKE ${dateRangeSourcePattern}
+        )
+      ORDER BY "Article"."publishedAt" DESC NULLS LAST, "Article"."id" DESC
+      LIMIT 51
+    `,
   ])
 
   return {
+    date_range: summarizePlan(plans[4]),
     feed_name: summarizePlan(plans[2]),
     folder_name: summarizePlan(plans[3]),
     high_volume: summarizePlan(plans[1]),

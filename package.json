@@ -15,12 +15,14 @@
     "chat:load-test": "tsx scripts/load-test-chat-gateway.ts",
     "chat:repair-read-markers": "tsx scripts/repair-chat-read-markers.ts",
     "compose:verify-env": "node scripts/ci/assert-compose-service-environments.mjs",
+    "compatibility:verify-legacy-redis": "node scripts/ci/assert-legacy-redis-compatibility.mjs",
     "build": "next build",
     "image-proxy:measure": "tsx scripts/measure-image-proxy.ts",
     "search:measure": "tsx scripts/measure-article-search.ts",
     "runtime:build": "node scripts/build-runtime.mjs",
     "start": "next start",
     "lint": "eslint",
+    "migration:risk": "tsx scripts/check-migration-risk.ts",
     "postinstall": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
@@ -96,7 +98,7 @@
     "vitest": "^4.1.9"
   },
   "overrides": {
-    "@hono/node-server": "1.19.13",
+    "@hono/node-server": "1.19.17",
     "minimatch@3": {
       "brace-expansion": "1.1.16"
     },
@@ -105,7 +107,9 @@
     },
     "fast-uri": "3.1.5",
     "ip-address": "10.4.0",
-    "js-yaml": "4.3.0",
+    "js-yaml": "4.3.1",
+    "hono": "4.13.1",
+    "nanoid": "3.3.18",
     "postcss": "8.5.23",
     "sharp": "0.35.0",
     "socket.io-parser": "4.2.7"

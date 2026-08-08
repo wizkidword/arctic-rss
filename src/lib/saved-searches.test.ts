@@ -9,6 +9,7 @@ import {
   setSavedSearchMonitorEnabledForUserWithClient,
   SavedSearchError,
   savedSearchHref,
+  smartDigestDraftHref,
 } from "./saved-searches"
 import type { SavedSearchRecord } from "./saved-searches"
 
@@ -276,6 +277,20 @@ describe("saved searches", () => {
       )
     ).toBe(
       "/app/search?v=1&q=sea+ice&source=subscription-1&folder=folder-1&collection=collection-1&state=read&from=2026-07-01&to=2026-07-31"
+    )
+  })
+
+  it("creates an explicit digest draft from the supported saved-view filters", () => {
+    expect(
+      smartDigestDraftHref(
+        savedSearchRecord({
+          folderId: "folder-1",
+          name: "Sea ice watch",
+          subscriptionId: null,
+        })
+      )
+    ).toBe(
+      "/app/smart-digests/new?include=sea+ice&name=Sea+ice+watch&topic=sea+ice&folder=folder-1&sourceScope=FOLDERS"
     )
   })
 })

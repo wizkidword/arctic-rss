@@ -17,6 +17,7 @@ describe("production Docker images", () => {
     );
     expect(dockerfile).toContain("FROM ${NODE_IMAGE} AS migrate");
     expect(dockerfile).toContain("COPY --from=migrate-deps /app/node_modules ./node_modules");
+    expect(dockerfile).toContain("COPY --from=builder /app/build/runtime/check-migration-risk.mjs ./check-migration-risk.mjs");
     expect(dockerfile).not.toContain("FROM deps AS migrate");
     expect(dockerfile).toContain(
       "rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx",

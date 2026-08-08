@@ -6,19 +6,20 @@ import {
   ArticleActionToolbar,
   ArticleContextMenu,
   type ActiveArticleCollection,
-  type ArticleContextMenuArticle,
 } from "@/components/article-context-menu"
 import { ArticleSourceIcon } from "@/components/article-source-icon"
 import { ArticleReadTracker } from "@/components/article-read-tracker"
 import { StoryClusterDismissButton } from "@/components/story-cluster-dismiss-button"
 import { StoryClusterPanel } from "@/components/story-cluster-panel"
 import { StoryClusterSplitButton } from "@/components/story-cluster-split-button"
-import {
-  ArticleStateControls,
-  MarkAllReadButton,
-} from "@/components/article-state-controls"
+import { MarkAllReadButton } from "@/components/article-state-controls"
 import { ReaderKeyboardShortcuts } from "@/components/reader-keyboard-shortcuts"
 import { ReaderViewSwitcher } from "@/components/reader-view-switcher"
+import { ArticleBody } from "@/components/reader/article-body"
+import {
+  ArticleCardGrid,
+  articleContextMenuArticle,
+} from "@/components/reader/article-card-grid"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -32,7 +33,6 @@ import {
   type ReaderArticle,
   type ReaderArticleListItem,
 } from "@/lib/articles"
-import { imageProxyUrl } from "@/lib/image-proxy-url"
 import { type DefaultView } from "@/lib/preferences"
 import {
   articleDetailHref,
@@ -48,8 +48,6 @@ import { type ArticleCollectionPickerItem } from "@/lib/article-collections"
 import { type StoryClusterPresentation } from "@/lib/story-cluster-reader"
 import { extractYouTubeVideoId } from "@/lib/youtube-feeds"
 import { cn } from "@/lib/utils"
-
-const ARTICLE_IMAGE_HTML_PATTERN = /<img\b/i
 
 export function ReaderSurface({
   articles,
@@ -258,7 +256,7 @@ function renderReaderView({
     return (
       <section className="grid min-h-[70vh] min-w-0 gap-4 xl:grid-cols-[1fr_minmax(320px,440px)]">
         <div className={cn(hasExplicitSelection && "order-2 xl:order-1")}>
-          <CardArticleGrid
+          <ArticleCardGrid
             articles={articles}
             articleCollections={articleCollections}
             basePath={basePath}
@@ -582,84 +580,6 @@ function storyClusterReasonLabel(
   return labels[reason]
 }
 
-function CardArticleGrid({
-  articles,
-  articleCollections,
-  basePath,
-  currentCollection,
-  dateTimePreferences,
-  readOnlyActionReason,
-  selectedArticleId,
-}: {
-  articles: ReaderArticleListItem[]
-  articleCollections: ArticleCollectionPickerItem[]
-  basePath: string
-  currentCollection?: ActiveArticleCollection
-  dateTimePreferences: DateTimePreferences
-  readOnlyActionReason?: string
-  selectedArticleId?: string
-}) {
-  return (
-    <div className="grid content-start gap-3 sm:grid-cols-2">
-      {articles.map((article) => (
-        <ArticleContextMenu
-          article={articleContextMenuArticle(article)}
-          as="article"
-          collections={articleCollections}
-          currentCollection={currentCollection}
-          readOnlyReason={readOnlyActionReason}
-          className={cn(
-            "overflow-hidden rounded-lg border bg-card transition-colors hover:bg-muted",
-            article.id === selectedArticleId && "bg-muted"
-          )}
-          inlineActions
-          key={article.id}
-        >
-          {imageProxyUrl(article.imageUrl) && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              alt=""
-              className="aspect-video w-full object-cover"
-              src={imageProxyUrl(article.imageUrl) ?? ""}
-            />
-          )}
-          <div className="flex flex-col gap-3 p-3">
-        <Link className="min-w-0" href={articleSelectionHref(basePath, article.id)}>
-              <h2
-                className={cn(
-                  "line-clamp-2 text-sm leading-5",
-                  !article.isRead && "font-semibold"
-                )}
-              >
-                {article.title}
-              </h2>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {article.feedTitle}
-                {article.publishedAt
-                  ? ` - ${formatArticleDateTime(
-                      article.publishedAt,
-                      dateTimePreferences
-                    )}`
-                  : ""}
-              </p>
-            </Link>
-            {article.summary && (
-              <p className="line-clamp-3 text-xs leading-5 text-muted-foreground">
-                {article.summary}
-              </p>
-            )}
-            <ArticleStateControls
-              article={article}
-              readOnlyReason={readOnlyActionReason}
-              size="xs"
-            />
-          </div>
-        </ArticleContextMenu>
-      ))}
-    </div>
-  )
-}
-
 function ArticleReaderCard({
   article,
   articleCollections,
@@ -785,73 +705,8 @@ function YouTubeVideoEmbed({
   )
 }
 
-function articleContextMenuArticle(
-  article: ReaderArticleListItem
-): ArticleContextMenuArticle {
-  return {
-    feedId: article.feedId,
-    id: article.id,
-    isRead: article.isRead,
-    isStarred: article.isStarred,
-    title: article.title,
-    url: article.url,
-  }
-}
-
 function isReaderArticle(
   article: ReaderArticleListItem | undefined
 ): article is ReaderArticle {
   return Boolean(article && "sanitizedContentHtml" in article)
-}
-
-function ArticleBody({ article }: { article: ReaderArticle }) {
-  const proxiedImageUrl = imageProxyUrl(article.imageUrl)
-  const fallbackImageUrl =
-    proxiedImageUrl &&
-    !extractYouTubeVideoId(article.url) &&
-    !articleHtmlHasImage(article.sanitizedContentHtml)
-      ? proxiedImageUrl
-      : null
-
-  if (article.sanitizedContentHtml) {
-    return (
-      <>
-        {fallbackImageUrl ? (
-          <ArticleImageFallback imageUrl={fallbackImageUrl} />
-        ) : null}
-        <div
-          className="min-w-0 max-w-full space-y-4 break-words text-foreground [&_*]:max-w-full [&_a]:break-words [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-4 [&_img]:max-h-[520px] [&_img]:rounded-lg [&_img]:object-contain [&_p]:break-words [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-3"
-          dangerouslySetInnerHTML={{ __html: article.sanitizedContentHtml }}
-        />
-      </>
-    )
-  }
-
-  return (
-    <>
-      {fallbackImageUrl ? (
-        <ArticleImageFallback imageUrl={fallbackImageUrl} />
-      ) : null}
-      <p className="min-w-0 whitespace-pre-wrap break-words">
-        {article.contentText ||
-          "This article did not include readable body text in the feed."}
-      </p>
-    </>
-  )
-}
-
-function ArticleImageFallback({ imageUrl }: { imageUrl: string }) {
-  // Feed-level images are body media here, not cropped preview headers.
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      alt=""
-      className="max-h-[520px] w-full rounded-lg object-contain"
-      src={imageUrl}
-    />
-  )
-}
-
-function articleHtmlHasImage(html: string | null) {
-  return Boolean(html && ARTICLE_IMAGE_HTML_PATTERN.test(html))
 }

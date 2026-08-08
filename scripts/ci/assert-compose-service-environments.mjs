@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
+import { readFileSync } from "node:fs"
 
+const environmentManifest = JSON.parse(
+  readFileSync(new URL("../../config/service-role-environments.json", import.meta.url), "utf8")
+)
 const compose = JSON.parse(
   execFileSync(
     "docker",
@@ -32,79 +36,36 @@ function environmentNames(serviceName) {
   assert.ok(service, `Missing Compose service: ${serviceName}`)
   assert.ok(!service.env_file, `${serviceName} must not use env_file.`)
 
-  return new Set(Object.keys(service.environment ?? {}))
+  return Object.keys(service.environment ?? {}).sort()
 }
 
-function assertAbsent(serviceName, variableNames) {
-  const names = environmentNames(serviceName)
-
-  for (const variableName of variableNames) {
-    assert.ok(
-      !names.has(variableName),
-      `${serviceName} must not receive ${variableName}.`
-    )
-  }
+function assertExactEnvironment(serviceName, allowed) {
+  assert.deepEqual(
+    environmentNames(serviceName),
+    [...allowed].sort(),
+    `${serviceName} environment must exactly match config/service-role-environments.json.`
+  )
 }
 
-function assertPresent(serviceName, variableNames) {
-  const names = environmentNames(serviceName)
-
-  for (const variableName of variableNames) {
-    assert.ok(names.has(variableName), `${serviceName} must receive ${variableName}.`)
-  }
+for (const [role, entry] of Object.entries(environmentManifest.roles)) {
+  assertExactEnvironment(entry.composeService, entry.allowed)
+  assert.ok(
+    entry.required.every((variable) => entry.allowed.includes(variable)),
+    `${role} has a required variable outside its allowed set.`
+  )
 }
 
-const infrastructureSecrets = [
-  "CLOUDFLARE_TUNNEL_TOKEN",
-  "MIGRATE_DATABASE_URL",
-  "POSTGRES_PASSWORD",
-  "REDIS_PASSWORD",
-]
+for (const [serviceName, allowed] of Object.entries(environmentManifest.infrastructure)) {
+  assertExactEnvironment(serviceName, allowed)
+}
 
-assertPresent("web", ["ARCTIC_RSS_SERVICE_ROLE", "ARCTIC_RSS_TOPOLOGY", "DATABASE_URL"])
-assertAbsent("web", infrastructureSecrets)
+assert.deepEqual(
+  Object.keys(compose.services).sort(),
+  [
+    ...Object.values(environmentManifest.roles).map((entry) => entry.composeService),
+    ...Object.keys(environmentManifest.infrastructure),
+  ].sort(),
+  "Every rendered Compose service must have an exact environment manifest entry."
+)
 
-assertPresent("worker-ingestion", ["ARCTIC_RSS_SERVICE_ROLE", "DATABASE_URL", "DURABLE_REDIS_URL"])
-assertAbsent("worker-ingestion", [
-  ...infrastructureSecrets,
-  "AUTH_GOOGLE_ID",
-  "AUTH_GOOGLE_SECRET",
-  "AUTH_SECRET",
-  "OPENAI_API_KEY",
-  "SMTP_PASSWORD",
-  "SMTP_USER",
-  "TURNSTILE_SECRET_KEY",
-])
-
-assertPresent("chat-gateway", [
-  "ARCTIC_RSS_SERVICE_ROLE",
-  "ARCTIC_IRC_TOKEN_SECRET",
-  "DATABASE_URL",
-  "EPHEMERAL_REDIS_URL",
-])
-assertAbsent("chat-gateway", [
-  ...infrastructureSecrets,
-  "AUTH_GOOGLE_ID",
-  "AUTH_GOOGLE_SECRET",
-  "AUTH_SECRET",
-  "OPENAI_API_KEY",
-  "SMTP_PASSWORD",
-  "SMTP_USER",
-  "TURNSTILE_SECRET_KEY",
-])
-
-assertPresent("migrate", ["DATABASE_URL"])
-assertAbsent("migrate", [
-  "ARCTIC_IRC_TOKEN_SECRET",
-  "AUTH_GOOGLE_ID",
-  "AUTH_GOOGLE_SECRET",
-  "AUTH_SECRET",
-  "CLOUDFLARE_TUNNEL_TOKEN",
-  "OPENAI_API_KEY",
-  "SMTP_PASSWORD",
-  "SMTP_USER",
-])
-
-assert.deepEqual([...environmentNames("cloudflared")].sort(), ["TUNNEL_TOKEN"])
-
-console.log("Compose service environment boundaries verified.")
+console.log("Compose service environment boundaries exactly match the manifest.")

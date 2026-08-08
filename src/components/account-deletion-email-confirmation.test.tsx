@@ -13,27 +13,31 @@ describe("AccountDeletionEmailConfirmation", () => {
     window.history.replaceState(null, "", "/")
   })
 
-  it("keeps the email token out of the request URL and submits it only after DELETE", async () => {
+  it("exchanges the email token for a same-origin handoff before DELETE", async () => {
     const token = "x".repeat(43)
     window.history.replaceState(null, "", `/delete-account#token=${token}`)
-    const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ error: "Invalid confirmation." }),
-      ok: false,
-    })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ json: async () => ({ ready: true }), ok: true })
+      .mockResolvedValueOnce({ json: async () => ({ error: "Invalid confirmation." }), ok: false })
     vi.stubGlobal("fetch", fetchMock)
     const user = userEvent.setup()
 
     render(<AccountDeletionEmailConfirmation />)
 
     await waitFor(() => expect(window.location.hash).toBe(""))
-    expect((screen.getByRole("button", { name: "Delete account" }) as HTMLButtonElement).disabled).toBe(true)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/account/deletion/handoff",
+      expect.objectContaining({ body: JSON.stringify({ token }), method: "POST" })
+    )
     await user.type(screen.getByLabelText("Type DELETE to confirm"), "DELETE")
     await user.click(screen.getByRole("button", { name: "Delete account" }))
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/account/deletion/confirmation",
       expect.objectContaining({
-        body: JSON.stringify({ confirmation: "DELETE", token }),
+        body: JSON.stringify({ confirmation: "DELETE" }),
         method: "POST",
       })
     )

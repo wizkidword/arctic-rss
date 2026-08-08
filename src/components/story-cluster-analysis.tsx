@@ -60,8 +60,8 @@ export function StoryClusterAnalysis({
           </h5>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             Runs only when you ask. Every generated statement links to its
-            underlying original source; Arctic RSS does not assign ideological
-            source scores.
+            underlying original source and never replaces publisher wording;
+            Arctic RSS does not assign ideological source scores.
           </p>
         </div>
       </div>

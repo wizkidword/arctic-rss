@@ -4,6 +4,12 @@ Docker Compose reads `.env` only to interpolate the explicit `environment:`
 allowlists in `docker-compose.yml`. It must never inject the entire file into a
 service with `env_file`.
 
+The exact, machine-readable source of truth is
+[`config/service-role-environments.json`](../../config/service-role-environments.json).
+It lists every allowed and required variable for every application role plus
+the environment set for each infrastructure service. Compose validation, doctor
+required-variable output, and production startup checks consume that source.
+
 ## Runtime matrix
 
 | Service | Required configuration | Explicitly excluded examples |
@@ -26,7 +32,8 @@ URLs are never given to those infrastructure containers.
 ## Validation and rotation
 
 - `npm run compose:verify-env` renders all supported Compose profiles from
-  `.env.example` and fails if sensitive values cross the boundaries above.
+  `.env.example` and fails if any service has a missing or unexpected variable
+  relative to the exact manifest. Its output contains names only, never values.
 - Production web, worker, and chat-gateway startup validates its own role and
   rejects sensitive variables that do not belong there.
 - Rotate a credential only in the services that receive it. For example,
@@ -37,8 +44,8 @@ URLs are never given to those infrastructure containers.
 ## Adding a variable
 
 1. Trace its runtime read and assign it to the smallest service set.
-2. Add it to that service's explicit Compose allowlist and this matrix.
-3. Extend `assert-compose-service-environments.mjs` when it is sensitive.
+2. Add it to that service's explicit Compose allowlist and the exact manifest.
+3. Run `npm run compose:verify-env`; do not weaken it to an absence-only check.
 4. Add role-validation coverage if a production process reads it at startup.
 5. Do not restore `env_file` as a compatibility shortcut.
 

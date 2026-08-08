@@ -4,7 +4,7 @@
 production-remediation work. This is a decision aid and resumption guide, not
 a commitment to build every item or a schedule.
 
-**Last reviewed:** 2026-07-28
+**Last reviewed:** 2026-08-08
 
 ## Current baseline
 
@@ -16,19 +16,25 @@ minimization are in place.
 The next product initiative should be selected deliberately and delivered as a
 small vertical slice. Do not begin several roadmap items at once.
 
+Third-pass source work has improved the reader shell, search/saved-search
+handoffs, source recovery controls, and AI provenance wording. Those changes
+remain pending the separately owner-gated production release; see
+[the capability status record](../audits/third-pass-capability-status.md) for
+evidence by capability.
+
 ## Recommended sequence
 
 | Order | Initiative | Why it belongs here | Status |
 | --- | --- | --- | --- |
-| 1 | Search and saved searches | Makes an existing reader useful again as subscriptions grow. | In progress: source slices ready; OVH preflight and release evidence remain |
+| 1 | Search and saved searches | Makes an existing reader useful again as subscriptions grow. | Source slice verified locally; production release and OVH evidence remain owner-gated. |
 | 2 | Reader automation | Builds on saved-search/query semantics to reduce routine triage. | Not started |
-| 3 | Story comparison | Helps readers understand coverage across sources instead of only consuming a chronological feed. | In progress: source signal foundation only |
-| 4 | Better briefings | Improves the value of the existing AI and digest foundations. | Not started |
+| 3 | Story comparison | Helps readers understand coverage across sources instead of only consuming a chronological feed. | In progress: inline source-signal foundation and narrow reader projection are ready locally; no production claim. |
+| 4 | Better briefings | Improves the value of the existing AI and digest foundations. | In progress: saved-search-to-digest draft handoff and clearer source evidence are ready locally; broader briefing workflow remains planned. |
 | 5 | Podcast transcripts | Extends the podcast experience from playback to research and recall. | In progress: publisher-supplied transcript retrieval and reader display are implemented; abuse controls and broader polish remain planned. |
 | 6 | Capture tools | Gives users a low-friction way to bring outside reading into Arctic RSS. | Not started |
 | 7 | Shared workspaces | Adds collaboration only after individual-reader workflows are strong. | Not started |
 | 8 | API and webhooks | Exposes stable, proven concepts to other tools after their data model settles. | Not started |
-| 9 | Privacy and source health | Makes collection, retention, and feed reliability more visible and controllable. | Not started |
+| 9 | Privacy and source health | Makes collection, retention, and feed reliability more visible and controllable. | In progress: signed-in source attention and bounded recovery controls are ready locally; release and operator validation remain. |
 | 10 | Offline/PWA support | Adds device resilience once the core interactions and cache policy are stable. | Not started |
 
 This is the suggested order, not a rigid dependency chain. A clear user need

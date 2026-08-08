@@ -39,6 +39,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -53,6 +54,15 @@ jobs:
           npx prisma validate
       - name: Generate Prisma client
         run: npm run prisma:generate
+      - name: Classify changed migration risk
+        env:
+          MIGRATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$MIGRATION_BASE_SHA" ]; then
+            npm run migration:risk -- --base "$MIGRATION_BASE_SHA"
+          else
+            echo "No comparison base was supplied; no changed migrations to classify."
+          fi
       - name: Apply and verify migrations
         run: |
           npm run prisma:deploy
@@ -285,6 +295,7 @@ jobs:
           docker compose config -q
           npm run topology:validate
           npm run compose:verify-env
+          npm run compatibility:verify-legacy-redis
           docker info --format '{{range .Plugins.Log}}{{println .}}{{end}}' | grep -qx journald
           rm .env
       - name: Build production web image

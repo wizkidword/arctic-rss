@@ -39,4 +39,9 @@ await Promise.all([
     entryPoints: ["scripts/repair-chat-read-markers.ts"],
     outfile: resolve(outputDirectory, "repair-chat-read-markers.mjs"),
   }),
+  build({
+    ...buildOptions,
+    entryPoints: ["scripts/check-migration-risk.ts"],
+    outfile: resolve(outputDirectory, "check-migration-risk.mjs"),
+  }),
 ])

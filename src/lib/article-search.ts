@@ -280,19 +280,24 @@ export async function listReaderArticleSearchPageWithClient({
     LIMIT ${boundedLimit + 1}
   `
   } catch (error) {
+    const durationMs = performance.now() - queryStartedAt
+    const timedOut = isArticleSearchTimeout(error)
+
+    recordArticleSearchMetrics({
+      durationMs,
+      filters,
+      outcome: "failed",
+      resultsCount: 0,
+      timedOut,
+    })
     logSlowArticleSearch({
-      durationMs: performance.now() - queryStartedAt,
+      durationMs,
       filters,
       outcome: "failed",
     })
     throw error
   }
-
-  logSlowArticleSearch({
-    durationMs: performance.now() - queryStartedAt,
-    filters,
-    outcome: "completed",
-  })
+  const durationMs = performance.now() - queryStartedAt
 
   const visibleRows = rows.slice(0, boundedLimit)
   const articles = await listReaderArticleListItemsByIdsForUserWithClient({
@@ -300,6 +305,15 @@ export async function listReaderArticleSearchPageWithClient({
     store,
     userId,
   })
+
+  recordArticleSearchMetrics({
+    durationMs,
+    filters,
+    outcome: "completed",
+    resultsCount: articles.length,
+    timedOut: false,
+  })
+  logSlowArticleSearch({ durationMs, filters, outcome: "completed" })
 
   return {
     articles,
@@ -335,6 +349,36 @@ export function logSlowArticleSearch({
       outcome,
       queryLength: normalizeSearchQuery(filters.query).length,
       state: normalizeSearchState(filters.state),
+    })
+  )
+}
+
+/**
+ * Emits one low-cardinality event per executed search. Values deliberately do
+ * not include query text, account identifiers, or source/folder identifiers.
+ */
+export function recordArticleSearchMetrics({
+  durationMs,
+  filters,
+  outcome,
+  resultsCount,
+  timedOut,
+}: {
+  durationMs: number
+  filters: ArticleSearchFilters
+  outcome: "completed" | "failed"
+  resultsCount: number
+  timedOut: boolean
+}) {
+  console.info(
+    JSON.stringify({
+      event: "article_search_metrics",
+      outcome,
+      search_duration_ms: Math.max(0, Math.round(durationMs)),
+      search_filter_count: articleSearchFilterCount(filters),
+      search_requests_total: 1,
+      search_results_count: Math.max(0, Math.trunc(resultsCount)),
+      search_timeout_total: timedOut ? 1 : 0,
     })
   )
 }
@@ -377,6 +421,28 @@ function calendarDateValue(value: Date) {
 
 function escapeLikeTerm(value: string) {
   return value.replace(/[\\%_]/g, "\\$&")
+}
+
+function articleSearchFilterCount(filters: ArticleSearchFilters) {
+  return [
+    filters.collectionId,
+    filters.folderId,
+    filters.subscriptionId,
+    filters.publishedAfter,
+    filters.publishedBefore,
+    normalizeSearchState(filters.state) !== "all" ? "state" : undefined,
+  ].filter(Boolean).length
+}
+
+function isArticleSearchTimeout(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false
+  }
+
+  const candidate = error as { code?: unknown; message?: unknown }
+  const message = typeof candidate.message === "string" ? candidate.message.toLowerCase() : ""
+
+  return candidate.code === "57014" || /statement timeout|query timeout|timed out/.test(message)
 }
 
 function encodeArticleSearchCursor(cursor: ArticleSearchRow) {

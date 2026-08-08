@@ -4,6 +4,7 @@ import {
   deleteArticleForUserWithClient,
   listReaderArticlePageWithClient,
   listPublicReaderArticlesWithClient,
+  listStoryClusterArticlesByIdsForUserWithClient,
   markArticlesReadWithClient,
   sanitizeArticleHtml,
   setArticleReadStateWithClient,
@@ -266,6 +267,56 @@ describe("reader list projections", () => {
     )
 
     expect(listPayloadBytes).toBeLessThan(fullPayloadBytes / 20)
+  })
+
+  it("loads related coverage through an authorized metadata-only projection", async () => {
+    const store = {
+      article: {
+        findMany: vi.fn().mockResolvedValue([
+          createArticleRecord({
+            id: "article-related",
+            title: "Related coverage",
+            url: "https://example.com/related-coverage",
+          }),
+        ]),
+      },
+    }
+
+    const articles = await listStoryClusterArticlesByIdsForUserWithClient({
+      articleIds: ["article-related", "article-inaccessible"],
+      store,
+      userId: "user-1",
+    })
+    const query = store.article.findMany.mock.calls[0]?.[0]
+
+    expect(query.select).toEqual({
+      feed: { select: { title: true } },
+      id: true,
+      publishedAt: true,
+      title: true,
+      url: true,
+    })
+    expect(query.select).not.toHaveProperty("aiSummaries")
+    expect(query.select).not.toHaveProperty("contentHtml")
+    expect(query.select).not.toHaveProperty("contentText")
+    expect(query.select).not.toHaveProperty("states")
+    expect(query.where).toEqual(
+      expect.objectContaining({
+        AND: expect.arrayContaining([
+          { id: { in: ["article-related", "article-inaccessible"] } },
+        ]),
+      })
+    )
+    expect(JSON.stringify(query.where)).toContain('"userId":"user-1"')
+    expect(articles).toEqual([
+      {
+        feedTitle: "Public Feed",
+        id: "article-related",
+        publishedAt: new Date("2026-07-02T14:00:00.000Z"),
+        title: "Related coverage",
+        url: "https://example.com/related-coverage",
+      },
+    ])
   })
 })
 

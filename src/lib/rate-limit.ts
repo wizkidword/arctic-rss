@@ -27,6 +27,7 @@ type RateLimitRule = {
 
 export type RateLimitAction =
   | "account_deletion_confirmation"
+  | "account_deletion_handoff"
   | "account_deletion_confirmation_request"
   | "account_deletion_reauthentication"
   | "admin_opml_import"
@@ -53,6 +54,7 @@ export type RateLimitAction =
   | "podcast_transcript"
   | "password_reset_complete"
   | "password_reset_request"
+  | "public_health"
   | "signup"
   | "story_cluster_control"
   | "story_cluster_evaluation"
@@ -205,6 +207,13 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
   ],
   image_proxy: [
     { limit: 120, scope: "ip", subject: inputSubject("ip"), windowMs: 5 * 60_000 },
+  ],
+  account_deletion_handoff: [
+    { limit: 10, scope: "ip", subject: inputSubject("ip"), windowMs: 15 * 60_000 },
+    { limit: 5, scope: "token", subject: inputSubject("token"), windowMs: 15 * 60_000 },
+  ],
+  public_health: [
+    { limit: 600, scope: "ip", subject: inputSubject("ip"), windowMs: 60_000 },
   ],
   login: [
     { limit: 25, scope: "ip", subject: inputSubject("ip"), windowMs: 15 * 60_000 },

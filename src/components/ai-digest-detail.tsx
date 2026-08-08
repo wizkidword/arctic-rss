@@ -85,6 +85,7 @@ export function AiDigestDetail({ digest }: { digest: DigestDetail }) {
   const skimLater = digest.items.filter(
     (item) => item.section === "SKIM_LATER"
   )
+  const sourceCount = new Set(digest.items.map((item) => item.feedTitle)).size
 
   return (
     <div className="flex flex-col gap-4">
@@ -104,6 +105,9 @@ export function AiDigestDetail({ digest }: { digest: DigestDetail }) {
         <p className="mt-2 text-xs text-muted-foreground">
           Generated{" "}
           {digestDateFormatter.format(digest.completedAt || digest.createdAt)}
+        </p>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          AI-generated briefing from {digest.items.length} articles across {sourceCount} {sourceCount === 1 ? "source" : "sources"}. Source links open publisher content; several reports can still trace back to one original report.
         </p>
       </section>
 
@@ -178,6 +182,7 @@ function DigestSection({
               </p>
               {item.reason && (
                 <p className="mt-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Why included:</span>{" "}
                   {item.reason}
                 </p>
               )}

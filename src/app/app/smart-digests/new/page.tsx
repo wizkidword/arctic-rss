@@ -3,12 +3,19 @@ import { redirect } from "next/navigation"
 import { ArrowLeftIcon, SparklesIcon } from "lucide-react"
 
 import { auth } from "@/auth"
-import { SmartDigestRuleForm } from "@/components/smart-digest-rule-form"
+import {
+  SmartDigestRuleForm,
+  type SmartDigestRuleFormDraft,
+} from "@/components/smart-digest-rule-form"
 import { buttonVariants } from "@/components/ui/button"
 import { listSmartDigestSourceOptions } from "@/lib/smart-digests"
 import { cn } from "@/lib/utils"
 
-export default async function NewSmartDigestPage() {
+export default async function NewSmartDigestPage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+} = {}) {
   const session = await auth()
 
   if (!session?.user?.id) {
@@ -16,6 +23,7 @@ export default async function NewSmartDigestPage() {
   }
 
   const sourceOptions = await listSmartDigestSourceOptions(session.user.id)
+  const draft = smartDigestDraftFromSearchParams(await searchParams)
 
   return (
     <div className="flex min-h-screen flex-col gap-4 p-3 sm:p-4 lg:p-6">
@@ -41,9 +49,37 @@ export default async function NewSmartDigestPage() {
       </section>
 
       <SmartDigestRuleForm
+        draft={draft}
         folders={sourceOptions.folders}
         subscriptions={sourceOptions.subscriptions}
       />
     </div>
   )
+}
+
+function smartDigestDraftFromSearchParams(
+  searchParams: Record<string, string | string[] | undefined>
+): SmartDigestRuleFormDraft | undefined {
+  const sourceScope = firstValue(searchParams.sourceScope)
+  const folderId = firstValue(searchParams.folder)
+  const feedSubscriptionId = firstValue(searchParams.feed)
+  const draft: SmartDigestRuleFormDraft = {
+    includeTerms: firstValue(searchParams.include),
+    name: firstValue(searchParams.name),
+    topicPrompt: firstValue(searchParams.topic),
+  }
+
+  if (sourceScope === "FOLDERS" && folderId) {
+    draft.folderIds = [folderId]
+    draft.sourceScope = "FOLDERS"
+  } else if (sourceScope === "FEEDS" && feedSubscriptionId) {
+    draft.feedSubscriptionIds = [feedSubscriptionId]
+    draft.sourceScope = "FEEDS"
+  }
+
+  return draft.name || draft.topicPrompt || draft.includeTerms ? draft : undefined
+}
+
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
 }

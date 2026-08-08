@@ -37,7 +37,10 @@ own rules and retention practices.
 See [PROJECT.md](PROJECT.md) for the operating model,
 [DEPLOYMENT.md](DEPLOYMENT.md) for generic deployment and recovery guidance,
 and [docs/roadmaps/product-roadmap.md](docs/roadmaps/product-roadmap.md) for
-planned product work.
+planned product work. The current source, test, browser, and production
+evidence for the third-pass stabilization work is kept separately in the
+[capability status record](docs/audits/third-pass-capability-status.md); source
+completion is not a claim that a change has been released.
 
 ## Stack
 

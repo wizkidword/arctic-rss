@@ -51,6 +51,8 @@ RUN npm ci
 FROM ${NODE_IMAGE} AS migrate
 WORKDIR /app
 COPY --from=migrate-deps /app/node_modules ./node_modules
+COPY --from=builder /app/build/runtime/check-migration-risk.mjs ./check-migration-risk.mjs
+COPY --from=builder /app/docs/operations/migration-risk ./docs/operations/migration-risk
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 RUN ./node_modules/.bin/prisma --version \
