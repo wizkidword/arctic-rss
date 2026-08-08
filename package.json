@@ -15,6 +15,7 @@
     "chat:load-test": "tsx scripts/load-test-chat-gateway.ts",
     "chat:repair-read-markers": "tsx scripts/repair-chat-read-markers.ts",
     "compose:verify-env": "node scripts/ci/assert-compose-service-environments.mjs",
+    "compose:verify-dependencies": "node scripts/ci/assert-compose-service-dependencies.mjs",
     "compatibility:verify-legacy-redis": "node scripts/ci/assert-legacy-redis-compatibility.mjs",
     "build": "next build",
     "image-proxy:measure": "tsx scripts/measure-image-proxy.ts",

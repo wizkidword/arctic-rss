@@ -1,3 +1,17 @@
+x-worker-durable-dependencies: &worker-durable-dependencies
+  migrate:
+    condition: service_completed_successfully
+  redis:
+    condition: service_healthy
+
+x-worker-realtime-dependencies: &worker-realtime-dependencies
+  migrate:
+    condition: service_completed_successfully
+  redis:
+    condition: service_healthy
+  redis-ephemeral:
+    condition: service_healthy
+
 x-worker-runtime: &worker-runtime
   image: ${WORKER_IMAGE:-arctic-rss-worker}
   build:
@@ -12,13 +26,6 @@ x-worker-runtime: &worker-runtime
     - ALL
   security_opt:
     - no-new-privileges:true
-  depends_on:
-    migrate:
-      condition: service_completed_successfully
-    redis:
-      condition: service_healthy
-    redis-ephemeral:
-      condition: service_healthy
   stop_grace_period: 60s
   command: ["node", "worker.mjs"]
   logging:
@@ -233,6 +240,7 @@ services:
 
   worker:
     <<: *worker-runtime
+    depends_on: *worker-realtime-dependencies
     profiles: ["all-in-one"]
     cpus: 0.75
     mem_limit: 1g
@@ -308,6 +316,7 @@ services:
 
   worker-ingestion:
     <<: *worker-runtime
+    depends_on: *worker-durable-dependencies
     profiles: ["split-workers"]
     cpus: 0.5
     mem_limit: 640m
@@ -342,6 +351,7 @@ services:
 
   worker-ai-mail:
     <<: *worker-runtime
+    depends_on: *worker-durable-dependencies
     profiles: ["split-workers"]
     cpus: 0.75
     mem_limit: 768m
@@ -382,6 +392,7 @@ services:
 
   worker-imports:
     <<: *worker-runtime
+    depends_on: *worker-durable-dependencies
     profiles: ["split-workers"]
     cpus: 0.5
     mem_limit: 768m
@@ -403,6 +414,7 @@ services:
 
   worker-maintenance:
     <<: *worker-runtime
+    depends_on: *worker-durable-dependencies
     profiles: ["split-workers"]
     cpus: 0.35
     mem_limit: 384m
@@ -438,6 +450,7 @@ services:
 
   worker-chat-events:
     <<: *worker-runtime
+    depends_on: *worker-realtime-dependencies
     profiles: ["chat-workers"]
     cpus: 0.35
     mem_limit: 384m

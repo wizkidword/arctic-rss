@@ -214,3 +214,15 @@ each application role when an infrastructure secret is injected. Compose
 environment verification and doctor required-variable reporting continue to
 read the same manifest. No credentials were changed, rotated, printed, or
 deployed.
+
+## Phase 7B local Compose dependency evidence (2026-08-08)
+
+The shared worker template no longer imposes an ephemeral Redis dependency.
+The four durable-only worker roles now wait for only migration completion and
+durable Redis health. The all-in-one worker and chat-event worker still wait
+for both Redis services; the chat gateway waits for migration completion and
+ephemeral Redis only. The rendered-Compose dependency check asserts the exact
+dependency names and readiness conditions for every affected service.
+
+No production worker was restarted, no Redis credential changed, and no
+deployment occurred.
