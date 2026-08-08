@@ -45,9 +45,9 @@ query. Filter-only browsing must use a separately reviewed reader-list path.
 rejects production mode. It requires
 `ARCTIC_RSS_SEARCH_BENCHMARK_CONFIRM=disposable`, accepts only PostgreSQL on a
 loopback host, and removes the fixture after the run. Its scenarios cover text
-only, unread, starred large-result, feed-name, folder-name, and multi-term
-searches. The application's date filters use the same prepared query shape;
-capture a fresh date-range plan before adding a date index.
+only, unread, starred large-result, feed-name, folder-name, multi-term, and
+date-range searches. The date-range case uses the same `publishedAfter` and
+`publishedBefore` predicates as the reader search query.
 
 The retained prior synthetic run used 24 subscribed sources, 6 folders,
 30,000 articles with 900-byte synthetic bodies, and 15,000 reader-state rows.
@@ -98,11 +98,12 @@ The current branch passed the 350 ms p95 target in every recorded scenario:
 | Folder-name text match | 158.39 ms | Tiny folder table sequential scan. |
 | Text plus unread | 91.21 ms | Within target. |
 | Text plus starred, large result set | 24.46 ms | Broad match sequential scan; 10.69 ms plan execution. |
+| Text plus date range | 32.43 ms | Full user-scoped query; existing `ArticleState_userId_articleId_key` index; 11.49 ms plan execution. |
 
 This is a fresh, synthetic current-branch result, not production latency or a
-production query-plan claim. The benchmark does not include a date-range
-scenario, so capture a dedicated disposable date-range plan before considering
-a date-specific index. Do not add another index until that plan justifies it.
+production query-plan claim. The date-range plan did not justify a dedicated
+date index, so none was added. Re-run the synthetic plan before considering an
+index if the query shape or corpus changes materially.
 
 ## Future measurement procedure
 

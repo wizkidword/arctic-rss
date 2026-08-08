@@ -7,10 +7,11 @@
 ## 14.1 Repository state
 
 - **Starting commit:** `e227dad36a73b045b34dd9e4ad34c6fcc6e5aaf7`.
-- **Ending commit:** this documentation commit (the branch `HEAD` once it is
+- **Ending commit:** this closeout commit (the branch `HEAD` once it is
   created).
 - **Branch:** `codex/third-pass-stabilization`.
-- **Commits created:** 6, including the final CodeQL remediation commit.
+- **Commits created:** 9, including the two CodeQL remediations, the recorded
+  synthetic benchmark, and this reproducible date-range evidence.
 - **Working tree:** expected clean after this commit, except for the
   pre-existing untracked `.npm-cache/` directory. It is not part of this work
   and was not removed or staged. `git diff --check` passed before committing.
@@ -28,12 +29,12 @@
 | P1-02 duplicate navigation hydration | Partial — locally closed | Lazy mobile navigation plus one shared feed-menu controller. | Component/shell tests and public browser smoke; 10/100/200-feed local measurement. | Production device/usage evidence remains. |
 | P2-01 doctor semantics | Partial — locally closed | Explicit runtime, host, migrations, and release scopes with centralized exit evaluation. | Doctor exit-semantics tests in the full suite. | Enforcing scopes were not run against an owner-approved host. |
 | P2-02 migration risk | Partial — locally closed | SQL classifier, checked-in report convention, CI/release wiring. | Classifier tests and `migration:risk` report for this diff. | No migration was added; production preflight remains owner-gated. |
-| P2-03 environment manifest | Partial — locally closed | One role manifest drives validation and documented service boundaries. | Exact Compose-manifest validator passed. | Runtime Compose profiles could not start on this Windows Docker host. |
-| P2-04 deletion handoff | Partial — source/test complete | Logged-out, cross-device confirmation handoff and one-active-confirmation protection. | Route, helper, action, and concurrency regressions in full suite. | Authenticated cross-device browser journey remains unexecuted. |
+| P2-03 environment manifest | Partial — locally closed | One role manifest drives validation and documented service boundaries. | Exact Compose-manifest validator and both Linux CI Compose release-gate profiles passed. | Local Windows Docker cannot use the production `journald` driver; OVH runtime verification remains. |
+| P2-04 deletion handoff | Partial — source/test complete | Logged-out, cross-device confirmation handoff and one-active-confirmation protection. | Route, helper, action, concurrency, and final CI browser-journey regressions passed. | Production migration/release and live account verification remain. |
 | P2-05 maintainability | Partial — locally closed | Actions, article projections, reader presentation, and worker lifecycle split by responsibility while retaining stable exports. | Full suite, typecheck, lint, runtime build, and public smoke. | Normal post-release behavior observation remains. |
 | P2-06 layout efficiency | Partial — locally measured | Narrow shell selections and preserved grouped reader counters. | 10/100/200 synthetic browser measurements and regression coverage. | No production database tracing or production timing claim. |
-| P3-01 source quota before discovery | Partial — source/test complete | Subscription quota is checked before outbound discovery and remains transaction-safe. | Focused subscription tests in full suite. | Authenticated end-to-end confirmation remains. |
-| P3-02 one active deletion confirmation | Partial — source/test complete | Single active confirmation invariant and race-safe handoff behavior. | Focused concurrency tests in full suite. | Production migration/release and browser verification remain. |
+| P3-01 source quota before discovery | Partial — source/test complete | Subscription quota is checked before outbound discovery and remains transaction-safe. | Focused subscription tests and final CI browser journeys passed. | Production behavior observation remains. |
+| P3-02 one active deletion confirmation | Partial — source/test complete | Single active confirmation invariant and race-safe handoff behavior. | Focused concurrency and final CI browser regressions passed. | Production migration/release and live account verification remain. |
 | P3-03 legacy Redis compatibility | Deferred by design | Compatibility path remains scoped and documented; removal is blocked on production evidence. | Compatibility-boundary validator passed. | Removing it early could break production migration compatibility. |
 | P3-06 Redis server identity diagnostics | Partial — source/test complete | Host/release doctor scopes compare normalized endpoint and server identity safely. | Doctor tests in full suite. | Requires owner-approved host diagnostics. |
 | P3-07 transcript single-flight | Partial — locally closed | Normalized same-URL cache misses coalesce and clean up after success/failure. | Focused concurrency tests plus full suite. | Production observability remains. |
@@ -98,7 +99,10 @@
 
 **Earlier browser attempts:** The default port 3000 run reached an unrelated already-running local server and failed. The first isolated run omitted its test-port origin/allowlist and was rejected by host validation. Neither result was used as evidence; no application code was weakened. The final isolated run above is the valid result.
 
-**Not executed:** The five authenticated Playwright journeys require the disposable database, Redis, and fixture stack. They remain a release/CI gate.
+**Final CI browser evidence:** The required browser-smoke and reader-journey job
+passed in GitHub CI, where the disposable database, Redis, and authenticated
+fixture stack are available. The local public-only run above remains separate
+evidence for the local host/origin configuration.
 
 ### Compose, migration risk, doctor, and policy boundaries
 
@@ -129,11 +133,33 @@
 
 **Doctor exit semantics:** covered by the passing full Vitest suite. An actual `npm run doctor` enforcing scope was not run because it requires the selected runtime/host and is not a substitute for owner-approved production preflight.
 
-**Compose runtime attempt:** An isolated disposable PostgreSQL Compose project was attempted for the search benchmark and failed before startup because this Windows Docker daemon does not enable the stack's required `journald` logging driver. Its container, network, and volume were removed. All-in-one, split-worker, chat, and tunnel runtime profiles are therefore unexecuted here.
+**Compose runtime attempt:** An isolated disposable PostgreSQL Compose project
+was attempted for the search benchmark and failed before startup because this
+Windows Docker daemon does not enable the stack's required `journald` logging
+driver. Its container, network, and volume were removed. This limitation is
+local-only: both all-in-one-with-chat and split-with-chat Compose release-gate
+profiles subsequently passed in GitHub's Linux CI. A live OVH tunnel remains a
+production verification item, not a local substitute.
 
-**GitHub-only checks not executed locally:** full-history secret scan, CodeQL, container vulnerability scans, SBOM generation, and the GitHub dependency review action. These remain required CI evidence for a reviewed commit.
+**GitHub CI evidence:** The reviewed pull request passed its quality/migration
+suite, browser journeys, both Compose release-gate profiles, installed
+dependency audit, dependency review, secret scan, static analysis, container
+scan/SBOM, and CodeQL checks. The closing commit must pass the same required
+checks before merge; the pull request is the authoritative record for that
+exact head.
 
 ## 14.4 Performance evidence
+
+**Command:** `ARCTIC_RSS_SEARCH_BENCHMARK_CONFIRM=disposable npm run search:measure`
+against a fresh, loopback-only PostgreSQL 17.10 container with 30,000 synthetic
+articles, 15,000 reader-state rows, and 15 warmed samples per scenario.
+**Result:** Passed; every scenario was below the 350 ms p95 target. The
+date-range scenario was 32.43 ms p95; its full user-scoped plan returned 51
+rows in 11.49 ms and did not justify a new date index.
+**Notes:** The container used Docker's `local` logging driver because the
+Windows daemon cannot start the production Compose stack's `journald` driver.
+It was removed after the run. No production resource, credential, or data was
+used.
 
 The complete local reader-shell evidence is in [third-pass reader and shell results](../performance/third-pass-reader-shell-results.md). It used a disposable authenticated fixture with 10, 100, and 200 feeds and keeps production claims out of the result:
 
@@ -146,7 +172,12 @@ The complete local reader-shell evidence is in [third-pass reader and shell resu
 | Transcript same-URL concurrency | Multiple cache misses could fetch repeatedly | 10 concurrent misses made one outbound request in focused test | Synthetic test, not production traffic. |
 | Public health concurrency | Previously direct dependent checks | Cached single-flight health code and regression tests | No live public load test or production probe. |
 
-Search telemetry and retained historical synthetic plan evidence are in [search query-plan and telemetry evidence](../performance/search-query-evidence.md). A fresh synthetic 30,000-article run could not start on this Docker host due to the unavailable `journald` driver; no new index was added without fresh plan justification.
+Search telemetry and current synthetic query-plan evidence are in [search
+query-plan and telemetry evidence](../performance/search-query-evidence.md). A
+fresh 30,000-article disposable PostgreSQL run passed the p95 target for every
+recorded scenario, including the full date-range query. The selective text plan
+used `Article_searchDocument_idx`; the date-range plan did not justify a new
+date index.
 
 ## 14.5 Migration and deployment evidence
 
@@ -174,10 +205,10 @@ Deferred: scheduled reader rules, a separate Today portal, unbounded bulk source
 
 | Item | Why incomplete | Code ready? | Exact owner action required | Risk of deferral / safe next step |
 | --- | --- | --- | --- | --- |
-| CI and production release | The reviewed six-commit branch is not yet through its final CI rerun, and no deployment approval was supplied. | Local source gates pass. | Push the branch, require CI success, then approve `DEPLOY <short-sha>`. | Do not deploy before remote CI and explicit typed approval. |
+| CI and production release | The reviewed branch must pass CI for its exact merge head, and no deployment approval was supplied. | Source, local gates, and the preceding reviewed-commit CI pass. | Merge the PR only after its exact head is green; then approve `DEPLOY <short-sha>` for the resulting `main` commit. | Do not deploy before remote CI and explicit typed approval. |
 | Production preflight and verification | Requires private OVH host, selected topology, real health/login checks, and operator recovery access. | Source/runbooks ready; environment not exercised. | Run the owner-approved OVH preflight and release verification. | Local success does not prove live readiness. |
-| Authenticated browser journeys | Requires disposable database/Redis/feed-fixture stack. | Tests are present. | Run the authenticated Playwright gate in CI or a compatible disposable environment. | Private reader/deletion/source workflows lack final browser confirmation. |
-| Compose runtime profiles and search benchmark | Windows Docker lacks `journald`, required by the checked-in Compose logging configuration. | Static validators and benchmark guardrails pass. | Use a compatible disposable Linux Docker host, then run selected Compose profiles and `ARCTIC_RSS_SEARCH_BENCHMARK_CONFIRM=disposable npm run search:measure`. | Do not infer runtime topology or query plans from static checks. |
+| Authenticated browser journeys | The local Windows run remains public-only. | The authenticated browser journey gate passed in final CI. | Repeat only as part of the post-release changed-flow verification. | CI does not substitute for live production verification. |
+| Compose runtime profiles and search benchmark | Windows Docker lacks `journald`, required by the checked-in Compose logging configuration. | Both Linux CI Compose gates and the direct disposable 30,000-article benchmark passed. | Verify the selected OVH topology, tunnel, and operator diagnostics during approved release. | CI and a disposable database do not infer live tunnel or host state. |
 | Moderate transitive Hono advisories | The remaining fix crosses a dependency major through `@modelcontextprotocol/sdk`. | High/critical production dependency gate passes. | Review and separately approve a compatible major-path upgrade or removal of the dependency. | Moderate advisory remains; do not hide it behind the passing high/critical CI threshold. |
 | Legacy Redis compatibility retirement | Production migration evidence is intentionally missing. | Guard and retirement checklist are ready. | Follow the owner-gated compatibility retirement checklist after production evidence exists. | Early removal could interrupt a supported migration path. |
 
@@ -187,4 +218,9 @@ Deferred: scheduled reader rules, a separate Today portal, unbounded bulk source
 NOT READY FOR PRODUCTION
 ```
 
-The source implementation, local test suite, production build, public browser smoke, schema/policy checks, and high/critical production dependency check pass. That is necessary but not sufficient. GitHub CI, compatible runtime Compose evidence, authenticated browser journeys, owner-approved OVH preflight, explicit `DEPLOY <short-sha>` authorization, and live health/login/changed-flow verification are still required. No production state was changed.
+The source implementation, local test suite, production build, public browser
+smoke, schema/policy checks, current synthetic benchmark, and preceding
+GitHub CI pass. That is necessary but not sufficient. The exact merge head
+must be green, then owner-approved OVH preflight, explicit `DEPLOY <short-sha>`
+authorization, and live health/login/changed-flow verification are still
+required. No production state was changed.
