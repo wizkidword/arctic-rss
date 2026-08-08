@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { getDiscoverDirectoryFeed } from "@/lib/discover-directory"
 import { FeedValidationError } from "@/lib/feed-discovery"
-import { FeedRefreshError, refreshFeed } from "@/lib/feed-refresh"
+import { enqueueFeedRefresh } from "@/lib/feed-refresh-queue"
 import {
   FeedSubscriptionError,
   getUserFeedSubscription,
@@ -49,20 +49,13 @@ export async function addFeedAction(
 
   try {
     const subscription = await subscribeToFeed({ folderId, url, userId: session.user.id })
-    let refreshMessage = typeof subscription.initialArticleCount === "number"
-      ? `Imported ${subscription.initialArticleCount} articles.`
-      : "Article refresh will retry if needed."
-    if (typeof subscription.initialArticleCount !== "number") {
-      try {
-        refreshMessage = `Imported ${(await refreshFeed(subscription.feedId)).articleCount} articles.`
-      } catch {
-        refreshMessage = "Subscribed. Article refresh will retry."
-      }
-    }
+    const refreshMessage = await initialRefreshMessage(subscription)
     revalidatePath("/app")
     refresh()
     return {
-      analytics: getFeedSubscriptionAnalytics(subscription),
+      ...(getFeedSubscriptionAnalytics(subscription)
+        ? { analytics: getFeedSubscriptionAnalytics(subscription) }
+        : {}),
       message: `Subscribed to ${subscription.customTitle || subscription.feed.title}. ${refreshMessage}`,
       status: "success",
     }
@@ -96,20 +89,13 @@ export async function subscribeDirectoryFeedAction(
     return subscriptionError(error, "Arctic RSS could not subscribe to that directory feed.")
   }
 
-  let refreshMessage = typeof subscription.initialArticleCount === "number"
-    ? `Imported ${subscription.initialArticleCount} articles.`
-    : "Article refresh will retry."
-  if (typeof subscription.initialArticleCount !== "number") {
-    try {
-      refreshMessage = `Imported ${(await refreshFeed(subscription.feedId)).articleCount} articles.`
-    } catch {
-      // The subscription is committed and the worker can retry the refresh.
-    }
-  }
+  const refreshMessage = await initialRefreshMessage(subscription)
   try { revalidatePath("/app") } catch { /* best effort after a committed mutation */ }
   try { refresh() } catch { /* best effort after a committed mutation */ }
   return {
-    analytics: getFeedSubscriptionAnalytics(subscription),
+    ...(getFeedSubscriptionAnalytics(subscription)
+      ? { analytics: getFeedSubscriptionAnalytics(subscription) }
+      : {}),
     message: `Subscribed to ${directoryFeed.label}. ${refreshMessage}`,
     status: "success",
   }
@@ -130,16 +116,19 @@ export async function refreshFeedAction(
   const cooldownMessage = manualFeedRefreshCooldownMessage(subscription.feed.lastFetchedAt)
   if (cooldownMessage) return { message: cooldownMessage, status: "error" }
   try {
-    const result = await refreshFeed(subscription.feedId)
+    const result = await enqueueFeedRefresh(subscription.feedId, {
+      priority: 1,
+      trigger: "manual",
+    })
     revalidatePath("/app")
     revalidatePath(`/app/feed/${subscription.id}`)
     refresh()
-    return { message: `Fetched ${result.articleCount} articles.`, status: "success" }
-  } catch (error) {
-    if (error instanceof FeedRefreshError || error instanceof FeedFetchError || error instanceof UnsafeUrlError) {
-      return { message: error.message, status: "error" }
+    return {
+      message: result.outcome === "queued" ? "Refresh queued." : "Refresh already queued.",
+      status: "success",
     }
-    return { message: "Arctic RSS could not refresh that feed.", status: "error" }
+  } catch {
+    return { message: "Arctic RSS could not queue that feed refresh.", status: "error" }
   }
 }
 
@@ -266,18 +255,25 @@ export async function bulkFeedAttentionAction(
     }
   }
 
-  const refreshed = await Promise.allSettled(
-    subscriptions.map((subscription) => refreshFeed(subscription!.feedId))
+  const enqueued = await Promise.allSettled(
+    subscriptions.map((subscription) =>
+      enqueueFeedRefresh(subscription!.feedId, {
+        priority: 1,
+        trigger: "source-attention",
+      })
+    )
   )
-  const succeeded = refreshed.filter((result) => result.status === "fulfilled").length
+  const queued = enqueued.filter(
+    (result) => result.status === "fulfilled" && result.value.outcome === "queued"
+  ).length
+  const alreadyQueued = enqueued.filter(
+    (result) => result.status === "fulfilled" && result.value.outcome === "already-queued"
+  ).length
   revalidatePath("/app")
   refresh()
   return {
-    message:
-      succeeded === subscriptionIds.length
-        ? `${succeeded} ${sourceLabel(succeeded)} retried.`
-        : `${succeeded} of ${subscriptionIds.length} selected ${sourceLabel(subscriptionIds.length)} retried.`,
-    status: succeeded ? "success" : "error",
+    message: sourceAttentionMessage({ alreadyQueued, queued, total: subscriptionIds.length }),
+    status: queued || alreadyQueued ? "success" : "error",
   }
 }
 
@@ -294,6 +290,25 @@ function subscriptionError(error: unknown, fallback: string): AddFeedActionState
     return { message: error.message, status: "error" }
   }
   return { message: fallback, status: "error" }
+}
+
+async function initialRefreshMessage(subscription: {
+  feedId: string
+  initialArticleCount?: number
+}) {
+  if (typeof subscription.initialArticleCount === "number") {
+    return `Imported ${subscription.initialArticleCount} articles.`
+  }
+
+  try {
+    const result = await enqueueFeedRefresh(subscription.feedId, {
+      priority: 1,
+      trigger: "subscription-initial-retry",
+    })
+    return result.outcome === "queued" ? "Article refresh queued." : "Article refresh already queued."
+  } catch {
+    return "Article refresh will retry."
+  }
 }
 
 function getFeedSubscriptionAnalytics(subscription: { sourceCountBeforeSubscribe?: number }): SourceSubscriptionAnalytics | undefined {
@@ -318,4 +333,28 @@ function isBulkFeedAttentionOperation(
 
 function sourceLabel(count: number) {
   return count === 1 ? "source" : "sources"
+}
+
+function sourceAttentionMessage({
+  alreadyQueued,
+  queued,
+  total,
+}: {
+  alreadyQueued: number
+  queued: number
+  total: number
+}) {
+  if (!queued && !alreadyQueued) {
+    return `Arctic RSS could not queue the selected ${sourceLabel(total)}.`
+  }
+
+  const parts = []
+  if (queued) {
+    parts.push(`${queued} ${sourceLabel(queued)} queued`)
+  }
+  if (alreadyQueued) {
+    parts.push(`${alreadyQueued} ${sourceLabel(alreadyQueued)} already queued`)
+  }
+
+  return `${parts.join("; ")}.`
 }

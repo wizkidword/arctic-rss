@@ -8,7 +8,7 @@ type SourceKind = "feed" | "podcast"
 
 type SourceQueueSubject = {
   close(): Promise<void>
-  enqueue(sourceId: string, options?: Record<string, unknown>): Promise<{ id?: string }>
+  enqueue(sourceId: string, options?: Record<string, unknown>): Promise<{ jobId: string }>
   name: string
   sourceKey: "feedId" | "podcastId"
 }
@@ -57,7 +57,7 @@ redisDescribe("source refresh queues with real Redis", () => {
           attempts: 1,
           backoff: { delay: 1, type: "fixed" },
         })
-        const failedJobId = requiredJobId(failed)
+        const failedJobId = failed.jobId
         await waitForWorkerEvent(failingWorker, "failed", failedJobId)
 
         expect(await inspector.getJob(failedJobId)).toBeUndefined()
@@ -93,7 +93,7 @@ redisDescribe("source refresh queues with real Redis", () => {
           failedJobId
         )
         const requeued = await subject.enqueue(failedSourceId)
-        expect(requiredJobId(requeued)).toBe(failedJobId)
+        expect(requeued.jobId).toBe(failedJobId)
         await reenqueueCompleted
         expect(await inspector.getJob(failedJobId)).toBeUndefined()
 
@@ -101,9 +101,7 @@ redisDescribe("source refresh queues with real Redis", () => {
           subject.enqueue(concurrentSourceId),
           subject.enqueue(concurrentSourceId),
         ])
-        expect(requiredJobId(firstConcurrentJob)).toBe(
-          requiredJobId(secondConcurrentJob)
-        )
+        expect(firstConcurrentJob.jobId).toBe(secondConcurrentJob.jobId)
         await concurrentActive
         const counts = await inspector.getJobCounts("active", "waiting")
         expect((counts.active ?? 0) + (counts.waiting ?? 0)).toBe(1)
@@ -111,7 +109,7 @@ redisDescribe("source refresh queues with real Redis", () => {
         const concurrentCompleted = waitForWorkerEvent(
           restarted,
           "completed",
-          requiredJobId(firstConcurrentJob)
+          firstConcurrentJob.jobId
         )
         releaseConcurrent?.()
         await concurrentCompleted
@@ -147,14 +145,6 @@ async function loadSourceQueueSubject(kind: SourceKind): Promise<SourceQueueSubj
     name: queue.PODCAST_REFRESH_QUEUE_NAME,
     sourceKey: "podcastId",
   }
-}
-
-function requiredJobId(job: { id?: string }) {
-  if (!job.id) {
-    throw new Error("Expected BullMQ to return a job ID.")
-  }
-
-  return job.id
 }
 
 function waitForWorkerEvent<Data, Result>(

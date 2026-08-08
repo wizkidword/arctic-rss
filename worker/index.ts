@@ -53,6 +53,7 @@ import {
   FEED_REFRESH_QUEUE_NAME,
   type FeedRefreshJobData,
 } from "../src/lib/feed-refresh-queue"
+import type { SourceRefreshTrigger } from "../src/lib/source-refresh-queue"
 import { durableRedisConnectionOptions } from "../src/lib/redis-config"
 import { refreshPodcast } from "../src/lib/podcast-refresh"
 import {
@@ -184,6 +185,7 @@ const worker = runsWorkerResponsibility(workerMode, "ingestion")
       kind: "feed",
       refresh: () => refreshFeedAndQueueChatIntegration(job.data.feedId),
       sourceId: job.data.feedId,
+      trigger: job.data.trigger ?? "scheduler",
     })
   },
   {
@@ -325,6 +327,7 @@ const podcastWorker = runsWorkerResponsibility(workerMode, "ingestion")
       kind: "podcast",
       refresh: () => refreshPodcast(job.data.podcastId),
       sourceId: job.data.podcastId,
+      trigger: job.data.trigger ?? "scheduler",
     })
   },
   {
@@ -545,10 +548,12 @@ async function runTrackedRefresh<
   kind,
   refresh,
   sourceId,
+  trigger,
 }: {
   kind: "feed" | "podcast"
   refresh: () => Promise<Result>
   sourceId: string
+  trigger: SourceRefreshTrigger
 }) {
   const startedAt = performance.now()
 
@@ -563,6 +568,7 @@ async function runTrackedRefresh<
         kind,
         outcome: "success",
         sourceId,
+        trigger,
       })
     )
 
@@ -576,6 +582,7 @@ async function runTrackedRefresh<
         kind,
         outcome: "failed",
         sourceId,
+        trigger,
       })
     )
 

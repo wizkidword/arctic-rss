@@ -404,12 +404,13 @@ async function importOpmlEntry({
       userId,
     })
 
-    try {
-      await enqueueFeedRefresh(subscription.feedId)
-    } catch {
-      // The subscription is complete; the normal scheduler will retry later.
+    if (typeof subscription.initialArticleCount !== "number") {
+      try {
+        await enqueueFeedRefresh(subscription.feedId, { trigger: "opml-retry" })
+      } catch {
+        // The subscription is complete; the normal scheduler will retry later.
+      }
     }
-
     return { errorMessage: null, status: "ADDED" }
   } catch (error) {
     if (isDuplicateSubscriptionError(error)) {

@@ -124,3 +124,19 @@ the worker requests graceful shutdown and exits nonzero.
 
 This is local source evidence only. It does not claim a production release,
 production restart test, or a deployed worker revision.
+
+## Phase 3 local queue-placement evidence (2026-08-08)
+
+Manual refresh, bulk source-attention retry, and incomplete initial-import
+fallbacks now authorize and submit a deterministic BullMQ job. The request
+returns `queued` or `already-queued` without waiting for a remote source. Job
+data contains only the source ID and one low-sensitivity trigger label. OPML
+does not add a duplicate job after its initial XML import succeeds.
+
+| Verification | Result |
+| --- | --- |
+| Action and architecture tests | Passed: manual and bulk queue outcomes, paused/cooldown guards, no direct feed-refresh action import/call, and initial-import queue behavior. |
+| Real Redis queue lifecycle | Passed: terminal-job removal, later re-enqueue, and concurrent active-job deduplication for feeds and podcasts. |
+| Browser coverage | Not run: this isolated worktree has no configured disposable authenticated browser/database fixture. This remains required before a release claim. |
+
+No migration, production action, push, or deployment is included in this phase.
