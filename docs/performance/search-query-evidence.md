@@ -68,7 +68,7 @@ only, not a current-branch rerun or a production benchmark.
 The full retained before/after table and raw plan summary are in
 [the prior search performance audit](../audits/second-pass-phase-9-search-performance.md).
 
-## Attempted third-pass refresh
+## Initial third-pass Compose attempt
 
 On 2026-08-08, an isolated Compose project was created on an alternate
 loopback PostgreSQL port to rerun the synthetic benchmark. Docker could create
@@ -78,12 +78,33 @@ Windows Docker host. The isolated container, network, and volume were removed
 after the failed start. No migration, benchmark, query plan, or production
 resource was touched.
 
-This means the current source has focused telemetry tests, while fresh
-representative plans for text/date combinations and a current 30,000-article
-synthetic run are still required on a compatible disposable Linux Docker host.
-Do not add another index until those plans justify it.
+## Third-pass disposable result
 
-## Safe next measurement procedure
+After that Compose-only logging limitation, the benchmark was rerun on
+2026-08-08 against a direct disposable PostgreSQL 17.10 container on a unique
+loopback port using Docker's `local` logging driver. The database used a fresh
+throwaway credential, received all 38 committed migrations, and was removed
+immediately after the run. No Compose service, production resource, production
+account, or production data was used.
+
+The current branch passed the 350 ms p95 target in every recorded scenario:
+
+| Scenario | p95 (15 warmed samples) | Sanitized plan observation |
+| --- | ---: | --- |
+| Text only, common term | 59.59 ms | Broad match; no forced index claim. |
+| Text only, rare term | 103.39 ms | `Article_searchDocument_idx` through Bitmap Index/Heap Scan; 0.50 ms plan execution. |
+| Multi-term text | 60.79 ms | Within target. |
+| Feed-name text match | 120.13 ms | Tiny feed table sequential scan. |
+| Folder-name text match | 158.39 ms | Tiny folder table sequential scan. |
+| Text plus unread | 91.21 ms | Within target. |
+| Text plus starred, large result set | 24.46 ms | Broad match sequential scan; 10.69 ms plan execution. |
+
+This is a fresh, synthetic current-branch result, not production latency or a
+production query-plan claim. The benchmark does not include a date-range
+scenario, so capture a dedicated disposable date-range plan before considering
+a date-specific index. Do not add another index until that plan justifies it.
+
+## Future measurement procedure
 
 On a compatible disposable host, create a fresh local PostgreSQL database,
 apply the committed migrations with the migration credential boundary, then
