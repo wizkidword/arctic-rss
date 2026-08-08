@@ -58,12 +58,30 @@ export const listUserFeedSubscriptions = cache(async function listUserFeedSubscr
   userId: string
 ): Promise<FeedSubscriptionNavItem[]> {
   const subscriptions = await getPrisma().feedSubscription.findMany({
-    where: { userId },
-    include: {
-      feed: true,
-      folder: true,
+    select: {
+      customTitle: true,
+      feed: {
+        select: {
+          faviconUrl: true,
+          feedUrl: true,
+          lastError: true,
+          lastSuccessfulFetchAt: true,
+          siteUrl: true,
+          title: true,
+        },
+      },
+      feedId: true,
+      folder: {
+        select: {
+          name: true,
+        },
+      },
+      folderId: true,
+      id: true,
+      isPaused: true,
     },
     orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
+    where: { userId },
   })
   const unreadCounts = await getUnreadArticleCountsByFeed(
     userId,
@@ -215,6 +233,19 @@ export async function subscribeToFeed({
     }
   }
 
+  let sourceCountBeforeSubscribe = 0
+
+  try {
+    const sourceLimit = await assertUserCanAddSource({ userId })
+    sourceCountBeforeSubscribe = sourceLimit.currentSourceCount
+  } catch (error) {
+    if (error instanceof SourceLimitError) {
+      throw new FeedSubscriptionError(error.message)
+    }
+
+    throw error
+  }
+
   const discoveredFeed = await discoverFeedFromUrl(url)
   const directoryFeed = feedDirectoryFeeds.find((feed) =>
     isDirectoryFeedSubscribed(feed, [discoveredFeed.feedUrl])
@@ -264,19 +295,6 @@ export async function subscribeToFeed({
     throw new FeedSubscriptionError(
       `You are already subscribed to ${existingDirectSubscription.feed.title}.`
     )
-  }
-
-  let sourceCountBeforeSubscribe = 0
-
-  try {
-    const sourceLimit = await assertUserCanAddSource({ userId })
-    sourceCountBeforeSubscribe = sourceLimit.currentSourceCount
-  } catch (error) {
-    if (error instanceof SourceLimitError) {
-      throw new FeedSubscriptionError(error.message)
-    }
-
-    throw error
   }
 
   const now = new Date()

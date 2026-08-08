@@ -168,7 +168,9 @@ describe("folders", () => {
     const folders = await listUserFolders("user-1")
 
     expect(folderFindMany).toHaveBeenCalledWith({
-      include: {
+      select: {
+        id: true,
+        name: true,
         subscriptions: {
           select: {
             feedId: true,

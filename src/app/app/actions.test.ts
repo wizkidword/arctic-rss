@@ -255,6 +255,7 @@ vi.mock("@/lib/url-safety", () => ({
 import {
   addArticleToCollectionAction,
   addPodcastEpisodeToCollectionAction,
+  bulkFeedAttentionAction,
   deleteArticleAction,
   dismissStoryClusterAction,
   evaluateStoryClusterAction,
@@ -867,6 +868,119 @@ describe("removePodcastEpisodeFromCollectionAction", () => {
     )
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/podcasts")
     expect(mocks.refresh).toHaveBeenCalled()
+  })
+})
+
+describe("bulkFeedAttentionAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.getUserFeedSubscription.mockReset()
+    mocks.refresh.mockReset()
+    mocks.refreshFeed.mockReset()
+    mocks.revalidatePath.mockReset()
+    mocks.setFeedSubscriptionPaused.mockReset()
+    mocks.unsubscribeFromFeed.mockReset()
+  })
+
+  it("refuses a bulk unsubscribe until the explicit confirmation is present", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    const formData = new FormData()
+    formData.set("operation", "unsubscribe")
+    formData.append("subscriptionIds", "subscription-1")
+
+    const result = await bulkFeedAttentionAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(result).toEqual({
+      message: "Type UNSUBSCRIBE to confirm removing the selected sources.",
+      status: "error",
+    })
+    expect(mocks.getUserFeedSubscription).not.toHaveBeenCalled()
+    expect(mocks.unsubscribeFromFeed).not.toHaveBeenCalled()
+  })
+
+  it("pauses only the signed-in user's fully verified selection", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getUserFeedSubscription.mockImplementation(async (userId, subscriptionId) =>
+      userId === "user-1" ? { feedId: `feed-${subscriptionId}`, id: subscriptionId } : null
+    )
+    const formData = new FormData()
+    formData.set("operation", "pause")
+    formData.append("subscriptionIds", "subscription-1")
+    formData.append("subscriptionIds", "subscription-2")
+
+    const result = await bulkFeedAttentionAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(mocks.getUserFeedSubscription).toHaveBeenNthCalledWith(
+      1,
+      "user-1",
+      "subscription-1"
+    )
+    expect(mocks.getUserFeedSubscription).toHaveBeenNthCalledWith(
+      2,
+      "user-1",
+      "subscription-2"
+    )
+    expect(mocks.setFeedSubscriptionPaused).toHaveBeenCalledWith({
+      isPaused: true,
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(mocks.setFeedSubscriptionPaused).toHaveBeenCalledWith({
+      isPaused: true,
+      subscriptionId: "subscription-2",
+      userId: "user-1",
+    })
+    expect(result).toEqual({ message: "2 sources paused.", status: "success" })
+  })
+
+  it("does not mutate a partial selection when an owned subscription is missing", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getUserFeedSubscription
+      .mockResolvedValueOnce({ feedId: "feed-1", id: "subscription-1" })
+      .mockResolvedValueOnce(null)
+    const formData = new FormData()
+    formData.set("operation", "pause")
+    formData.append("subscriptionIds", "subscription-1")
+    formData.append("subscriptionIds", "other-users-subscription")
+
+    const result = await bulkFeedAttentionAction(
+      { message: "", status: "idle" },
+      formData
+    )
+
+    expect(result).toEqual({
+      message: "One or more selected sources are no longer available.",
+      status: "error",
+    })
+    expect(mocks.setFeedSubscriptionPaused).not.toHaveBeenCalled()
+  })
+
+  it("does not retry a paused source through the bulk path", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getUserFeedSubscription.mockResolvedValue({
+      feedId: "feed-1",
+      id: "subscription-1",
+      isPaused: true,
+    })
+    const formData = new FormData()
+    formData.set("operation", "retry")
+    formData.append("subscriptionIds", "subscription-1")
+
+    await expect(
+      bulkFeedAttentionAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "Resume selected sources before retrying them.",
+      status: "error",
+    })
+    expect(mocks.refreshFeed).not.toHaveBeenCalled()
   })
 })
 

@@ -1,9 +1,17 @@
 import { AuthorizationError, requireFreshUser } from "@/lib/authorization"
 import {
   AccountDeletionError,
-  confirmOAuthAccountDeletion,
-  parseOAuthAccountDeletionConfirmation,
+  confirmOAuthAccountDeletionByTokenHash,
+  parseOAuthAccountDeletionFinalConfirmation,
 } from "@/lib/account-deletion"
+import {
+  ACCOUNT_DELETION_HANDOFF_COOKIE,
+  AccountDeletionHandoffError,
+  clearAccountDeletionHandoffCookie,
+  getAccountDeletionHandoffSecret,
+  getCookieValue,
+  verifyAccountDeletionHandoff,
+} from "@/lib/account-deletion-handoff"
 import { getAppOrigin } from "@/lib/app-origin"
 import { enforceRateLimit, getTrustedClientIp } from "@/lib/rate-limit"
 
@@ -21,7 +29,19 @@ export async function POST(request: Request) {
     }
 
     const [user, body] = await Promise.all([requireFreshUser(), request.json()])
-    const { token } = parseOAuthAccountDeletionConfirmation(body)
+    parseOAuthAccountDeletionFinalConfirmation(body)
+    const handoff = getCookieValue(
+      request.headers.get("cookie"),
+      ACCOUNT_DELETION_HANDOFF_COOKIE
+    )
+
+    if (!handoff) {
+      throw new AccountDeletionHandoffError("Account deletion confirmation is invalid or expired.")
+    }
+
+    const { tokenHash } = verifyAccountDeletionHandoff(handoff, {
+      secret: getAccountDeletionHandoffSecret(),
+    })
     const rateLimit = await enforceRateLimit({
       action: "account_deletion_confirmation",
       ip: getTrustedClientIp(request.headers),
@@ -43,8 +63,11 @@ export async function POST(request: Request) {
       )
     }
 
-    await confirmOAuthAccountDeletion({ token, userId: user.id })
-    return Response.json({ deleted: true }, { headers: noStore })
+    await confirmOAuthAccountDeletionByTokenHash({ tokenHash, userId: user.id })
+    return Response.json(
+      { deleted: true },
+      { headers: { ...noStore, "Set-Cookie": clearAccountDeletionHandoffCookie() } }
+    )
   } catch (error) {
     if (error instanceof AuthorizationError) {
       return Response.json({ error: "Authentication is required." }, { headers: noStore, status: 401 })
@@ -58,7 +81,17 @@ export async function POST(request: Request) {
     }
 
     if (error instanceof AccountDeletionError) {
-      return Response.json({ error: error.message }, { headers: noStore, status: 400 })
+      return Response.json(
+        { error: error.message },
+        { headers: { ...noStore, "Set-Cookie": clearAccountDeletionHandoffCookie() }, status: 400 }
+      )
+    }
+
+    if (error instanceof AccountDeletionHandoffError) {
+      return Response.json(
+        { error: error.message },
+        { headers: { ...noStore, "Set-Cookie": clearAccountDeletionHandoffCookie() }, status: 400 }
+      )
     }
 
     console.error(JSON.stringify({ event: "account_deletion_confirmation_failed" }))

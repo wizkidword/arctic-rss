@@ -34,6 +34,11 @@ type AccountDeletionConfirmationDependencies = {
   store?: AccountDeletionStore
 }
 
+type OAuthAccountDeletionConfirmationToken = {
+  expiresAt: Date
+  tokenHash: string
+}
+
 export class AccountDeletionError extends Error {
   constructor(message: string) {
     super(message)
@@ -80,6 +85,26 @@ export function parseOAuthAccountDeletionConfirmation(value: unknown) {
   }
 
   return { confirmation: ACCOUNT_DELETION_CONFIRMATION, token }
+}
+
+export function parseOAuthAccountDeletionHandoff(value: unknown) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    typeof (value as { token?: unknown }).token !== "string"
+  ) {
+    throw new AccountDeletionError(INVALID_CONFIRMATION_MESSAGE)
+  }
+
+  const token = (value as { token: string }).token.trim()
+
+  if (token.length < 32 || token.length > 512) {
+    throw new AccountDeletionError(INVALID_CONFIRMATION_MESSAGE)
+  }
+
+  return { token }
 }
 
 export function parseOAuthAccountDeletionConfirmationRequest(value: unknown) {
@@ -211,38 +236,47 @@ export async function requestOAuthAccountDeletionConfirmation(
 ) {
   const now = dependencies.now ?? new Date()
   const store = dependencies.store ?? getPrisma()
-  const user = await store.user.findUnique({
-    select: {
-      authVersion: true,
-      disabledAt: true,
-      email: true,
-      emailVerified: true,
-      id: true,
-      passwordHash: true,
-    },
-    where: { id: userId },
-  })
-
-  if (!user || user.disabledAt || user.passwordHash || !user.emailVerified) {
-    throw new AccountDeletionError(
-      "Email confirmation is only available for active Google-only accounts with a verified email address."
-    )
-  }
-
-  await store.accountDeletionConfirmationToken.updateMany({
-    data: { usedAt: now },
-    where: { userId: user.id, usedAt: null },
-  })
-
   const { token, tokenHash } = createAccountDeletionConfirmationToken()
-  await store.accountDeletionConfirmationToken.create({
-    data: {
-      authVersion: user.authVersion,
-      expiresAt: getAccountDeletionConfirmationExpiresAt(now),
-      purpose: ACCOUNT_DELETION_TOKEN_PURPOSE,
-      tokenHash,
-      userId: user.id,
-    },
+  let email: string
+
+  // Lock the user row before replacing an existing confirmation. PostgreSQL
+  // serializes concurrent requests for the same user, so the invalidate and
+  // create operations are one reliable state transition rather than two
+  // independent writes that can leave multiple usable tokens behind.
+  await store.$transaction(async (transaction) => {
+    const user = await transaction.user.update({
+      data: { updatedAt: now },
+      select: {
+        authVersion: true,
+        disabledAt: true,
+        email: true,
+        emailVerified: true,
+        id: true,
+        passwordHash: true,
+      },
+      where: { id: userId },
+    })
+
+    if (user.disabledAt || user.passwordHash || !user.emailVerified) {
+      throw new AccountDeletionError(
+        "Email confirmation is only available for active Google-only accounts with a verified email address."
+      )
+    }
+
+    email = user.email
+    await transaction.accountDeletionConfirmationToken.updateMany({
+      data: { usedAt: now },
+      where: { userId: user.id, usedAt: null },
+    })
+    await transaction.accountDeletionConfirmationToken.create({
+      data: {
+        authVersion: user.authVersion,
+        expiresAt: getAccountDeletionConfirmationExpiresAt(now),
+        purpose: ACCOUNT_DELETION_TOKEN_PURPOSE,
+        tokenHash,
+        userId: user.id,
+      },
+    })
   })
 
   try {
@@ -250,7 +284,7 @@ export async function requestOAuthAccountDeletionConfirmation(
       dependencies.sendConfirmationEmail ?? sendAccountDeletionConfirmationEmail
     )({
       confirmationUrl: buildAccountDeletionConfirmationUrl(token),
-      to: user.email,
+      to: email!,
     })
 
     if (result.status !== "sent") {
@@ -269,13 +303,64 @@ export async function requestOAuthAccountDeletionConfirmation(
   return { status: "sent" as const }
 }
 
+export function parseOAuthAccountDeletionFinalConfirmation(value: unknown) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    (value as { confirmation?: unknown }).confirmation !== ACCOUNT_DELETION_CONFIRMATION
+  ) {
+    throw new AccountDeletionError(
+      "Type DELETE and use a valid account deletion confirmation link."
+    )
+  }
+
+  return { confirmation: ACCOUNT_DELETION_CONFIRMATION }
+}
+
+export async function getOAuthAccountDeletionHandoff(
+  { token }: { token: string },
+  { now = new Date(), store = getPrisma() }: Pick<AccountDeletionConfirmationDependencies, "now" | "store"> = {}
+): Promise<OAuthAccountDeletionConfirmationToken> {
+  const tokenHash = hashAccountDeletionConfirmationToken(token)
+  const confirmationToken = await store.accountDeletionConfirmationToken.findUnique({
+    select: {
+      expiresAt: true,
+      purpose: true,
+      usedAt: true,
+    },
+    where: { tokenHash },
+  })
+
+  if (
+    !confirmationToken ||
+    confirmationToken.purpose !== ACCOUNT_DELETION_TOKEN_PURPOSE ||
+    confirmationToken.usedAt ||
+    confirmationToken.expiresAt <= now
+  ) {
+    throw new AccountDeletionError(INVALID_CONFIRMATION_MESSAGE)
+  }
+
+  return { expiresAt: confirmationToken.expiresAt, tokenHash }
+}
+
 export async function confirmOAuthAccountDeletion(
   { token, userId }: { token: string; userId: string },
   dependencies: AccountDeletionConfirmationDependencies = {}
 ) {
+  return confirmOAuthAccountDeletionByTokenHash(
+    { tokenHash: hashAccountDeletionConfirmationToken(token), userId },
+    dependencies
+  )
+}
+
+export async function confirmOAuthAccountDeletionByTokenHash(
+  { tokenHash, userId }: { tokenHash: string; userId: string },
+  dependencies: AccountDeletionConfirmationDependencies = {}
+) {
   const now = dependencies.now ?? new Date()
   const store = dependencies.store ?? getPrisma()
-  const tokenHash = hashAccountDeletionConfirmationToken(token)
 
   await store.$transaction(async (transaction) => {
     const confirmationToken = await transaction.accountDeletionConfirmationToken.findUnique({

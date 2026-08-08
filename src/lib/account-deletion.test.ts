@@ -10,8 +10,10 @@ import {
   getAccountDeletionConfirmationExpiresAt,
   getDeletionSubjectReference,
   hashAccountDeletionConfirmationToken,
+  getOAuthAccountDeletionHandoff,
   parseAccountDeletionConfirmation,
   parseOAuthAccountDeletionConfirmation,
+  parseOAuthAccountDeletionHandoff,
   parseOAuthAccountDeletionConfirmationRequest,
   requestOAuthAccountDeletionConfirmation,
   requireAccountDeletionReauthentication,
@@ -39,6 +41,8 @@ describe("account deletion", () => {
     expect(() =>
       parseOAuthAccountDeletionConfirmation({ confirmation: "DELETE", token: "x".repeat(43) })
     ).not.toThrow()
+    expect(() => parseOAuthAccountDeletionHandoff({ token: "short" })).toThrow(AccountDeletionError)
+    expect(() => parseOAuthAccountDeletionHandoff({ token: "x".repeat(43) })).not.toThrow()
   })
 
   it("creates a short-lived, hashed email confirmation token whose secret stays in the URL fragment", () => {
@@ -141,10 +145,10 @@ describe("account deletion", () => {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     }
     const sendConfirmationEmail = vi.fn().mockResolvedValue({ status: "sent" })
-    const store = {
+    const transaction = {
       accountDeletionConfirmationToken: tokenStore,
       user: {
-        findUnique: vi.fn().mockResolvedValue({
+        update: vi.fn().mockResolvedValue({
           authVersion: 4,
           disabledAt: null,
           email: "reader@example.test",
@@ -153,6 +157,10 @@ describe("account deletion", () => {
           passwordHash: null,
         }),
       },
+    }
+    const store = {
+      $transaction: async (work: (client: typeof transaction) => Promise<unknown>) => work(transaction),
+      accountDeletionConfirmationToken: tokenStore,
     }
 
     await expect(
@@ -175,6 +183,155 @@ describe("account deletion", () => {
       confirmationUrl: expect.stringMatching(/^https:\/\/arcticrss\.com\/delete-account#token=/),
       to: "reader@example.test",
     })
+    expect(transaction.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { updatedAt: now }, where: { id: "user-1" } })
+    )
+    vi.unstubAllEnvs()
+  })
+
+  it("checks a current token for a handoff without consuming it", async () => {
+    const now = new Date("2026-08-02T12:00:00.000Z")
+    const token = "x".repeat(43)
+    const findUnique = vi.fn().mockResolvedValue({
+      expiresAt: new Date("2026-08-02T12:15:00.000Z"),
+      purpose: ACCOUNT_DELETION_TOKEN_PURPOSE,
+      usedAt: null,
+    })
+
+    await expect(
+      getOAuthAccountDeletionHandoff({ token }, { now, store: { accountDeletionConfirmationToken: { findUnique } } as never })
+    ).resolves.toEqual({
+      expiresAt: new Date("2026-08-02T12:15:00.000Z"),
+      tokenHash: hashAccountDeletionConfirmationToken(token),
+    })
+    expect(findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tokenHash: hashAccountDeletionConfirmationToken(token) } })
+    )
+  })
+
+  it("does not leave its own active token behind when email delivery fails", async () => {
+    const now = new Date("2026-08-02T12:00:00.000Z")
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 })
+    const tokenStore = { create: vi.fn(), updateMany }
+    const transaction = {
+      accountDeletionConfirmationToken: tokenStore,
+      user: {
+        update: vi.fn().mockResolvedValue({
+          authVersion: 4,
+          disabledAt: null,
+          email: "reader@example.test",
+          emailVerified: now,
+          id: "user-1",
+          passwordHash: null,
+        }),
+      },
+    }
+    const store = {
+      $transaction: async (work: (client: typeof transaction) => Promise<unknown>) => work(transaction),
+      accountDeletionConfirmationToken: tokenStore,
+    }
+
+    await expect(
+      requestOAuthAccountDeletionConfirmation(
+        { userId: "user-1" },
+        { now, sendConfirmationEmail: vi.fn().mockRejectedValue(new Error("mail unavailable")), store: store as never }
+      )
+    ).rejects.toThrow("Unable to send")
+
+    expect(updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ tokenHash: expect.any(String), usedAt: null }) })
+    )
+  })
+
+  it("serializes simultaneous requests so only the final email token remains usable", async () => {
+    const now = new Date("2026-08-02T12:00:00.000Z")
+    const tokens: Array<{
+      expiresAt: Date
+      purpose: string
+      tokenHash: string
+      usedAt: Date | null
+      userId: string
+    }> = []
+    const sentUrls: string[] = []
+    const tokenStore = {
+      create: vi.fn(async ({ data }: { data: (typeof tokens)[number] }) => {
+        tokens.push({ ...data, usedAt: null })
+      }),
+      findUnique: vi.fn(async ({ where }: { where: { tokenHash: string } }) =>
+        tokens.find((token) => token.tokenHash === where.tokenHash) ?? null
+      ),
+      updateMany: vi.fn(async ({ data, where }: { data: { usedAt: Date }; where: { userId?: string; usedAt: null } }) => {
+        let count = 0
+        for (const token of tokens) {
+          if ((!where.userId || token.userId === where.userId) && token.usedAt === where.usedAt) {
+            token.usedAt = data.usedAt
+            count += 1
+          }
+        }
+        return { count }
+      }),
+    }
+    const transaction = {
+      accountDeletionConfirmationToken: tokenStore,
+      user: {
+        update: vi.fn().mockResolvedValue({
+          authVersion: 4,
+          disabledAt: null,
+          email: "reader@example.test",
+          emailVerified: now,
+          id: "user-1",
+          passwordHash: null,
+        }),
+      },
+    }
+    let previousTransaction = Promise.resolve()
+    const store = {
+      $transaction: async (work: (client: typeof transaction) => Promise<unknown>) => {
+        const predecessor = previousTransaction
+        let release!: () => void
+        previousTransaction = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        await predecessor
+        try {
+          return await work(transaction)
+        } finally {
+          release()
+        }
+      },
+      accountDeletionConfirmationToken: tokenStore,
+    }
+    const sendConfirmationEmail = vi.fn(async ({ confirmationUrl }: { confirmationUrl: string }) => {
+      sentUrls.push(confirmationUrl)
+      return { status: "sent" as const }
+    })
+    vi.stubEnv("APP_ORIGIN", "https://arcticrss.com")
+
+    await Promise.all([
+      requestOAuthAccountDeletionConfirmation(
+        { userId: "user-1" },
+        { now, sendConfirmationEmail, store: store as never }
+      ),
+      requestOAuthAccountDeletionConfirmation(
+        { userId: "user-1" },
+        { now, sendConfirmationEmail, store: store as never }
+      ),
+    ])
+
+    expect(tokens.filter((token) => !token.usedAt)).toHaveLength(1)
+    expect(sentUrls).toHaveLength(2)
+    const rawTokens = sentUrls.map((url) => new URL(url).hash.slice("#token=".length))
+    const activeToken = rawTokens.find(
+      (token) => hashAccountDeletionConfirmationToken(token) === tokens.find((item) => !item.usedAt)?.tokenHash
+    )
+    const replacedToken = rawTokens.find((token) => token !== activeToken)
+
+    await expect(
+      getOAuthAccountDeletionHandoff({ token: activeToken! }, { now, store: store as never })
+    ).resolves.toEqual(expect.objectContaining({ tokenHash: expect.any(String) }))
+    await expect(
+      getOAuthAccountDeletionHandoff({ token: replacedToken! }, { now, store: store as never })
+    ).rejects.toThrow("invalid or expired")
     vi.unstubAllEnvs()
   })
 

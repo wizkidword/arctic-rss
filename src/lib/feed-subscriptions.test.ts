@@ -196,9 +196,27 @@ describe("feed subscriptions", () => {
     const subscriptions = await listUserFeedSubscriptions("user-1")
 
     expect(findMany).toHaveBeenCalledWith({
-      include: {
-        feed: true,
-        folder: true,
+      select: {
+        customTitle: true,
+        feed: {
+          select: {
+            faviconUrl: true,
+            feedUrl: true,
+            lastError: true,
+            lastSuccessfulFetchAt: true,
+            siteUrl: true,
+            title: true,
+          },
+        },
+        feedId: true,
+        folder: {
+          select: {
+            name: true,
+          },
+        },
+        folderId: true,
+        id: true,
+        isPaused: true,
       },
       orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
       where: { userId: "user-1" },
@@ -558,6 +576,7 @@ describe("feed subscriptions", () => {
       },
     })
     expect(folderCreate).not.toHaveBeenCalled()
+    expect(discoverFeedFromUrl).not.toHaveBeenCalled()
     expect(feedUpsert).not.toHaveBeenCalled()
     expect(feedSubscriptionCreate).not.toHaveBeenCalled()
   })

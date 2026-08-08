@@ -17,8 +17,9 @@ function getConfirmationTokenFromFragment() {
 export function AccountDeletionEmailConfirmation() {
   const [confirmation, setConfirmation] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [handoffReady, setHandoffReady] = useState(false)
+  const [preparing, setPreparing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [token, setToken] = useState<string | null>(null)
   const initialized = useRef(false)
 
   const initializeFromFragment = useCallback((element: HTMLElement | null) => {
@@ -27,15 +28,39 @@ export function AccountDeletionEmailConfirmation() {
     }
 
     initialized.current = true
-    const nextToken = getConfirmationTokenFromFragment()
-    setToken(nextToken)
-    if (!nextToken) {
+    const token = getConfirmationTokenFromFragment()
+    if (!token) {
       setError("This deletion confirmation link is invalid or expired. Request a new one from Settings.")
+      return
     }
+
+    setPreparing(true)
+    void fetch("/api/account/deletion/handoff", {
+      body: JSON.stringify({ token }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as { error?: string }
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Unable to prepare account deletion confirmation.")
+        }
+
+        setHandoffReady(true)
+      })
+      .catch((handoffError) => {
+        setError(
+          handoffError instanceof Error
+            ? handoffError.message
+            : "Unable to prepare account deletion confirmation."
+        )
+      })
+      .finally(() => setPreparing(false))
   }, [])
 
   async function confirmDeletion() {
-    if (!token || confirmation !== CONFIRMATION || submitting) {
+    if (!handoffReady || confirmation !== CONFIRMATION || submitting) {
       return
     }
 
@@ -44,7 +69,7 @@ export function AccountDeletionEmailConfirmation() {
 
     try {
       const response = await fetch("/api/account/deletion/confirmation", {
-        body: JSON.stringify({ confirmation, token }),
+        body: JSON.stringify({ confirmation }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       })
@@ -58,6 +83,18 @@ export function AccountDeletionEmailConfirmation() {
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete the account.")
       setSubmitting(false)
+    }
+  }
+
+  async function cancelDeletion() {
+    if (submitting) {
+      return
+    }
+
+    try {
+      await fetch("/api/account/deletion/handoff", { method: "DELETE" })
+    } finally {
+      window.location.assign("/settings")
     }
   }
 
@@ -79,14 +116,24 @@ export function AccountDeletionEmailConfirmation() {
           />
         </label>
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-        <button
-          className="mt-4 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!token || confirmation !== CONFIRMATION || submitting}
-          onClick={confirmDeletion}
-          type="button"
-        >
-          {submitting ? "Deleting account…" : "Delete account"}
-        </button>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!handoffReady || confirmation !== CONFIRMATION || preparing || submitting}
+            onClick={confirmDeletion}
+            type="button"
+          >
+            {preparing ? "Preparing confirmation…" : submitting ? "Deleting account…" : "Delete account"}
+          </button>
+          <button
+            className="rounded-md border px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={submitting}
+            onClick={cancelDeletion}
+            type="button"
+          >
+            Cancel
+          </button>
+        </div>
       </section>
     </main>
   )
