@@ -71,6 +71,16 @@ container instance ID, release SHA (or `unknown` outside the release command),
 and a timestamp. The single selected mode owner makes a stale record a
 cross-container signal without putting health state in a local filesystem.
 
+The local heartbeat is written only after its durable Redis write succeeds.
+Long-lived worker control-plane clients reconnect with bounded jitter. During a
+durable Redis outage, a worker stops refreshing its local health file and a
+maintenance pass loses its lease before it can make another lease-protected
+write. `WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS` defaults to 60 seconds and is
+accepted only from 10 seconds through 10 minutes; if recovery does not finish
+inside that window, the worker shuts down with a nonzero exit so Compose can
+replace it. The state logs contain only the control-plane client label and
+state, never a Redis URL, credential, queue payload, or raw error.
+
 The approved release and rollback scripts inject the manifest-selected topology
 and commit SHA into Compose. Manual production Compose use must set
 `ARCTIC_RSS_TOPOLOGY` to one of the names in

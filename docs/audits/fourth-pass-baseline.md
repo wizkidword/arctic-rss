@@ -105,3 +105,22 @@ evidence of a production condition.
 The next implementation phase is Phase 1: remove terminal source-refresh jobs
 while retaining deterministic active-job deduplication and explicit recent
 failure evidence.
+
+## Phase 2 local recovery evidence (2026-08-08)
+
+Phase 2 replaces the two worker clients that permanently stopped reconnecting
+with one shared durable-Redis control-plane policy. A failed durable heartbeat
+cannot refresh the Docker heartbeat file. A maintenance lease is aborted on
+connection loss or failed renewal; after that loss it cannot continue, renew,
+or release a potentially newer lease. The client uses a bounded, jittered
+reconnect delay. If Redis stays unavailable past the bounded recovery grace,
+the worker requests graceful shutdown and exits nonzero.
+
+| Verification | Result |
+| --- | --- |
+| Focused fake-client tests | Passed: control-plane state/grace/shutdown, lease loss/ownership, later tick, and gated heartbeat behavior. |
+| Disposable real Redis restart | Passed: a fresh loopback-only `redis:7.4-alpine` container was restarted during the test; the client observed degradation, recovered, and resumed durable and local heartbeat writes. The container was removed afterward. |
+| Type-check and lint | Passed for the Phase 2 implementation. |
+
+This is local source evidence only. It does not claim a production release,
+production restart test, or a deployed worker revision.

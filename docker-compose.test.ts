@@ -27,6 +27,26 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     );
   });
 
+  it("passes the bounded durable-Redis recovery grace to every worker mode", async () => {
+    const compose = await readFile("docker-compose.yml", "utf8");
+
+    for (const worker of [
+      "worker",
+      "worker-ingestion",
+      "worker-ai-mail",
+      "worker-imports",
+      "worker-maintenance",
+      "worker-chat-events",
+    ]) {
+      const section = compose.match(
+        new RegExp(`  ${worker}:\\r?\\n([\\s\\S]*?)(?=\\r?\\n  [a-z][a-z-]+:|\\r?\\nvolumes:|$)`),
+      );
+      expect(section?.[0]).toContain(
+        "WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}",
+      );
+    }
+  });
+
   it("allows a release to select immutable application image tags", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
 

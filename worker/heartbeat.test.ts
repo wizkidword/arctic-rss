@@ -31,6 +31,7 @@ describe("worker heartbeat", () => {
       version: "test-version",
     })
 
+    await Promise.resolve()
     expect(health.writeWorkerHeartbeat).toHaveBeenCalledWith({ path: "/tmp/worker-heartbeat" })
     expect(health.writeDurableWorkerHeartbeat).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -48,5 +49,32 @@ describe("worker heartbeat", () => {
     await vi.advanceTimersByTimeAsync(2_000)
     expect(health.writeWorkerHeartbeat).toHaveBeenCalledTimes(2)
     expect(health.writeDurableWorkerHeartbeat).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not refresh local health until the durable control plane is ready", async () => {
+    let ready = false
+    const heartbeat = startWorkerHeartbeat({
+      instanceId: "worker-1",
+      intervalMs: 1_000,
+      isControlPlaneReady: () => ready,
+      mode: "maintenance",
+      path: "/tmp/worker-heartbeat",
+      store: {} as never,
+      version: "test-version",
+    })
+
+    expect(health.writeDurableWorkerHeartbeat).not.toHaveBeenCalled()
+    expect(health.writeWorkerHeartbeat).not.toHaveBeenCalled()
+
+    ready = true
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(health.writeDurableWorkerHeartbeat).toHaveBeenCalledOnce()
+    expect(health.writeWorkerHeartbeat).toHaveBeenCalledOnce()
+
+    ready = false
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(health.writeDurableWorkerHeartbeat).toHaveBeenCalledOnce()
+    expect(health.writeWorkerHeartbeat).toHaveBeenCalledOnce()
+    heartbeat.stop()
   })
 })

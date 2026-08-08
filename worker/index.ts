@@ -1,7 +1,6 @@
 import "dotenv/config"
 
 import { Worker } from "bullmq"
-import Redis from "ioredis"
 
 import { cleanupExpiredAuthTokens } from "../src/lib/auth-token-maintenance"
 import {
@@ -105,6 +104,7 @@ import {
   workerHeartbeatPath,
 } from "./mode"
 import { createMaintenanceLock, type MaintenanceLease } from "./maintenance-lock"
+import { createWorkerControlPlaneRedis } from "./control-plane-redis"
 import { logWorkerMemory } from "./memory-log"
 import { startWorkerHeartbeat } from "./heartbeat"
 import { createManagedWorkerTargets } from "./managed-workers"
@@ -114,17 +114,34 @@ assertSecureProductionConfiguration(process.env, `worker-${workerMode}`)
 const heartbeatPath = workerHeartbeatPath(workerMode)
 const heartbeatInstanceId = process.env.HOSTNAME?.trim() || `worker-${process.pid}`
 const heartbeatVersion = process.env.ARCTIC_RSS_BUILD_SHA?.trim() || "unknown"
-const durableHeartbeatStore = new Redis(durableRedisConnectionOptions().url, {
-  connectTimeout: 2_000,
-  enableOfflineQueue: false,
-  maxRetriesPerRequest: 0,
-  retryStrategy: () => null,
+let controlPlaneRestartRequested = false
+
+function requestControlPlaneRestart() {
+  if (controlPlaneRestartRequested) {
+    return
+  }
+
+  controlPlaneRestartRequested = true
+  console.error(
+    JSON.stringify({
+      event: "worker_control_plane_redis",
+      outcome: "recovery_grace_expired",
+    })
+  )
+  void shutdown()
+    .catch((error) => {
+      console.error(`[worker] control-plane shutdown failed: ${schedulerErrorMessage(error)}`)
+    })
+    .finally(() => process.exit(1))
+}
+
+const durableHeartbeatControl = createWorkerControlPlaneRedis({
+  name: "durable-heartbeat",
+  onGraceExpired: requestControlPlaneRestart,
 })
-durableHeartbeatStore.on("error", () => {
-  // The retry loop below records a redacted operational error without secrets.
-})
+const durableHeartbeatStore = durableHeartbeatControl.client
 const maintenanceLock = runsWorkerResponsibility(workerMode, "maintenance")
-  ? createMaintenanceLock()
+  ? createMaintenanceLock({ onRecoveryGraceExpired: requestControlPlaneRestart })
   : undefined
 
 const {
@@ -999,6 +1016,7 @@ if (chatOutboxPublisher) {
 const heartbeat = startWorkerHeartbeat({
   instanceId: heartbeatInstanceId,
   intervalMs: WORKER_HEARTBEAT_INTERVAL_MS,
+  isControlPlaneReady: durableHeartbeatControl.isReady,
   mode: workerMode,
   path: heartbeatPath,
   store: durableHeartbeatStore,
@@ -1024,7 +1042,7 @@ function shutdown() {
           closeChatArticleIntegrationQueue(),
           closeChatRoomEventPublisher(),
           maintenanceLock?.close() ?? Promise.resolve(),
-          closeDurableHeartbeatStore(),
+          durableHeartbeatControl.close(),
         ])
         await clearWorkerHeartbeat({ path: heartbeatPath }).catch((error) => {
           console.error(
@@ -1053,14 +1071,6 @@ function shutdown() {
   }
 
   return shutdownPromise
-}
-
-async function closeDurableHeartbeatStore() {
-  try {
-    await durableHeartbeatStore.quit()
-  } catch {
-    durableHeartbeatStore.disconnect()
-  }
 }
 
 installWorkerSignalHandlers({

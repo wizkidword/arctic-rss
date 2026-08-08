@@ -205,6 +205,11 @@ jobs:
           node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- restart redis-ephemeral
           node scripts/ci/assert-running-topology.mjs ${{ matrix.topology }}
           node scripts/ci/assert-compose-chat-release-gates.mjs --after-redis-restart
+      - name: Verify workers recover after durable Redis restart
+        run: |
+          recovery_started=$(date +%s%3N)
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- restart redis
+          node scripts/ci/assert-worker-redis-recovery.mjs ${{ matrix.topology }} --after "$recovery_started"
       - name: Run authenticated, real-time, worker, retention, and CSP release gates
         run: npm run test:chat:release-gates
       - name: Capture Compose status on failure
@@ -212,6 +217,61 @@ jobs:
         run: |
           node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- ps
           node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- logs --no-color chat-gateway
+      - name: Stop Compose topology
+        if: always()
+        run: node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- down --volumes --remove-orphans
+
+  worker-redis-recovery-gates:
+    name: Compose-backed worker Redis recovery gates (${{ matrix.topology }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        topology: [all-in-one, split]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Configure isolated production-like Compose environment
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
+            -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
+            -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
+            -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
+            -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
+            -e 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
+            -e 's#^MIGRATE_DATABASE_URL=.*#MIGRATE_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
+            -e 's#APP_ORIGIN=http://localhost:3000#APP_ORIGIN=https://arcticrss.test#' \
+            -e 's#AUTH_URL=http://localhost:3000#AUTH_URL=https://arcticrss.test#' \
+            -e 's/^FEED_SCHEDULER_INTERVAL_MS=60000/FEED_SCHEDULER_INTERVAL_MS=10000/' \
+            .env
+      - name: Validate selected topology and Compose services
+        run: npm run topology:validate -- --topology ${{ matrix.topology }}
+      - name: Start the selected web, worker, Redis, and database topology
+        run: >-
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} --
+          up --build --detach --wait --wait-timeout 300
+      - name: Verify workers recover after durable Redis restart
+        run: |
+          recovery_started=$(date +%s%3N)
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- restart redis
+          node scripts/ci/assert-worker-redis-recovery.mjs ${{ matrix.topology }} --after "$recovery_started"
+      - name: Capture Compose status on failure
+        if: failure()
+        run: |
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- ps
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- logs --no-color worker worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-chat-events
       - name: Stop Compose topology
         if: always()
         run: node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- down --volumes --remove-orphans
