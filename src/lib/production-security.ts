@@ -193,8 +193,7 @@ function assertRedisUrl(
     return assertCredentialedUrlValue(
       workloadUrl,
       workloadVariable,
-      new Set(["redis:", "rediss:"]),
-      { requireUsername: false }
+      new Set(["redis:", "rediss:"])
     )
   }
 
@@ -229,6 +228,25 @@ function assertRedisWorkloadSeparation(environment: ProductionEnvironment) {
   ) {
     throw new UnsafeProductionConfigurationError(
       "DURABLE_REDIS_URL and EPHEMERAL_REDIS_URL must not target the same Redis endpoint in production."
+    )
+  }
+
+  if (
+    !allowsLegacyRedisMigration(environment) &&
+    durable.username === ephemeral.username
+  ) {
+    throw new UnsafeProductionConfigurationError(
+      "DURABLE_REDIS_URL and EPHEMERAL_REDIS_URL must use distinct Redis ACL usernames in production."
+    )
+  }
+
+  if (
+    !allowsLegacyRedisMigration(environment) &&
+    decodeUrlCredential(durable, "DURABLE_REDIS_URL") ===
+      decodeUrlCredential(ephemeral, "EPHEMERAL_REDIS_URL")
+  ) {
+    throw new UnsafeProductionConfigurationError(
+      "DURABLE_REDIS_URL and EPHEMERAL_REDIS_URL must use distinct Redis passwords in production."
     )
   }
 }

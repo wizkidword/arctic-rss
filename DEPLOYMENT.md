@@ -44,14 +44,15 @@ access, while the migration account owns the schema and is used solely by the
 one-shot `migrate` service. Do not use the PostgreSQL superuser connection for
 either application runtime service.
 
-Set `REDIS_PASSWORD` to a separate high-entropy value, then include that value
-in both `DURABLE_REDIS_URL` and `EPHEMERAL_REDIS_URL`. Durable Redis protects
-the BullMQ queue with AOF and `noeviction`; ephemeral Redis carries only
-TTL-bounded rate-limit and chat transport state. Production rejects a legacy
-`REDIS_URL` fallback or matching normalized endpoints unless the reviewed,
-temporary `ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION=true` exception is
-set. Remove that exception and `REDIS_URL` only through the owner-gated
-[compatibility retirement checklist](docs/operations/legacy-redis-compatibility-retirement.md).
+Set distinct high-entropy `DURABLE_REDIS_PASSWORD` and
+`EPHEMERAL_REDIS_PASSWORD` values, each with its own ACL username. Include
+the matching username/password pair in its workload-specific URL. Durable
+Redis protects the BullMQ queue with AOF and `noeviction`; ephemeral Redis
+carries only TTL-bounded rate-limit and chat transport state. Production
+rejects shared Redis endpoints, ACL usernames, and passwords. The legacy
+`REDIS_URL` fallback is a reviewed direct-process migration exception only;
+normal Compose services never receive it. Retire it only through the
+owner-gated [compatibility retirement checklist](docs/operations/legacy-redis-compatibility-retirement.md).
 Both Redis containers are loopback-bound and are never public services.
 
 For transactional email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,

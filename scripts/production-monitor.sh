@@ -155,11 +155,28 @@ else
   fi
 fi
 
+redis_cli() {
+  local container_name="$1"
+  shift
+
+  case "$container_name" in
+    app-redis-1)
+      docker exec "$container_name" sh -c 'redis-cli --no-auth-warning --user "$DURABLE_REDIS_USERNAME" -a "$DURABLE_REDIS_PASSWORD" "$@"' sh "$@"
+      ;;
+    app-redis-ephemeral-1)
+      docker exec "$container_name" sh -c 'redis-cli --no-auth-warning --user "$EPHEMERAL_REDIS_USERNAME" -a "$EPHEMERAL_REDIS_PASSWORD" "$@"' sh "$@"
+      ;;
+    *)
+      return 64
+      ;;
+  esac
+}
+
 redis_config_value() {
   local container_name="$1"
   local setting="$2"
 
-  docker exec "$container_name" sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" CONFIG GET "$1"' sh "$setting" \
+  redis_cli "$container_name" CONFIG GET "$setting" \
     | tr -d '\r' \
     | sed -n '2p'
 }
@@ -170,7 +187,7 @@ redis_info_value() {
   local field="$3"
   local info
 
-  info="$(docker exec "$container_name" sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO "$1"' sh "$section")" || return 1
+  info="$(redis_cli "$container_name" INFO "$section")" || return 1
   awk -F: -v field="$field" '$1 == field { gsub(/\r/, "", $2); print $2; found = 1 } END { exit !found }' <<< "$info"
 }
 
@@ -179,7 +196,7 @@ redis_error_count() {
   local error_name="$2"
   local info
 
-  info="$(docker exec "$container_name" sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO errorstats')" || return 1
+  info="$(redis_cli "$container_name" INFO errorstats)" || return 1
   awk -F'[=:,]' -v error_name="$error_name" '$1 == error_name { print $3; found = 1 } END { if (!found) print 0 }' <<< "$info"
 }
 
@@ -212,7 +229,7 @@ if [[ "$(redis_config_value app-redis-ephemeral-1 maxmemory-policy || true)" != 
   failures+=("redis_ephemeral_memory_policy")
 fi
 
-if ! docker exec app-redis-1 sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO persistence' \
+if ! redis_cli app-redis-1 INFO persistence \
   | tr -d '\r' \
   | grep -q '^aof_last_write_status:ok$'; then
   failures+=("redis_durable_persistence")

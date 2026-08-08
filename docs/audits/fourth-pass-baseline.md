@@ -226,3 +226,29 @@ dependency names and readiness conditions for every affected service.
 
 No production worker was restarted, no Redis credential changed, and no
 deployment occurred.
+
+## Phase 7C local Redis credential and network evidence (2026-08-08)
+
+Durable and ephemeral Redis now each receive only a dedicated ACL username and
+password. Redis starts with the default ACL user disabled; workload URLs in a
+normal production environment must include distinct usernames and passwords as
+well as distinct endpoints. The temporary legacy URL remains a direct-process,
+owner-gated pre-ACL recovery path only and is never injected into Compose
+application services.
+
+Compose declares exactly three reviewed networks. Durable-only workers attach
+only to `durable-data`. The chat gateway attaches to
+`ephemeral-realtime` and `web-edge`, not `durable-data`; PostgreSQL also joins
+`web-edge` temporarily because the gateway continues to use the existing
+runtime database role until Phase 7D. Web and the chat-event worker retain the
+two Redis networks they currently require. All infrastructure host ports remain
+loopback-only.
+
+| Verification | Result |
+| --- | --- |
+| Rendered Compose network boundary | Passed: every affected service has the exact reviewed network set. |
+| Disposable ACL Redis integration | Passed: durable credentials fail on ephemeral Redis, ephemeral credentials fail on durable Redis, the chat-gateway-shaped network cannot resolve durable Redis, and the ingestion-worker-shaped network cannot resolve ephemeral Redis. |
+| Configuration guard | Passed locally: direct production workload URLs require a username/password and reject shared ACL usernames or passwords. |
+
+No production Redis credential was read, created, rotated, or printed. No
+production container, OVH host, push, or deployment was changed.

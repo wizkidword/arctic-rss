@@ -75,7 +75,7 @@ function readMaintenanceTick() {
       "redis",
       "sh",
       "-c",
-      'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" --raw GET arctic-rss:maintenance-tick:v1',
+      'redis-cli --no-auth-warning --user "$DURABLE_REDIS_USERNAME" -a "$DURABLE_REDIS_PASSWORD" --raw GET arctic-rss:maintenance-tick:v1',
     ]).trim()
     const tick = JSON.parse(value)
 

@@ -57,6 +57,11 @@ services:
       driver: journald
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    # The gateway needs PostgreSQL until Phase 7D introduces its restricted
+    # database role, but it must never share the durable Redis network.
+    networks:
+      - durable-data
+      - web-edge
 
   redis:
     image: redis:7.4.9-alpine3.21
@@ -65,12 +70,13 @@ services:
     mem_limit: 320m
     pids_limit: 64
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      DURABLE_REDIS_USERNAME: ${DURABLE_REDIS_USERNAME:?DURABLE_REDIS_USERNAME is required}
+      DURABLE_REDIS_PASSWORD: ${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}
     # Durable BullMQ data must never be evicted. Keep a memory margin below the
     # container limit so Redis can safely rewrite AOF files under load.
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--auto-aof-rewrite-min-size", "64mb", "--auto-aof-rewrite-percentage", "100", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--auto-aof-rewrite-min-size", "64mb", "--auto-aof-rewrite-percentage", "100", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--user", "${DURABLE_REDIS_USERNAME:?DURABLE_REDIS_USERNAME is required}", "on", ">${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}", "~*", "&*", "+@all", "--user", "default", "off"]
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning --user \"$${DURABLE_REDIS_USERNAME}\" -a \"$${DURABLE_REDIS_PASSWORD}\" ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -80,6 +86,8 @@ services:
       driver: journald
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    networks:
+      - durable-data
 
   redis-ephemeral:
     image: redis:7.4.9-alpine3.21
@@ -88,13 +96,14 @@ services:
     mem_limit: 192m
     pids_limit: 64
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      EPHEMERAL_REDIS_USERNAME: ${EPHEMERAL_REDIS_USERNAME:?EPHEMERAL_REDIS_USERNAME is required}
+      EPHEMERAL_REDIS_PASSWORD: ${EPHEMERAL_REDIS_PASSWORD:?EPHEMERAL_REDIS_PASSWORD is required}
     # Socket.IO, presence, replay, rate-limit, and security-event state is
     # intentionally disposable. Every application key has a bounded TTL, so
     # volatile-ttl can reclaim the shortest-lived state under memory pressure.
-    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-ttl", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-ttl", "--user", "${EPHEMERAL_REDIS_USERNAME:?EPHEMERAL_REDIS_USERNAME is required}", "on", ">${EPHEMERAL_REDIS_PASSWORD:?EPHEMERAL_REDIS_PASSWORD is required}", "~*", "&*", "+@all", "--user", "default", "off"]
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning --user \"$${EPHEMERAL_REDIS_USERNAME}\" -a \"$${EPHEMERAL_REDIS_PASSWORD}\" ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -104,6 +113,8 @@ services:
     # no Redis service is reachable from the public network.
     ports:
       - "127.0.0.1:${EPHEMERAL_REDIS_PORT:-6380}:6379"
+    networks:
+      - ephemeral-realtime
 
   migrate:
     image: ${MIGRATE_IMAGE:-arctic-rss-migrate}
@@ -131,6 +142,8 @@ services:
       - no-new-privileges:true
     logging:
       driver: journald
+    networks:
+      - web-edge
 
   web:
     image: ${WEB_IMAGE:-arctic-rss-web}
@@ -237,6 +250,10 @@ services:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
     logging:
       driver: journald
+    networks:
+      - durable-data
+      - ephemeral-realtime
+      - web-edge
 
   worker:
     <<: *worker-runtime
@@ -313,6 +330,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
+      - ephemeral-realtime
 
   worker-ingestion:
     <<: *worker-runtime
@@ -348,6 +368,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
 
   worker-ai-mail:
     <<: *worker-runtime
@@ -389,6 +411,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
 
   worker-imports:
     <<: *worker-runtime
@@ -411,6 +435,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
 
   worker-maintenance:
     <<: *worker-runtime
@@ -447,6 +473,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
 
   worker-chat-events:
     <<: *worker-runtime
@@ -471,6 +499,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
+      - ephemeral-realtime
 
   chat-gateway:
     image: ${CHAT_GATEWAY_IMAGE:-arctic-rss-chat-gateway}
@@ -531,6 +562,9 @@ services:
     # proxy is the only permitted browser-facing route to this service.
     logging:
       driver: journald
+    networks:
+      - ephemeral-realtime
+      - web-edge
 
   edge-proxy:
     image: ${EDGE_PROXY_IMAGE:-arctic-rss-edge-proxy}
@@ -569,6 +603,8 @@ services:
       - "127.0.0.1:${EDGE_PROXY_HOST_PORT:-8080}:8080"
     logging:
       driver: journald
+    networks:
+      - web-edge
 
   cloudflared:
     image: cloudflare/cloudflared:2026.6.1
@@ -593,7 +629,14 @@ services:
         condition: service_healthy
     logging:
       driver: journald
+    networks:
+      - web-edge
 
 volumes:
   postgres-data:
   redis-data:
+
+networks:
+  durable-data:
+  ephemeral-realtime:
+  web-edge:

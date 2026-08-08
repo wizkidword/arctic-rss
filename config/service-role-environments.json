@@ -86,6 +86,7 @@
     "NEXT_PUBLIC_APP_URL",
     "NEXTAUTH_URL",
     "POSTGRES_PORT",
+    "REDIS_PASSWORD",
     "REDIS_PORT",
     "REDIS_URL",
     "WEB_IMAGE",
@@ -95,8 +96,8 @@
   ],
   "infrastructure": {
     "postgres": ["POSTGRES_DB", "POSTGRES_PASSWORD", "POSTGRES_USER"],
-    "redis": ["REDIS_PASSWORD"],
-    "redis-ephemeral": ["REDIS_PASSWORD"],
+    "redis": ["DURABLE_REDIS_PASSWORD", "DURABLE_REDIS_USERNAME"],
+    "redis-ephemeral": ["EPHEMERAL_REDIS_PASSWORD", "EPHEMERAL_REDIS_USERNAME"],
     "edge-proxy": []
   }
 }

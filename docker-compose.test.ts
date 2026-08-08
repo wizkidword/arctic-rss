@@ -75,8 +75,12 @@ describe("Cloudflare Tunnel Compose configuration", () => {
       "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}",
     );
     expect(compose).toContain(
-      "REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}",
+      "DURABLE_REDIS_PASSWORD: ${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}",
     );
+    expect(compose).toContain(
+      "EPHEMERAL_REDIS_PASSWORD: ${EPHEMERAL_REDIS_PASSWORD:?EPHEMERAL_REDIS_PASSWORD is required}",
+    );
+    expect(compose).toContain('"--user", "default", "off"');
     expect(compose).toContain(
       "DATABASE_URL: ${MIGRATE_DATABASE_URL:?MIGRATE_DATABASE_URL is required}",
     );

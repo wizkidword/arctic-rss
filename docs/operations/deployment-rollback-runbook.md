@@ -67,20 +67,20 @@ normal backup gate and a typed deployment approval have been recorded.
 1. Preserve the existing `redis-data` volume and do not create a backup policy
    for `redis-ephemeral`: only the durable Redis has recoverable state.
 2. Without printing values, add `DURABLE_REDIS_URL` and
-   `EPHEMERAL_REDIS_URL` to the root-only production `.env`. Both URLs must
-   use the existing `REDIS_PASSWORD`; they target `redis` and
-   `redis-ephemeral` respectively. `REDIS_URL` is deprecated; production
-   requires those workload-specific values and rejects a shared target unless
-   `ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION=true` is a reviewed,
-   temporary migration exception. Remove that exception and `REDIS_URL` before
-   Phase 5 begins.
+   `EPHEMERAL_REDIS_URL` to the root-only production `.env`, using distinct
+   `DURABLE_REDIS_USERNAME`/`DURABLE_REDIS_PASSWORD` and
+   `EPHEMERAL_REDIS_USERNAME`/`EPHEMERAL_REDIS_PASSWORD` ACL pairs. Each URL
+   targets its matching service (`redis` or `redis-ephemeral`). `REDIS_URL` is
+   deprecated; normal Compose services never receive it. Use the explicit,
+   temporary direct-process compatibility exception only under the
+   [credential-and-network rollout runbook](redis-credential-network-rollout.md).
 3. Confirm the new keys exist, render the staged Compose file, then start the
    data services in order. Do not start the application containers until both
    Redis health checks pass:
 
    ```bash
    cd "$APP_DIR"
-   for key in DURABLE_REDIS_URL EPHEMERAL_REDIS_URL; do
+   for key in DURABLE_REDIS_USERNAME DURABLE_REDIS_PASSWORD DURABLE_REDIS_URL EPHEMERAL_REDIS_USERNAME EPHEMERAL_REDIS_PASSWORD EPHEMERAL_REDIS_URL; do
      grep -q "^${key}=." .env || {
        echo "missing required Redis migration key: ${key}" >&2
        exit 1
@@ -357,7 +357,7 @@ without displaying their values:
 
 ```bash
 cd "$APP_DIR"
-for key in POSTGRES_PASSWORD DATABASE_URL MIGRATE_DATABASE_URL REDIS_PASSWORD AUTH_SECRET; do
+for key in POSTGRES_PASSWORD DATABASE_URL MIGRATE_DATABASE_URL DURABLE_REDIS_USERNAME DURABLE_REDIS_PASSWORD EPHEMERAL_REDIS_USERNAME EPHEMERAL_REDIS_PASSWORD AUTH_SECRET; do
   if ! grep -q "^${key}=." .env; then
     echo "missing required environment key: ${key}" >&2
     exit 1

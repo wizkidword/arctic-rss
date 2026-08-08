@@ -13,9 +13,9 @@ const webProductionEnvironment = {
   AUTH_URL: "https://arcticrss.com",
   DATABASE_URL:
     "postgresql://arctic_runtime:runtime-password@postgres:5432/arctic_rss?schema=public",
-  DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379",
+  DURABLE_REDIS_URL: "redis://arctic_durable:durable-redis-password@redis:6379",
   EPHEMERAL_REDIS_URL:
-    "redis://:ephemeral-redis-password@redis-ephemeral:6379",
+    "redis://arctic_ephemeral:ephemeral-redis-password@redis-ephemeral:6379",
   NODE_ENV: "production",
   REQUIRE_EMAIL_VERIFICATION: "true",
 } as const
@@ -79,7 +79,8 @@ describe("production security configuration", () => {
       "CLOUDFLARE_TUNNEL_TOKEN",
       "MIGRATE_DATABASE_URL",
       "POSTGRES_PASSWORD",
-      "REDIS_PASSWORD",
+      "DURABLE_REDIS_PASSWORD",
+      "EPHEMERAL_REDIS_PASSWORD",
     ]) {
       expect(() =>
         assertSecureProductionConfiguration(
@@ -125,8 +126,8 @@ describe("production security configuration", () => {
       assertSecureProductionConfiguration(
         {
           ...webProductionEnvironment,
-          DURABLE_REDIS_URL: "redis://:durable-redis-password@REDIS:6379/0",
-          EPHEMERAL_REDIS_URL: "redis://:ephemeral-redis-password@redis/",
+          DURABLE_REDIS_URL: "redis://arctic_durable:durable-redis-password@REDIS:6379/0",
+          EPHEMERAL_REDIS_URL: "redis://arctic_ephemeral:ephemeral-redis-password@redis/",
         },
         "web"
       )
@@ -136,8 +137,8 @@ describe("production security configuration", () => {
       assertSecureProductionConfiguration(
         {
           ...webProductionEnvironment,
-          DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379/0",
-          EPHEMERAL_REDIS_URL: "rediss://:ephemeral-redis-password@redis:6379/0",
+          DURABLE_REDIS_URL: "redis://arctic_durable:durable-redis-password@redis:6379/0",
+          EPHEMERAL_REDIS_URL: "rediss://arctic_ephemeral:ephemeral-redis-password@redis:6379/0",
         },
         "web"
       )
@@ -147,12 +148,46 @@ describe("production security configuration", () => {
       assertSecureProductionConfiguration(
         {
           ...webProductionEnvironment,
-          DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379/0",
-          EPHEMERAL_REDIS_URL: "redis://:ephemeral-redis-password@redis:6379/1",
+          DURABLE_REDIS_URL: "redis://arctic_durable:durable-redis-password@redis:6379/0",
+          EPHEMERAL_REDIS_URL: "redis://arctic_ephemeral:ephemeral-redis-password@redis:6379/1",
         },
         "web"
       )
     ).not.toThrow()
+  })
+
+  it("requires distinct ACL usernames and passwords for direct workload URLs", () => {
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...webProductionEnvironment,
+          EPHEMERAL_REDIS_URL:
+            "redis://arctic_durable:ephemeral-redis-password@redis-ephemeral:6379/0",
+        },
+        "web"
+      )
+    ).toThrow("must use distinct Redis ACL usernames")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...webProductionEnvironment,
+          EPHEMERAL_REDIS_URL:
+            "redis://arctic_ephemeral:durable-redis-password@redis-ephemeral:6379/0",
+        },
+        "web"
+      )
+    ).toThrow("must use distinct Redis passwords")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...webProductionEnvironment,
+          DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379/0",
+        },
+        "web"
+      )
+    ).toThrow("DURABLE_REDIS_URL must include a username and password")
   })
 
   it("permits legacy Redis only with the explicit temporary migration flag", () => {
@@ -222,8 +257,8 @@ describe("production security configuration", () => {
   it("rejects a shared Redis endpoint from the all-in-one worker", () => {
     const environment = {
       DATABASE_URL: webProductionEnvironment.DATABASE_URL,
-      DURABLE_REDIS_URL: "redis://:durable-redis-password@redis:6379/0",
-      EPHEMERAL_REDIS_URL: "redis://:ephemeral-redis-password@redis/",
+      DURABLE_REDIS_URL: "redis://arctic_durable:durable-redis-password@redis:6379/0",
+      EPHEMERAL_REDIS_URL: "redis://arctic_ephemeral:ephemeral-redis-password@redis/",
       NODE_ENV: "production",
     }
 

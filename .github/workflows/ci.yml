@@ -181,7 +181,8 @@ jobs:
             -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
             -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
             -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
-            -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_DURABLE_REDIS_PASSWORD/ci-durable-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_EPHEMERAL_REDIS_PASSWORD/ci-ephemeral-redis-password/g' \
             -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
             -e 's/CHANGE_ME_GENERATE_A_SEPARATE_32_BYTE_SECRET/ci-chat-token-secret-that-is-at-least-32-bytes/g' \
             -e 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
@@ -248,7 +249,8 @@ jobs:
             -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
             -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
             -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
-            -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_DURABLE_REDIS_PASSWORD/ci-durable-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_EPHEMERAL_REDIS_PASSWORD/ci-ephemeral-redis-password/g' \
             -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
             -e 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
             -e 's#^MIGRATE_DATABASE_URL=.*#MIGRATE_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
@@ -349,12 +351,16 @@ jobs:
             -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
             -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
             -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
-            -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_DURABLE_REDIS_PASSWORD/ci-durable-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_EPHEMERAL_REDIS_PASSWORD/ci-ephemeral-redis-password/g' \
             -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
             .env
           docker compose config -q
           npm run topology:validate
           npm run compose:verify-env
+          npm run compose:verify-dependencies
+          npm run compose:verify-redis-boundaries
+          npm run redis:boundaries:verify
           npm run compatibility:verify-legacy-redis
           docker info --format '{{range .Plugins.Log}}{{println .}}{{end}}' | grep -qx journald
           rm .env

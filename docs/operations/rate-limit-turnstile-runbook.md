@@ -39,10 +39,10 @@ Inspect this safely on the VPS without printing runtime secrets:
 
 ```bash
 cd /opt/arctic-rss/app
-docker compose exec -T redis sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO memory | grep -E "^(used_memory_human|maxmemory_human|mem_fragmentation_ratio):"'
-docker compose exec -T redis sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" CONFIG GET appendonly maxmemory maxmemory-policy'
-docker compose exec -T redis-ephemeral sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" INFO memory | grep -E "^(used_memory_human|maxmemory_human|mem_fragmentation_ratio):"'
-docker compose exec -T redis-ephemeral sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" CONFIG GET appendonly maxmemory maxmemory-policy'
+docker compose exec -T redis sh -c 'redis-cli --no-auth-warning --user "$DURABLE_REDIS_USERNAME" -a "$DURABLE_REDIS_PASSWORD" INFO memory | grep -E "^(used_memory_human|maxmemory_human|mem_fragmentation_ratio):"'
+docker compose exec -T redis sh -c 'redis-cli --no-auth-warning --user "$DURABLE_REDIS_USERNAME" -a "$DURABLE_REDIS_PASSWORD" CONFIG GET appendonly maxmemory maxmemory-policy'
+docker compose exec -T redis-ephemeral sh -c 'redis-cli --no-auth-warning --user "$EPHEMERAL_REDIS_USERNAME" -a "$EPHEMERAL_REDIS_PASSWORD" INFO memory | grep -E "^(used_memory_human|maxmemory_human|mem_fragmentation_ratio):"'
+docker compose exec -T redis-ephemeral sh -c 'redis-cli --no-auth-warning --user "$EPHEMERAL_REDIS_USERNAME" -a "$EPHEMERAL_REDIS_PASSWORD" CONFIG GET appendonly maxmemory maxmemory-policy'
 ```
 
 The production monitor checks both containers, durable AOF health, configured

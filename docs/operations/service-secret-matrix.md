@@ -15,7 +15,7 @@ required-variable output, and production startup checks consume that source.
 | Service | Required configuration | Explicitly excluded examples |
 | --- | --- | --- |
 | `migrate` | `DATABASE_URL`, interpolated from `MIGRATE_DATABASE_URL` | Runtime DB URL, auth, mail, AI, chat, and tunnel values |
-| `web` | Runtime DB, durable/ephemeral Redis URLs, auth/origin/cron, optional Google, SMTP, Turnstile, AI, and web chat settings | `MIGRATE_DATABASE_URL`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, tunnel token |
+| `web` | Runtime DB, durable/ephemeral Redis URLs, auth/origin/cron, optional Google, SMTP, Turnstile, AI, and web chat settings | `MIGRATE_DATABASE_URL`, `POSTGRES_PASSWORD`, Redis ACL usernames/passwords, tunnel token |
 | `worker` (`all`) | Runtime DB, both Redis URLs, feed/scheduler settings, optional AI/mail, and required chat-worker settings | Runtime auth/OAuth, Turnstile, migration, PostgreSQL/Redis container passwords, tunnel token |
 | `worker-ingestion` | Runtime DB, durable Redis, feed/podcast concurrency, chat bot flags | OAuth, SMTP, AI, Turnstile, ephemeral Redis, migration, tunnel values |
 | `worker-ai-mail` | Runtime DB, durable Redis, origin, optional AI and SMTP configuration | OAuth, Turnstile, chat token, migration, tunnel values |
