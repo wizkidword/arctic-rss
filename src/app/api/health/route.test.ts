@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { checkSystemHealth } = vi.hoisted(() => ({
-  checkSystemHealth: vi.fn(),
+const { enforceRateLimit, getTrustedClientIp, readPublicHealthSnapshot } = vi.hoisted(() => ({
+  enforceRateLimit: vi.fn(),
+  getTrustedClientIp: vi.fn(),
+  readPublicHealthSnapshot: vi.fn(),
 }))
 
-vi.mock("@/lib/system-health", () => ({
-  checkSystemHealth,
+vi.mock("@/lib/health-snapshot", () => ({
+  healthSnapshotAgeMs: vi.fn(() => 12),
+  readPublicHealthSnapshot,
+}))
+
+vi.mock("@/lib/rate-limit", () => ({
+  enforceRateLimit,
+  getTrustedClientIp,
 }))
 
 import { GET } from "./route"
@@ -13,18 +21,15 @@ import { GET } from "./route"
 describe("GET /api/health", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    getTrustedClientIp.mockReturnValue(null)
+    readPublicHealthSnapshot.mockResolvedValue({
+      snapshot: { status: "ok" },
+      source: "fresh",
+    })
   })
 
-  it("returns a non-cacheable, minimal 200 response when dependencies are healthy", async () => {
-    checkSystemHealth.mockResolvedValue({
-      checks: {
-        database: "ok",
-        redis: "ok",
-      },
-      status: "ok",
-    })
-
-    const response = await GET()
+  it("returns a minimal 200 response from a cached healthy snapshot", async () => {
+    const response = await GET(new Request("https://arcticrss.test/api/health"))
 
     expect(response.status).toBe(200)
     expect(response.headers.get("cache-control")).toBe("no-store")
@@ -32,19 +37,38 @@ describe("GET /api/health", () => {
     await expect(response.json()).resolves.toEqual({ status: "ok" })
   })
 
-  it("does not disclose the failed dependency in a degraded response", async () => {
-    checkSystemHealth.mockResolvedValue({
-      checks: {
-        database: "ok",
-        redis: "failed",
+  it("does not disclose failed dependencies from a degraded snapshot", async () => {
+    readPublicHealthSnapshot.mockResolvedValue({
+      snapshot: {
+        checks: { database: "failed", durableRedis: "failed" },
+        status: "degraded",
       },
-      status: "degraded",
+      source: "stale",
     })
 
-    const response = await GET()
+    const response = await GET(new Request("https://arcticrss.test/api/health"))
 
     expect(response.status).toBe(503)
-    expect(response.headers.get("cache-control")).toBe("no-store")
+    await expect(response.json()).resolves.toEqual({ status: "degraded" })
+  })
+
+  it("rate limits only a trusted client IP and keeps the response public-safe", async () => {
+    getTrustedClientIp.mockReturnValue("198.51.100.40")
+    enforceRateLimit.mockResolvedValue({
+      allowed: false,
+      reason: "limited",
+      retryAfterSeconds: 15,
+    })
+
+    const response = await GET(new Request("https://arcticrss.test/api/health"))
+
+    expect(enforceRateLimit).toHaveBeenCalledWith({
+      action: "public_health",
+      ip: "198.51.100.40",
+    })
+    expect(readPublicHealthSnapshot).not.toHaveBeenCalled()
+    expect(response.status).toBe(429)
+    expect(response.headers.get("retry-after")).toBe("15")
     await expect(response.json()).resolves.toEqual({ status: "degraded" })
   })
 })

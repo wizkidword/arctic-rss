@@ -1,32 +1,61 @@
 # Readiness and redacted diagnostics
 
-`GET /api/health` is deliberately public-safe. It returns only one of:
+## Public health
+
+`GET /api/health` is public-safe and returns only one of:
 
 ```json
 {"status":"ok"}
 ```
 
-or:
-
 ```json
 {"status":"degraded"}
 ```
 
-It does not return endpoint names, worker names, queue contents, timestamps,
-credentials, URLs, or error messages. Docker uses `/api/live` for a cheap web
-process liveness check; readiness is the stricter, dependency-aware signal.
+```json
+{"status":"unavailable"}
+```
 
-## Internal readiness contract
+It never returns dependency names, worker names, queue contents, timestamps,
+credentials, URLs, or raw error messages.
 
-For the topology selected in `ARCTIC_RSS_TOPOLOGY`, readiness checks:
+The application keeps a process-local health snapshot for three seconds. One
+refresh is shared by concurrent cache misses. When an expired snapshot is less
+than 30 seconds old, it is served while one refresh runs; once it is older, a
+request waits for the next bounded refresh. A failed refresh returns
+`unavailable`. This prevents a burst of public probes from multiplying
+PostgreSQL, Redis, queue, worker, or chat checks.
 
-- PostgreSQL, durable Redis, and ephemeral Redis independently;
-- every worker mode required by that topology, using a durable Redis heartbeat;
-- the last fully successful maintenance scheduler tick;
-- bounded BullMQ queue metadata: oldest waiting work, active jobs that exceed
-  the stall threshold, and recent failed-job count; and
-- the chat gateway `/ready` endpoint only when the selected topology enables
-  chat.
+Trusted `cf-connecting-ip` values are rate-limited at 600 requests per minute.
+Requests without a valid trusted client IP are not rejected, so loopback and
+load-balancer probes remain usable. Every public result is `no-store`; the
+short cache is inside the application, rather than a public intermediary.
+
+The application writes low-cardinality structured events for public request
+snapshot source and age, refresh duration and classification, and suppressed
+concurrent refreshes. It does not log client IPs, URLs, secrets, or raw
+dependency errors.
+
+Docker uses `/api/live` for cheap web-process liveness. Public health is the
+cached dependency-aware signal; it returns HTTP 200 only for `ok` and a
+non-200 status otherwise.
+
+## Detailed health
+
+`GET /api/internal/health` is protected by fresh administrator authorization.
+Ordinary unauthenticated and non-administrator requests receive a 403 response.
+A successful response is `no-store` and includes the current detailed checks,
+the snapshot age, and check duration:
+
+- PostgreSQL, durable Redis, and ephemeral Redis;
+- required worker heartbeats and maintenance freshness;
+- bounded queue readiness; and
+- chat gateway readiness only for a chat-enabled topology.
+
+The detailed route does not return credentials, connection strings, queue
+payloads, job IDs, or raw dependency errors. It uses the same single-flight
+refresh as public health, so an operator refresh cannot create a duplicate
+concurrent diagnostic run.
 
 Workers keep the existing container-local `/tmp` heartbeat for Docker. They
 also refresh a 90-second durable Redis TTL record containing only worker mode,
@@ -40,36 +69,53 @@ and commit SHA into Compose. Manual production Compose use must set
 [`ops/topologies.json`](../../ops/topologies.json); production web startup
 rejects an absent or unknown value.
 
-Queue readiness is intentionally bounded: waiting and active reads do not scan
-all jobs, a suspected stall is an active job older than 15 minutes, and more
-than five failed jobs in the most recent 15 minutes degrades readiness. These
-limits are operational alerts, not a command to delete or retry work.
-
 ## `npm run doctor`
 
-Run the doctor command inside a reviewed runtime environment:
+Doctor has explicit scopes. It emits a redacted JSON `report` plus a central
+`evaluation` array. Every evaluation entry is `OK`, `WARNING`, `FAILURE`,
+or `NOT_APPLICABLE`; the process exit code is derived from those entries, not
+from a hand-picked subset.
 
 ```bash
-npm run doctor
+npm run doctor -- runtime --role web
+npm run doctor -- runtime --role worker-ingestion
+npm run doctor -- host
+npm run doctor -- migrations
+npm run doctor -- release --topology split-with-chat
 ```
 
-It emits JSON containing only safe metadata:
+- `runtime` checks only the selected service role's required variables and
+  runtime dependencies.
+- `host` checks backup-metadata evidence and the real Redis server identities.
+- `migrations` checks the migration status using the migration-only
+  credential boundary.
+- `release` aggregates runtime, host, and migration checks for the selected
+  topology.
 
-- present/missing variable names for the current service role;
-- production configuration-boundary validation errors with URLs redacted;
-- Redis separation result, runtime/migration database role names, and migration
-  status without connection strings;
-- selected topology, worker ownership modes, heartbeat/tick ages, queue counts
-  and thresholds, and chat readiness;
-- optional backup-metadata age, read from `ARCTIC_RSS_BACKUP_METADATA_PATH`
-  when that safe metadata file is mounted or supplied to the process.
+Exit code 0 means every required check passed. Exit code 1 means at least one
+required check failed or could not be evaluated. `--warn-only` is available
+only for exploratory use: it leaves failures visible in the JSON but suppresses
+exit-code enforcement. It is not a release approval.
 
-It never prints environment values, connection strings, secret values, queue
-payloads, job IDs, or backup contents. A nonzero exit means a required
-readiness or production-boundary check failed; it is diagnostic evidence, not
-deployment authorization. On a workstation with no configured local services,
-an unavailable report is expected.
+Doctor reports present/missing variable names, not values; runtime and migration
+database role names, not connection strings; selected topology, worker
+ownership, heartbeat and tick ages, queue thresholds, and chat readiness. It
+never prints environment values, credentials, queue payloads, job IDs, backup
+contents, or Redis server IDs.
+
+Host diagnostics compare both the normalized Redis endpoints and live Redis
+server identities. The report distinguishes:
+
+- the same endpoint;
+- aliases for the same server and database;
+- the same server with different logical databases; and
+- separate Redis servers.
+
+Arctic RSS requires separate durable and ephemeral Redis servers in production.
+A shared server is a host-diagnostic failure even when the logical databases
+differ. An unavailable endpoint is also a failure in enforcing host and release
+scopes.
 
 For a production release, retain the existing fresh typed
-`DEPLOY <short-sha>` gate and the release/rollback runbook. CI and doctor
-results do not authorize a deployment.
+`DEPLOY <short-sha>` gate and the release/rollback runbook. CI, health, and
+doctor results are diagnostic evidence; none authorizes a deployment.

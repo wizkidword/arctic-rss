@@ -938,6 +938,15 @@ sudo -n journalctl --vacuum-time=30d
 # `docker compose run` does not support `--no-build` on the OVH Compose
 # version. It never builds unless `--build` is explicitly supplied, so these
 # remain off-host-image-only while staying compatible with that runtime.
+mapfile -t pending_migrations < <(
+  comm -13 \
+    <(sudo -n find "$live/prisma/migrations" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort) \
+    <(sudo -n find "$stage/prisma/migrations" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+)
+for migration_name in "${pending_migrations[@]}"; do
+  test -n "$migration_name"
+  stage_compose run --rm --no-deps -T migrate node ./check-migration-risk.mjs --migration "$migration_name" </dev/null
+done
 stage_compose run --rm --no-deps -T migrate </dev/null
 stage_compose run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
 migration_status="verified"

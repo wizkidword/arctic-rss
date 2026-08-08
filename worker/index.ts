@@ -1,6 +1,5 @@
 import "dotenv/config"
 
-import { getHeapStatistics } from "node:v8"
 import { Worker } from "bullmq"
 import Redis from "ioredis"
 
@@ -93,8 +92,6 @@ import {
   clearWorkerHeartbeat,
   maintenanceTickMaxAgeMs,
   writeDurableMaintenanceTick,
-  writeDurableWorkerHeartbeat,
-  writeWorkerHeartbeat,
 } from "../src/lib/worker-health"
 import {
   getWorkerShutdownTimeoutMs,
@@ -107,6 +104,9 @@ import {
   workerHeartbeatPath,
 } from "./mode"
 import { createMaintenanceLock, type MaintenanceLease } from "./maintenance-lock"
+import { logWorkerMemory } from "./memory-log"
+import { startWorkerHeartbeat } from "./heartbeat"
+import { createManagedWorkerTargets } from "./managed-workers"
 
 const workerMode = getWorkerMode()
 assertSecureProductionConfiguration(process.env, `worker-${workerMode}`)
@@ -151,33 +151,6 @@ const chatEventOutboxIntervalMs = readClampedPositiveInteger({
 })
 const WORKER_HEARTBEAT_INTERVAL_MS = 30_000
 const WORKER_MEMORY_LOG_INTERVAL_MS = 5 * 60_000
-
-type WorkerMemoryLogContext = {
-  jobId?: string
-  outcome?: string
-  trigger: "startup" | "interval" | "opml_import"
-}
-
-function megabytes(bytes: number) {
-  return Math.round((bytes / 1024 / 1024) * 10) / 10
-}
-
-function logWorkerMemory(context: WorkerMemoryLogContext) {
-  const memory = process.memoryUsage()
-
-  console.log(
-    JSON.stringify({
-      event: "worker_memory",
-      ...context,
-      arrayBuffersMb: megabytes(memory.arrayBuffers),
-      externalMb: megabytes(memory.external),
-      heapLimitMb: megabytes(getHeapStatistics().heap_size_limit),
-      heapTotalMb: megabytes(memory.heapTotal),
-      heapUsedMb: megabytes(memory.heapUsed),
-      rssMb: megabytes(memory.rss),
-    })
-  )
-}
 
 console.log(`Arctic RSS ${workerMode} worker online`)
 console.log(
@@ -343,66 +316,16 @@ const podcastWorker = runsWorkerResponsibility(workerMode, "ingestion")
   )
   : undefined
 
-function trackActiveJobs(target: Worker) {
-  const activeJobIds = new Set<string>()
-
-  target.on("active", (job) => {
-    if (job.id) {
-      activeJobIds.add(job.id)
-    }
-  })
-  target.on("completed", (job) => {
-    if (job.id) {
-      activeJobIds.delete(job.id)
-    }
-  })
-  target.on("failed", (job) => {
-    if (job?.id) {
-      activeJobIds.delete(job.id)
-    }
-  })
-
-  return () => [...activeJobIds]
-}
-
-const managedWorkers = [
-  worker && { activeJobs: trackActiveJobs(worker), name: "feed-refresh", worker },
-  podcastWorker && {
-    activeJobs: trackActiveJobs(podcastWorker),
-    name: "podcast-refresh",
-    worker: podcastWorker,
-  },
-  aiDigestWorker && {
-    activeJobs: trackActiveJobs(aiDigestWorker),
-    name: "ai-digest",
-    worker: aiDigestWorker,
-  },
-  smartDigestWorker && {
-    activeJobs: trackActiveJobs(smartDigestWorker),
-    name: "smart-digest",
-    worker: smartDigestWorker,
-  },
-  smartDigestEmailWorker && {
-    activeJobs: trackActiveJobs(smartDigestEmailWorker),
-    name: "smart-digest-email",
-    worker: smartDigestEmailWorker,
-  },
-  opmlImportWorker && {
-    activeJobs: trackActiveJobs(opmlImportWorker),
-    name: "opml-import",
-    worker: opmlImportWorker,
-  },
-  bulkReadWorker && {
-    activeJobs: trackActiveJobs(bulkReadWorker),
-    name: "bulk-read",
-    worker: bulkReadWorker,
-  },
-  chatArticleIntegrationWorker && {
-    activeJobs: trackActiveJobs(chatArticleIntegrationWorker),
-    name: "chat-article-integration",
-    worker: chatArticleIntegrationWorker,
-  },
-].filter((target): target is NonNullable<typeof target> => Boolean(target))
+const managedWorkers = createManagedWorkerTargets([
+  { name: "feed-refresh", worker },
+  { name: "podcast-refresh", worker: podcastWorker },
+  { name: "ai-digest", worker: aiDigestWorker },
+  { name: "smart-digest", worker: smartDigestWorker },
+  { name: "smart-digest-email", worker: smartDigestEmailWorker },
+  { name: "opml-import", worker: opmlImportWorker },
+  { name: "bulk-read", worker: bulkReadWorker },
+  { name: "chat-article-integration", worker: chatArticleIntegrationWorker },
+])
 
 worker?.on("failed", (job, error) => {
   console.error(
@@ -1057,29 +980,14 @@ if (chatOutboxPublisher) {
   void publishPendingChatEvents()
 }
 
-function recordWorkerHeartbeat() {
-  const timestamp = Date.now()
-
-  writeWorkerHeartbeat({ path: heartbeatPath }).catch((error) => {
-    console.error(
-      `[worker] could not update health heartbeat: ${schedulerErrorMessage(error)}`
-    )
-  })
-  writeDurableWorkerHeartbeat({
-    client: durableHeartbeatStore,
-    instanceId: heartbeatInstanceId,
-    mode: workerMode,
-    timestamp,
-    version: heartbeatVersion,
-  }).catch((error) => {
-    console.error(
-      `[worker] could not update durable health heartbeat: ${schedulerErrorMessage(error)}`
-    )
-  })
-}
-
-const heartbeat = setInterval(recordWorkerHeartbeat, WORKER_HEARTBEAT_INTERVAL_MS)
-recordWorkerHeartbeat()
+const heartbeat = startWorkerHeartbeat({
+  instanceId: heartbeatInstanceId,
+  intervalMs: WORKER_HEARTBEAT_INTERVAL_MS,
+  mode: workerMode,
+  path: heartbeatPath,
+  store: durableHeartbeatStore,
+  version: heartbeatVersion,
+})
 const memoryTelemetry = setInterval(
   () => logWorkerMemory({ trigger: "interval" }),
   WORKER_MEMORY_LOG_INTERVAL_MS
@@ -1120,7 +1028,7 @@ function shutdown() {
         if (chatOutboxPublisher) {
           clearInterval(chatOutboxPublisher)
         }
-        clearInterval(heartbeat)
+        heartbeat.stop()
         clearInterval(memoryTelemetry)
       },
       timeoutMs: getWorkerShutdownTimeoutMs(),

@@ -24,5 +24,10 @@ evidence to imply a policy it did not record.
 
 OAuth-only deletion confirmation tokens are separately stored as SHA-256
 digests, expire after 15 minutes, are bound to the account and its auth version,
-and are consumed atomically with deletion. Expired tokens are included in the
-normal auth-token maintenance job.
+and are consumed atomically with deletion. The email keeps its raw token in a
+URL fragment only; the browser exchanges it through a same-origin POST for a
+short-lived signed `HttpOnly`, `SameSite=Lax` handoff cookie scoped to the final
+confirmation route. The raw token is never held by the confirmation page or
+sent in the final deletion request. A user-row lock serializes new confirmation
+requests, so a replacement invalidates the earlier token. Expired tokens are
+included in the normal auth-token maintenance job.

@@ -12,6 +12,7 @@ describe("runtime bundle build", () => {
     expect(script).toContain('entryPoints: ["services/chat-gateway/index.ts"]')
     expect(script).toContain('entryPoints: ["scripts/bootstrap-admin.ts"]')
     expect(script).toContain('entryPoints: ["scripts/repair-chat-read-markers.ts"]')
+    expect(script).toContain('entryPoints: ["scripts/check-migration-risk.ts"]')
     expect(script).toContain('format: "esm"')
     expect(script).toContain('packages: "external"')
     expect(script).toContain('target: "node24"')
