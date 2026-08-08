@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto"
+import { createHmac, scryptSync, timingSafeEqual } from "node:crypto"
 
 export const ACCOUNT_DELETION_HANDOFF_COOKIE = "arcticrss-account-deletion-handoff"
 export const ACCOUNT_DELETION_HANDOFF_COOKIE_PATH = "/api/account/deletion/confirmation"
@@ -6,6 +6,9 @@ export const ACCOUNT_DELETION_HANDOFF_COOKIE_PATH = "/api/account/deletion/confi
 const HANDOFF_PREFIX = "arcticrss-account-deletion-handoff"
 const HANDOFF_VERSION = "v1"
 const MIN_SECRET_BYTES = 32
+const HANDOFF_SIGNATURE_DERIVATION_BYTES = 32
+const HANDOFF_SIGNATURE_DERIVATION_COST = 16_384
+const HANDOFF_SIGNATURE_DERIVATION_CONTEXT = "arcticrss-account-deletion-handoff-v1"
 
 type AccountDeletionHandoffPayload = {
   exp: number
@@ -150,8 +153,18 @@ function assertSecret(secret: string) {
 }
 
 function sign(encodedPayload: string, secret: string) {
+  const signingInput = scryptSync(
+    `${HANDOFF_PREFIX}.${HANDOFF_VERSION}.${encodedPayload}`,
+    HANDOFF_SIGNATURE_DERIVATION_CONTEXT,
+    HANDOFF_SIGNATURE_DERIVATION_BYTES,
+    {
+      N: HANDOFF_SIGNATURE_DERIVATION_COST,
+      maxmem: 64 * 1024 * 1024,
+    }
+  )
+
   return createHmac("sha256", secret)
-    .update(`${HANDOFF_PREFIX}.${HANDOFF_VERSION}.${encodedPayload}`)
+    .update(signingInput)
     .digest("base64url")
 }
 
