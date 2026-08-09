@@ -405,6 +405,17 @@ export async function disableUserAction(
             userId: user.id,
           },
         }),
+        transaction.aiDigest.updateMany({
+          data: {
+            completedAt: disabledAt,
+            errorMessage: "ACCOUNT_DISABLED",
+            status: "CANCELED",
+          },
+          where: {
+            status: { in: ["PENDING", "PROCESSING", "FAILED"] },
+            userId: user.id,
+          },
+        }),
         transaction.digestRun.updateMany({
           data: {
             completedAt: disabledAt,

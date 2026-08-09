@@ -374,6 +374,9 @@ describe("disableUserAction", () => {
       savedSearch: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
+      aiDigest: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       smartDigestRule: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
@@ -434,6 +437,17 @@ describe("disableUserAction", () => {
       },
       where: {
         isEnabled: true,
+        userId: "user-1",
+      },
+    })
+    expect(transaction.aiDigest.updateMany).toHaveBeenCalledWith({
+      data: {
+        completedAt: expect.any(Date),
+        errorMessage: "ACCOUNT_DISABLED",
+        status: "CANCELED",
+      },
+      where: {
+        status: { in: ["PENDING", "PROCESSING", "FAILED"] },
         userId: "user-1",
       },
     })

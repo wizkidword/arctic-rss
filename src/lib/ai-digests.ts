@@ -14,6 +14,11 @@ import {
   reserveAiUsageOperation,
   runWithAiOperationLeaseHeartbeat,
 } from "./ai-usage"
+import {
+  getBackgroundEligibility,
+  type BackgroundEligibility,
+  type BackgroundEligibilityStore,
+} from "./background-eligibility"
 
 const DEFAULT_LOCAL_DIGEST_MODEL = "local-digest-v1"
 const DEFAULT_OPENAI_DIGEST_MODEL = "gpt-5.4-mini"
@@ -25,7 +30,12 @@ export const AI_DIGEST_PROMPT_VERSION = "2026-08-01"
 const AI_DIGEST_PERIODS = ["DAILY", "WEEKLY"] as const
 
 export type AiDigestSection = "MUST_READ" | "SKIM_LATER"
-export type AiDigestStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
+export type AiDigestStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELED"
 export type AiDigestPeriod = (typeof AI_DIGEST_PERIODS)[number]
 
 export type AiDigestProviderArticle = {
@@ -119,7 +129,7 @@ type DigestArticleRecord = {
   url: string
 }
 
-export type AiDigestStore = Omit<AiUsageLedgerStore, "$transaction"> & {
+export type AiDigestStore = Omit<AiUsageLedgerStore, "$transaction" | "user"> & {
   $transaction<T>(
     callback: (transaction: AiDigestStore) => Promise<T>,
   ): Promise<T>
@@ -140,6 +150,7 @@ export type AiDigestStore = Omit<AiUsageLedgerStore, "$transaction"> & {
     count(args: Record<string, unknown>): Promise<number>
     findMany(args: Record<string, unknown>): Promise<DigestArticleRecord[]>
   }
+  user: AiUsageLedgerStore["user"] & BackgroundEligibilityStore["user"]
 }
 
 export class AiDigestError extends Error {
@@ -302,7 +313,30 @@ export async function processAiDigestWithClient({
     }
   }
 
+  if (digest.status === "CANCELED") {
+    return {
+      articleCount: digest.articleCount ?? 0,
+      digestId,
+      status: "CANCELED" as const,
+    }
+  }
+
   const generatedAt = now()
+
+  const initialEligibility = await getBackgroundEligibility({
+    store,
+    userId: digest.userId,
+  })
+  if (!initialEligibility.aiAllowed) {
+    return cancelIneligibleAiDigest({
+      digest,
+      digestId,
+      eligibility: initialEligibility,
+      now: generatedAt,
+      store,
+    })
+  }
+
   let operationId: string | null = null
   let operationLease: AiOperationLease | null = null
 
@@ -437,6 +471,36 @@ export async function processAiDigestWithClient({
     }
 
     const providerArticles = articles.map(mapProviderArticle)
+
+    const latestEligibility = await getBackgroundEligibility({
+      store,
+      userId: digest.userId,
+    })
+    if (!latestEligibility.aiAllowed) {
+      const released = await failAiUsageOperation({
+        errorCode: aiDigestIneligibilityCode(latestEligibility),
+        lease: claimedLease,
+        operationId: reservationId,
+        store,
+      })
+
+      if (!released) {
+        return {
+          articleCount: digest.articleCount ?? 0,
+          digestId,
+          status: "PROCESSING" as const,
+        }
+      }
+
+      return cancelIneligibleAiDigest({
+        digest,
+        digestId,
+        eligibility: latestEligibility,
+        now: generatedAt,
+        store,
+      })
+    }
+
     const generated = normalizeDigestResult(
       await runWithAiOperationLeaseHeartbeat({
         lease: claimedLease,
@@ -570,6 +634,43 @@ export async function processAiDigestWithClient({
 
     throw new AiDigestError(message)
   }
+}
+
+async function cancelIneligibleAiDigest({
+  digest,
+  digestId,
+  eligibility,
+  now,
+  store,
+}: {
+  digest: AiDigestRecord
+  digestId: string
+  eligibility: BackgroundEligibility
+  now: Date
+  store: AiDigestStore
+}) {
+  await store.aiDigest.update({
+    data: {
+      completedAt: now,
+      errorMessage: aiDigestIneligibilityCode(eligibility),
+      status: "CANCELED",
+    },
+    where: {
+      id: digestId,
+    },
+  })
+
+  return {
+    articleCount: digest.articleCount ?? 0,
+    digestId,
+    status: "CANCELED" as const,
+  }
+}
+
+function aiDigestIneligibilityCode(eligibility: BackgroundEligibility) {
+  return eligibility.reason === "account-disabled"
+    ? "ACCOUNT_DISABLED"
+    : "ACCOUNT_INELIGIBLE"
 }
 
 export async function getAiDigestForUser({
