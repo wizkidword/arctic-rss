@@ -37,6 +37,7 @@ describe("SavedSearchList", () => {
             monitorCursorArticleId: null,
             monitorCursorCreatedAt: null,
             monitorEnabled: true,
+            monitorFailureCount: 0,
             monitorLastRunAt: null,
             monitorNewMatchCount: 0,
             monitorNextRunAt: null,

@@ -28,6 +28,7 @@ export type SavedSearchRecord = {
   monitorCursorCreatedAt: Date | null
   monitorAction: SavedSearchMonitorAction
   monitorEnabled: boolean
+  monitorFailureCount: number
   monitorLastRunAt: Date | null
   monitorNewMatchCount: number
   monitorNextRunAt: Date | null
@@ -70,6 +71,7 @@ type SavedSearchStore = {
         | "monitorCursorCreatedAt"
         | "monitorAction"
         | "monitorEnabled"
+        | "monitorFailureCount"
         | "monitorLastRunAt"
         | "monitorNewMatchCount"
         | "monitorNextRunAt"

@@ -13,6 +13,9 @@ export const DEFAULT_SAVED_MONITOR_BATCH_SIZE = 25
 export const DEFAULT_SAVED_MONITOR_INTERVAL_MS = 5 * 60_000
 export const DEFAULT_SAVED_MONITOR_LEASE_MS = 10 * 60_000
 export const DEFAULT_SAVED_MONITOR_MATCH_BATCH_SIZE = 100
+export const DEFAULT_SAVED_MONITOR_RETRY_BASE_MS = 60_000
+export const DEFAULT_SAVED_MONITOR_RETRY_MAX_MS = 60 * 60_000
+const MAX_SAVED_MONITOR_FAILURE_COUNT = 16
 
 type DueSavedMonitor = Pick<
   SavedSearchRecord,
@@ -22,6 +25,7 @@ type DueSavedMonitor = Pick<
   | "monitorCursorArticleId"
   | "monitorCursorCreatedAt"
   | "monitorAction"
+  | "monitorFailureCount"
   | "monitorNextRunAt"
   | "publishedAfter"
   | "publishedBefore"
@@ -68,6 +72,8 @@ export type SavedMonitorSettings = {
   intervalMs: number
   leaseMs: number
   matchBatchSize: number
+  retryBaseMs: number
+  retryMaxMs: number
 }
 
 export type SavedMonitorTickResult = {
@@ -88,6 +94,21 @@ export function savedMonitorSettings(
     minimum: 60_000,
     value: environment.SAVED_MONITOR_INTERVAL_MS,
   })
+  const retryBaseMs = readClampedPositiveInteger({
+    fallback: DEFAULT_SAVED_MONITOR_RETRY_BASE_MS,
+    maximum: 60 * 60_000,
+    minimum: 10_000,
+    value: environment.SAVED_MONITOR_RETRY_BASE_MS,
+  })
+  const retryMaxMs = Math.max(
+    retryBaseMs,
+    readClampedPositiveInteger({
+      fallback: DEFAULT_SAVED_MONITOR_RETRY_MAX_MS,
+      maximum: 24 * 60 * 60_000,
+      minimum: DEFAULT_SAVED_MONITOR_RETRY_BASE_MS,
+      value: environment.SAVED_MONITOR_RETRY_MAX_MS,
+    })
+  )
 
   return {
     batchSize: readClampedPositiveInteger({
@@ -104,6 +125,8 @@ export function savedMonitorSettings(
       minimum: 1,
       value: environment.SAVED_MONITOR_MATCH_BATCH_SIZE,
     }),
+    retryBaseMs,
+    retryMaxMs,
   }
 }
 
@@ -143,6 +166,7 @@ export async function processDueSavedMonitors({
       monitorCursorArticleId: true,
       monitorCursorCreatedAt: true,
       monitorAction: true,
+      monitorFailureCount: true,
       monitorNextRunAt: true,
       publishedAfter: true,
       publishedBefore: true,
@@ -241,9 +265,16 @@ export async function processDueSavedMonitors({
       result.continued += continued ? 1 : 0
     } catch {
       result.failed += 1
+      const failureCount = Math.min(
+        MAX_SAVED_MONITOR_FAILURE_COUNT,
+        Math.max(0, monitor.monitorFailureCount) + 1
+      )
       await store.savedSearch.updateMany({
         data: {
-          monitorNextRunAt: new Date(now.getTime() + settings.intervalMs),
+          monitorFailureCount: failureCount,
+          monitorNextRunAt: new Date(
+            now.getTime() + savedMonitorRetryDelay({ failureCount, settings })
+          ),
         },
         where: {
           id: monitor.id,
@@ -316,6 +347,7 @@ async function completeSavedMonitorRun({
     data: {
       monitorCursorArticleId: cursor.articleId,
       monitorCursorCreatedAt: cursor.createdAt,
+      monitorFailureCount: 0,
       monitorLastRunAt: now,
       monitorNextRunAt: nextRunAt,
       ...(increment ? { monitorNewMatchCount: { increment } } : {}),
@@ -329,6 +361,20 @@ async function completeSavedMonitorRun({
   })
 
   return result.count === 1
+}
+
+function savedMonitorRetryDelay({
+  failureCount,
+  settings,
+}: {
+  failureCount: number
+  settings: Pick<SavedMonitorSettings, "retryBaseMs" | "retryMaxMs">
+}) {
+  const exponent = Math.min(Math.max(0, failureCount - 1), 30)
+  return Math.min(
+    Math.max(settings.retryBaseMs, settings.retryMaxMs),
+    settings.retryBaseMs * 2 ** exponent
+  )
 }
 
 function savedMonitorCursor(

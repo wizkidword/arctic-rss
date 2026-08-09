@@ -941,6 +941,9 @@ model SavedSearch {
   monitorEnabled         Boolean   @default(false)
   monitorAction          String    @default("count")
   monitorNewMatchCount   Int       @default(0)
+  // Consecutive failed monitor attempts; monitorLastRunAt remains the last
+  // successful pass and monitorNextRunAt is the next eligible attempt.
+  monitorFailureCount    Int       @default(0)
   monitorLastRunAt       DateTime?
   monitorNextRunAt       DateTime?
   monitorCursorCreatedAt DateTime?

@@ -77,6 +77,7 @@ import {
 import { assertSecureProductionConfiguration } from "../src/lib/production-security"
 import { getRuntimeTopology } from "../src/lib/runtime-topology"
 import { cleanupExpiredSecurityEvents } from "../src/lib/security-event-maintenance"
+import { reportSourceOrphanRetention } from "../src/lib/source-orphan-retention"
 import { processSmartDigestEmailDelivery } from "../src/lib/smart-digest-delivery"
 import {
   closeSmartDigestEmailQueue,
@@ -108,6 +109,7 @@ import {
   workerHeartbeatPath,
 } from "./mode"
 import { createMaintenanceLock, type MaintenanceLease } from "./maintenance-lock"
+import { MaintenanceSchedule } from "./maintenance-schedule"
 import { createWorkerControlPlaneRedis } from "./control-plane-redis"
 import { logWorkerMemory } from "./memory-log"
 import { startWorkerHeartbeat } from "./heartbeat"
@@ -177,6 +179,28 @@ const WORKER_HEARTBEAT_INTERVAL_MS = 30_000
 const WORKER_MEMORY_LOG_INTERVAL_MS = 5 * 60_000
 const HEALTH_SNAPSHOT_INTERVAL_MS = 20_000
 const HEALTH_SNAPSHOT_INITIAL_DELAY_MS = 5_000
+const SOURCE_ORPHAN_REPORT_INTERVAL_MS = 24 * 60 * 60_000
+const authTokenMaintenanceSchedule = new MaintenanceSchedule({
+  normalIntervalMs: authTokenMaintenanceIntervalMs,
+})
+const chatRetentionMaintenanceSchedule = new MaintenanceSchedule({
+  normalIntervalMs: chatRetentionIntervalMs,
+})
+const securityEventMaintenanceSchedule = new MaintenanceSchedule({
+  normalIntervalMs: securityEventMaintenanceIntervalMs,
+})
+const aiOperationReconciliationSchedule = new MaintenanceSchedule({
+  normalIntervalMs: schedulerIntervalMs,
+})
+const savedMonitorMaintenanceSchedule = new MaintenanceSchedule({
+  normalIntervalMs: schedulerIntervalMs,
+})
+const sourceOrphanReportSchedule = new MaintenanceSchedule({
+  normalIntervalMs: SOURCE_ORPHAN_REPORT_INTERVAL_MS,
+})
+const healthSnapshotSchedule = new MaintenanceSchedule({
+  normalIntervalMs: HEALTH_SNAPSHOT_INTERVAL_MS,
+})
 
 console.log(`Arctic RSS ${workerMode} worker online`)
 console.log(
@@ -513,14 +537,20 @@ async function enqueueDueSmartDigests(lease?: MaintenanceLease) {
 let schedulerRunning = false
 let schedulerTickPromise: Promise<void> | undefined
 let healthSnapshotPromise: Promise<void> | undefined
-let nextAuthTokenMaintenanceAt = 0
-let nextChatRetentionAt = 0
-let nextSecurityEventMaintenanceAt = 0
 let chatRetentionContinuation: ChatRetentionContinuation | undefined
-let chatRetentionFailureCount = 0
 
 function schedulerErrorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : "unknown error"
+}
+
+function maintenanceScheduleMetrics(schedule: MaintenanceSchedule) {
+  const snapshot = schedule.snapshot(Date.now())
+
+  return {
+    failureCount: snapshot.failureCount,
+    lastSuccessAgeMs: snapshot.lastSuccessAgeMs,
+    nextEligibleAt: new Date(snapshot.nextEligibleAt).toISOString(),
+  }
 }
 
 function recordTerminalSourceRefreshFailure(
@@ -617,6 +647,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       securityEventMaintenanceResult,
       aiOperationReconciliationResult,
       savedMonitorResult,
+      sourceOrphanReportResult,
     ] = await Promise.allSettled([
       runLeaseAwareMaintenance(lease, () => enqueueDueFeeds(lease)),
       runLeaseAwareMaintenance(lease, () => enqueueDuePodcasts(lease)),
@@ -628,6 +659,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       runLeaseAwareMaintenance(lease, runSecurityEventMaintenance),
       runLeaseAwareMaintenance(lease, () => runAiOperationReconciliation(lease)),
       runLeaseAwareMaintenance(lease, () => runSavedMonitors(lease)),
+      runLeaseAwareMaintenance(lease, () => runSourceOrphanReporting(lease)),
     ])
 
     if (feedResult.status === "fulfilled") {
@@ -669,20 +701,6 @@ async function schedulerTick(lease?: MaintenanceLease) {
       )
     }
 
-    if (
-      chatRetentionResult.status === "fulfilled" &&
-      !("disabled" in chatRetentionResult.value && chatRetentionResult.value.disabled)
-    ) {
-      chatRetentionFailureCount = 0
-      console.log(
-        JSON.stringify({
-          event: "chat_retention",
-          ...chatRetentionResult.value,
-          outcome: "success",
-        })
-      )
-    }
-
     if (feedResult.status === "rejected") {
       console.error(
         `[worker] feed scheduler failed: ${schedulerErrorMessage(feedResult.reason)}`
@@ -718,11 +736,10 @@ async function schedulerTick(lease?: MaintenanceLease) {
     }
 
     if (chatRetentionResult.status === "rejected") {
-      chatRetentionFailureCount += 1
       console.error(
         JSON.stringify({
           event: "chat_retention",
-          failureCount: chatRetentionFailureCount,
+          ...maintenanceScheduleMetrics(chatRetentionMaintenanceSchedule),
           outcome: "failure",
           reason: schedulerErrorMessage(chatRetentionResult.reason),
         })
@@ -731,63 +748,56 @@ async function schedulerTick(lease?: MaintenanceLease) {
 
     if (maintenanceResult.status === "rejected") {
       console.error(
-        `[worker] auth token maintenance failed: ${schedulerErrorMessage(
-          maintenanceResult.reason
-        )}`
-      )
-    }
-
-    if (securityEventMaintenanceResult.status === "fulfilled") {
-      console.log(
         JSON.stringify({
-          event: "security_event_maintenance",
-          outcome: "success",
-          ...securityEventMaintenanceResult.value,
+          event: "auth_token_maintenance",
+          ...maintenanceScheduleMetrics(authTokenMaintenanceSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(maintenanceResult.reason),
         })
       )
     }
 
     if (securityEventMaintenanceResult.status === "rejected") {
       console.error(
-        `[worker] security event maintenance failed: ${schedulerErrorMessage(
-          securityEventMaintenanceResult.reason
-        )}`
-      )
-    }
-
-    if (aiOperationReconciliationResult.status === "fulfilled") {
-      console.log(
         JSON.stringify({
-          event: "ai_operation_reconciliation",
-          outcome: "success",
-          ...aiOperationReconciliationResult.value,
+          event: "security_event_maintenance",
+          ...maintenanceScheduleMetrics(securityEventMaintenanceSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(securityEventMaintenanceResult.reason),
         })
       )
     }
 
     if (aiOperationReconciliationResult.status === "rejected") {
       console.error(
-        `[worker] AI operation reconciliation failed: ${schedulerErrorMessage(
-          aiOperationReconciliationResult.reason
-        )}`
-      )
-    }
-
-    if (savedMonitorResult.status === "fulfilled") {
-      console.log(
         JSON.stringify({
-          event: "saved_monitor_scheduler",
-          outcome: "success",
-          ...savedMonitorResult.value,
+          event: "ai_operation_reconciliation",
+          ...maintenanceScheduleMetrics(aiOperationReconciliationSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(aiOperationReconciliationResult.reason),
         })
       )
     }
 
     if (savedMonitorResult.status === "rejected") {
       console.error(
-        `[worker] saved monitor scheduler failed: ${schedulerErrorMessage(
-          savedMonitorResult.reason
-        )}`
+        JSON.stringify({
+          event: "saved_monitor_scheduler",
+          ...maintenanceScheduleMetrics(savedMonitorMaintenanceSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(savedMonitorResult.reason),
+        })
+      )
+    }
+
+    if (sourceOrphanReportResult.status === "rejected") {
+      console.error(
+        JSON.stringify({
+          event: "source_orphan_retention_report",
+          ...maintenanceScheduleMetrics(sourceOrphanReportSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(sourceOrphanReportResult.reason),
+        })
       )
     }
 
@@ -802,6 +812,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       securityEventMaintenanceResult,
       aiOperationReconciliationResult,
       savedMonitorResult,
+      sourceOrphanReportResult,
     ].every((result) => result.status === "fulfilled")
   } finally {
     schedulerRunning = false
@@ -887,7 +898,11 @@ function failedSystemHealthResult(): SystemHealthResult {
 }
 
 function runHealthSnapshot() {
-  if (healthSnapshotPromise || !maintenanceLock) {
+  if (
+    healthSnapshotPromise ||
+    !maintenanceLock ||
+    !healthSnapshotSchedule.isDue(Date.now())
+  ) {
     return healthSnapshotPromise
   }
 
@@ -910,11 +925,19 @@ function runHealthSnapshot() {
       })
       lease.assertHeld()
 
+      if (checkFailed) {
+        healthSnapshotSchedule.recordFailure(Date.now())
+      } else {
+        healthSnapshotSchedule.recordSuccess(Date.now())
+      }
+
       console.info(
         JSON.stringify({
           checkFailed,
           durationMs: Math.max(0, Date.now() - startedAt),
           event: "health_snapshot",
+          outcome: checkFailed ? "failure" : "success",
+          ...maintenanceScheduleMetrics(healthSnapshotSchedule),
           status: snapshot.status,
           topology: snapshot.topology,
         })
@@ -925,8 +948,16 @@ function runHealthSnapshot() {
         console.warn(JSON.stringify({ event: "health_snapshot", outcome: "lease_unavailable" }))
       }
     })
-    .catch(() => {
-      console.error(JSON.stringify({ event: "health_snapshot", outcome: "failed" }))
+    .catch((error) => {
+      healthSnapshotSchedule.recordFailure(Date.now())
+      console.error(
+        JSON.stringify({
+          event: "health_snapshot",
+          ...maintenanceScheduleMetrics(healthSnapshotSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(error),
+        })
+      )
     })
     .finally(() => {
       healthSnapshotPromise = undefined
@@ -936,33 +967,47 @@ function runHealthSnapshot() {
 }
 
 async function runChatRetention(lease?: MaintenanceLease) {
-  if (!getChatFeatureFlags().enabled) {
+  if (!chatRetentionMaintenanceSchedule.isDue(Date.now())) {
     return { disabled: true }
   }
 
-  const now = Date.now()
+  try {
+    if (!getChatFeatureFlags().enabled) {
+      return { disabled: true }
+    }
 
-  if (now < nextChatRetentionAt) {
-    return { disabled: true }
+    const result = await purgeExpiredChatRecords({
+      assertLeaseHeld: lease?.assertHeld,
+      batchSize: chatRetentionSettings.batchSize,
+      continuation: chatRetentionContinuation,
+      maxBatches: chatRetentionSettings.maxBatches,
+      maxRuntimeMs: chatRetentionSettings.maxRuntimeMs,
+      store: prisma,
+    })
+    // Another worker may own the distributed lock. Preserve our local cursor in
+    // that case so a skipped pass cannot make the next successful pass rescan
+    // from the beginning.
+    if (!result.skipped) {
+      chatRetentionContinuation = result.continuation ?? undefined
+      chatRetentionMaintenanceSchedule.recordSuccess(Date.now())
+    } else {
+      chatRetentionMaintenanceSchedule.recordDeferred(Date.now())
+    }
+
+    console.log(
+      JSON.stringify({
+        event: "chat_retention",
+        ...result,
+        outcome: result.skipped ? "skipped" : "success",
+        ...maintenanceScheduleMetrics(chatRetentionMaintenanceSchedule),
+      })
+    )
+
+    return result
+  } catch (error) {
+    chatRetentionMaintenanceSchedule.recordFailure(Date.now())
+    throw error
   }
-
-  nextChatRetentionAt = now + chatRetentionIntervalMs
-  const result = await purgeExpiredChatRecords({
-    assertLeaseHeld: lease?.assertHeld,
-    batchSize: chatRetentionSettings.batchSize,
-    continuation: chatRetentionContinuation,
-    maxBatches: chatRetentionSettings.maxBatches,
-    maxRuntimeMs: chatRetentionSettings.maxRuntimeMs,
-    store: prisma,
-  })
-  // Another worker may own the distributed lock. Preserve our local cursor in
-  // that case so a skipped pass cannot make the next successful pass rescan
-  // from the beginning.
-  if (!result.skipped) {
-    chatRetentionContinuation = result.continuation ?? undefined
-  }
-
-  return result
 }
 
 async function enqueuePendingSmartDigestEmails(lease?: MaintenanceLease) {
@@ -986,63 +1031,149 @@ async function enqueuePendingSmartDigestEmails(lease?: MaintenanceLease) {
 }
 
 async function runAuthTokenMaintenance() {
-  const now = Date.now()
-
-  if (now < nextAuthTokenMaintenanceAt) {
+  if (!authTokenMaintenanceSchedule.isDue(Date.now())) {
     return
   }
 
-  nextAuthTokenMaintenanceAt = now + authTokenMaintenanceIntervalMs
-
-  const result = await cleanupExpiredAuthTokens({
-    batchSize: authTokenMaintenanceBatchSize,
-    store: prisma,
-  })
-  const deleted =
-    result.passwordResetTokensDeleted +
-    result.emailVerificationTokensDeleted +
-    result.accountDeletionConfirmationTokensDeleted
-
-  console.log(
-    JSON.stringify({
-      accountDeletionConfirmationTokensDeleted: result.accountDeletionConfirmationTokensDeleted,
-      emailVerificationTokensDeleted: result.emailVerificationTokensDeleted,
-      event: "auth_token_maintenance",
-      outcome: "success",
-      passwordResetTokensDeleted: result.passwordResetTokensDeleted,
-      totalDeleted: deleted,
+  try {
+    const result = await cleanupExpiredAuthTokens({
+      batchSize: authTokenMaintenanceBatchSize,
+      store: prisma,
     })
-  )
+    const deleted =
+      result.passwordResetTokensDeleted +
+      result.emailVerificationTokensDeleted +
+      result.accountDeletionConfirmationTokensDeleted
+
+    authTokenMaintenanceSchedule.recordSuccess(Date.now())
+    console.log(
+      JSON.stringify({
+        accountDeletionConfirmationTokensDeleted: result.accountDeletionConfirmationTokensDeleted,
+        emailVerificationTokensDeleted: result.emailVerificationTokensDeleted,
+        event: "auth_token_maintenance",
+        outcome: "success",
+        passwordResetTokensDeleted: result.passwordResetTokensDeleted,
+        totalDeleted: deleted,
+        ...maintenanceScheduleMetrics(authTokenMaintenanceSchedule),
+      })
+    )
+  } catch (error) {
+    authTokenMaintenanceSchedule.recordFailure(Date.now())
+    throw error
+  }
 }
 
 async function runSecurityEventMaintenance() {
-  const now = Date.now()
-
-  if (now < nextSecurityEventMaintenanceAt) {
-    return { securityEventsDeleted: 0 }
+  if (!securityEventMaintenanceSchedule.isDue(Date.now())) {
+    return
   }
 
-  nextSecurityEventMaintenanceAt = now + securityEventMaintenanceIntervalMs
-  return cleanupExpiredSecurityEvents({
-    batchSize: securityEventMaintenanceBatchSize,
-    store: prisma,
-  })
+  try {
+    const result = await cleanupExpiredSecurityEvents({
+      batchSize: securityEventMaintenanceBatchSize,
+      store: prisma,
+    })
+    securityEventMaintenanceSchedule.recordSuccess(Date.now())
+    console.log(
+      JSON.stringify({
+        event: "security_event_maintenance",
+        outcome: "success",
+        ...result,
+        ...maintenanceScheduleMetrics(securityEventMaintenanceSchedule),
+      })
+    )
+  } catch (error) {
+    securityEventMaintenanceSchedule.recordFailure(Date.now())
+    throw error
+  }
 }
 
 async function runAiOperationReconciliation(lease?: MaintenanceLease) {
-  return reconcileExpiredAiUsageOperations({
-    assertLeaseHeld: lease?.assertHeld,
-    batchSize: schedulerBatchSize,
-    store: prisma as unknown as Parameters<typeof reconcileExpiredAiUsageOperations>[0]["store"],
-  })
+  if (!aiOperationReconciliationSchedule.isDue(Date.now())) {
+    return
+  }
+
+  try {
+    const result = await reconcileExpiredAiUsageOperations({
+      assertLeaseHeld: lease?.assertHeld,
+      batchSize: schedulerBatchSize,
+      store: prisma as unknown as Parameters<typeof reconcileExpiredAiUsageOperations>[0]["store"],
+    })
+    aiOperationReconciliationSchedule.recordSuccess(Date.now())
+    console.log(
+      JSON.stringify({
+        event: "ai_operation_reconciliation",
+        outcome: "success",
+        ...result,
+        ...maintenanceScheduleMetrics(aiOperationReconciliationSchedule),
+      })
+    )
+  } catch (error) {
+    aiOperationReconciliationSchedule.recordFailure(Date.now())
+    throw error
+  }
 }
 
 async function runSavedMonitors(lease?: MaintenanceLease) {
-  return processDueSavedMonitors({
-    assertLeaseHeld: lease?.assertHeld,
-    settings: savedMonitorSchedulerSettings,
-    store: prisma as unknown as Parameters<typeof processDueSavedMonitors>[0]["store"],
-  })
+  if (!savedMonitorMaintenanceSchedule.isDue(Date.now())) {
+    return
+  }
+
+  try {
+    const result = await processDueSavedMonitors({
+      assertLeaseHeld: lease?.assertHeld,
+      settings: savedMonitorSchedulerSettings,
+      store: prisma as unknown as Parameters<typeof processDueSavedMonitors>[0]["store"],
+    })
+    if (result.failed) {
+      savedMonitorMaintenanceSchedule.recordFailure(Date.now())
+      console.error(
+        JSON.stringify({
+          event: "saved_monitor_scheduler",
+          outcome: "partial_failure",
+          ...result,
+          ...maintenanceScheduleMetrics(savedMonitorMaintenanceSchedule),
+        })
+      )
+    } else {
+      savedMonitorMaintenanceSchedule.recordSuccess(Date.now())
+      console.log(
+        JSON.stringify({
+          event: "saved_monitor_scheduler",
+          outcome: "success",
+          ...result,
+          ...maintenanceScheduleMetrics(savedMonitorMaintenanceSchedule),
+        })
+      )
+    }
+  } catch (error) {
+    savedMonitorMaintenanceSchedule.recordFailure(Date.now())
+    throw error
+  }
+}
+
+async function runSourceOrphanReporting(lease?: MaintenanceLease) {
+  if (!sourceOrphanReportSchedule.isDue(Date.now())) {
+    return
+  }
+
+  try {
+    lease?.assertHeld()
+    const report = await reportSourceOrphanRetention({ store: prisma })
+    lease?.assertHeld()
+    sourceOrphanReportSchedule.recordSuccess(Date.now())
+    console.info(
+      JSON.stringify({
+        event: "source_orphan_retention_report",
+        outcome: "success",
+        ...report,
+        ...maintenanceScheduleMetrics(sourceOrphanReportSchedule),
+      })
+    )
+  } catch (error) {
+    sourceOrphanReportSchedule.recordFailure(Date.now())
+    throw error
+  }
 }
 
 let chatOutboxPublishPromise: Promise<void> | undefined

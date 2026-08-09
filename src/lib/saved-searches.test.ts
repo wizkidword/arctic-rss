@@ -27,6 +27,7 @@ function savedSearchRecord(
     monitorCursorCreatedAt: null,
     monitorAction: "count",
     monitorEnabled: false,
+    monitorFailureCount: 0,
     monitorLastRunAt: null,
     monitorNewMatchCount: 0,
     monitorNextRunAt: null,
