@@ -190,6 +190,13 @@ function Get-ReleaseTopology {
   $applicationServices = @($knownServices | Where-Object {
     $_ -notin @("postgres", "redis", "redis-ephemeral", "migrate", "cloudflared")
   })
+  # Releases from before the dedicated worker-health service used this exact
+  # chat topology. Retain it only as an explicit prior-release signature so
+  # the guard can create a rollback record for that controlled upgrade path;
+  # unknown active service layouts still fail closed below.
+  $legacyTopologyCatalog = @(
+    "all-in-one-with-chat|chat-gateway,edge-proxy,web,worker"
+  )
   $topologyCatalog = @(
     $manifest.topologies.PSObject.Properties | ForEach-Object {
       $catalogName = [string]$_.Name
@@ -200,8 +207,8 @@ function Get-ReleaseTopology {
 
       "$catalogName|$($catalogServices -join ',')"
     }
-  )
-  if ($topologyCatalog.Count -ne 4 -or @($topologyCatalog | Select-Object -Unique).Count -ne 4) {
+  ) + $legacyTopologyCatalog
+  if ($topologyCatalog.Count -ne 5 -or @($topologyCatalog | Select-Object -Unique).Count -ne 5) {
     throw "The topology manifest has an ambiguous release-service catalog."
   }
 
