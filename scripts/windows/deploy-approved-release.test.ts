@@ -24,6 +24,20 @@ describe("approved release command", () => {
     expect(script).not.toContain('"Browser smoke test"')
   })
 
+  it("retries post-release local and public health checks before failing", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain("function Invoke-ExpectedCurlResponse")
+    expect(script).toContain("$MaxAttempts = 12")
+    expect(script).toContain("Start-Sleep -Seconds $RetryDelaySeconds")
+    expect(script).toContain("wait_for_local_endpoint()")
+    expect(script).toContain("for attempt in $(seq 1 12); do")
+    expect(script).toContain('curl -fsS --connect-timeout 5 --max-time 10 "$@" 2>/dev/null || true')
+    expect(script).toContain('wait_for_local_endpoint health \'{"status":"ok"}\'')
+    expect(script).toContain('$publicHealth = Invoke-ExpectedCurlResponse -Label "Public health endpoint"')
+    expect(script).toContain('$loginStatus = Invoke-ExpectedCurlResponse -Label "Public login page"')
+  })
+
   it("keeps uploaded release images isolated from the live Compose image tags", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 

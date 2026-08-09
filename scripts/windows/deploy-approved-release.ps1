@@ -51,6 +51,31 @@ function Invoke-LocalCheck {
   }
 }
 
+function Invoke-ExpectedCurlResponse {
+  param(
+    [Parameter(Mandatory)][string]$Label,
+    [Parameter(Mandatory)][string]$ExpectedResponse,
+    [Parameter(Mandatory)][string[]]$Arguments,
+    [ValidateRange(1, 60)][int]$MaxAttempts = 12,
+    [ValidateRange(1, 30)][int]$RetryDelaySeconds = 2
+  )
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    $output = @(& "curl.exe" @Arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+    $response = ($output | Out-String).Trim()
+    if ($exitCode -eq 0 -and $response -eq $ExpectedResponse) {
+      return $response
+    }
+
+    if ($attempt -lt $MaxAttempts) {
+      Start-Sleep -Seconds $RetryDelaySeconds
+    }
+  }
+
+  throw "$Label did not return the expected response after $MaxAttempts attempts."
+}
+
 function Assert-Matches {
   param(
     [Parameter(Mandatory)][string]$Name,
@@ -1199,10 +1224,31 @@ done
 worker_health="${worker_health_entries[*]}"
 worker_image="${worker_image_entries[*]}"
 
-local_health="$(curl -fsS -H "Host: $canonical_host" http://127.0.0.1:3000/api/health)"
-local_live="$(curl -fsS http://127.0.0.1:3000/api/live)"
-test "$local_health" = '{"status":"ok"}'
-test "$local_live" = '{"status":"ok"}'
+wait_for_local_endpoint() {
+  local label="$1"
+  local expected_response="$2"
+  shift 2
+
+  local attempt response
+  for attempt in $(seq 1 12); do
+    response="$(curl -fsS --connect-timeout 5 --max-time 10 "$@" 2>/dev/null || true)"
+    if test "$response" = "$expected_response"; then
+      return 0
+    fi
+
+    if test "$attempt" -lt 12; then
+      sleep 2
+    fi
+  done
+
+  printf 'Local %s endpoint did not return the expected response after 12 attempts.\n' "$label" >&2
+  return 1
+}
+
+wait_for_local_endpoint health '{"status":"ok"}' -H "Host: $canonical_host" http://127.0.0.1:3000/api/health
+wait_for_local_endpoint live '{"status":"ok"}' http://127.0.0.1:3000/api/live
+local_health='{"status":"ok"}'
+local_live='{"status":"ok"}'
 monitor_timer="$(sudo -n systemctl is-active arctic-rss-monitor.timer)"
 monitor_result="$(sudo -n systemctl show arctic-rss-monitor.service -p Result --value)"
 monitor_status="$(sudo -n systemctl show arctic-rss-monitor.service -p ExecMainStatus --value)"
@@ -1258,18 +1304,12 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
   $edgeProxyHealth = Get-ReleaseMarker -Output $stageOutput -Name "EDGE_PROXY_HEALTH"
   $edgeProxyImage = Get-ReleaseMarker -Output $stageOutput -Name "EDGE_PROXY_IMAGE"
 
-  $publicHealth = (Invoke-RequiredCommand -FilePath "curl.exe" -Arguments @(
+  $publicHealth = Invoke-ExpectedCurlResponse -Label "Public health endpoint" -ExpectedResponse '{"status":"ok"}' -Arguments @(
     "-fsS", "https://$($config.CanonicalHost)/api/health"
-  ) | Out-String).Trim()
-  if ($publicHealth -ne '{"status":"ok"}') {
-    throw "The public health endpoint did not return the expected status."
-  }
-  $loginStatus = (Invoke-RequiredCommand -FilePath "curl.exe" -Arguments @(
+  )
+  $loginStatus = Invoke-ExpectedCurlResponse -Label "Public login page" -ExpectedResponse "200" -Arguments @(
     "-fsS", "-o", "NUL", "-w", "%{http_code}", "https://$($config.CanonicalHost)/login"
-  ) | Out-String).Trim()
-  if ($loginStatus -ne "200") {
-    throw "The public login page did not return HTTP 200."
-  }
+  )
 
   New-Item -ItemType Directory -Force -Path $config.ReleaseRecordDirectory | Out-Null
   $deployedAt = (Get-Date).ToUniversalTime().ToString("o")
