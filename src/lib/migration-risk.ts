@@ -175,7 +175,10 @@ export function validateMigrationRiskReport(
 }
 
 export function migrationSqlSha256(sql: string) {
-  return createHash("sha256").update(sql, "utf8").digest("hex")
+  // Migration reports identify SQL content, not the checkout-specific line
+  // ending convention. This keeps a reviewed LF hash valid when a Windows
+  // release archive contains the equivalent CRLF source.
+  return createHash("sha256").update(sql.replace(/\r\n/g, "\n"), "utf8").digest("hex")
 }
 
 function parseMigrationRiskReportFields(content: string) {

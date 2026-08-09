@@ -129,6 +129,19 @@ Production result: not yet deployed
     ).toContain("Migration name does not match migration SQL")
   })
 
+  it("uses the reviewed hash for equivalent LF and CRLF migration SQL", () => {
+    const lfSql = 'ALTER TABLE "Article" ADD COLUMN "fingerprint" TEXT;\nCREATE INDEX CONCURRENTLY "Article_fingerprint_idx" ON "Article" ("fingerprint");\n'
+    const crlfSql = lfSql.replace(/\n/g, "\r\n")
+
+    expect(migrationSqlSha256(crlfSql)).toBe(migrationSqlSha256(lfSql))
+    expect(
+      validateMigrationRiskReport(riskReport({ sql: lfSql }), {
+        migrationName: "example_migration",
+        sql: crlfSql,
+      })
+    ).toEqual([])
+  })
+
   it("allows historical records to stay non-ready but rejects unmeasured evidence in a ready record", () => {
     expect(
       validateMigrationRiskReport(riskReport(), {
