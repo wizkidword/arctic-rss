@@ -101,7 +101,7 @@ export async function createProductionChatGateway(
   const recoverySettings = getChatGatewayRecoverySettings(environment)
   const abuseSettings = getChatGatewayAbuseSettings(environment)
   const port = getChatGatewayPort(environment)
-  const prisma = getPrisma()
+  const prisma = getPrisma(environment.CHAT_DATABASE_URL)
   const redis = createGatewayRedisClient()
   const redisPublisher = redis.duplicate()
   const redisSubscriber = redis.duplicate()

@@ -14,6 +14,18 @@ names only the variable and role; it never logs its value.
 Ordinary process settings such as `PATH`, `HOME`, and the Node runtime version
 are not application-managed variables and remain allowed.
 
+## Chat gateway database boundary
+
+The chat gateway receives `CHAT_DATABASE_URL`, not `DATABASE_URL`. It connects
+as a separate login that can perform the narrow socket authorization, room,
+membership, normal-message, and event-outbox operations used by that process.
+It may display an article share's ID, title, and publisher, but cannot read
+article bodies, account passwords or confirmation tokens, AI data, or broad
+chat administration/reporting data. It also cannot change plans or roles, or
+perform schema DDL. The controlled owner applies and rotates that login using
+the [chat database role runbook](chat-database-role-runbook.md); migrations do
+not create it.
+
 ## Temporary Redis compatibility
 
 `REDIS_URL` and `ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION` are declared
@@ -30,9 +42,11 @@ Before an approved release, run:
 ```bash
 npm run compose:verify-env
 npm run doctor -- release --role web
+npm run db:verify-chat-role
 ```
 
 The first command verifies rendered Compose service environments exactly match
 the manifest. The second reports required variable names and the production
-security-boundary result without exposing values. Neither command authorizes a
-production change.
+security-boundary result without exposing values. The last command uses a
+disposable PostgreSQL instance to prove the chat role's allowed and denied SQL
+behavior. None of these commands authorizes a production change.

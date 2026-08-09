@@ -271,7 +271,7 @@ describe("production security configuration", () => {
     const environment = {
       APP_ORIGIN: "https://arcticrss.com",
       ARCTIC_IRC_TOKEN_SECRET: "chat-token-secret-that-is-at-least-32-bytes",
-      DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      CHAT_DATABASE_URL: "postgresql://arctic_chat:chat-runtime-password@postgres:5432/arctic_rss?schema=public",
       EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
       NODE_ENV: "production",
     }
@@ -286,6 +286,13 @@ describe("production security configuration", () => {
         "chat-gateway"
       )
     ).toThrow("OPENAI_API_KEY must not be present for the chat-gateway service.")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        { ...environment, DATABASE_URL: webProductionEnvironment.DATABASE_URL },
+        "chat-gateway"
+      )
+    ).toThrow("DATABASE_URL must not be present for the chat-gateway service.")
   })
 
   it.each(PRODUCTION_SERVICE_ROLES)(
@@ -356,7 +363,7 @@ function validProductionEnvironmentForRole(
     return {
       APP_ORIGIN: "https://arcticrss.com",
       ARCTIC_IRC_TOKEN_SECRET: "chat-token-secret-that-is-at-least-32-bytes",
-      DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      CHAT_DATABASE_URL: "postgresql://arctic_chat:chat-runtime-password@postgres:5432/arctic_rss?schema=public",
       EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
       NODE_ENV: "production",
     }

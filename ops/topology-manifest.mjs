@@ -68,6 +68,7 @@ function assertTopology(topologyName, topology, manifest) {
       assert.ok(topology.requiredServices.includes(serviceName), `${topologyName} enables chat without ${serviceName}.`)
     }
     assert.ok(topology.requiredEnvironment.includes("ARCTIC_IRC_TOKEN_SECRET"), `${topologyName} enables chat without ARCTIC_IRC_TOKEN_SECRET.`)
+    assert.ok(topology.requiredEnvironment.includes("CHAT_DATABASE_URL"), `${topologyName} enables chat without CHAT_DATABASE_URL.`)
   } else {
     for (const serviceName of ["chat-gateway", "edge-proxy", "worker-chat-events"]) {
       assert.ok(!topology.requiredServices.includes(serviceName), `${topologyName} enables ${serviceName} without chat.`)

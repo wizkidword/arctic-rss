@@ -6,10 +6,8 @@ const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient
 }
 
-export function getPrisma() {
+export function getPrisma(connectionString = process.env.DATABASE_URL) {
   if (!globalForPrisma.prisma) {
-    const connectionString = process.env.DATABASE_URL
-
     if (!connectionString) {
       throw new Error("DATABASE_URL is required before opening a database connection.")
     }

@@ -22,7 +22,7 @@ required-variable output, and production startup checks consume that source.
 | `worker-imports` | Runtime DB and durable Redis | Auth/OAuth, SMTP, AI, chat, migration, tunnel values |
 | `worker-maintenance` | Runtime DB, durable Redis, scheduler/monitor and chat-retention settings | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
 | `worker-chat-events` | Runtime DB, durable/ephemeral Redis, event-outbox interval | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
-| `chat-gateway` | Runtime DB, ephemeral Redis, canonical origin, chat token and gateway limits | Auth/OAuth, SMTP, AI, migration, PostgreSQL/Redis container passwords, tunnel token |
+| `chat-gateway` | `CHAT_DATABASE_URL` for the dedicated restricted chat role, ephemeral Redis, canonical origin, chat token and gateway limits | `DATABASE_URL`, migration DB URL, Auth/OAuth, SMTP, AI, PostgreSQL/Redis container passwords, tunnel token |
 | `cloudflared` | `TUNNEL_TOKEN`, interpolated from `CLOUDFLARE_TUNNEL_TOKEN` | Database, Redis, auth, SMTP, AI, and chat values |
 
 `postgres`, `redis`, and `redis-ephemeral` receive only the database/Redis
@@ -40,6 +40,11 @@ URLs are never given to those infrastructure containers.
   rotating `OPENAI_API_KEY` affects web plus `worker`/`worker-ai-mail`; a
   chat-token rotation affects web plus `chat-gateway`; a tunnel-token rotation
   affects only `cloudflared`.
+- `CHAT_DATABASE_URL` belongs only to `chat-gateway`. Its role is deliberately
+  narrower than the application runtime role and has no schema ownership. Use
+  the [chat database role runbook](chat-database-role-runbook.md) for a
+  coordinated role-password rotation; never substitute `DATABASE_URL` as a
+  shortcut.
 
 ## Adding a variable
 

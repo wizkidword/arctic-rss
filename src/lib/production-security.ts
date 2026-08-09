@@ -378,7 +378,11 @@ function assertChatGatewayConfiguration(environment: ProductionEnvironment) {
     throw error
   }
 
-  assertRuntimeDatabaseUrl(environment)
+  assertCredentialedUrl(
+    environment,
+    "CHAT_DATABASE_URL",
+    new Set(["postgres:", "postgresql:"])
+  )
   assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
   assertRequiredSecret(environment, "ARCTIC_IRC_TOKEN_SECRET", 32)
 }

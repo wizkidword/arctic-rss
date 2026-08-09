@@ -47,12 +47,12 @@ fresh typed approval and the selected-topology checks in the release runbook.
 4. Before committing, run `npm test`, `npm run typecheck`, and `npm run build`.
 
 The example environment uses Docker service hostnames. For `npm run dev` on a
-host machine, change `DATABASE_URL`, `DURABLE_REDIS_URL`, and
-`EPHEMERAL_REDIS_URL` to `localhost`; use the PostgreSQL, durable-Redis, and
-ephemeral-Redis loopback ports from `.env.example`. `REDIS_URL` is retained
-only for an explicitly flagged temporary one-Redis migration; production
-otherwise requires distinct workload-specific endpoints. Remove it only using
-the owner-gated checklist in
+host machine, change `DATABASE_URL`, `CHAT_DATABASE_URL`,
+`DURABLE_REDIS_URL`, and `EPHEMERAL_REDIS_URL` to `localhost`; use the
+PostgreSQL, durable-Redis, and ephemeral-Redis loopback ports from
+`.env.example`. `REDIS_URL` is retained only for an explicitly flagged
+temporary one-Redis migration; production otherwise requires distinct
+workload-specific endpoints. Remove it only using the owner-gated checklist in
 [the compatibility retirement record](docs/operations/legacy-redis-compatibility-retirement.md).
 
 ## Deployment guardrails

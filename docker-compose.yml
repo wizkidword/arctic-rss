@@ -526,7 +526,7 @@ services:
     stop_grace_period: 30s
     environment:
       ARCTIC_RSS_SERVICE_ROLE: chat-gateway
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CHAT_DATABASE_URL: ${CHAT_DATABASE_URL:?CHAT_DATABASE_URL is required}
       EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
       APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
       ARCTIC_IRC_ENABLED: ${ARCTIC_IRC_ENABLED:-false}

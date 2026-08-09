@@ -252,3 +252,25 @@ loopback-only.
 
 No production Redis credential was read, created, rotated, or printed. No
 production container, OVH host, push, or deployment was changed.
+
+## Phase 7D local chat database-role evidence (2026-08-08)
+
+The chat gateway now takes `CHAT_DATABASE_URL` rather than the normal runtime
+database URL. Its idempotent PostgreSQL bootstrap creates a non-superuser,
+non-schema-owning login with only the column and table privileges used by
+gateway authorization, room snapshots, normal-message creation, read markers,
+and event-outbox writes. Display-only article shares expose only ID, feed ID,
+and title; publisher lookup exposes only ID and title. The gateway does not
+receive access to article bodies, account passwords or deletion/reset hashes,
+AI records, plan/role changes, chat reports, or schema DDL.
+
+`npm run db:verify-chat-role` creates a disposable PostgreSQL instance,
+applies committed migrations, applies the bootstrap twice, performs the real
+gateway authorization and room/message/read-marker paths, and proves each
+restricted SQL operation is rejected. The role bootstrap is outside Prisma
+migrations, and the migration service remains the only schema-owning
+application path.
+
+No production database role or password was created, changed, read, or
+printed. No production container, OVH host, push, migration, or deployment was
+changed.
