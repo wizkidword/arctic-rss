@@ -54,7 +54,7 @@ jobs:
           npx prisma validate
       - name: Generate Prisma client
         run: npm run prisma:generate
-      - name: Classify changed migration risk
+      - name: Verify changed migration risk evidence
         env:
           MIGRATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |

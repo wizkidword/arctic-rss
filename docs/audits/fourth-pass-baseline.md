@@ -221,6 +221,30 @@ missing-artifact, empty-artifact, resized, altered, and traversal cases. This
 is source and local test evidence only. No VPS backup, off-host copy, restore
 drill, release, push, or deployment was run for this phase.
 
+## Phase 9C local migration-evidence result (2026-08-08)
+
+Migration-risk records now carry a fixed machine-checked field set, including
+the exact UTF-8 SQL SHA-256, measured row/table/index evidence fields, backup
+evidence ID requirement, approver, UTC approval timestamp, and an explicit
+`Production ready` boolean. The verifier compares the name and hash to the
+actual migration file for every selected new migration, even if the advisory
+regex classifier finds nothing.
+
+Historical and source-only records can honestly say their production
+measurements or approval are absent only while `Production ready: false`. A
+record marked ready is rejected if it contains “not recorded,” “not measured,”
+“not verified,” “retrospective only,” or “pending evidence”; it also needs a
+UTC approval timestamp and explicit backup-evidence-ID language. Both existing
+records are deliberately non-ready and have hashes that match their committed
+SQL.
+
+Focused unit tests cover required fields, name/hash mismatch, historical
+non-ready records, blocked unmeasured ready records, timestamp rules, and
+backup-evidence-ID wording. The actual verifier passes for the current
+fingerprint migration (no classifier finding) and historical search migration
+(two advisory findings). No production measurement, approval, migration,
+release, push, or deployment was performed.
+
 ## Phase 7A local exact-environment evidence (2026-08-08)
 
 The service-role manifest now also records runtime-only compatibility aliases

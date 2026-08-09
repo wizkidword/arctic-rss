@@ -18,10 +18,12 @@ reviewed target commit are mandatory first.
   committed, reviewed Prisma migrations.
 - Before the migration service runs, the approved release script compares the
   staged migration names with the current release and runs the dependency-free
-  migration-risk classifier for every new migration. A flagged migration must
-  have a complete record under
-  [`migration-risk`](migration-risk) before Prisma is allowed to start. This
-  is an owner-decision gate, not an automatic approval.
+  migration-risk verifier for every new migration. Every new migration must
+  have a complete record under [`migration-risk`](migration-risk), bound to
+  its exact SQL SHA-256. Classifier findings are advisory prompts, not a
+  safety verdict; a migration with no classifier finding still needs the
+  record before Prisma is allowed to start. This is an owner-decision gate,
+  not an automatic approval.
 - The migration service has its own Docker image. Rebuild that image from the
   staged release immediately before running it; `docker compose run migrate`
   alone may reuse an older image that cannot see a newly committed migration.
@@ -43,12 +45,17 @@ data changes, direct non-null additions, unstaged foreign keys, and enum
 replacement. A safe result means no recognized high-risk pattern was found; it
 does not prove the SQL is safe for a material production table.
 
-For each flagged migration, create
+For each new migration, create
 `docs/operations/migration-risk/<migration-name>.md` with all required fields:
-migration name, author/date, affected tables, row and size estimates, lock and
-rewrite risk, duration, online strategy, backfill and validation plans,
-maintenance decision, rollback and forward recovery, backup evidence, owner
-approval, and production result.
+migration name; exact migration SQL SHA-256; author/date; affected tables;
+measured row counts and table/index sizes; lock and rewrite risk; duration;
+online strategy; backfill and validation plans; maintenance decision; rollback
+and forward recovery; backup evidence ID requirement; approver; approval
+timestamp; `Production ready: true|false`; and production result. A
+`Production ready: true` record cannot contain “not recorded,” “not measured,”
+“not verified,” “retrospective only,” or “pending evidence.” Historical
+records may describe missing old evidence only when `Production ready: false`;
+they never approve a future equivalent migration.
 
 Use expand-and-contract for material data changes: expand the schema, backfill
 bounded resumable batches outside the schema transaction, create or validate

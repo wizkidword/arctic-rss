@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve, sep } from "node:path"
+import { pathToFileURL } from "node:url"
 
 import {
   classifyMigrationSql,
@@ -19,7 +20,7 @@ function main() {
     : options.base
       ? changedMigrationNames(options.base)
       : []
-  const results = migrationNames.map(inspectMigration)
+  const results = migrationNames.map((name) => inspectMigration(name))
   const failures = results.flatMap((result) => result.errors)
 
   process.stdout.write(
@@ -76,8 +77,8 @@ function changedMigrationNames(base: string) {
   )]
 }
 
-function inspectMigration(name: string) {
-  const migrationsDirectory = resolve(process.cwd(), "prisma", "migrations")
+export function inspectMigration(name: string, rootDirectory = process.cwd()) {
+  const migrationsDirectory = resolve(rootDirectory, "prisma", "migrations")
   const migrationDirectory = resolve(migrationsDirectory, name)
 
   if (
@@ -100,29 +101,31 @@ function inspectMigration(name: string) {
     }
   }
 
-  const findings = classifyMigrationSql(readFileSync(sqlPath, "utf8"))
-  if (!findings.length) {
-    return { errors: [], findings, name }
-  }
+  const sql = readFileSync(sqlPath, "utf8")
+  const findings = classifyMigrationSql(sql)
 
   const reportPath = resolve(
-    process.cwd(),
+    rootDirectory,
     "docs",
     "operations",
     "migration-risk",
     `${name}.md`
   )
   const missingFields = validateMigrationRiskReport(
-    existsSync(reportPath) ? readFileSync(reportPath, "utf8") : undefined
+    existsSync(reportPath) ? readFileSync(reportPath, "utf8") : undefined,
+    { migrationName: name, sql }
   )
 
   return {
     errors: missingFields.length
-      ? [`Migration ${name} is flagged (${findings.map(({ code }) => code).join(", ")}) and its risk report is missing: ${missingFields.join(", ")}.`]
+      ? [`Migration ${name}${findings.length ? ` is flagged (${findings.map(({ code }) => code).join(", ")})` : ""} has an invalid risk report: ${missingFields.join(", ")}.`]
       : [],
     findings,
     name,
   }
 }
 
-main()
+const invokedScript = process.argv[1]
+if (invokedScript && import.meta.url === pathToFileURL(resolve(invokedScript)).href) {
+  main()
+}

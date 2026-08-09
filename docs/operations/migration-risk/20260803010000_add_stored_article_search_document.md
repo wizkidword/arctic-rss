@@ -1,10 +1,11 @@
 # Migration risk record: stored article search document
 
 Migration name: `20260803010000_add_stored_article_search_document`
+Migration SQL SHA-256: `842a91f14d30444f4983ed0e3df3d6b21c9976bd98f003eb0cd9170a124648e1`
 Author/date: Historical migration; retrospective recorded 2026-08-08
 Affected tables: `Article`; its full-text search index
-Estimated row counts: Not recorded in the checked-in evidence; measure before any equivalent production change.
-Estimated table and index sizes: Not recorded in the checked-in evidence; measure before any equivalent production change.
+Measured row counts: Not recorded in the checked-in evidence; measure before any equivalent production change.
+Measured table and index sizes: Not recorded in the checked-in evidence; measure before any equivalent production change.
 Expected lock type: `ALTER TABLE ... ADD COLUMN ... GENERATED ... STORED` can require an ACCESS EXCLUSIVE lock; ordinary `CREATE INDEX` can block writers.
 Rewrite or scan risk: Yes. PostgreSQL must evaluate the stored generated expression for existing rows, and the GIN index build scans the resulting column.
 Expected duration: Not recorded for production; dependent on Article row count, body size, storage throughput, and concurrent write load.
@@ -14,8 +15,10 @@ Validation plan: Confirm the expected column expression, valid GIN index, repres
 Maintenance mode required: Yes for a future equivalent unless a rehearsal proves an online-safe staged procedure for the measured production table.
 Rollback feasibility: Schema rollback is not assumed safe after an incompatible application release or data rewrite.
 Forward-recovery plan: Keep a compatible application version available; if the index or expression is invalid, use a separately reviewed repair migration after verifying backup and schema state.
-Backup evidence required: Fresh, verified, off-host PostgreSQL backup evidence before any future production execution.
-Owner approval: Retrospective only; a fresh owner approval is required before any equivalent production migration.
+Backup evidence ID requirement: An exact fresh structured backup evidence ID is required before any future production execution.
+Approver: Retrospective only; a fresh owner approval is required before any equivalent production migration.
+Approval timestamp: Not recorded because production ready is false.
+Production ready: false
 Production result: Not verified from current production evidence in this worktree; this record makes no deployed-state claim.
 
 ## Classifier disposition

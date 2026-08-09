@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto"
+
 export const MIGRATION_RISK_REPORT_FIELDS = [
   "Migration name",
+  "Migration SQL SHA-256",
   "Author/date",
   "Affected tables",
-  "Estimated row counts",
-  "Estimated table and index sizes",
+  "Measured row counts",
+  "Measured table and index sizes",
   "Expected lock type",
   "Rewrite or scan risk",
   "Expected duration",
@@ -13,10 +16,17 @@ export const MIGRATION_RISK_REPORT_FIELDS = [
   "Maintenance mode required",
   "Rollback feasibility",
   "Forward-recovery plan",
-  "Backup evidence required",
-  "Owner approval",
+  "Backup evidence ID requirement",
+  "Approver",
+  "Approval timestamp",
+  "Production ready",
   "Production result",
 ] as const
+
+export type MigrationRiskReportExpectation = {
+  migrationName: string
+  sql: string
+}
 
 export type MigrationRiskCode =
   | "ALTER_COLUMN_TYPE"
@@ -111,15 +121,91 @@ export function classifyMigrationSql(sql: string): MigrationRiskFinding[] {
 }
 
 export function missingMigrationRiskReportFields(content: string) {
-  return MIGRATION_RISK_REPORT_FIELDS.filter((field) => {
-    const value = content.match(new RegExp(`^\\s*${escapeRegex(field)}\\s*:\\s*(.+)\\s*$`, "mi"))?.[1]
+  const fields = parseMigrationRiskReportFields(content)
 
-    return !value || /^(?:n\/a|tbd|todo|unknown)$/i.test(value.trim())
-  })
+  return MIGRATION_RISK_REPORT_FIELDS.filter((field) => isPlaceholder(fields.get(field)))
 }
 
-export function validateMigrationRiskReport(content: string | undefined) {
-  return content ? missingMigrationRiskReportFields(content) : ["risk report"]
+export function validateMigrationRiskReport(
+  content: string | undefined,
+  expectation?: MigrationRiskReportExpectation
+) {
+  if (!content) {
+    return ["risk report"]
+  }
+
+  const fields = parseMigrationRiskReportFields(content)
+  const errors: string[] = [...missingMigrationRiskReportFields(content)]
+  const productionReady = fields.get("Production ready")?.trim().toLowerCase()
+
+  if (productionReady && productionReady !== "true" && productionReady !== "false") {
+    errors.push("Production ready must be true or false")
+  }
+
+  if (productionReady === "true") {
+    for (const field of MIGRATION_RISK_REPORT_FIELDS) {
+      const value = fields.get(field)
+      if (value && containsUnverifiedProductionPhrase(value)) {
+        errors.push(`${field} contains unverified production evidence`)
+      }
+    }
+
+    if (!isIsoTimestamp(fields.get("Approval timestamp"))) {
+      errors.push("Approval timestamp must be an ISO-8601 UTC timestamp when Production ready is true")
+    }
+    if (!/\bbackup[ -]?evidence[ -]?id\b/i.test(fields.get("Backup evidence ID requirement") ?? "")) {
+      errors.push("Backup evidence ID requirement must name the exact backup evidence ID when Production ready is true")
+    }
+  }
+
+  if (expectation) {
+    const reportedMigrationName = unwrapMarkdownCode(fields.get("Migration name"))
+    if (reportedMigrationName !== expectation.migrationName) {
+      errors.push("Migration name does not match migration SQL")
+    }
+
+    const reportedHash = unwrapMarkdownCode(fields.get("Migration SQL SHA-256")).toLowerCase()
+    const expectedHash = migrationSqlSha256(expectation.sql)
+    if (!/^[a-f0-9]{64}$/.test(reportedHash) || reportedHash !== expectedHash) {
+      errors.push("Migration SQL SHA-256 does not match migration SQL")
+    }
+  }
+
+  return [...new Set(errors)]
+}
+
+export function migrationSqlSha256(sql: string) {
+  return createHash("sha256").update(sql, "utf8").digest("hex")
+}
+
+function parseMigrationRiskReportFields(content: string) {
+  return new Map(
+    MIGRATION_RISK_REPORT_FIELDS.flatMap((field) => {
+      const value = content.match(new RegExp(`^\\s*${escapeRegex(field)}\\s*:\\s*(.+)\\s*$`, "mi"))?.[1]
+      return value ? [[field, value.trim()] as const] : []
+    })
+  )
+}
+
+function isPlaceholder(value: string | undefined) {
+  return !value || /^(?:n\/a|tbd|todo|unknown)$/i.test(value.trim())
+}
+
+function containsUnverifiedProductionPhrase(value: string) {
+  return /\b(?:not recorded|not measured|not verified|retrospective only|pending evidence)\b/i.test(value)
+}
+
+function isIsoTimestamp(value: string | undefined) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)) {
+    return false
+  }
+
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().replace(".000Z", "Z") === value
+}
+
+function unwrapMarkdownCode(value: string | undefined) {
+  return value?.trim().replace(/^`([^`]+)`$/, "$1") ?? ""
 }
 
 function splitSqlStatements(sql: string) {
