@@ -48,6 +48,22 @@ describe("approved release command", () => {
     expect(script).toContain('test "$redis_ephemeral_health" = healthy')
   })
 
+  it("attaches legacy stateful containers to the staged topology before migration", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain("ensure_stateful_network_alias()")
+    expect(script).toContain('docker network connect --alias "$alias" "$network" "$container"')
+    expect(script).toContain("ensure_stateful_network_alias durable-data app-postgres-1 postgres")
+    expect(script).toContain("ensure_stateful_network_alias web-edge app-postgres-1 postgres")
+    expect(script).toContain("ensure_stateful_network_alias durable-data app-redis-1 redis")
+    expect(script).toContain("ensure_stateful_network_alias ephemeral-realtime app-redis-ephemeral-1 redis-ephemeral")
+    expect(script).toContain('STATEFUL_NETWORK_READINESS=%s\\n')
+    expect(script).toContain('statefulNetworkReadiness = $statefulNetworkReadiness')
+    expect(script.indexOf("ensure_stateful_network_alias durable-data app-postgres-1 postgres")).toBeLessThan(
+      script.indexOf('run --rm --no-deps -T migrate node ./check-migration-risk.mjs'),
+    )
+  })
+
   it("uses a pipefail-safe journal retention assertion", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 

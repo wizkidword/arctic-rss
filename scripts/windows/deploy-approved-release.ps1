@@ -926,6 +926,82 @@ case "$topology_name" in
     ;;
 esac
 stage_compose config -q
+stateful_network_readiness="not-verified"
+network_name_for() {
+  printf '%s_%s' "$compose_project" "$1"
+}
+network_matches_compose_identity() {
+  network="$1"
+  logical_name="$2"
+  sudo -n docker network inspect "$network" | python3 -c '
+import json
+import sys
+
+network, project, logical_name = sys.argv[1:]
+labels = json.load(sys.stdin)[0].get("Labels") or {}
+raise SystemExit(0 if labels.get("com.docker.compose.project") == project and labels.get("com.docker.compose.network") == logical_name else 1)
+' "$network" "$compose_project" "$logical_name"
+}
+container_has_network_alias() {
+  container="$1"
+  network="$2"
+  alias="$3"
+  sudo -n docker inspect "$container" | python3 -c '
+import json
+import sys
+
+_container, network, alias = sys.argv[1:]
+networks = json.load(sys.stdin)[0]["NetworkSettings"]["Networks"]
+raise SystemExit(0 if alias in (networks.get(network) or {}).get("Aliases", []) else 1)
+' "$container" "$network" "$alias"
+}
+container_has_network() {
+  container="$1"
+  network="$2"
+  sudo -n docker inspect "$container" | python3 -c '
+import json
+import sys
+
+_container, network = sys.argv[1:]
+networks = json.load(sys.stdin)[0]["NetworkSettings"]["Networks"]
+raise SystemExit(0 if network in networks else 1)
+' "$container" "$network"
+}
+ensure_stateful_network_alias() {
+  logical_name="$1"
+  container="$2"
+  alias="$3"
+  network="$(network_name_for "$logical_name")"
+
+  if sudo -n docker network inspect "$network" >/dev/null 2>&1; then
+    network_matches_compose_identity "$network" "$logical_name"
+  else
+    sudo -n docker network create --driver bridge \
+      --label "com.docker.compose.project=$compose_project" \
+      --label "com.docker.compose.network=$logical_name" \
+      "$network" >/dev/null
+  fi
+
+  if container_has_network_alias "$container" "$network" "$alias"; then
+    return
+  fi
+  if container_has_network "$container" "$network"; then
+    printf 'Stateful container %s is attached to %s without required alias %s.\n' "$container" "$network" "$alias" >&2
+    exit 1
+  fi
+
+  sudo -n docker network connect --alias "$alias" "$network" "$container"
+  container_has_network_alias "$container" "$network" "$alias"
+}
+# Controlled upgrades from the legacy single-network layout keep stateful
+# containers and volumes alive. Attach them to the staged topology's named
+# networks before the isolated migrator runs, preserving the legacy network
+# until the application services have passed their release health checks.
+ensure_stateful_network_alias durable-data app-postgres-1 postgres
+ensure_stateful_network_alias web-edge app-postgres-1 postgres
+ensure_stateful_network_alias durable-data app-redis-1 redis
+ensure_stateful_network_alias ephemeral-realtime app-redis-ephemeral-1 redis-ephemeral
+stateful_network_readiness="verified"
 compose_images="$(stage_compose config --images)"
 sudo -n docker load --input "$image_archive" >/dev/null
 while IFS= read -r image_name; do
@@ -1140,6 +1216,7 @@ printf 'PREVIOUS_TOPOLOGY=%s\n' "$previous_topology"
 printf 'PREVIOUS_IMAGES=%s\n' "${previous_images[*]}"
 printf 'TOPOLOGY=%s\n' "$topology_name"
 printf 'TOPOLOGY_HEALTH=%s\n' "${topology_health[*]}"
+printf 'STATEFUL_NETWORK_READINESS=%s\n' "$stateful_network_readiness"
 printf 'MIGRATION_STATUS=%s\n' "$migration_status"
 printf 'CHAT_DATABASE_ROLE=%s\n' "$chat_database_role"
 printf 'WEB_HEALTH=%s\n' "$web_health"
@@ -1169,6 +1246,7 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
   $previousImages = Get-ReleaseMarker -Output $stageOutput -Name "PREVIOUS_IMAGES"
   $deployedTopology = Get-ReleaseMarker -Output $stageOutput -Name "TOPOLOGY"
   $topologyHealth = Get-ReleaseMarker -Output $stageOutput -Name "TOPOLOGY_HEALTH"
+  $statefulNetworkReadiness = Get-ReleaseMarker -Output $stageOutput -Name "STATEFUL_NETWORK_READINESS"
   $migrationStatus = Get-ReleaseMarker -Output $stageOutput -Name "MIGRATION_STATUS"
   $chatDatabaseRole = Get-ReleaseMarker -Output $stageOutput -Name "CHAT_DATABASE_ROLE"
   $webHealth = Get-ReleaseMarker -Output $stageOutput -Name "WEB_HEALTH"
@@ -1214,6 +1292,7 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
     previousImageTags = @($previousImages -split ' ' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     topology = $deployedTopology
     topologyHealth = $topologyHealth
+    statefulNetworkReadiness = $statefulNetworkReadiness
     publicHealth = $publicHealth
     chatGatewayHealth = $chatGatewayHealth
     chatGatewayImage = $chatGatewayImage
