@@ -1217,6 +1217,9 @@ model ImportJob {
   user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   entries ImportJobEntry[]
 
+  // PostgreSQL enforces one active (PENDING or PROCESSING) import per user
+  // with the partial unique index in the corresponding raw SQL migration.
+  // Prisma schema syntax cannot model partial indexes.
   @@index([userId, status, updatedAt])
   @@index([status, updatedAt])
 }

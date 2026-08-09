@@ -72,6 +72,8 @@ jobs:
         run: npm test
       - name: Verify restricted chat database role SQL boundaries
         run: npm run db:verify-chat-role
+      - name: Verify OPML import admission across database clients
+        run: npm run db:verify-opml-import-admission
       - name: Check types
         run: npm run typecheck
       - name: Lint

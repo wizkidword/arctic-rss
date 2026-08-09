@@ -30,6 +30,8 @@ vi.mock("./opml", () => ({
 import {
   cancelOpmlImportJob,
   createOpmlImportJob,
+  OpmlImportJobError,
+  retryOpmlImportJob,
 } from "./opml-import-jobs"
 
 describe("OPML import jobs", () => {
@@ -51,9 +53,7 @@ describe("OPML import jobs", () => {
         async (callback: (client: typeof transaction) => Promise<unknown>) =>
           callback(transaction)
       ),
-      importJob: {
-        findFirst: vi.fn().mockResolvedValue(null),
-      },
+      importJob: {},
     }
     mocks.getPrisma.mockReturnValue(prisma)
     mocks.parseOpmlSubscriptions.mockReturnValue([
@@ -104,6 +104,102 @@ describe("OPML import jobs", () => {
       ],
     })
     expect(mocks.enqueueOpmlImportJob).toHaveBeenCalledWith("job-1")
+  })
+
+  it("admits one of two simultaneous create requests and reports the other as active", async () => {
+    const activeUsers = new Set<string>()
+    let nextJob = 0
+    const transaction = {
+      importJob: {
+        create: vi.fn(async ({ data }: { data: { userId: string } }) => {
+          if (activeUsers.has(data.userId)) {
+            throw { code: "P2002" }
+          }
+          activeUsers.add(data.userId)
+          nextJob += 1
+          return { id: `job-${nextJob}` }
+        }),
+      },
+      importJobEntry: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    }
+    mocks.getPrisma.mockReturnValue({
+      $transaction: vi.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction)
+      ),
+      importJob: {},
+    })
+    mocks.parseOpmlSubscriptions.mockReturnValue([])
+    mocks.enqueueOpmlImportJob.mockResolvedValue({})
+
+    const results = await Promise.allSettled([
+      createOpmlImportJob({ opmlXml: "<opml />", userId: "user-1" }),
+      createOpmlImportJob({ opmlXml: "<opml />", userId: "user-1" }),
+    ])
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+    const rejected = results.find((result) => result.status === "rejected")
+    expect(rejected?.status).toBe("rejected")
+    if (rejected?.status === "rejected") {
+      expect(rejected.reason).toBeInstanceOf(OpmlImportJobError)
+      expect(rejected.reason.message).toMatch(/already running/i)
+    }
+    expect(mocks.enqueueOpmlImportJob).toHaveBeenCalledTimes(1)
+  })
+
+  it("frees a failed-to-enqueue job so the user can immediately start another", async () => {
+    let active = false
+    let nextJob = 0
+    const create = vi.fn(async () => {
+      if (active) {
+        throw { code: "P2002" }
+      }
+      active = true
+      nextJob += 1
+      return { id: `job-${nextJob}` }
+    })
+    const update = vi.fn(async () => {
+      active = false
+      return { id: "job-1" }
+    })
+    const transaction = {
+      importJob: { create },
+      importJobEntry: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    }
+    mocks.getPrisma.mockReturnValue({
+      $transaction: vi.fn(
+        async (callback: (client: typeof transaction) => Promise<unknown>) =>
+          callback(transaction)
+      ),
+      importJob: { update },
+    })
+    mocks.parseOpmlSubscriptions.mockReturnValue([])
+    mocks.enqueueOpmlImportJob
+      .mockRejectedValueOnce(new Error("queue unavailable"))
+      .mockResolvedValueOnce({})
+
+    await expect(
+      createOpmlImportJob({ opmlXml: "<opml />", userId: "user-1" })
+    ).rejects.toThrow("could not start")
+    await expect(
+      createOpmlImportJob({ opmlXml: "<opml />", userId: "user-1" })
+    ).resolves.toEqual({ jobId: "job-2", totalFeeds: 0 })
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "FAILED" }) })
+    )
+  })
+
+  it("turns a concurrent retry conflict into the same active-import message", async () => {
+    mocks.getPrisma.mockReturnValue({
+      $transaction: vi.fn().mockRejectedValue({ code: "P2002" }),
+      importJob: {
+        findFirst: vi.fn().mockResolvedValue({ id: "job-1" }),
+      },
+    })
+
+    await expect(
+      retryOpmlImportJob({ jobId: "job-1", userId: "user-1" })
+    ).rejects.toThrow("already running")
   })
 
   it("only accepts a cancel request for the owning user and an active import", async () => {

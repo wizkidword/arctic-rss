@@ -19,6 +19,7 @@
     "compose:verify-redis-boundaries": "node scripts/ci/assert-compose-redis-boundaries.mjs",
     "compatibility:verify-legacy-redis": "node scripts/ci/assert-legacy-redis-compatibility.mjs",
     "db:connection-budgets:verify": "node scripts/ci/assert-database-connection-budgets.mjs",
+    "db:verify-opml-import-admission": "tsx scripts/ci/verify-opml-import-admission.ts",
     "db:verify-chat-role": "tsx scripts/ci/verify-chat-runtime-role.ts",
     "build": "next build",
     "image-proxy:measure": "tsx scripts/measure-image-proxy.ts",

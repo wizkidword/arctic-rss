@@ -41,47 +41,41 @@ export async function createOpmlImportJob({
 }) {
   const entries = parseOpmlSubscriptions(opmlXml)
   const prisma = getPrisma()
-  const activeJob = await prisma.importJob.findFirst({
-    orderBy: { createdAt: "desc" },
-    select: { id: true },
-    where: {
-      status: { in: ["PENDING", "PROCESSING"] },
-      userId,
-    },
-  })
-
-  if (activeJob) {
-    throw new OpmlImportJobError(
-      "An OPML import is already running. Wait for it to finish or cancel it before starting another."
-    )
-  }
-
   const folderCount = new Set(
     entries.flatMap((entry) => (entry.folderName ? [entry.folderName] : []))
   ).size
-  const job = await prisma.$transaction(async (transaction) => {
-    const createdJob = await transaction.importJob.create({
-      data: {
-        folderCount,
-        status: "PENDING",
-        totalFeeds: entries.length,
-        userId,
-      },
-      select: { id: true },
-    })
+  let job: { id: string }
 
-    await transaction.importJobEntry.createMany({
-      data: entries.map((entry, sequence) => ({
-        folderName: entry.folderName,
-        importJobId: createdJob.id,
-        sequence,
-        title: entry.title,
-        xmlUrl: entry.xmlUrl,
-      })),
-    })
+  try {
+    job = await prisma.$transaction(async (transaction) => {
+      const createdJob = await transaction.importJob.create({
+        data: {
+          folderCount,
+          status: "PENDING",
+          totalFeeds: entries.length,
+          userId,
+        },
+        select: { id: true },
+      })
 
-    return createdJob
-  })
+      await transaction.importJobEntry.createMany({
+        data: entries.map((entry, sequence) => ({
+          folderName: entry.folderName,
+          importJobId: createdJob.id,
+          sequence,
+          title: entry.title,
+          xmlUrl: entry.xmlUrl,
+        })),
+      })
+
+      return createdJob
+    })
+  } catch (error) {
+    if (isActiveOpmlImportConflict(error)) {
+      throw activeOpmlImportError()
+    }
+    throw error
+  }
 
   try {
     await enqueueOpmlImportJob(job.id)
@@ -291,43 +285,50 @@ export async function retryOpmlImportJob({
     return false
   }
 
-  await prisma.$transaction(async (transaction) => {
-    await transaction.importJobEntry.updateMany({
-      data: {
-        errorMessage: null,
-        processedAt: null,
-        status: "PENDING",
-      },
-      where: {
-        importJobId: job.id,
-        status: "FAILED",
-      },
-    })
+  try {
+    await prisma.$transaction(async (transaction) => {
+      await transaction.importJobEntry.updateMany({
+        data: {
+          errorMessage: null,
+          processedAt: null,
+          status: "PENDING",
+        },
+        where: {
+          importJobId: job.id,
+          status: "FAILED",
+        },
+      })
 
-    const [addedFeeds, skippedFeeds] = await Promise.all([
-      transaction.importJobEntry.count({
-        where: { importJobId: job.id, status: "ADDED" },
-      }),
-      transaction.importJobEntry.count({
-        where: { importJobId: job.id, status: "SKIPPED" },
-      }),
-    ])
+      const [addedFeeds, skippedFeeds] = await Promise.all([
+        transaction.importJobEntry.count({
+          where: { importJobId: job.id, status: "ADDED" },
+        }),
+        transaction.importJobEntry.count({
+          where: { importJobId: job.id, status: "SKIPPED" },
+        }),
+      ])
 
-    await transaction.importJob.update({
-      data: {
-        addedFeeds,
-        cancelRequestedAt: null,
-        completedAt: null,
-        failedFeeds: 0,
-        lastError: null,
-        processedFeeds: addedFeeds + skippedFeeds,
-        skippedFeeds,
-        startedAt: null,
-        status: "PENDING",
-      },
-      where: { id: job.id },
+      await transaction.importJob.update({
+        data: {
+          addedFeeds,
+          cancelRequestedAt: null,
+          completedAt: null,
+          failedFeeds: 0,
+          lastError: null,
+          processedFeeds: addedFeeds + skippedFeeds,
+          skippedFeeds,
+          startedAt: null,
+          status: "PENDING",
+        },
+        where: { id: job.id },
+      })
     })
-  })
+  } catch (error) {
+    if (isActiveOpmlImportConflict(error)) {
+      throw activeOpmlImportError()
+    }
+    throw error
+  }
 
   try {
     await enqueueOpmlImportJob(job.id)
@@ -537,6 +538,21 @@ function isDuplicateSubscriptionError(error: unknown) {
   return (
     error instanceof FeedSubscriptionError &&
     error.message.toLowerCase().includes("already subscribed")
+  )
+}
+
+function activeOpmlImportError() {
+  return new OpmlImportJobError(
+    "An OPML import is already running. Wait for it to finish or cancel it before starting another."
+  )
+}
+
+function isActiveOpmlImportConflict(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2002"
   )
 }
 
