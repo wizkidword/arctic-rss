@@ -293,3 +293,21 @@ tests cover the boundary.
 
 No production data, source fetch, credential, migration, container, OVH host,
 push, or deployment was changed.
+
+## Phase 8B local current-story-version evidence (2026-08-08)
+
+Related-coverage presentation now queries active user-owned `StoryCluster`
+records as the root, then selects only each cluster's highest version under the
+existing invariant that the current version is highest. The bounded `take`
+therefore applies to clusters rather than historical version rows. A cluster
+with thirteen older versions cannot crowd an older active cluster out merely
+because its history is longer.
+
+Member display still rehydrates through the existing subscription and archive
+authorization guard. If a source is paused, unsubscribed, or archived, the
+whole saved group is withheld rather than showing an incomplete grouping. AI
+comparison copy now states its original source count at generation separately
+from the number of sources currently visible in the group.
+
+No production data, credential, migration, container, OVH host, push, or
+deployment was changed.

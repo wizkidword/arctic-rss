@@ -78,6 +78,36 @@ describe("StoryClusterAnalysis", () => {
     expect(markup).toContain('href="/app/article/article-1"')
     expect(markup).toContain('href="https://first.example/story"')
     expect(markup).toContain('href="https://second.example/story"')
+    expect(markup).toContain(
+      "using 2 sources at generation. 2 sources are currently visible in this group."
+    )
     expect(markup).not.toContain("Generate cited analysis")
+  })
+
+  it("does not present the original analysis count as the current visible count", () => {
+    const markup = renderToStaticMarkup(
+      <StoryClusterAnalysis
+        articleId="article-1"
+        cluster={{
+          ...cluster,
+          analysis: {
+            claims: [
+              {
+                citations: ["member-1"],
+                kind: "NEW_FACT",
+                statement: "One currently visible citation remains.",
+              },
+            ],
+            model: "gpt-5.4-mini",
+            provider: "openai",
+            sourceCount: 5,
+          },
+        }}
+      />,
+    )
+
+    expect(markup).toContain(
+      "using 5 sources at generation. 2 sources are currently visible in this group."
+    )
   })
 })

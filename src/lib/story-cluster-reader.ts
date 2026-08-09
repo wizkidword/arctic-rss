@@ -56,7 +56,7 @@ export type StoryClusterPresentation = {
   analysis: StoryClusterAnalysisPresentation | null
 }
 
-type StoryClusterVersionRecord = {
+type StoryClusterCurrentVersionRecord = {
   analyses: Array<{
     claims: Array<{
       citations: Array<{
@@ -71,10 +71,6 @@ type StoryClusterVersionRecord = {
     provider: string
     sourceCount: number
   }>
-  cluster: {
-    currentVersionNumber: number
-    id: string
-  }
   evidence: Array<{
     leftMember: {
       articleId: string | null
@@ -91,11 +87,24 @@ type StoryClusterVersionRecord = {
   version: number
 }
 
+type StoryClusterRecord = {
+  currentVersionNumber: number
+  id: string
+  versions: StoryClusterCurrentVersionRecord[]
+}
+
+type StoryClusterVersionRecord = StoryClusterCurrentVersionRecord & {
+  cluster: {
+    currentVersionNumber: number
+    id: string
+  }
+}
+
 export type StoryClusterReaderStore = {
-  storyClusterVersion: {
+  storyCluster: {
     findMany(
       args: Record<string, unknown>
-    ): Promise<StoryClusterVersionRecord[]>
+    ): Promise<StoryClusterRecord[]>
   }
 }
 
@@ -305,88 +314,90 @@ export async function listStoryClustersForArticlesUserWithClient({
       ? normalizedArticleIds[0]
       : { in: normalizedArticleIds }
 
-  const versions = await store.storyClusterVersion.findMany({
-    orderBy: [{ cluster: { updatedAt: "desc" } }, { version: "desc" }],
+  const clusters = await store.storyCluster.findMany({
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     select: {
-      cluster: {
+      currentVersionNumber: true,
+      id: true,
+      versions: {
+        orderBy: { version: "desc" },
         select: {
-          currentVersionNumber: true,
-          id: true
-        }
-      },
-      evidence: {
-        select: {
-          leftMember: {
+          evidence: {
             select: {
-              articleId: true
+              leftMember: {
+                select: {
+                  articleId: true
+                }
+              },
+              rightMember: {
+                select: {
+                  articleId: true
+                }
+              },
+              signal: true
             }
           },
-          rightMember: {
-            select: {
-              articleId: true
-            }
-          },
-          signal: true
-        }
-      },
-      analyses: {
-        orderBy: {
-          createdAt: "desc"
-        },
-        select: {
-          claims: {
+          analyses: {
             orderBy: {
-              position: "asc"
+              createdAt: "desc"
             },
             select: {
-              citations: {
+              claims: {
                 orderBy: {
                   position: "asc"
                 },
                 select: {
-                  memberId: true,
-                  position: true
+                  citations: {
+                    orderBy: {
+                      position: "asc"
+                    },
+                    select: {
+                      memberId: true,
+                      position: true
+                    }
+                  },
+                  kind: true,
+                  position: true,
+                  statement: true
                 }
               },
-              kind: true,
-              position: true,
-              statement: true
+              model: true,
+              provider: true,
+              sourceCount: true
+            },
+            take: 1
+          },
+          members: {
+            select: {
+              articleId: true,
+              id: true
             }
           },
-          model: true,
-          provider: true,
-          sourceCount: true
+          version: true
         },
         take: 1
-      },
-      members: {
-        select: {
-          articleId: true,
-          id: true
-        }
-      },
-      version: true
+      }
     },
     take:
       normalizedArticleIds.length === 1
         ? STORY_CLUSTER_VERSION_LOOKUP_LIMIT
         : MAX_VISIBLE_STORY_CLUSTERS_PER_PAGE,
     where: {
-      cluster: {
-        status: "ACTIVE",
-        userId: normalizedUserId
-      },
-      members: {
+      status: "ACTIVE",
+      userId: normalizedUserId,
+      versions: {
         some: {
-          articleId: articleIdFilter
+          members: {
+            some: {
+              articleId: articleIdFilter
+            }
+          }
         }
       }
     }
   })
-  const currentVersions = versions
-    .filter(
-      (version) => version.version === version.cluster.currentVersionNumber
-    )
+  const currentVersions = clusters
+    .flatMap(currentVersionFromCluster)
     .slice(0, maxResults)
 
   if (!currentVersions.length) {
@@ -414,6 +425,22 @@ export async function listStoryClustersForArticlesUserWithClient({
 
     return presentation ? [presentation] : []
   })
+}
+
+function currentVersionFromCluster(cluster: StoryClusterRecord) {
+  const version = cluster.versions[0]
+
+  return version && version.version === cluster.currentVersionNumber
+    ? [
+        {
+          ...version,
+          cluster: {
+            currentVersionNumber: cluster.currentVersionNumber,
+            id: cluster.id,
+          },
+        },
+      ]
+    : []
 }
 
 function boundedReaderWindow(
