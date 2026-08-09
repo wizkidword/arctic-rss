@@ -60,6 +60,9 @@ const runtimeEnvironment: Record<string, string> = {
   ...productionServerEnvironment,
   ...authenticatedFixtureEnvironment,
 }
+const productionServerCommand =
+  process.env.ARCTIC_RSS_E2E_PRODUCTION_SERVER_COMMAND ??
+  "npm run test:e2e:production:server"
 
 if (usesAuthenticatedFixtures) {
   for (const [key, value] of Object.entries(fixtureControlEnvironment)) {
@@ -84,7 +87,7 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   webServer: {
     command: usesProductionServer
-      ? "npm run test:e2e:production:server"
+      ? productionServerCommand
       : `npm run dev -- --hostname 127.0.0.1 --port ${e2ePort}`,
     env: usesProductionServer ? runtimeEnvironment : {},
     reuseExistingServer: !process.env.CI && !usesAuthenticatedFixtures,
