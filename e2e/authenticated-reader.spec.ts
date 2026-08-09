@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+
 import { expect, test, type Locator, type Page } from "playwright/test"
 
 import {
@@ -222,6 +224,34 @@ test.describe("authenticated reader journeys", () => {
     ).toHaveText("E2E Imports")
   })
 
+  test("downloads a bounded private account export", async ({ page }) => {
+    await signIn(page, e2eCredentials.reader)
+    await page.goto("/app/settings/import-export")
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("link", { name: "Export account data" }).click(),
+    ])
+
+    expect(download.suggestedFilename()).toBe("arctic-rss-account-export.json")
+    await expect(download.failure()).resolves.toBeNull()
+
+    const downloadPath = await download.path()
+    expect(downloadPath).toBeTruthy()
+    const accountExport = JSON.parse(await readFile(downloadPath!, "utf8"))
+
+    expect(accountExport).toMatchObject({
+      format: "arctic-rss-account-export",
+      schemaVersion: 1,
+      subscriptions: {
+        feeds: expect.any(Array),
+        podcasts: expect.any(Array),
+      },
+    })
+    expect(JSON.stringify(accountExport)).not.toContain("contentHtml")
+    expect(JSON.stringify(accountExport)).not.toContain("contentText")
+  })
+
   test("searches, saves, reopens, and deletes a private search shortcut", async ({
     page,
   }) => {
@@ -234,7 +264,7 @@ test.describe("authenticated reader journeys", () => {
       page.getByRole("link", { name: "E2E Search Phrase Result" })
     ).toBeVisible()
 
-    await page.getByRole("link", { name: "Save search" }).click()
+    await page.getByRole("link", { name: "Save view" }).click()
     await page.getByLabel("Saved search name").fill("E2E Search Shortcut")
     await page.getByRole("button", { name: "Save search" }).click()
     await expect(page).toHaveURL(/\/app\/saved-searches/)

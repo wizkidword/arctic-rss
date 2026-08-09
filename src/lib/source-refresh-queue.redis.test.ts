@@ -123,7 +123,8 @@ redisDescribe("source refresh queues with real Redis", () => {
           subject.close(),
         ])
       }
-    }
+    },
+    15_000
   )
 })
 
