@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  articleAccessWhere,
   deleteArticleForUserWithClient,
+  getReaderArticleForUserWithClient,
   getStorySignalArticleForUserWithClient,
+  listReaderArticleListItemsByIdsForUserWithClient,
+  listReaderArticlesByIdsForUserWithClient,
   listReaderArticlePageWithClient,
   listPublicReaderArticlesWithClient,
   listStorySignalArticlesForUserWithClient,
@@ -384,6 +388,156 @@ describe("reader list projections", () => {
   })
 })
 
+describe("collection-retained article access", () => {
+  it("uses an active source or a collection owned by the current reader", () => {
+    expect(articleAccessWhere("user-1")).toEqual({
+      OR: [
+        {
+          feed: {
+            subscriptions: {
+              some: {
+                isPaused: false,
+                userId: "user-1",
+              },
+            },
+          },
+        },
+        {
+          collectionItems: {
+            some: {
+              collection: {
+                userId: "user-1",
+              },
+            },
+          },
+        },
+      ],
+    })
+  })
+
+  it("allows retained articles through detail, hydration, and related-story presentation", async () => {
+    const store = {
+      article: {
+        findFirst: vi.fn().mockResolvedValue(
+          createArticleRecord({
+            id: "article-retained",
+            title: "Retained article",
+          })
+        ),
+        findMany: vi.fn().mockResolvedValue([
+          createArticleRecord({
+            id: "article-retained",
+            title: "Retained article",
+          }),
+        ]),
+      },
+    }
+
+    await expect(
+      getReaderArticleForUserWithClient({
+        articleId: "article-retained",
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toMatchObject({ id: "article-retained" })
+    await expect(
+      listReaderArticlesByIdsForUserWithClient({
+        articleIds: ["article-retained"],
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toHaveLength(1)
+    await expect(
+      listReaderArticleListItemsByIdsForUserWithClient({
+        articleIds: ["article-retained"],
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toHaveLength(1)
+    await expect(
+      listStoryClusterArticlesByIdsForUserWithClient({
+        articleIds: ["article-retained"],
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toHaveLength(1)
+
+    const queries = [
+      store.article.findFirst.mock.calls[0]?.[0],
+      ...store.article.findMany.mock.calls.map(([query]) => query),
+    ]
+
+    for (const query of queries) {
+      expect(query.where).toEqual(
+        expect.objectContaining({
+          AND: expect.arrayContaining([articleAccessWhere("user-1")]),
+        })
+      )
+      expect(JSON.stringify(query.where)).not.toContain('"userId":"user-2"')
+    }
+  })
+
+  it("keeps ordinary reader pages limited to active subscriptions but lets a selected collection prove access", async () => {
+    const store = {
+      article: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    }
+
+    await listReaderArticlePageWithClient({ store, userId: "user-1" })
+    await listReaderArticlePageWithClient({
+      collectionId: "collection-1",
+      store,
+      userId: "user-1",
+    })
+
+    expect(store.article.findMany.mock.calls[0]?.[0]?.where).toEqual({
+      AND: [
+        {
+          feed: {
+            subscriptions: {
+              some: {
+                isPaused: false,
+                userId: "user-1",
+              },
+            },
+          },
+        },
+        {
+          states: {
+            none: {
+              archivedAt: { not: null },
+              userId: "user-1",
+            },
+          },
+        },
+      ],
+    })
+    expect(store.article.findMany.mock.calls[1]?.[0]?.where).toEqual({
+      AND: [
+        {
+          collectionItems: {
+            some: {
+              collection: {
+                userId: "user-1",
+              },
+              collectionId: "collection-1",
+            },
+          },
+        },
+        {
+          states: {
+            none: {
+              archivedAt: { not: null },
+              userId: "user-1",
+            },
+          },
+        },
+      ],
+    })
+  })
+})
+
 describe("article state mutations", () => {
   it("marks an article read for the current user only", async () => {
     const store = createStateStore()
@@ -400,13 +554,7 @@ describe("article state mutations", () => {
     expect(store.article.findFirst).toHaveBeenCalledWith({
       select: { id: true },
       where: {
-        feed: {
-          subscriptions: {
-            some: {
-              userId: "user-1",
-            },
-          },
-        },
+        ...articleAccessWhere("user-1"),
         id: "article-1",
       },
     })
@@ -501,13 +649,7 @@ describe("article state mutations", () => {
     expect(store.article.findFirst).toHaveBeenCalledWith({
       select: { id: true },
       where: {
-        feed: {
-          subscriptions: {
-            some: {
-              userId: "user-1",
-            },
-          },
-        },
+        ...articleAccessWhere("user-1"),
         id: "article-1",
       },
     })

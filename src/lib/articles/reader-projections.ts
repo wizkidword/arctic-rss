@@ -194,6 +194,15 @@ export type ReaderArticleStore = {
   }
 }
 
+export type ReaderArticleDetailStore = {
+  article: {
+    findFirst(args: {
+      include: Prisma.ArticleInclude
+      where: Prisma.ArticleWhereInput
+    }): Promise<ReaderArticleRecord | null>
+  }
+}
+
 export function readerArticleListSelect(userId: string) {
   return {
     feed: {

@@ -15,6 +15,7 @@ import {
   type ReaderArticleListItem,
   type ReaderArticleListItemsStore,
   type ReaderArticleListStore,
+  type ReaderArticleDetailStore,
   type ReaderArticleStore,
   type StoryClusterArticleProjection,
   type StoryClusterArticleStore,
@@ -357,7 +358,7 @@ export async function listReaderArticleListItemsByIdsForUserWithClient({
       AND: [
         { id: { in: uniqueArticleIds } },
         notArchivedArticleWhere(userId),
-        subscribedArticleWhere(userId),
+        articleAccessWhere(userId),
       ],
     },
   })
@@ -393,7 +394,7 @@ export async function listReaderArticlesByIdsForUserWithClient({
       AND: [
         { id: { in: uniqueArticleIds } },
         notArchivedArticleWhere(userId),
-        subscribedArticleWhere(userId),
+        articleAccessWhere(userId),
       ],
     },
   })
@@ -447,7 +448,7 @@ export async function listStoryClusterArticlesByIdsForUserWithClient({
       AND: [
         { id: { in: uniqueArticleIds } },
         notArchivedArticleWhere(userId),
-        subscribedArticleWhere(userId),
+        articleAccessWhere(userId),
       ],
     },
   })
@@ -558,11 +559,27 @@ export async function getReaderArticleForUser({
   articleId: string
   userId: string
 }) {
-  const article = await getPrisma().article.findFirst({
+  return getReaderArticleForUserWithClient({
+    articleId,
+    store: getPrisma() as unknown as ReaderArticleDetailStore,
+    userId,
+  })
+}
+
+export async function getReaderArticleForUserWithClient({
+  articleId,
+  store,
+  userId,
+}: {
+  articleId: string
+  store: ReaderArticleDetailStore
+  userId: string
+}) {
+  const article = await store.article.findFirst({
     include: readerArticleInclude(userId),
     where: {
       AND: [
-        subscribedArticleWhere(userId),
+        articleAccessWhere(userId),
         { id: articleId },
         notArchivedArticleWhere(userId),
       ],
@@ -1039,7 +1056,7 @@ function notArchivedArticleWhere(userId: string): Prisma.ArticleWhereInput {
 
 function collectionArticleWhere(
   userId: string,
-  collectionId: string
+  collectionId?: string
 ): Prisma.ArticleWhereInput {
   return {
     collectionItems: {
@@ -1047,9 +1064,21 @@ function collectionArticleWhere(
         collection: {
           userId,
         },
-        collectionId,
+        ...(collectionId ? { collectionId } : {}),
       },
     },
+  }
+}
+
+/**
+ * A reader can access an article through an active source subscription or a
+ * collection item they own. Lists without a collection filter intentionally
+ * keep using `subscribedArticleWhere` so saved articles do not reappear in
+ * the ordinary reader after an unsubscribe.
+ */
+export function articleAccessWhere(userId: string): Prisma.ArticleWhereInput {
+  return {
+    OR: [subscribedArticleWhere(userId), collectionArticleWhere(userId)],
   }
 }
 
@@ -1119,13 +1148,7 @@ async function assertArticleBelongsToUser({
   const article = await store.article.findFirst({
     select: { id: true },
     where: {
-      feed: {
-        subscriptions: {
-          some: {
-            userId,
-          },
-        },
-      },
+      ...articleAccessWhere(userId),
       id: articleId,
     },
   })

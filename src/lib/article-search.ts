@@ -196,8 +196,10 @@ export async function listReaderArticleSearchPageWithClient({
             END
         )::double precision AS "rank"
       FROM "Article"
-      INNER JOIN "FeedSubscription"
+      LEFT JOIN "FeedSubscription"
         ON "FeedSubscription"."feedId" = "Article"."feedId"
+        AND "FeedSubscription"."userId" = ${userId}
+        AND "FeedSubscription"."isPaused" = false
       INNER JOIN "Feed"
         ON "Feed"."id" = "Article"."feedId"
       LEFT JOIN "Folder"
@@ -207,25 +209,29 @@ export async function listReaderArticleSearchPageWithClient({
         ON "ArticleState"."articleId" = "Article"."id"
         AND "ArticleState"."userId" = ${userId}
       CROSS JOIN search_terms
-      WHERE "FeedSubscription"."userId" = ${userId}
-        AND "FeedSubscription"."isPaused" = false
-        AND "ArticleState"."archivedAt" IS NULL
+      WHERE "ArticleState"."archivedAt" IS NULL
+        AND (
+          (
+            ${filters.collectionId ?? null}::text IS NULL
+            AND "FeedSubscription"."id" IS NOT NULL
+          )
+          OR (
+            ${filters.collectionId ?? null}::text IS NOT NULL
+            AND EXISTS (
+              SELECT 1
+              FROM "ArticleCollectionItem"
+              INNER JOIN "ArticleCollection"
+                ON "ArticleCollection"."id" = "ArticleCollectionItem"."collectionId"
+              WHERE "ArticleCollectionItem"."articleId" = "Article"."id"
+                AND "ArticleCollectionItem"."collectionId" = ${filters.collectionId ?? null}
+                AND "ArticleCollection"."userId" = ${userId}
+            )
+          )
+        )
         AND (${filters.subscriptionId ?? null}::text IS NULL OR "FeedSubscription"."id" = ${filters.subscriptionId ?? null})
         AND (${filters.folderId ?? null}::text IS NULL OR "FeedSubscription"."folderId" = ${filters.folderId ?? null})
         AND (${filters.publishedAfter ?? null}::timestamp IS NULL OR "Article"."publishedAt" >= ${filters.publishedAfter ?? null})
         AND (${filters.publishedBefore ?? null}::timestamp IS NULL OR "Article"."publishedAt" < ${filters.publishedBefore ?? null})
-        AND (
-          ${filters.collectionId ?? null}::text IS NULL
-          OR EXISTS (
-            SELECT 1
-            FROM "ArticleCollectionItem"
-            INNER JOIN "ArticleCollection"
-              ON "ArticleCollection"."id" = "ArticleCollectionItem"."collectionId"
-            WHERE "ArticleCollectionItem"."articleId" = "Article"."id"
-              AND "ArticleCollectionItem"."collectionId" = ${filters.collectionId ?? null}
-              AND "ArticleCollection"."userId" = ${userId}
-          )
-        )
         AND (
           ${state} = 'all'
           OR (${state} = 'unread' AND COALESCE("ArticleState"."isRead", false) = false)

@@ -117,8 +117,10 @@ describe("article search query", () => {
     ]
     const sql = strings.join("?")
 
+    expect(sql).toContain('LEFT JOIN "FeedSubscription"')
     expect(sql).toContain('"FeedSubscription"."userId" = ?')
     expect(sql).toContain('"FeedSubscription"."isPaused" = false')
+    expect(sql).toContain('"FeedSubscription"."id" IS NOT NULL')
     expect(sql).toContain('"ArticleState"."archivedAt" IS NULL')
     expect(sql).toContain('"ArticleCollection"."userId" = ?')
     expect(sql).toContain('"Article"."searchDocument"')
@@ -147,14 +149,27 @@ describe("article search query", () => {
             },
           },
           {
-            feed: {
-              subscriptions: {
-                some: {
-                  isPaused: false,
-                  userId: "user-1",
+            OR: [
+              {
+                feed: {
+                  subscriptions: {
+                    some: {
+                      isPaused: false,
+                      userId: "user-1",
+                    },
+                  },
                 },
               },
-            },
+              {
+                collectionItems: {
+                  some: {
+                    collection: {
+                      userId: "user-1",
+                    },
+                  },
+                },
+              },
+            ],
           },
         ],
       },

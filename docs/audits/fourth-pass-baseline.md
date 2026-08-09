@@ -303,11 +303,39 @@ therefore applies to clusters rather than historical version rows. A cluster
 with thirteen older versions cannot crowd an older active cluster out merely
 because its history is longer.
 
-Member display still rehydrates through the existing subscription and archive
-authorization guard. If a source is paused, unsubscribed, or archived, the
-whole saved group is withheld rather than showing an incomplete grouping. AI
-comparison copy now states its original source count at generation separately
-from the number of sources currently visible in the group.
+Member display still rehydrates through the reader access and archive guard.
+An article from a paused or removed source is visible only when that reader
+deliberately retained it in one of their collections; otherwise the whole saved
+group is withheld rather than showing an incomplete grouping. AI comparison
+copy now states its original source count at generation separately from the
+number of sources currently visible in the group.
+
+No production data, credential, migration, container, OVH host, push, or
+deployment was changed.
+
+## Phase 8C local collection-retention evidence (2026-08-08)
+
+Article access now has one reusable rule: the reader must have either an
+active, unpaused source subscription or an item in a collection they own.
+Ordinary reader pages and ordinary search keep their active-source boundary.
+When a specific owned collection is selected, its saved article supplies the
+access proof even after the original source is unsubscribed. Article detail,
+reader hydration, search-result hydration, read/star/archive state changes,
+and related-coverage presentation all apply the same durable rule. A
+collection belonging to another reader never supplies access.
+
+The search SQL keeps source attribution from the feed. It left-joins an active
+subscription only when one exists and permits a no-longer-subscribed article
+only through a user-owned item in the selected collection. There is currently
+no orphan-article cleanup worker: unsubscribe removes only the subscription,
+so the collection reference remains until its item is removed. Any future
+orphan cleanup must continue to treat a collection item as a protected
+reference.
+
+| Verification | Result |
+| --- | --- |
+| Focused source tests | Passed: 38 tests across article detail/hydration, collections, state mutation, and search query guards. |
+| Authenticated browser journey | Checked in: subscribe, save, unsubscribe, collection reopen/detail/search, star/read, remove, and disappearance. Not run locally because this isolated worktree has no disposable authenticated database fixture. |
 
 No production data, credential, migration, container, OVH host, push, or
 deployment was changed.

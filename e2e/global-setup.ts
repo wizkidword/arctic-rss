@@ -54,6 +54,14 @@ function responseForPath(requestUrl: string, origin: URL) {
     })
   }
 
+  if (path === "/collection.xml") {
+    return rssDocument({
+      articleTitle: "E2E Collection Article One",
+      feedTitle: "E2E Collection Feed",
+      itemId: "collection-one",
+    })
+  }
+
   if (path === "/opml-a.xml") {
     return rssDocument({
       articleTitle: "E2E OPML Article A",

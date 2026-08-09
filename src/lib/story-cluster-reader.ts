@@ -230,7 +230,8 @@ export async function evaluateStoryClustersForArticleUserWithDependencies({
 /**
  * Reads only current, active versions for an article. Membership is hydrated
  * again through the reader access guard, so a saved snapshot never exposes a
- * source that was later paused, removed, or archived for this user.
+ * source that was later paused, removed, or archived for this user unless the
+ * reader deliberately retained that article in one of their collections.
  */
 export async function listStoryClustersForArticleUser({
   articleId,

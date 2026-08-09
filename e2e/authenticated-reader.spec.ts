@@ -62,6 +62,126 @@ test.describe("authenticated reader journeys", () => {
     ).toBeVisible()
   })
 
+  test("keeps a saved article available after its source is unsubscribed until it is removed", async ({
+    page,
+  }) => {
+    await signIn(page, e2eCredentials.collection)
+    await page.getByRole("button", { name: "Add Feed" }).click()
+    await page.getByLabel("Feed or website URL").fill(`${e2eFeedUrl}/collection.xml`)
+    await page.getByRole("button", { name: "Subscribe" }).click()
+    await expect(
+      page.getByText(
+        /Subscribed to E2E Collection Feed\. Imported 1 articles\.|You are already subscribed to E2E Collection Feed\./
+      )
+    ).toBeVisible()
+
+    await page.goto("/app")
+    await page
+      .getByRole("link", { name: "E2E Collection Article One" })
+      .click({ position: { x: 8, y: 8 } })
+
+    const articleToolbar = page.getByRole("toolbar", {
+      name: "E2E Collection Article One actions",
+    })
+    await articleToolbar.getByRole("button", { name: "Save to collection" }).click()
+    const collectionDialog = page.getByRole("dialog", {
+      name: "Save to collection",
+    })
+    await collectionDialog
+      .getByLabel("New collection name")
+      .fill("E2E Read Later")
+    await collectionDialog.getByRole("button", { name: "Save" }).click()
+    await expect(collectionDialog).not.toBeVisible()
+
+    await page.goto("/app/folders")
+    await page
+      .getByRole("button", { name: "Unsubscribe from E2E Collection Feed" })
+      .click()
+    const unsubscribeDialog = page.getByRole("dialog", {
+      name: "Unsubscribe from E2E Collection Feed?",
+    })
+    await unsubscribeDialog.getByRole("button", { name: "Unsubscribe" }).click()
+    await expect(
+      page.getByRole("button", { name: "Unsubscribe from E2E Collection Feed" })
+    ).not.toBeVisible()
+
+    await page.goto("/app")
+    await expect(
+      page.getByRole("link", { name: "E2E Collection Article One" })
+    ).not.toBeVisible()
+
+    await page.goto("/app/collections")
+    const collectionLink = page.getByRole("link", { name: "E2E Read Later" })
+    await expect(collectionLink).toBeVisible()
+    const collectionHref = await collectionLink.getAttribute("href")
+    expect(collectionHref).toMatch(/^\/app\/collections\/[A-Za-z0-9_-]+$/)
+    await collectionLink.click()
+    await expect(
+      page.getByRole("link", { name: "E2E Collection Article One" })
+    ).toBeVisible()
+    const permalink = page.getByRole("link", { name: "Permalink" })
+    const permalinkHref = await permalink.getAttribute("href")
+    expect(permalinkHref).toMatch(/^\/app\/article\/[A-Za-z0-9_-]+$/)
+    await permalink.click()
+    await expect(page).toHaveURL(/\/app\/article\/[A-Za-z0-9_-]+$/)
+    await expect(
+      page.getByText("E2E Collection Article One", { exact: true })
+    ).toBeVisible()
+
+    await page.goto(collectionHref!)
+    const collectionArticleToolbar = page.getByRole("toolbar", {
+      name: "E2E Collection Article One actions",
+    })
+    await collectionArticleToolbar.getByRole("button", { name: "Star post" }).click()
+    await expect(
+      collectionArticleToolbar.getByRole("button", { name: "Unstar post" })
+    ).toBeVisible()
+    await collectionArticleToolbar
+      .getByRole("button", { name: "Unstar post" })
+      .click()
+    await expect(
+      collectionArticleToolbar.getByRole("button", { name: "Star post" })
+    ).toBeVisible()
+    await collectionArticleToolbar.getByRole("button", { name: "Star post" }).click()
+    await collectionArticleToolbar
+      .getByRole("button", { name: "Mark as read" })
+      .click()
+    await expect(
+      collectionArticleToolbar.getByRole("button", { name: "Mark as unread" })
+    ).toBeVisible()
+    await collectionArticleToolbar
+      .getByRole("button", { name: "Mark as unread" })
+      .click()
+    await expect(
+      collectionArticleToolbar.getByRole("button", { name: "Mark as read" })
+    ).toBeVisible()
+    await collectionArticleToolbar
+      .getByRole("button", { name: "Mark as read" })
+      .click()
+
+    const collectionId = collectionHref?.split("/").at(-1)
+    expect(collectionId).toBeTruthy()
+    await page.goto(`/app/search?collection=${collectionId}`)
+    await page.getByLabel("Search articles").fill("E2E Collection Article One")
+    await page.getByRole("button", { exact: true, name: "Search" }).click()
+    await expect(
+      page.getByRole("link", { name: "E2E Collection Article One" })
+    ).toBeVisible()
+
+    await page.goto(collectionHref!)
+    await page
+      .getByRole("toolbar", { name: "E2E Collection Article One actions" })
+      .getByRole("button", { name: "Remove from E2E Read Later" })
+      .click()
+    await expect(
+      page.getByRole("link", { name: "E2E Collection Article One" })
+    ).not.toBeVisible()
+    await page.goto(permalinkHref!)
+    await expect(
+      page.getByRole("link", { name: "E2E Collection Article One" })
+    ).not.toBeVisible()
+  })
+
   test("imports OPML into a folder and safely skips its duplicate feed", async ({
     page,
   }) => {

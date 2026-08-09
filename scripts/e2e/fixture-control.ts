@@ -54,6 +54,7 @@ async function seedE2eFixtures() {
   const feedUrl = `http://${fixtureHost}`
   const fixtures = [
     ["admin", "admin@e2e.arcticrss.test", "E2E Admin"],
+    ["collection", "collection@e2e.arcticrss.test", "E2E Collection Reader"],
     ["oauth", "oauth@e2e.arcticrss.test", "E2E OAuth Reader"],
     ["opml", "opml@e2e.arcticrss.test", "E2E OPML Reader"],
     ["reader", "reader@e2e.arcticrss.test", "E2E Reader"],
@@ -72,6 +73,7 @@ async function seedE2eFixtures() {
       feedUrl: {
         in: [
           `${feedUrl}/reader.xml`,
+          `${feedUrl}/collection.xml`,
           `${feedUrl}/opml-a.xml`,
           `${feedUrl}/opml-b.xml`,
           `${feedUrl}/search.xml`,

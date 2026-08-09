@@ -103,13 +103,27 @@ describe("article collections", () => {
     expect(store.article.findFirst).toHaveBeenCalledWith({
       select: { id: true },
       where: {
-        feed: {
-          subscriptions: {
-            some: {
-              userId: "user-1",
+        OR: [
+          {
+            feed: {
+              subscriptions: {
+                some: {
+                  isPaused: false,
+                  userId: "user-1",
+                },
+              },
             },
           },
-        },
+          {
+            collectionItems: {
+              some: {
+                collection: {
+                  userId: "user-1",
+                },
+              },
+            },
+          },
+        ],
         id: "article-1",
       },
     })
@@ -183,7 +197,7 @@ describe("article collections", () => {
     expect(store.articleCollectionItem.upsert).not.toHaveBeenCalled()
   })
 
-  it("does not add articles outside the user's subscriptions", async () => {
+  it("does not add articles outside the user's active or retained access", async () => {
     const store = createCollectionStore({ article: null })
 
     await expect(
