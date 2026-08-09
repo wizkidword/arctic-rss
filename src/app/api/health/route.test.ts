@@ -7,7 +7,6 @@ const { enforceRateLimit, getTrustedClientIp, readPublicHealthSnapshot } = vi.ho
 }))
 
 vi.mock("@/lib/health-snapshot", () => ({
-  healthSnapshotAgeMs: vi.fn(() => 12),
   readPublicHealthSnapshot,
 }))
 
@@ -24,7 +23,9 @@ describe("GET /api/health", () => {
     getTrustedClientIp.mockReturnValue(null)
     readPublicHealthSnapshot.mockResolvedValue({
       snapshot: { status: "ok" },
+      snapshotAgeMs: 12,
       source: "fresh",
+      status: "ok",
     })
   })
 
@@ -43,7 +44,9 @@ describe("GET /api/health", () => {
         checks: { database: "failed", durableRedis: "failed" },
         status: "degraded",
       },
+      snapshotAgeMs: 12,
       source: "stale",
+      status: "degraded",
     })
 
     const response = await GET(new Request("https://arcticrss.test/api/health"))

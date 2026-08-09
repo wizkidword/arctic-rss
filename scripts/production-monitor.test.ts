@@ -33,6 +33,7 @@ describe("production monitor", () => {
     expect(script).toContain("app-worker-ai-mail-1")
     expect(script).toContain("app-worker-imports-1")
     expect(script).toContain("app-worker-maintenance-1")
+    expect(script).toContain("app-worker-health-1")
     expect(script).toContain("app-worker-chat-events-1")
   })
 })

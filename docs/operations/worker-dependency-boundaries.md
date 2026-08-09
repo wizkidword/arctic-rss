@@ -11,12 +11,16 @@ than using one shared dependency set.
 | `worker-imports` | Yes | Yes | No |
 | `worker-maintenance` | Yes | Yes | No |
 | `worker-chat-events` | Yes | Yes | Yes |
+| `worker-health` | Yes | Yes | Yes |
 | `chat-gateway` | Yes | No | Yes |
 
 This is a startup dependency boundary. Compose does not restart a service just
 because an unrelated container stops, and durable-only workers do not receive
-an ephemeral Redis URL. An ephemeral Redis outage therefore cannot block or
-restart those worker roles through Compose dependency handling.
+an ephemeral Redis URL. The separate health worker is the deliberate exception:
+it needs both Redis workloads and the edge network to inspect the chat gateway
+and publish the shared readiness snapshot. An ephemeral Redis outage therefore
+cannot block or restart durable-only worker roles through Compose dependency
+handling.
 
 Verify the rendered model without starting containers:
 

@@ -11,7 +11,10 @@ describe("topology manifest", () => {
       const workers = manifest.workerServices.filter((service) => topology.requiredServices.includes(service))
 
       expect(workers.length).toBeGreaterThan(0)
-      expect(workers.includes("worker") && workers.length > 1).toBe(false)
+      expect(
+        workers.includes("worker") &&
+          workers.some((worker) => worker !== "worker" && worker !== "worker-health")
+      ).toBe(false)
       expect(topology.requiredServices).toContain("web")
       expect(topology.requiredServices).toContain("migrate")
     }

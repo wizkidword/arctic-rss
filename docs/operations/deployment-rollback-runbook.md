@@ -119,6 +119,8 @@ chat-enabled split topology:
 - `worker-maintenance`: schedulers, cleanup, reconciliation, retention, and
   source-health maintenance. A durable Redis lease permits only one scheduler
   holder at a time.
+- `worker-health`: the only worker allowed to inspect both Redis workloads and
+  the chat gateway; it publishes the shared public-health snapshot.
 - `worker-chat-events`: chat article integration, bot scheduling, and the
   transactional outbox publisher.
 
@@ -132,8 +134,8 @@ owners:
 cd "$APP_DIR"
 docker compose --profile all-in-one stop worker
 docker compose --profile all-in-one rm -f worker
-docker compose --profile split-workers up -d \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance
+docker compose --profile split-workers --profile health up -d \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-health
 docker compose ps
 ```
 
@@ -144,11 +146,11 @@ queue-ownership concern appears, stop the split services and recreate the
 safe compatibility worker:
 
 ```bash
-docker compose --profile split-workers stop \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance
-docker compose --profile split-workers rm -f \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance
-docker compose --profile all-in-one up -d --no-deps --force-recreate worker
+docker compose --profile split-workers --profile health stop \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-health
+docker compose --profile split-workers --profile health rm -f \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-health
+docker compose --profile all-in-one --profile health up -d --no-deps --force-recreate worker worker-health
 ```
 
 Do not activate both forms as a steady state. BullMQ may safely coordinate

@@ -98,6 +98,7 @@ for split_worker in \
   app-worker-ai-mail-1 \
   app-worker-imports-1 \
   app-worker-maintenance-1 \
+  app-worker-health-1 \
   app-worker-chat-events-1; do
   if docker inspect "$split_worker" >/dev/null 2>&1; then
     check_healthy_container "$split_worker"

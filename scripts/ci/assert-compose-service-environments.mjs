@@ -29,6 +29,8 @@ const compose = JSON.parse(
       "--profile",
       "all-in-one",
       "--profile",
+      "health",
+      "--profile",
       "tunnel",
       "config",
       "--format",

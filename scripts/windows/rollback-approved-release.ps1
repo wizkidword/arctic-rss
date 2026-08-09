@@ -99,7 +99,8 @@ function Get-RollbackTopology {
   $workerServices = @($manifest.workerServices | ForEach-Object { [string]$_ })
   $requiredServices = @($topology.requiredServices | ForEach-Object { [string]$_ })
   $activeWorkers = @($requiredServices | Where-Object { $workerServices -contains $_ })
-  if ($activeWorkers.Count -eq 0 -or (($activeWorkers -contains "worker") -and $activeWorkers.Count -gt 1)) {
+  $nonAllApplicationWorkers = @($activeWorkers | Where-Object { $_ -notin @("worker", "worker-health") })
+  if ($activeWorkers.Count -eq 0 -or (($activeWorkers -contains "worker") -and $nonAllApplicationWorkers.Count -gt 0)) {
     throw "The selected topology has ambiguous worker ownership."
   }
 

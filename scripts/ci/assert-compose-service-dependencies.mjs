@@ -11,6 +11,8 @@ const compose = JSON.parse(
       "--profile",
       "all-in-one",
       "--profile",
+      "health",
+      "--profile",
       "split-workers",
       "--profile",
       "chat-workers",
@@ -35,7 +37,7 @@ for (const serviceName of durableOnlyWorkers) {
   assertDependencies(serviceName, ["migrate", "redis"])
 }
 
-for (const serviceName of ["worker", "worker-chat-events"]) {
+for (const serviceName of ["worker", "worker-chat-events", "worker-health"]) {
   assertDependencies(serviceName, ["migrate", "redis", "redis-ephemeral"])
 }
 

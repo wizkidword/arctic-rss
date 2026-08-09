@@ -503,6 +503,37 @@ services:
       - durable-data
       - ephemeral-realtime
 
+  # The health probe is deliberately separate from durable-only maintenance:
+  # it is the sole worker with the network paths required to inspect every
+  # dependency and publish the shared readiness snapshot.
+  worker-health:
+    <<: *worker-runtime
+    depends_on: *worker-realtime-dependencies
+    profiles: ["health"]
+    cpus: 0.25
+    mem_limit: 384m
+    pids_limit: 128
+    environment:
+      ARCTIC_RSS_SERVICE_ROLE: worker-health
+      NODE_OPTIONS: "--max-old-space-size=256"
+      WORKER_MODE: health
+      ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
+      ARCTIC_RSS_TOPOLOGY: ${ARCTIC_RSS_TOPOLOGY:-all-in-one}
+      WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
+      EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-health').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - durable-data
+      - ephemeral-realtime
+      - web-edge
+
   chat-gateway:
     image: ${CHAT_GATEWAY_IMAGE:-arctic-rss-chat-gateway}
     build:

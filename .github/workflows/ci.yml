@@ -277,7 +277,7 @@ jobs:
         if: failure()
         run: |
           node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- ps
-          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- logs --no-color worker worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-chat-events
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- logs --no-color worker worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-health worker-chat-events
       - name: Stop Compose topology
         if: always()
         run: node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- down --volumes --remove-orphans

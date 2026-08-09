@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { requireFreshAdmin, refreshDetailedHealthSnapshot } = vi.hoisted(() => ({
-  refreshDetailedHealthSnapshot: vi.fn(),
+const { checkSystemHealth, requireFreshAdmin } = vi.hoisted(() => ({
+  checkSystemHealth: vi.fn(),
   requireFreshAdmin: vi.fn(),
 }))
 
@@ -10,9 +10,8 @@ vi.mock("@/lib/authorization", () => ({
   requireFreshAdmin,
 }))
 
-vi.mock("@/lib/health-snapshot", () => ({
-  healthSnapshotAgeMs: vi.fn(() => 20),
-  refreshDetailedHealthSnapshot,
+vi.mock("@/lib/system-health", () => ({
+  checkSystemHealth,
 }))
 
 import { GET } from "./route"
@@ -29,25 +28,21 @@ describe("GET /api/internal/health", () => {
     const response = await GET()
 
     expect(response.status).toBe(403)
-    expect(refreshDetailedHealthSnapshot).not.toHaveBeenCalled()
+    expect(checkSystemHealth).not.toHaveBeenCalled()
     await expect(response.json()).resolves.toEqual({ error: "Administrator access is required." })
   })
 
   it("returns detailed dependency checks only after fresh administrator authorization", async () => {
     requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
-    refreshDetailedHealthSnapshot.mockResolvedValue({
-      checkedAt: 100,
-      durationMs: 13,
-      result: {
-        checks: {
-          chatGateway: "disabled",
-          database: "ok",
-          durableRedis: "ok",
-          ephemeralRedis: "ok",
-          maintenance: "ok",
-          queues: "ok",
-          workers: { all: "ok" },
-        },
+    checkSystemHealth.mockResolvedValue({
+      checks: {
+        chatGateway: "disabled",
+        database: "ok",
+        durableRedis: "ok",
+        ephemeralRedis: "ok",
+        maintenance: "ok",
+        queues: "ok",
+        workers: { all: "ok", health: "ok" },
       },
       status: "ok",
     })
@@ -56,8 +51,9 @@ describe("GET /api/internal/health", () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get("cache-control")).toBe("no-store")
-    await expect(response.json()).resolves.toEqual({
-      checkDurationMs: 13,
+    const body = await response.json()
+
+    expect(body).toMatchObject({
       checks: {
         chatGateway: "disabled",
         database: "ok",
@@ -65,10 +61,10 @@ describe("GET /api/internal/health", () => {
         ephemeralRedis: "ok",
         maintenance: "ok",
         queues: "ok",
-        workers: { all: "ok" },
+        workers: { all: "ok", health: "ok" },
       },
-      snapshotAgeMs: 20,
       status: "ok",
     })
+    expect(body.checkDurationMs).toEqual(expect.any(Number))
   })
 })

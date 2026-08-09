@@ -28,6 +28,7 @@ import {
 import { processAiDigest } from "../src/lib/ai-digests"
 import { reconcileExpiredAiUsageOperations } from "../src/lib/ai-usage"
 import { getPrisma } from "../src/lib/db"
+import { writeHealthSnapshot } from "../src/lib/health-snapshot"
 import { refreshFeed } from "../src/lib/feed-refresh"
 import {
   processChatArticleIntegration,
@@ -74,6 +75,7 @@ import {
   savedMonitorSettings,
 } from "../src/lib/saved-monitors"
 import { assertSecureProductionConfiguration } from "../src/lib/production-security"
+import { getRuntimeTopology } from "../src/lib/runtime-topology"
 import { cleanupExpiredSecurityEvents } from "../src/lib/security-event-maintenance"
 import { processSmartDigestEmailDelivery } from "../src/lib/smart-digest-delivery"
 import {
@@ -89,6 +91,7 @@ import {
   type SmartDigestJobData,
 } from "../src/lib/smart-digest-queue"
 import { processSmartDigestRule } from "../src/lib/smart-digest-processing"
+import { checkSystemHealth, type SystemHealthResult } from "../src/lib/system-health"
 import {
   clearWorkerHeartbeat,
   maintenanceTickMaxAgeMs,
@@ -115,6 +118,7 @@ assertSecureProductionConfiguration(process.env, `worker-${workerMode}`)
 const heartbeatPath = workerHeartbeatPath(workerMode)
 const heartbeatInstanceId = process.env.HOSTNAME?.trim() || `worker-${process.pid}`
 const heartbeatVersion = process.env.ARCTIC_RSS_BUILD_SHA?.trim() || "unknown"
+const runsHealthSnapshotProducer = workerMode === "health"
 let controlPlaneRestartRequested = false
 
 function requestControlPlaneRestart() {
@@ -141,7 +145,8 @@ const durableHeartbeatControl = createWorkerControlPlaneRedis({
   onGraceExpired: requestControlPlaneRestart,
 })
 const durableHeartbeatStore = durableHeartbeatControl.client
-const maintenanceLock = runsWorkerResponsibility(workerMode, "maintenance")
+const maintenanceLock =
+  runsWorkerResponsibility(workerMode, "maintenance") || runsHealthSnapshotProducer
   ? createMaintenanceLock({ onRecoveryGraceExpired: requestControlPlaneRestart })
   : undefined
 
@@ -170,6 +175,8 @@ const chatEventOutboxIntervalMs = readClampedPositiveInteger({
 })
 const WORKER_HEARTBEAT_INTERVAL_MS = 30_000
 const WORKER_MEMORY_LOG_INTERVAL_MS = 5 * 60_000
+const HEALTH_SNAPSHOT_INTERVAL_MS = 20_000
+const HEALTH_SNAPSHOT_INITIAL_DELAY_MS = 5_000
 
 console.log(`Arctic RSS ${workerMode} worker online`)
 console.log(
@@ -505,6 +512,7 @@ async function enqueueDueSmartDigests(lease?: MaintenanceLease) {
 
 let schedulerRunning = false
 let schedulerTickPromise: Promise<void> | undefined
+let healthSnapshotPromise: Promise<void> | undefined
 let nextAuthTokenMaintenanceAt = 0
 let nextChatRetentionAt = 0
 let nextSecurityEventMaintenanceAt = 0
@@ -859,6 +867,74 @@ function runSchedulerTick() {
   return schedulerTickPromise
 }
 
+function failedSystemHealthResult(): SystemHealthResult {
+  const topology = getRuntimeTopology()
+
+  return {
+    checks: {
+      chatGateway: topology.chatEnabled ? "failed" : "disabled",
+      database: "failed",
+      durableRedis: "failed",
+      ephemeralRedis: "failed",
+      maintenance: "failed",
+      queues: "failed",
+      workers: Object.fromEntries(
+        topology.workerModes.map((mode) => [mode, "failed" as const])
+      ),
+    },
+    status: "degraded",
+  }
+}
+
+function runHealthSnapshot() {
+  if (healthSnapshotPromise || !maintenanceLock) {
+    return healthSnapshotPromise
+  }
+
+  const topology = getRuntimeTopology()
+  healthSnapshotPromise = maintenanceLock
+    .run(async (lease) => {
+      const startedAt = Date.now()
+      let checkFailed = false
+      const result = await checkSystemHealth().catch(() => {
+        checkFailed = true
+        return failedSystemHealthResult()
+      })
+
+      lease.assertHeld()
+      const snapshot = await writeHealthSnapshot({
+        checkedAt: Date.now(),
+        result,
+        store: durableHeartbeatStore,
+        topology: topology.name,
+      })
+      lease.assertHeld()
+
+      console.info(
+        JSON.stringify({
+          checkFailed,
+          durationMs: Math.max(0, Date.now() - startedAt),
+          event: "health_snapshot",
+          status: snapshot.status,
+          topology: snapshot.topology,
+        })
+      )
+    })
+    .then((leaseResult) => {
+      if (!leaseResult.acquired) {
+        console.warn(JSON.stringify({ event: "health_snapshot", outcome: "lease_unavailable" }))
+      }
+    })
+    .catch(() => {
+      console.error(JSON.stringify({ event: "health_snapshot", outcome: "failed" }))
+    })
+    .finally(() => {
+      healthSnapshotPromise = undefined
+    })
+
+  return healthSnapshotPromise
+}
+
 async function runChatRetention(lease?: MaintenanceLease) {
   if (!getChatFeatureFlags().enabled) {
     return { disabled: true }
@@ -1012,13 +1088,11 @@ const chatOutboxPublisher = runsWorkerResponsibility(workerMode, "chat-events")
       void publishPendingChatEvents()
     }, chatEventOutboxIntervalMs)
   : undefined
-
-if (scheduler) {
-  void runSchedulerTick()
-}
-if (chatOutboxPublisher) {
-  void publishPendingChatEvents()
-}
+const healthSnapshotPublisher = runsHealthSnapshotProducer
+  ? setInterval(() => {
+      void runHealthSnapshot()
+    }, HEALTH_SNAPSHOT_INTERVAL_MS)
+  : undefined
 
 const heartbeat = startWorkerHeartbeat({
   instanceId: heartbeatInstanceId,
@@ -1033,6 +1107,18 @@ const memoryTelemetry = setInterval(
   () => logWorkerMemory({ trigger: "interval" }),
   WORKER_MEMORY_LOG_INTERVAL_MS
 )
+
+if (scheduler) {
+  void runSchedulerTick()
+}
+if (chatOutboxPublisher) {
+  void publishPendingChatEvents()
+}
+if (healthSnapshotPublisher) {
+  setTimeout(() => {
+    void runHealthSnapshot()
+  }, HEALTH_SNAPSHOT_INITIAL_DELAY_MS)
+}
 
 let shutdownPromise: ReturnType<typeof shutdownWorkerRuntime> | undefined
 
@@ -1059,7 +1145,7 @@ function shutdown() {
       },
       disconnectDatabase: () => prisma.$disconnect(),
       getPendingWork: () =>
-        [schedulerTickPromise, chatOutboxPublishPromise].filter(
+        [schedulerTickPromise, chatOutboxPublishPromise, healthSnapshotPromise].filter(
           (work): work is Promise<void> => Boolean(work)
         ),
       stopScheduling: () => {
@@ -1068,6 +1154,9 @@ function shutdown() {
         }
         if (chatOutboxPublisher) {
           clearInterval(chatOutboxPublisher)
+        }
+        if (healthSnapshotPublisher) {
+          clearInterval(healthSnapshotPublisher)
         }
         heartbeat.stop()
         clearInterval(memoryTelemetry)

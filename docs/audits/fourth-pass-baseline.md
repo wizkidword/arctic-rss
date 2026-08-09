@@ -339,3 +339,28 @@ reference.
 
 No production data, credential, migration, container, OVH host, push, or
 deployment was changed.
+
+## Phase 9A local shared-health evidence (2026-08-08)
+
+Public `/api/health` now reads one compact record from durable Redis under a
+250-millisecond deadline. It never runs the deep system check or constructs a
+BullMQ queue. `worker-health` is a separate, topology-required worker that
+uses the existing durable maintenance lease to perform the deep check every 20
+seconds and write a versioned snapshot with a 60-second Redis TTL. Public
+health treats a missing, malformed, expired, or older-than-45-second snapshot
+as degraded.
+
+The health worker is deliberately the only new worker with durable, ephemeral,
+and edge-network access. `worker-maintenance` remains durable-only, preserving
+the Phase 7C network boundary. The topology, release/rollback service lists,
+exact service-environment manifest, dependency boundary, and network-boundary
+validation all include the health worker. Administrators retain an explicit,
+fresh sanitized deep diagnostic at `/api/internal/health`.
+
+| Verification | Result |
+| --- | --- |
+| Focused health/topology/security tests | Passed: 53 tests covering snapshot publication, freshness, staleness, timeout, 1,000 public reads, route authorization, topology, and production-role validation. |
+| Static and rendered topology checks | Passed: TypeScript plus Compose exact environment, dependency, Redis-network, and all-topology validation. |
+
+No production data, credential, migration, container, OVH host, push, or
+deployment was changed.

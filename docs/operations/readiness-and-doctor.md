@@ -12,29 +12,27 @@
 {"status":"degraded"}
 ```
 
-```json
-{"status":"unavailable"}
-```
-
 It never returns dependency names, worker names, queue contents, timestamps,
 credentials, URLs, or raw error messages.
 
-The application keeps a process-local health snapshot for three seconds. One
-refresh is shared by concurrent cache misses. When an expired snapshot is less
-than 30 seconds old, it is served while one refresh runs; once it is older, a
-request waits for the next bounded refresh. A failed refresh returns
-`unavailable`. This prevents a burst of public probes from multiplying
-PostgreSQL, Redis, queue, worker, or chat checks.
+The dedicated `worker-health` role runs the deep dependency inspection every
+20 seconds under the existing durable maintenance lease. It writes one compact,
+versioned snapshot to durable Redis with a 60-second TTL. Every web replica
+performs only a bounded 250-millisecond Redis read; it never starts PostgreSQL,
+queue, worker, or chat diagnostics and never constructs a BullMQ queue. A
+missing, malformed, expired, or older-than-45-second snapshot is `degraded`.
+This keeps a public-probe burst to lightweight shared-record reads rather than
+multiplied diagnostics.
 
 Trusted `cf-connecting-ip` values are rate-limited at 600 requests per minute.
 Requests without a valid trusted client IP are not rejected, so loopback and
 load-balancer probes remain usable. Every public result is `no-store`; the
-short cache is inside the application, rather than a public intermediary.
+shared snapshot is private durable-Redis state rather than a public
+intermediary cache.
 
 The application writes low-cardinality structured events for public request
-snapshot source and age, refresh duration and classification, and suppressed
-concurrent refreshes. It does not log client IPs, URLs, secrets, or raw
-dependency errors.
+snapshot source and age plus health-worker snapshot outcome and duration. It
+does not log client IPs, URLs, secrets, or raw dependency errors.
 
 Docker uses `/api/live` for cheap web-process liveness. Public health is the
 cached dependency-aware signal; it returns HTTP 200 only for `ok` and a
@@ -44,8 +42,8 @@ non-200 status otherwise.
 
 `GET /api/internal/health` is protected by fresh administrator authorization.
 Ordinary unauthenticated and non-administrator requests receive a 403 response.
-A successful response is `no-store` and includes the current detailed checks,
-the snapshot age, and check duration:
+A successful response is `no-store` and performs an explicit fresh diagnostic,
+returning sanitized check names and check duration:
 
 - PostgreSQL, durable Redis, and ephemeral Redis;
 - required worker heartbeats and maintenance freshness;
@@ -61,9 +59,8 @@ than retained source job records; it never exposes source IDs, job IDs, queue
 payloads, or raw errors.
 
 The detailed route does not return credentials, connection strings, queue
-payloads, job IDs, or raw dependency errors. It uses the same single-flight
-refresh as public health, so an operator refresh cannot create a duplicate
-concurrent diagnostic run.
+payloads, job IDs, or raw dependency errors. Unlike public health, it is an
+intentional administrator diagnostic and may run the bounded deep checks.
 
 Workers keep the existing container-local `/tmp` heartbeat for Docker. They
 also refresh a 90-second durable Redis TTL record containing only worker mode,
@@ -85,7 +82,8 @@ The approved release and rollback scripts inject the manifest-selected topology
 and commit SHA into Compose. Manual production Compose use must set
 `ARCTIC_RSS_TOPOLOGY` to one of the names in
 [`ops/topologies.json`](../../ops/topologies.json); production web startup
-rejects an absent or unknown value.
+rejects an absent or unknown value. The health worker requires that same
+topology value so it can verify the exact selected worker set.
 
 ## `npm run doctor`
 

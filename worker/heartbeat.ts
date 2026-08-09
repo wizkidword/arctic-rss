@@ -14,7 +14,7 @@ export function startWorkerHeartbeat({
   instanceId: string
   intervalMs: number
   isControlPlaneReady?: () => boolean
-  mode: "ai-mail" | "all" | "chat-events" | "imports" | "ingestion" | "maintenance"
+  mode: "ai-mail" | "all" | "chat-events" | "health" | "imports" | "ingestion" | "maintenance"
   path: string
   store: Redis
   version: string

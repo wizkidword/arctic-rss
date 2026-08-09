@@ -26,6 +26,7 @@ export const PRODUCTION_SERVICE_ROLES = [
   "worker-ai-mail",
   "worker-all",
   "worker-chat-events",
+  "worker-health",
   "worker-imports",
   "worker-ingestion",
   "worker-maintenance",
@@ -48,6 +49,7 @@ const WORKER_ROLES = new Set<ProductionServiceRole>([
   "worker-ai-mail",
   "worker-all",
   "worker-chat-events",
+  "worker-health",
   "worker-imports",
   "worker-ingestion",
   "worker-maintenance",
@@ -360,7 +362,11 @@ function assertWorkerConfiguration(
     assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
   }
 
-  if (role === "worker-all") {
+  if (role === "worker-health") {
+    assertRuntimeTopology(environment)
+  }
+
+  if (role === "worker-all" || role === "worker-health") {
     assertRedisWorkloadSeparation(environment)
   }
 }

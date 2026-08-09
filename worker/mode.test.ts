@@ -14,6 +14,10 @@ describe("worker mode", () => {
 
   it("parses explicit isolated modes and their independent heartbeat paths", () => {
     expect(getWorkerMode({ WORKER_MODE: "ai-mail" })).toBe("ai-mail")
+    expect(getWorkerMode({ WORKER_MODE: "health" })).toBe("health")
+    expect(workerHeartbeatPath("health")).toBe(
+      "/tmp/arctic-rss-worker-heartbeat-health"
+    )
     expect(workerHeartbeatPath("maintenance")).toBe(
       "/tmp/arctic-rss-worker-heartbeat-maintenance"
     )

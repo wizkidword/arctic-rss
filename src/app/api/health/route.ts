@@ -1,7 +1,4 @@
-import {
-  healthSnapshotAgeMs,
-  readPublicHealthSnapshot,
-} from "@/lib/health-snapshot"
+import { readPublicHealthSnapshot } from "@/lib/health-snapshot"
 import { enforceRateLimit, getTrustedClientIp } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -21,23 +18,22 @@ export async function GET(request: Request) {
     }
   }
 
-  const { snapshot, source } = await readPublicHealthSnapshot()
-  const snapshotAgeMs = healthSnapshotAgeMs(snapshot)
+  const { snapshotAgeMs, source, status } = await readPublicHealthSnapshot()
 
   console.info(
     JSON.stringify({
       event: "public_health_request",
       snapshotAgeMs,
       snapshotSource: source,
-      status: snapshot.status,
+      status,
     })
   )
 
-  return publicHealthResponse(snapshot.status, snapshot.status === "ok" ? 200 : 503)
+  return publicHealthResponse(status, status === "ok" ? 200 : 503)
 }
 
 function publicHealthResponse(
-  status: "degraded" | "ok" | "unavailable",
+  status: "degraded" | "ok",
   responseStatus: number,
   extraHeaders: HeadersInit = {}
 ) {

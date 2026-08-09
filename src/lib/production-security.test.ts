@@ -254,6 +254,37 @@ describe("production security configuration", () => {
     ).not.toThrow()
   })
 
+  it("requires an explicit topology and both Redis workloads for the health worker", () => {
+    const environment = {
+      DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
+      EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
+      NODE_ENV: "production",
+    }
+
+    expect(() =>
+      assertSecureProductionConfiguration(environment, "worker-health")
+    ).toThrow("ARCTIC_RSS_TOPOLOGY must be configured in production.")
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        { ...environment, ARCTIC_RSS_TOPOLOGY: "split" },
+        "worker-health"
+      )
+    ).not.toThrow()
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...environment,
+          ARCTIC_RSS_TOPOLOGY: "split",
+          EPHEMERAL_REDIS_URL: environment.DURABLE_REDIS_URL,
+        },
+        "worker-health"
+      )
+    ).toThrow("must not target the same Redis endpoint")
+  })
+
   it("rejects a shared Redis endpoint from the all-in-one worker", () => {
     const environment = {
       DATABASE_URL: webProductionEnvironment.DATABASE_URL,
@@ -372,9 +403,10 @@ function validProductionEnvironmentForRole(
   return {
     DATABASE_URL: webProductionEnvironment.DATABASE_URL,
     DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
-    ...(role === "worker-chat-events"
+    ...(role === "worker-chat-events" || role === "worker-health"
       ? { EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL }
       : {}),
+    ...(role === "worker-health" ? { ARCTIC_RSS_TOPOLOGY: "all-in-one" } : {}),
     NODE_ENV: "production",
   }
 }

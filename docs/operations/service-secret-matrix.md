@@ -22,6 +22,7 @@ required-variable output, and production startup checks consume that source.
 | `worker-imports` | Runtime DB and durable Redis | Auth/OAuth, SMTP, AI, chat, migration, tunnel values |
 | `worker-maintenance` | Runtime DB, durable Redis, scheduler/monitor and chat-retention settings | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
 | `worker-chat-events` | Runtime DB, durable/ephemeral Redis, event-outbox interval | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
+| `worker-health` | Runtime DB, durable/ephemeral Redis, and selected topology | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
 | `chat-gateway` | `CHAT_DATABASE_URL` for the dedicated restricted chat role, ephemeral Redis, canonical origin, chat token and gateway limits | `DATABASE_URL`, migration DB URL, Auth/OAuth, SMTP, AI, PostgreSQL/Redis container passwords, tunnel token |
 | `cloudflared` | `TUNNEL_TOKEN`, interpolated from `CLOUDFLARE_TUNNEL_TOKEN` | Database, Redis, auth, SMTP, AI, and chat values |
 

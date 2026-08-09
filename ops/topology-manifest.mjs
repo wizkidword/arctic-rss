@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 
 export const TOPOLOGY_MANIFEST_PATH = fileURLToPath(new URL("./topologies.json", import.meta.url))
 
-const REQUIRED_RESPONSIBILITIES = ["ingestion", "ai-mail", "imports", "maintenance"]
+const REQUIRED_RESPONSIBILITIES = ["ingestion", "ai-mail", "imports", "maintenance", "health"]
 const CHAT_RESPONSIBILITY = "chat-events"
 
 function assertStringArray(value, label) {
@@ -50,7 +50,13 @@ function assertTopology(topologyName, topology, manifest) {
 
   const activeWorkers = manifest.workerServices.filter((serviceName) => topology.requiredServices.includes(serviceName))
   assert.ok(activeWorkers.length > 0, `${topologyName} must include at least one worker.`)
-  assert.ok(!(activeWorkers.includes("worker") && activeWorkers.length > 1), `${topologyName} cannot enable worker mode all with split workers.`)
+  const nonAllApplicationWorkers = activeWorkers.filter(
+    (serviceName) => serviceName !== "worker" && serviceName !== "worker-health"
+  )
+  assert.ok(
+    !(activeWorkers.includes("worker") && nonAllApplicationWorkers.length > 0),
+    `${topologyName} cannot enable worker mode all with split workers.`
+  )
 
   const responsibilities = [...REQUIRED_RESPONSIBILITIES, ...(topology.chatEnabled ? [CHAT_RESPONSIBILITY] : [])]
   for (const responsibility of responsibilities) {

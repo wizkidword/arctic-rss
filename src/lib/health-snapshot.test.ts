@@ -1,13 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
-  PUBLIC_HEALTH_CACHE_MS,
-  PUBLIC_HEALTH_MAX_STALE_MS,
+  createHealthSnapshot,
+  HEALTH_SNAPSHOT_KEY,
+  HEALTH_SNAPSHOT_MAX_AGE_MS,
+  HEALTH_SNAPSHOT_TTL_MS,
   readPublicHealthSnapshot,
-  refreshDetailedHealthSnapshot,
-  resetHealthSnapshotForTests,
+  writeHealthSnapshot,
 } from "./health-snapshot"
 
+const checkedAt = 1_752_428_800_000
 const healthyResult = {
   checks: {
     chatGateway: "disabled" as const,
@@ -16,105 +18,109 @@ const healthyResult = {
     ephemeralRedis: "ok" as const,
     maintenance: "ok" as const,
     queues: "ok" as const,
-    workers: { all: "ok" as const },
+    workers: { all: "ok" as const, health: "ok" as const },
   },
   status: "ok" as const,
 }
 
-afterEach(() => {
-  resetHealthSnapshotForTests()
-})
-
 describe("health snapshots", () => {
-  it("shares one initial refresh across one hundred concurrent public requests", async () => {
-    let resolveCheck: ((value: typeof healthyResult) => void) | undefined
-    const check = vi.fn(
-      () => new Promise<typeof healthyResult>((resolve) => {
-        resolveCheck = resolve
-      })
-    )
-    const reads = Array.from({ length: 100 }, () =>
-      readPublicHealthSnapshot({ check, now: () => 10_000 })
-    )
+  it("writes a compact, versioned snapshot with a durable Redis TTL", async () => {
+    const store = { set: vi.fn().mockResolvedValue("OK") }
 
-    expect(check).toHaveBeenCalledOnce()
-    resolveCheck?.(healthyResult)
-
-    await expect(Promise.all(reads)).resolves.toEqual(
-      Array.from({ length: 100 }, () => ({
-        snapshot: {
-          checkedAt: 10_000,
-          durationMs: 0,
-          result: healthyResult,
-          status: "ok",
-        },
-        source: "miss",
-      }))
-    )
-  })
-
-  it("returns a fresh snapshot without another dependency check inside the cache window", async () => {
-    const check = vi.fn().mockResolvedValue(healthyResult)
-
-    await readPublicHealthSnapshot({ check, now: () => 10_000 })
-    const next = await readPublicHealthSnapshot({
-      check,
-      now: () => 10_000 + PUBLIC_HEALTH_CACHE_MS,
+    const snapshot = await writeHealthSnapshot({
+      checkedAt,
+      result: healthyResult,
+      store,
+      topology: "all-in-one",
     })
 
-    expect(check).toHaveBeenCalledOnce()
-    expect(next.source).toBe("fresh")
+    expect(snapshot).toEqual({
+      checkedAt: new Date(checkedAt).toISOString(),
+      checks: {
+        chatGateway: "disabled",
+        database: "ok",
+        durableRedis: "ok",
+        ephemeralRedis: "ok",
+        maintenance: "ok",
+        queues: "ok",
+        workers: "ok",
+      },
+      expiresAt: new Date(checkedAt + HEALTH_SNAPSHOT_TTL_MS).toISOString(),
+      status: "ok",
+      topology: "all-in-one",
+      version: 1,
+    })
+    expect(store.set).toHaveBeenCalledWith(
+      HEALTH_SNAPSHOT_KEY,
+      JSON.stringify(snapshot),
+      "PX",
+      HEALTH_SNAPSHOT_TTL_MS
+    )
   })
 
-  it("serves the last completed status while one expired refresh is in flight", async () => {
-    const initialCheck = vi.fn().mockResolvedValue(healthyResult)
-    await readPublicHealthSnapshot({ check: initialCheck, now: () => 10_000 })
+  it("serves a fresh shared snapshot without invoking dependency diagnostics", async () => {
+    const snapshot = createHealthSnapshot({
+      checkedAt,
+      result: healthyResult,
+      topology: "split",
+    })
+    const store = { get: vi.fn().mockResolvedValue(JSON.stringify(snapshot)) }
 
-    let resolveRefresh: ((value: typeof healthyResult) => void) | undefined
-    const check = vi.fn(
-      () => new Promise<typeof healthyResult>((resolve) => {
-        resolveRefresh = resolve
-      })
-    )
-    const stale = await readPublicHealthSnapshot({
-      check,
-      now: () => 10_000 + PUBLIC_HEALTH_CACHE_MS + 1,
+    await expect(
+      readPublicHealthSnapshot({ store, now: () => checkedAt + 1_000 })
+    ).resolves.toEqual({
+      snapshot,
+      snapshotAgeMs: 1_000,
+      source: "fresh",
+      status: "ok",
+    })
+  })
+
+  it("marks a missing, malformed, or stale snapshot degraded", async () => {
+    const stale = createHealthSnapshot({
+      checkedAt,
+      result: healthyResult,
+      topology: "split",
     })
 
-    expect(stale.source).toBe("stale")
-    expect(stale.snapshot.status).toBe("ok")
-    expect(check).toHaveBeenCalledOnce()
-    resolveRefresh?.(healthyResult)
-  })
-
-  it("waits for a new result after the maximum stale age", async () => {
-    const initialCheck = vi.fn().mockResolvedValue(healthyResult)
-    await readPublicHealthSnapshot({ check: initialCheck, now: () => 10_000 })
-    const unavailable = vi.fn().mockRejectedValue(new Error("dependency unavailable"))
-
-    const next = await readPublicHealthSnapshot({
-      check: unavailable,
-      now: () => 10_000 + PUBLIC_HEALTH_MAX_STALE_MS + 1,
-    })
-
-    expect(next).toMatchObject({ source: "miss", snapshot: { status: "unavailable" } })
-    expect(unavailable).toHaveBeenCalledOnce()
-  })
-
-  it("shares an explicit detailed refresh with an existing request", async () => {
-    let resolveCheck: ((value: typeof healthyResult) => void) | undefined
-    const check = vi.fn(
-      () => new Promise<typeof healthyResult>((resolve) => {
-        resolveCheck = resolve
+    await expect(
+      readPublicHealthSnapshot({ store: { get: vi.fn().mockResolvedValue(null) } })
+    ).resolves.toMatchObject({ source: "missing", status: "degraded" })
+    await expect(
+      readPublicHealthSnapshot({ store: { get: vi.fn().mockResolvedValue("not-json") } })
+    ).resolves.toMatchObject({ source: "missing", status: "degraded" })
+    await expect(
+      readPublicHealthSnapshot({
+        now: () => checkedAt + HEALTH_SNAPSHOT_MAX_AGE_MS + 1,
+        store: { get: vi.fn().mockResolvedValue(JSON.stringify(stale)) },
       })
+    ).resolves.toMatchObject({ source: "stale", status: "degraded" })
+  })
+
+  it("returns degraded when the bounded Redis read does not complete", async () => {
+    await expect(
+      readPublicHealthSnapshot({
+        readTimeoutMs: 1,
+        store: { get: vi.fn(() => new Promise<string | null>(() => undefined)) },
+      })
+    ).resolves.toMatchObject({ source: "unavailable", status: "degraded" })
+  })
+
+  it("keeps one thousand public reads to snapshot GET work only", async () => {
+    const snapshot = createHealthSnapshot({
+      checkedAt,
+      result: healthyResult,
+      topology: "all-in-one",
+    })
+    const store = { get: vi.fn().mockResolvedValue(JSON.stringify(snapshot)) }
+
+    const results = await Promise.all(
+      Array.from({ length: 1_000 }, () =>
+        readPublicHealthSnapshot({ store, now: () => checkedAt + 1_000 })
+      )
     )
-    const detailed = refreshDetailedHealthSnapshot({ check, now: () => 10_000 })
-    const publicRead = readPublicHealthSnapshot({ check, now: () => 10_000 })
 
-    expect(check).toHaveBeenCalledOnce()
-    resolveCheck?.(healthyResult)
-
-    await expect(detailed).resolves.toMatchObject({ status: "ok" })
-    await expect(publicRead).resolves.toMatchObject({ snapshot: { status: "ok" } })
+    expect(store.get).toHaveBeenCalledTimes(1_000)
+    expect(results.every((result) => result.status === "ok")).toBe(true)
   })
 })
