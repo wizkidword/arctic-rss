@@ -1,6 +1,6 @@
 # Fourth-pass capability status
 
-**Last reviewed:** 2026-08-08
+**Last reviewed:** 2026-08-09
 **Baseline commit:** `10896e19aa2a2151edff1bf550f0b3e56fcfe27e`
 
 This is a source and verification ledger, not a deployment record. A source
@@ -29,7 +29,7 @@ separately approved release and post-release verification occur.
 | Source orphan lifecycle reporting | Implemented in source: a read-only aggregate report counts currently unreferenced feeds and podcasts plus collection, directory, chat, audit, legal-hold, state, and digest references; no orphan state or deletion is enabled | Report mapping and malformed-result tests | Not applicable | Not applicable: no mutation or background purge is introduced | No | No | No | Separate owner approval for future marking and bounded purge | 2026-08-08 |
 | Current story versions selected before limiting | Baseline finding confirmed; historical versions are limited before current-version filtering | Existing reader tests do not cover historical crowd-out | Not applicable | Not applicable | No | No | No | Review and approve a future release | 2026-08-08 |
 | Collection-retained article authorization | Implemented in source: an article is accessible through an active subscription or a collection item owned by that reader; ordinary lists/searches still require an active source, while collection-scoped views/searches retain deliberate saves | Detail, list hydration, collection list, collection search, state mutation, related-story presentation, and foreign-collection query-shape tests | Authenticated subscribe/save/unsubscribe/collection/detail/search/state/remove journey is checked in; execution requires the disposable authenticated fixture | No orphan-article cleanup currently exists; source unsubscribe removes only the subscription and collection references remain until their item is removed | No | No | No | Review the authenticated fixture result, then approve a future release | 2026-08-08 |
-| Fourth-pass operational and product work | Not started; ordered behind Phases 1–10 | Not started | Not started | Not started | To be classified per change | No | No | Owner approval before Phase 11 product work | 2026-08-08 |
+| Phase 11A source hygiene | Implemented in source: safe redirect and feed self-link evidence, prior/current URL display, duplicate warning, reviewed recovery, and a typed-confirmation replacement that preserves the existing subscription record, folder, and custom title | Redirect, XML metadata, refresh recovery, subscription ownership/duplicate, action confirmation, and attention rendering tests; full suite passes | No dedicated authenticated browser journey in this run | Not applicable: no worker, queue family, or Compose topology is added | Yes — ten nullable, expand-only `Feed`/`FeedSubscription` fields | No | No | Run the authenticated browser journey; capture fresh production table/lock/backup evidence; then require a new `DEPLOY <short-sha>` approval | 2026-08-09 |
 
 ## Baseline evidence index
 

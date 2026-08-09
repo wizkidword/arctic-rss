@@ -85,6 +85,7 @@ const mocks = vi.hoisted(() => {
       (value: unknown) => value === "DAILY" || value === "WEEKLY",
     ),
     mergeStoryClustersForUser: vi.fn(),
+    markFeedSubscriptionAttentionReviewed: vi.fn(),
     MockAiDigestError,
     MockAiSummaryError,
     MockArticleCollectionError,
@@ -102,6 +103,7 @@ const mocks = vi.hoisted(() => {
     removePodcastEpisodeFromCollection: vi.fn(),
     refresh: vi.fn(),
     refreshFeed: vi.fn(),
+    replaceFeedSubscription: vi.fn(),
     requestEmailVerification: vi.fn(),
     requestAiDigestForUser: vi.fn(),
     retryOpmlImportJob: vi.fn(),
@@ -201,6 +203,8 @@ vi.mock("@/lib/feed-refresh", () => ({
 vi.mock("@/lib/feed-subscriptions", () => ({
   FeedSubscriptionError: mocks.MockFeedSubscriptionError,
   getUserFeedSubscription: mocks.getUserFeedSubscription,
+  markFeedSubscriptionAttentionReviewed: mocks.markFeedSubscriptionAttentionReviewed,
+  replaceFeedSubscription: mocks.replaceFeedSubscription,
   setFeedSubscriptionPaused: mocks.setFeedSubscriptionPaused,
   subscribeToFeed: mocks.subscribeToFeed,
   unsubscribeFromFeed: mocks.unsubscribeFromFeed,
@@ -274,6 +278,8 @@ import {
   removeArticleFromCollectionAction,
   removePodcastEpisodeFromCollectionAction,
   refreshFeedAction,
+  replaceFeedSubscriptionAction,
+  reviewFeedAttentionAction,
   setFeedPausedAction,
   subscribeDirectoryFeedAction,
   resendEmailVerificationAction,
@@ -1018,6 +1024,92 @@ describe("bulkFeedAttentionAction", () => {
       trigger: "source-attention",
     })
     expect(mocks.refreshFeed).not.toHaveBeenCalled()
+  })
+})
+
+describe("source hygiene actions", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enqueueFeedRefresh.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.markFeedSubscriptionAttentionReviewed.mockReset()
+    mocks.refresh.mockReset()
+    mocks.replaceFeedSubscription.mockReset()
+    mocks.revalidatePath.mockReset()
+  })
+
+  it("requires a reader to type REPLACE before changing a source", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    const formData = new FormData()
+    formData.set("candidateUrl", "https://feeds.example.com/new.xml")
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      replaceFeedSubscriptionAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "Type REPLACE to confirm changing this source.",
+      status: "error",
+    })
+
+    expect(mocks.replaceFeedSubscription).not.toHaveBeenCalled()
+    expect(mocks.enqueueFeedRefresh).not.toHaveBeenCalled()
+  })
+
+  it("verifies, replaces, and queues a reader-owned source", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.replaceFeedSubscription.mockResolvedValue({
+      feedId: "feed-new",
+      previousFeedUrl: "https://example.com/old.xml",
+      title: "My source",
+    })
+    mocks.enqueueFeedRefresh.mockResolvedValue({
+      jobId: "feed-new",
+      outcome: "queued",
+    })
+    const formData = new FormData()
+    formData.set("candidateUrl", "https://feeds.example.com/new.xml")
+    formData.set("confirmation", "REPLACE")
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      replaceFeedSubscriptionAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message:
+        "My source now follows the verified replacement. Its refresh is queued.",
+      status: "success",
+    })
+
+    expect(mocks.replaceFeedSubscription).toHaveBeenCalledWith({
+      candidateUrl: "https://feeds.example.com/new.xml",
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(mocks.enqueueFeedRefresh).toHaveBeenCalledWith("feed-new", {
+      priority: 1,
+      trigger: "source-hygiene-replacement",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/feed/subscription-1")
+  })
+
+  it("records a recovery review only for the signed-in reader", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      reviewFeedAttentionAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "Source recovery marked as reviewed.",
+      status: "success",
+    })
+
+    expect(mocks.markFeedSubscriptionAttentionReviewed).toHaveBeenCalledWith({
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/folders")
   })
 })
 

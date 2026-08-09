@@ -31,11 +31,14 @@ function createStore(feedUrl = "https://example.com/rss.xml") {
     feed: {
       findUnique: vi.fn().mockResolvedValue({
         consecutiveFailures: 0,
-        etag: null,
-        feedUrl,
-        id: "feed-1",
-        lastModified: null,
-        refreshIntervalMinutes: 60,
+      etag: null,
+      feedUrl,
+      id: "feed-1",
+      lastError: null,
+      lastFeedSelfUrl: null,
+      lastModified: null,
+      lastResolvedFeedUrl: null,
+      refreshIntervalMinutes: 60,
       }),
       update: vi.fn().mockResolvedValue({}),
     },
@@ -98,16 +101,72 @@ describe("feed refresh", () => {
       })
     )
     expect(store.feed.update).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         lastError: null,
+        lastFeedSelfUrl: null,
         lastFailedAt: null,
         lastFetchedAt: now,
+        lastPermanentRedirectUrl: null,
+        lastResolvedFeedUrl: "https://example.com/rss.xml",
         lastSuccessfulFetchAt: now,
+        lastSourceUrlObservedAt: now,
         consecutiveFailures: 0,
         nextFetchAt: new Date("2026-06-22T13:00:00.000Z"),
-      },
+      }),
       where: { id: "feed-1" },
     })
+  })
+
+  it("records source URL evidence and recovery after a successful redirected refresh", async () => {
+    const store = createStore("https://example.com/old.xml")
+    const now = new Date("2026-08-09T14:30:00.000Z")
+    store.feed.findUnique.mockResolvedValue({
+      consecutiveFailures: 2,
+      etag: null,
+      feedUrl: "https://example.com/old.xml",
+      id: "feed-1",
+      lastError: "The URL request timed out.",
+      lastFeedSelfUrl: "https://example.com/previous-self.xml",
+      lastModified: null,
+      lastResolvedFeedUrl: "https://example.com/old.xml",
+      refreshIntervalMinutes: 60,
+    })
+
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        redirects: [
+          {
+            from: "https://example.com/old.xml",
+            status: 308,
+            to: "https://feeds.example.com/current.xml",
+          },
+        ],
+        text: rssXml.replace(
+          "<channel>",
+          '<channel><atom:link href="https://feeds.example.com/self.xml" rel="self" />'
+        ),
+        url: new URL("https://feeds.example.com/current.xml"),
+      }),
+      now: () => now,
+      random: () => 0.5,
+      store,
+    })
+
+    expect(store.feed.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lastFeedSelfUrl: "https://feeds.example.com/self.xml",
+          lastPermanentRedirectUrl: "https://feeds.example.com/current.xml",
+          lastRecoveredAt: now,
+          lastResolvedFeedUrl: "https://feeds.example.com/current.xml",
+          lastSourceUrlObservedAt: now,
+          previousFeedSelfUrl: "https://example.com/previous-self.xml",
+          previousResolvedFeedUrl: "https://example.com/old.xml",
+        }),
+      })
+    )
   })
 
   it("updates existing feed items in a bounded transaction batch", async () => {

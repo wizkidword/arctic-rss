@@ -3,7 +3,9 @@
 export {
   addFeedAction,
   bulkFeedAttentionAction,
+  replaceFeedSubscriptionAction,
   refreshFeedAction,
+  reviewFeedAttentionAction,
   setFeedPausedAction,
   subscribeDirectoryFeedAction,
   unsubscribeFeedAction,
@@ -11,7 +13,9 @@ export {
 export type {
   AddFeedActionState,
   BulkFeedAttentionActionState,
+  ReplaceFeedSubscriptionActionState,
   RefreshFeedActionState,
+  ReviewFeedAttentionActionState,
   SetFeedPausedActionState,
   SourceSubscriptionAnalytics,
   SubscribeDirectoryFeedActionState,

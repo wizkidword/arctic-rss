@@ -1,4 +1,5 @@
 import { getPrisma } from "./db"
+import { parseFeedXml, type ParsedFeedMetadata } from "./feed-discovery"
 import { extractReadableArticleContent } from "./article-content-extraction"
 import { parseFeedArticlesWithMetrics, type ParsedFeedArticle } from "./feed-articles"
 import {
@@ -20,7 +21,10 @@ type RefreshableFeed = {
   etag: string | null
   feedUrl: string
   id: string
+  lastError: string | null
+  lastFeedSelfUrl: string | null
   lastModified: string | null
+  lastResolvedFeedUrl: string | null
   refreshIntervalMinutes: number
 }
 
@@ -59,7 +63,10 @@ type FeedRefreshStore = {
         etag: true
         feedUrl: true
         id: true
+        lastError: true
+        lastFeedSelfUrl: true
         lastModified: true
+        lastResolvedFeedUrl: true
         refreshIntervalMinutes: true
       }
       where: {
@@ -135,7 +142,10 @@ export async function refreshFeedWithClient({
       etag: true,
       feedUrl: true,
       id: true,
+      lastError: true,
+      lastFeedSelfUrl: true,
       lastModified: true,
+      lastResolvedFeedUrl: true,
       refreshIntervalMinutes: true,
     },
     where: { id: feedId },
@@ -187,6 +197,7 @@ export async function refreshFeedWithClient({
     }
 
     const parsed = parseFeedArticlesWithMetrics(response.text, response.url.href)
+    const metadata = safeFeedMetadata(response.text, response.url.href)
     recordFeedParseMetrics(feed.id, parsed.stats)
     const hydrated = await hydrateLinkedArticleContent({
       articles: parsed.articles,
@@ -203,6 +214,7 @@ export async function refreshFeedWithClient({
     await recordSuccessfulFeedFetch({
       feed,
       fetchedAt,
+      metadata,
       random,
       response,
       store,
@@ -281,12 +293,14 @@ function recordFeedParseMetrics(
 async function recordSuccessfulFeedFetch({
   feed,
   fetchedAt,
+  metadata,
   random,
   response,
   store,
 }: {
   feed: RefreshableFeed
   fetchedAt: Date
+  metadata?: ParsedFeedMetadata
   random: () => number
   response: SafeFetchTextResult
   store: FeedRefreshStore
@@ -294,10 +308,12 @@ async function recordSuccessfulFeedFetch({
   await store.feed.update({
     data: {
       ...responseValidators(response),
+      ...feedUrlObservation({ feed, fetchedAt, metadata, response }),
       lastError: null,
       lastFailedAt: null,
       lastFetchedAt: fetchedAt,
       lastSuccessfulFetchAt: fetchedAt,
+      ...(feed.lastError ? { lastRecoveredAt: fetchedAt } : {}),
       consecutiveFailures: 0,
       nextFetchAt: nextFetchAt({
         consecutiveFailures: 0,
@@ -522,6 +538,55 @@ function articleUpdateData(
     title: article.title,
     url: article.url,
   }
+}
+
+function safeFeedMetadata(xml: string, feedUrl: string) {
+  try {
+    return parseFeedXml(xml, feedUrl)
+  } catch {
+    // Article ingestion already validated the source. Metadata is optional
+    // hygiene evidence and must not turn a successful refresh into a failure.
+    return undefined
+  }
+}
+
+function feedUrlObservation({
+  feed,
+  fetchedAt,
+  metadata,
+  response,
+}: {
+  feed: RefreshableFeed
+  fetchedAt: Date
+  metadata?: ParsedFeedMetadata
+  response: SafeFetchTextResult
+}) {
+  const resolvedFeedUrl = response.url.href
+  const permanentRedirect = response.redirects
+    ?.filter((redirect) => redirect.status === 301 || redirect.status === 308)
+    .at(-1)?.to
+  const observation: Record<string, unknown> = {
+    lastPermanentRedirectUrl: permanentRedirect ?? null,
+    lastResolvedFeedUrl: resolvedFeedUrl,
+    lastSourceUrlObservedAt: fetchedAt,
+  }
+
+  if (feed.lastResolvedFeedUrl && feed.lastResolvedFeedUrl !== resolvedFeedUrl) {
+    observation.previousResolvedFeedUrl = feed.lastResolvedFeedUrl
+  }
+
+  if (metadata) {
+    observation.lastFeedSelfUrl = metadata.feedSelfUrl ?? null
+
+    if (
+      feed.lastFeedSelfUrl &&
+      feed.lastFeedSelfUrl !== (metadata.feedSelfUrl ?? null)
+    ) {
+      observation.previousFeedSelfUrl = feed.lastFeedSelfUrl
+    }
+  }
+
+  return observation
 }
 
 function responseValidators(response: SafeFetchTextResult) {

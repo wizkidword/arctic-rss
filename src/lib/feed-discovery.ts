@@ -33,6 +33,7 @@ export type FeedFormat = "rss" | "atom"
 export type ParsedFeedMetadata = {
   description?: string
   faviconUrl?: string
+  feedSelfUrl?: string
   format: FeedFormat
   language?: string
   siteUrl?: string
@@ -238,10 +239,15 @@ function parseRssFeed(parsed: Record<string, unknown>, feedUrl: string) {
   }
 
   const siteUrl = normalizeOptionalUrl(textValue(channel.link), feedUrl)
+  const feedSelfUrl = normalizeOptionalUrl(
+    findFeedLink(channel["atom:link"] ?? channel.link, "self"),
+    feedUrl
+  )
 
   return {
     description: truncateCharacters(textValue(channel.description), ingestionLimits.maxSummaryCharacters),
     faviconUrl: faviconFromSiteUrl(siteUrl),
+    feedSelfUrl,
     format: "rss" as const,
     language: textValue(channel.language),
     siteUrl,
@@ -262,11 +268,13 @@ function parseAtomFeed(parsed: Record<string, unknown>, feedUrl: string) {
     return null
   }
 
-  const siteUrl = normalizeOptionalUrl(findAtomAlternateLink(feed.link), feedUrl)
+  const siteUrl = normalizeOptionalUrl(findFeedLink(feed.link, "alternate"), feedUrl)
+  const feedSelfUrl = normalizeOptionalUrl(findFeedLink(feed.link, "self"), feedUrl)
 
   return {
     description: truncateCharacters(textValue(feed.subtitle), ingestionLimits.maxSummaryCharacters),
     faviconUrl: faviconFromSiteUrl(siteUrl),
+    feedSelfUrl,
     format: "atom" as const,
     language: textValue(feed["@xml:lang"] ?? feed["@lang"]),
     siteUrl,
@@ -359,19 +367,22 @@ function textValue(value: unknown): string | undefined {
   return undefined
 }
 
-function findAtomAlternateLink(value: unknown) {
+function findFeedLink(value: unknown, relation: "alternate" | "self") {
   const links = Array.isArray(value) ? value : [value]
   const fallback = links.find((link) => toRecord(link)?.["@href"])
 
-  const alternate =
+  const matchingLink =
     links.find((link) => {
       const record = toRecord(link)
       const rel = textValue(record?.["@rel"])
 
-      return record?.["@href"] && (!rel || rel === "alternate")
-    }) ?? fallback
+      return (
+        record?.["@href"] &&
+        (relation === "alternate" ? !rel || rel === "alternate" : rel === relation)
+      )
+    }) ?? (relation === "alternate" ? fallback : undefined)
 
-  return textValue(toRecord(alternate)?.["@href"])
+  return textValue(toRecord(matchingLink)?.["@href"])
 }
 
 function normalizeOptionalUrl(value: string | undefined, baseUrl: string) {

@@ -97,6 +97,8 @@ import {
   FeedSubscriptionError,
   hasUserFeedSubscriptions,
   listUserFeedSubscriptions,
+  markFeedSubscriptionAttentionReviewed,
+  replaceFeedSubscription,
   setFeedSubscriptionPaused,
   subscribeToFeed,
   unsubscribeFromFeed,
@@ -177,10 +179,18 @@ describe("feed subscriptions", () => {
         feed: {
           faviconUrl: null,
           feedUrl: "https://example.com/feed.xml",
+          lastFeedSelfUrl: null,
           lastError: null,
+          lastPermanentRedirectUrl: null,
+          lastRecoveredAt: null,
+          lastResolvedFeedUrl: null,
           lastSuccessfulFetchAt: null,
+          lastSourceUrlObservedAt: null,
+          previousFeedSelfUrl: null,
+          previousResolvedFeedUrl: null,
           siteUrl: "https://example.com",
           title: "Example Feed",
+          _count: { subscriptions: 2 },
         },
         feedId: "feed-1",
         folder: {
@@ -190,6 +200,8 @@ describe("feed subscriptions", () => {
         folderId: "folder-1",
         id: "subscription-1",
         isPaused: false,
+        lastSourceAttentionReviewedAt: null,
+        previousFeedUrl: null,
       },
     ])
 
@@ -202,10 +214,22 @@ describe("feed subscriptions", () => {
           select: {
             faviconUrl: true,
             feedUrl: true,
+            lastFeedSelfUrl: true,
             lastError: true,
+            lastPermanentRedirectUrl: true,
+            lastRecoveredAt: true,
+            lastResolvedFeedUrl: true,
             lastSuccessfulFetchAt: true,
+            lastSourceUrlObservedAt: true,
+            previousFeedSelfUrl: true,
+            previousResolvedFeedUrl: true,
             siteUrl: true,
             title: true,
+            _count: {
+              select: {
+                subscriptions: true,
+              },
+            },
           },
         },
         feedId: true,
@@ -217,6 +241,8 @@ describe("feed subscriptions", () => {
         folderId: true,
         id: true,
         isPaused: true,
+        lastSourceAttentionReviewedAt: true,
+        previousFeedUrl: true,
       },
       orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
       where: { userId: "user-1" },
@@ -233,9 +259,19 @@ describe("feed subscriptions", () => {
         folderName: "Tech",
         id: "subscription-1",
         isPaused: false,
+        lastFeedSelfUrl: null,
         lastError: null,
+        lastPermanentRedirectUrl: null,
+        lastRecoveredAt: null,
+        lastResolvedFeedUrl: null,
         lastSuccessfulFetchAt: null,
+        lastSourceAttentionReviewedAt: null,
+        lastSourceUrlObservedAt: null,
+        previousFeedSelfUrl: null,
+        previousFeedUrl: null,
+        previousResolvedFeedUrl: null,
         siteUrl: "https://example.com",
+        sourceSubscriberCount: 2,
         title: "Example Feed",
         unreadCount: 3,
       },
@@ -248,16 +284,26 @@ describe("feed subscriptions", () => {
       feed: {
         faviconUrl: null,
         feedUrl: `https://example.com/feed-${index}.xml`,
+        lastFeedSelfUrl: null,
         lastError: null,
+        lastPermanentRedirectUrl: null,
+        lastRecoveredAt: null,
+        lastResolvedFeedUrl: null,
         lastSuccessfulFetchAt: null,
+        lastSourceUrlObservedAt: null,
+        previousFeedSelfUrl: null,
+        previousResolvedFeedUrl: null,
         siteUrl: null,
         title: `Feed ${index}`,
+        _count: { subscriptions: 1 },
       },
       feedId: `feed-${index}`,
       folder: null,
       folderId: null,
       id: `subscription-${index}`,
       isPaused: false,
+      lastSourceAttentionReviewedAt: null,
+      previousFeedUrl: null,
     }))
     findMany.mockResolvedValue(subscriptions)
     getUnreadArticleCountsByFeed.mockResolvedValue(
@@ -305,6 +351,99 @@ describe("feed subscriptions", () => {
         userId: "user-1",
       })
     ).rejects.toThrow("That feed subscription was not found.")
+  })
+
+  it("marks only the current user's source recovery as reviewed", async () => {
+    feedSubscriptionUpdateMany.mockResolvedValue({ count: 1 })
+
+    await expect(
+      markFeedSubscriptionAttentionReviewed({
+        subscriptionId: "subscription-1",
+        userId: "user-1",
+      })
+    ).resolves.toBeUndefined()
+
+    expect(feedSubscriptionUpdateMany).toHaveBeenCalledWith({
+      data: { lastSourceAttentionReviewedAt: expect.any(Date) },
+      where: { id: "subscription-1", userId: "user-1" },
+    })
+  })
+
+  it("replaces one owned subscription after safe discovery while preserving its subscription record", async () => {
+    findFirst
+      .mockResolvedValueOnce({
+        customTitle: "My source title",
+        feed: { feedUrl: "https://example.com/old.xml", title: "Old source" },
+        feedId: "feed-old",
+        id: "subscription-1",
+      })
+      .mockResolvedValueOnce(null)
+    discoverFeedFromUrl.mockResolvedValue({
+      description: "Verified replacement",
+      faviconUrl: null,
+      feedUrl: "https://feeds.example.com/new.xml",
+      language: "en",
+      siteUrl: "https://feeds.example.com",
+      title: "New source",
+    })
+    feedUpsert.mockResolvedValue({ id: "feed-new", title: "New source" })
+    feedSubscriptionUpdateMany.mockResolvedValue({ count: 1 })
+    transaction.mockImplementation(async (callback) =>
+      callback({
+        feed: { upsert: feedUpsert },
+        feedSubscription: { updateMany: feedSubscriptionUpdateMany },
+      })
+    )
+
+    await expect(
+      replaceFeedSubscription({
+        candidateUrl: "https://feeds.example.com/new.xml",
+        subscriptionId: "subscription-1",
+        userId: "user-1",
+      })
+    ).resolves.toEqual({
+      feedId: "feed-new",
+      previousFeedUrl: "https://example.com/old.xml",
+      title: "My source title",
+    })
+
+    expect(discoverFeedFromUrl).toHaveBeenCalledWith(
+      "https://feeds.example.com/new.xml"
+    )
+    expect(feedSubscriptionUpdateMany).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        feedId: "feed-new",
+        previousFeedUrl: "https://example.com/old.xml",
+        previousFeedUrlChangedAt: expect.any(Date),
+      }),
+      where: { id: "subscription-1", userId: "user-1" },
+    })
+  })
+
+  it("refuses a replacement that is already subscribed by the reader", async () => {
+    findFirst
+      .mockResolvedValueOnce({
+        customTitle: null,
+        feed: { feedUrl: "https://example.com/old.xml", title: "Old source" },
+        feedId: "feed-old",
+        id: "subscription-1",
+      })
+      .mockResolvedValueOnce({
+        customTitle: "Already here",
+        feed: { title: "New source" },
+        id: "subscription-2",
+      })
+    discoverFeedFromUrl.mockResolvedValue({ feedUrl: "https://feeds.example.com/new.xml" })
+
+    await expect(
+      replaceFeedSubscription({
+        candidateUrl: "https://feeds.example.com/new.xml",
+        subscriptionId: "subscription-1",
+        userId: "user-1",
+      })
+    ).rejects.toThrow("You are already subscribed to Already here.")
+
+    expect(transaction).not.toHaveBeenCalled()
   })
 
   it("unsubscribes only the current user's subscription", async () => {

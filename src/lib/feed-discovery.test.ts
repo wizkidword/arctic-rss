@@ -15,6 +15,7 @@ describe("feed discovery helpers", () => {
         <channel>
           <title>Example RSS</title>
           <link>https://example.com</link>
+          <atom:link href="https://feeds.example.com/self.xml" rel="self" />
           <description>Readable updates</description>
           <language>en-US</language>
         </channel>
@@ -28,6 +29,7 @@ describe("feed discovery helpers", () => {
       siteUrl: "https://example.com/",
       description: "Readable updates",
       language: "en-US",
+      feedSelfUrl: "https://feeds.example.com/self.xml",
     })
   })
 
@@ -49,6 +51,7 @@ describe("feed discovery helpers", () => {
       siteUrl: "https://example.com/",
       description: "Atom updates",
       language: "en",
+      feedSelfUrl: "https://example.com/atom.xml",
     })
   })
 

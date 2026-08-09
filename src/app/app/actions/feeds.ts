@@ -10,6 +10,8 @@ import { enqueueFeedRefresh } from "@/lib/feed-refresh-queue"
 import {
   FeedSubscriptionError,
   getUserFeedSubscription,
+  markFeedSubscriptionAttentionReviewed,
+  replaceFeedSubscription,
   setFeedSubscriptionPaused,
   subscribeToFeed,
   unsubscribeFromFeed,
@@ -29,6 +31,8 @@ export type SourceSubscriptionAnalytics = {
 export type AddFeedActionState = ActionState & { analytics?: SourceSubscriptionAnalytics }
 export type SubscribeDirectoryFeedActionState = ActionState & { analytics?: SourceSubscriptionAnalytics }
 export type RefreshFeedActionState = ActionState
+export type ReplaceFeedSubscriptionActionState = ActionState
+export type ReviewFeedAttentionActionState = ActionState
 export type SetFeedPausedActionState = ActionState
 export type UnsubscribeFeedActionState = ActionState
 export type BulkFeedAttentionActionState = ActionState
@@ -274,6 +278,82 @@ export async function bulkFeedAttentionAction(
   return {
     message: sourceAttentionMessage({ alreadyQueued, queued, total: subscriptionIds.length }),
     status: queued || alreadyQueued ? "success" : "error",
+  }
+}
+
+export async function reviewFeedAttentionAction(
+  _previousState: ReviewFeedAttentionActionState,
+  formData: FormData
+): Promise<ReviewFeedAttentionActionState> {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { message: "You need to sign in before reviewing source health.", status: "error" }
+  }
+
+  const subscriptionId = String(formData.get("subscriptionId") ?? "").trim()
+  if (!subscriptionId) {
+    return { message: "Choose a source to review.", status: "error" }
+  }
+
+  try {
+    await markFeedSubscriptionAttentionReviewed({ subscriptionId, userId: session.user.id })
+    revalidatePath("/app/folders")
+    refresh()
+    return { message: "Source recovery marked as reviewed.", status: "success" }
+  } catch (error) {
+    return error instanceof FeedSubscriptionError
+      ? { message: error.message, status: "error" }
+      : { message: "Arctic RSS could not record that review.", status: "error" }
+  }
+}
+
+export async function replaceFeedSubscriptionAction(
+  _previousState: ReplaceFeedSubscriptionActionState,
+  formData: FormData
+): Promise<ReplaceFeedSubscriptionActionState> {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { message: "You need to sign in before replacing a source.", status: "error" }
+  }
+
+  const subscriptionId = String(formData.get("subscriptionId") ?? "").trim()
+  const candidateUrl = String(formData.get("candidateUrl") ?? "").trim()
+  if (!subscriptionId || !candidateUrl) {
+    return { message: "That proposed replacement source is unavailable.", status: "error" }
+  }
+  if (formData.get("confirmation") !== "REPLACE") {
+    return { message: "Type REPLACE to confirm changing this source.", status: "error" }
+  }
+  if (!(await canDiscover(session.user.id))) {
+    return rateLimitFailure()
+  }
+
+  try {
+    const replacement = await replaceFeedSubscription({
+      candidateUrl,
+      subscriptionId,
+      userId: session.user.id,
+    })
+    const queued = await enqueueFeedRefresh(replacement.feedId, {
+      priority: 1,
+      trigger: "source-hygiene-replacement",
+    })
+    revalidatePath("/app", "layout")
+    revalidateFeedSubscriptionPaths()
+    revalidatePath(`/app/feed/${subscriptionId}`)
+    refresh()
+    return {
+      message:
+        queued.outcome === "queued"
+          ? `${replacement.title} now follows the verified replacement. Its refresh is queued.`
+          : `${replacement.title} now follows the verified replacement. Its refresh is already queued.`,
+      status: "success",
+    }
+  } catch (error) {
+    return subscriptionError(
+      error,
+      "Arctic RSS could not verify and replace that source."
+    )
   }
 }
 

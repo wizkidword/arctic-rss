@@ -32,9 +32,16 @@ export type SafeFetchTextResult = {
   etag?: string
   lastModified?: string
   notModified?: boolean
+  redirects?: SafeFetchRedirect[]
   status?: number
   text: string
   url: URL
+}
+
+export type SafeFetchRedirect = {
+  from: string
+  status: number
+  to: string
 }
 
 export type SafeFetchBytesResult = {
@@ -43,6 +50,7 @@ export type SafeFetchBytesResult = {
   etag?: string
   lastModified?: string
   notModified: boolean
+  redirects?: SafeFetchRedirect[]
   status: number
   url: URL
 }
@@ -317,6 +325,7 @@ export async function safeFetchText(
     etag: result.etag,
     lastModified: result.lastModified,
     notModified: result.notModified,
+    redirects: result.redirects,
     status: result.status,
     text: decodeSafeText(result.bytes, result.contentType),
     url: result.url,
@@ -335,6 +344,7 @@ export async function safeFetchBytes(
   const hostRequestLimiter = options.hostRequestLimiter ?? sharedHostRequestLimiter
   const now = options.now ?? Date.now
   const deadline = now() + totalTimeoutMs
+  const redirects: SafeFetchRedirect[] = []
   let url = inputUrl
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
@@ -385,6 +395,7 @@ export async function safeFetchBytes(
         return responseResult({
           bytes: new Uint8Array(),
           notModified: true,
+          redirects,
           response,
           url,
         })
@@ -397,7 +408,9 @@ export async function safeFetchBytes(
           throw new FeedFetchError("The URL redirected without a Location header.")
         }
 
-        url = normalizeHttpUrl(new URL(location, url).href)
+        const nextUrl = normalizeHttpUrl(new URL(location, url).href)
+        redirects.push({ from: url.href, status: response.status, to: nextUrl.href })
+        url = nextUrl
         continue
       }
 
@@ -408,6 +421,7 @@ export async function safeFetchBytes(
       return responseResult({
         bytes: await readResponseBytes(response, maxBytes),
         notModified: false,
+        redirects,
         response,
         url,
       })
@@ -776,11 +790,13 @@ function requestHeaders(
 function responseResult({
   bytes,
   notModified,
+  redirects,
   response,
   url,
 }: {
   bytes: Uint8Array
   notModified: boolean
+  redirects: SafeFetchRedirect[]
   response: FetchResponse
   url: URL
 }): SafeFetchBytesResult {
@@ -790,6 +806,7 @@ function responseResult({
     etag: safeHeaderValue(response.headers.get("etag")),
     lastModified: safeHeaderValue(response.headers.get("last-modified")),
     notModified,
+    ...(redirects.length ? { redirects } : {}),
     status: response.status,
     url,
   }

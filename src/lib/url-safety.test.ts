@@ -340,6 +340,38 @@ describe("feed URL safety", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(6)
   })
 
+  it("returns only safely followed redirect evidence", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          headers: { location: "https://feeds.example.com/current.xml" },
+          status: 308,
+        })
+      )
+      .mockResolvedValueOnce(new Response("<rss></rss>"))
+
+    const result = await safeFetchText(
+      new URL("https://feeds.example.com/old.xml"),
+      {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        lookup: lookup as never,
+      }
+    )
+
+    expect(result).toMatchObject({
+      redirects: [
+        {
+          from: "https://feeds.example.com/old.xml",
+          status: 308,
+          to: "https://feeds.example.com/current.xml",
+        },
+      ],
+      url: new URL("https://feeds.example.com/current.xml"),
+    })
+  })
+
   it("returns bounded binary responses for the image proxy", async () => {
     const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
     const fetchImpl = vi.fn(async () =>
