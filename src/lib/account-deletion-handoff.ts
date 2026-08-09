@@ -1,4 +1,6 @@
-import { createHmac, hkdfSync, scrypt, timingSafeEqual } from "node:crypto"
+import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto"
+
+import { signLegacyV1AccountDeletionHandoff } from "./account-deletion-handoff-legacy-v1"
 
 export const ACCOUNT_DELETION_HANDOFF_COOKIE = "arcticrss-account-deletion-handoff"
 export const ACCOUNT_DELETION_HANDOFF_COOKIE_PATH = "/api/account/deletion/confirmation"
@@ -11,8 +13,6 @@ const MIN_SECRET_BYTES = 32
 const HANDOFF_SIGNATURE_BYTES = 32
 const MAX_PAYLOAD_SEGMENT_LENGTH = 256
 const MAX_LEGACY_V1_REMAINING_LIFETIME_SECONDS = 15 * 60
-const HANDOFF_SIGNATURE_DERIVATION_COST = 16_384
-const HANDOFF_SIGNATURE_DERIVATION_CONTEXT = "arcticrss-account-deletion-handoff-v1"
 const HANDOFF_V2_KEY_DERIVATION_CONTEXT = "arcticrss-account-deletion-handoff-v2"
 const BASE64URL_SEGMENT = /^[A-Za-z0-9_-]+$/
 
@@ -90,7 +90,7 @@ export async function verifyAccountDeletionHandoff(
   const expectedSignature =
     parsed.version === HANDOFF_VERSION
       ? signV2(parsed.encodedPayload, secret)
-      : await signLegacyV1(parsed.encodedPayload, secret)
+      : await signLegacyV1AccountDeletionHandoff(parsed.encodedPayload, secret)
 
   if (!signaturesMatch(parsed.signature, expectedSignature)) {
     throw invalidHandoff()
@@ -237,35 +237,8 @@ function getV2SigningKey(secret: string) {
   return key
 }
 
-async function signLegacyV1(encodedPayload: string, secret: string) {
-  const signingInput = await new Promise<Buffer>((resolve, reject) => {
-    scrypt(
-      signingInputForLegacyV1(encodedPayload),
-      HANDOFF_SIGNATURE_DERIVATION_CONTEXT,
-      HANDOFF_SIGNATURE_BYTES,
-      {
-        N: HANDOFF_SIGNATURE_DERIVATION_COST,
-        maxmem: 64 * 1024 * 1024,
-      },
-      (error, derivedKey) => {
-        if (error) {
-          reject(error)
-          return
-        }
-        resolve(Buffer.from(derivedKey))
-      }
-    )
-  })
-
-  return createHmac("sha256", secret).update(signingInput).digest()
-}
-
 function signingInput(version: string, encodedPayload: string) {
   return `${HANDOFF_PREFIX}.${version}.${encodedPayload}`
-}
-
-function signingInputForLegacyV1(encodedPayload: string) {
-  return signingInput(LEGACY_HANDOFF_VERSION, encodedPayload)
 }
 
 function isPayload(value: unknown): value is AccountDeletionHandoffPayload {

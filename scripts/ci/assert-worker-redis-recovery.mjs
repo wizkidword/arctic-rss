@@ -21,13 +21,14 @@ await waitFor(
   "all required workers to become healthy"
 )
 
-for (const service of workerServices) {
-  const logs = compose(["logs", "--no-color", service])
-  const unavailableAt = logs.search('"state":"unavailable"')
-  const recoveredAt = logs.indexOf('"state":"ready"', unavailableAt + 1)
+await waitFor(
+  () => workerServices.every((service) => hasRedisRecovery(service)),
+  "all required workers to log durable Redis degradation followed by recovery"
+)
 
+for (const service of workerServices) {
   assert.ok(
-    unavailableAt >= 0 && recoveredAt > unavailableAt,
+    hasRedisRecovery(service),
     `${service} must log durable Redis degradation followed by recovery.`
   )
 }
@@ -65,6 +66,14 @@ function composeServices() {
         .map((line) => JSON.parse(line))
 
   return new Map(entries.map((entry) => [entry.Service, entry]))
+}
+
+function hasRedisRecovery(service) {
+  const logs = compose(["logs", "--no-color", service])
+  const unavailableAt = logs.search('"state":"unavailable"')
+  const recoveredAt = logs.indexOf('"state":"ready"', unavailableAt + 1)
+
+  return unavailableAt >= 0 && recoveredAt > unavailableAt
 }
 
 function readMaintenanceTick() {

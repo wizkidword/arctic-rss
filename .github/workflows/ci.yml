@@ -100,8 +100,8 @@ jobs:
           - 5432:5432
     env:
       E2E_DATABASE_URL: postgresql://csp_e2e:csp-e2e-database-password@localhost:5432/arctic_rss?schema=public
-      E2E_DURABLE_REDIS_URL: redis://:csp-e2e-redis-password@localhost:6379
-      E2E_EPHEMERAL_REDIS_URL: redis://:csp-e2e-redis-password@localhost:6380
+      E2E_DURABLE_REDIS_URL: redis://csp_e2e_durable:csp-e2e-durable-redis-password@localhost:6379
+      E2E_EPHEMERAL_REDIS_URL: redis://csp_e2e_ephemeral:csp-e2e-ephemeral-redis-password@localhost:6380
     steps:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -116,10 +116,10 @@ jobs:
         run: npm ci
       - name: Start isolated durable and ephemeral Redis services
         run: |
-          docker run --detach --name arctic-rss-e2e-durable-redis --publish 6379:6379 redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99 redis-server --appendonly yes --requirepass csp-e2e-redis-password
-          docker run --detach --name arctic-rss-e2e-ephemeral-redis --publish 6380:6379 redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99 redis-server --save "" --requirepass csp-e2e-redis-password
-          docker exec arctic-rss-e2e-durable-redis redis-cli --no-auth-warning -a csp-e2e-redis-password ping
-          docker exec arctic-rss-e2e-ephemeral-redis redis-cli --no-auth-warning -a csp-e2e-redis-password ping
+          docker run --detach --name arctic-rss-e2e-durable-redis --publish 6379:6379 redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99 redis-server --appendonly yes --user csp_e2e_durable on ">csp-e2e-durable-redis-password" "~*" "+@all"
+          docker run --detach --name arctic-rss-e2e-ephemeral-redis --publish 6380:6379 redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99 redis-server --save "" --user csp_e2e_ephemeral on ">csp-e2e-ephemeral-redis-password" "~*" "+@all"
+          docker exec arctic-rss-e2e-durable-redis redis-cli --no-auth-warning --user csp_e2e_durable --pass csp-e2e-durable-redis-password ping
+          docker exec arctic-rss-e2e-ephemeral-redis redis-cli --no-auth-warning --user csp_e2e_ephemeral --pass csp-e2e-ephemeral-redis-password ping
       - name: Apply browser-test migrations
         run: DATABASE_URL="$E2E_DATABASE_URL" npm run prisma:deploy
       - name: Install Chromium
@@ -335,6 +335,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@1ad29ea4a422cce9a242a9fae469541dcd08addc # v4
         with:
+          config-file: ./.github/codeql/codeql-config.yml
           languages: javascript-typescript
           build-mode: none
       - name: Analyze source

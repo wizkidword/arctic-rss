@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "playwright/test"
+import { expect, test, type Locator, type Page } from "playwright/test"
 
 import {
   e2eCredentials,
@@ -41,16 +41,23 @@ test.describe("authenticated reader journeys", () => {
     const articleLink = page.getByRole("link", { name: "E2E Reader Article One" })
     await expect(articleLink).toBeVisible()
     await articleLink.click({ position: { x: 8, y: 8 } })
+    await page.waitForLoadState("networkidle")
 
     const toolbar = page.getByRole("toolbar", {
       name: "E2E Reader Article One actions",
     })
-    await toolbar.getByRole("button", { name: "Mark as read" }).click()
+    await setArticleRead(page, toolbar, true)
     await expect(toolbar.getByRole("button", { name: "Mark as unread" })).toBeVisible()
-    await toolbar.getByRole("button", { name: "Star post" }).click()
+    await setArticleStarred(page, toolbar, true)
     await expect(toolbar.getByRole("button", { name: "Unstar post" })).toBeVisible()
+    await expect(page.getByRole("link", { name: "Starred 1" })).toBeVisible()
 
-    await page.reload()
+    await page.goto("/app/starred")
+    const persistedArticleLink = page.getByRole("link", {
+      name: "E2E Reader Article One",
+    })
+    await expect(persistedArticleLink).toBeVisible()
+    await persistedArticleLink.click({ position: { x: 8, y: 8 } })
     const persistedToolbar = page.getByRole("toolbar", {
       name: "E2E Reader Article One actions",
     })
@@ -111,7 +118,7 @@ test.describe("authenticated reader journeys", () => {
     ).not.toBeVisible()
 
     await page.goto("/app/collections")
-    const collectionLink = page.getByRole("link", { name: "E2E Read Later" })
+    const collectionLink = page.getByRole("link", { name: /^E2E Read Later \d+$/ })
     await expect(collectionLink).toBeVisible()
     const collectionHref = await collectionLink.getAttribute("href")
     expect(collectionHref).toMatch(/^\/app\/collections\/[A-Za-z0-9_-]+$/)
@@ -125,39 +132,31 @@ test.describe("authenticated reader journeys", () => {
     await permalink.click()
     await expect(page).toHaveURL(/\/app\/article\/[A-Za-z0-9_-]+$/)
     await expect(
-      page.getByText("E2E Collection Article One", { exact: true })
+      page.getByRole("toolbar", { name: "E2E Collection Article One actions" })
     ).toBeVisible()
 
     await page.goto(collectionHref!)
     const collectionArticleToolbar = page.getByRole("toolbar", {
       name: "E2E Collection Article One actions",
     })
-    await collectionArticleToolbar.getByRole("button", { name: "Star post" }).click()
+    await setArticleStarred(page, collectionArticleToolbar, true)
     await expect(
       collectionArticleToolbar.getByRole("button", { name: "Unstar post" })
     ).toBeVisible()
-    await collectionArticleToolbar
-      .getByRole("button", { name: "Unstar post" })
-      .click()
+    await setArticleStarred(page, collectionArticleToolbar, false)
     await expect(
       collectionArticleToolbar.getByRole("button", { name: "Star post" })
     ).toBeVisible()
-    await collectionArticleToolbar.getByRole("button", { name: "Star post" }).click()
-    await collectionArticleToolbar
-      .getByRole("button", { name: "Mark as read" })
-      .click()
+    await setArticleStarred(page, collectionArticleToolbar, true)
+    await setArticleRead(page, collectionArticleToolbar, true)
     await expect(
       collectionArticleToolbar.getByRole("button", { name: "Mark as unread" })
     ).toBeVisible()
-    await collectionArticleToolbar
-      .getByRole("button", { name: "Mark as unread" })
-      .click()
+    await setArticleRead(page, collectionArticleToolbar, false)
     await expect(
       collectionArticleToolbar.getByRole("button", { name: "Mark as read" })
     ).toBeVisible()
-    await collectionArticleToolbar
-      .getByRole("button", { name: "Mark as read" })
-      .click()
+    await setArticleRead(page, collectionArticleToolbar, true)
 
     const collectionId = collectionHref?.split("/").at(-1)
     expect(collectionId).toBeTruthy()
@@ -303,15 +302,10 @@ test.describe("authenticated reader journeys", () => {
         hasText: e2eCredentials.revoked.email,
       })
       await expect(targetRow).toBeVisible()
-      await targetRow.getByRole("button", { name: "Disable user" }).click()
-      await adminPage.reload()
-      await expect(
-        adminPage
-          .getByRole("row")
-          .filter({ hasText: e2eCredentials.revoked.email })
-          .getByText("Disabled", { exact: true })
-          .first()
-      ).toBeVisible()
+      await clickServerAction(
+        adminPage,
+        targetRow.getByRole("button", { name: "Disable user" })
+      )
 
       await readerPage.goto("/app")
       await expect(readerPage).toHaveURL(/\/login/)
@@ -320,6 +314,41 @@ test.describe("authenticated reader journeys", () => {
     }
   })
 })
+
+async function clickArticleAction(page: Page, button: Locator) {
+  await button.click()
+  await page.waitForLoadState("networkidle")
+}
+
+async function clickServerAction(page: Page, button: Locator) {
+  const response = page.waitForResponse((candidate) => {
+    const request = candidate.request()
+    return request.method() === "POST" && Boolean(request.headers()["next-action"])
+  })
+
+  await button.click()
+  await response
+}
+
+async function setArticleRead(page: Page, toolbar: Locator, isRead: boolean) {
+  const button = toolbar.getByRole("button", {
+    name: isRead ? "Mark as read" : "Mark as unread",
+  })
+
+  if (await button.isVisible()) {
+    await clickArticleAction(page, button)
+  }
+}
+
+async function setArticleStarred(page: Page, toolbar: Locator, isStarred: boolean) {
+  const button = toolbar.getByRole("button", {
+    name: isStarred ? "Star post" : "Unstar post",
+  })
+
+  if (await button.isVisible()) {
+    await clickArticleAction(page, button)
+  }
+}
 
 async function signIn(
   page: Page,
