@@ -6,8 +6,12 @@ describe("production Docker images", () => {
   it("keeps build tools out of the compiled worker and gateway images", async () => {
     const dockerfile = await readFile("Dockerfile", "utf8");
 
-    expect(dockerfile).toContain("ARG NODE_IMAGE=node:24.17.0-alpine3.23");
-    expect(dockerfile).toContain("ARG NGINX_IMAGE=nginx:1.30.4-alpine3.24");
+    expect(dockerfile).toMatch(
+      /ARG NODE_IMAGE=node:[^\s@]+@sha256:[a-f0-9]{64}/,
+    );
+    expect(dockerfile).toMatch(
+      /ARG NGINX_IMAGE=nginx:[^\s@]+@sha256:[a-f0-9]{64}/,
+    );
     expect(dockerfile).toContain("FROM deps AS production-deps");
     expect(dockerfile).toContain("RUN npm prune --omit=dev");
     expect(dockerfile).toContain("npm run runtime:build");

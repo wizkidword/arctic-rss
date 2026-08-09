@@ -14,7 +14,8 @@ import {
   updateChatReadMarker,
 } from "../../src/lib/chat/room-service"
 
-const postgresImage = "postgres:17.10-alpine3.23"
+const postgresImage =
+  "postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4"
 const suffix = `${process.pid}-${randomUUID().replaceAll("-", "").slice(0, 12)}`
 const containerName = `arctic-rss-chat-role-${suffix}`
 const databaseName = "arctic_rss"

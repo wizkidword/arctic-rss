@@ -61,11 +61,16 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     );
   });
 
-  it("pins the reviewed PostgreSQL and Redis base images", async () => {
+  it("pins the reviewed PostgreSQL, Redis, and Cloudflared images by digest", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
 
-    expect(compose).toContain("image: postgres:17.10-alpine3.23");
-    expect(compose).toContain("image: redis:7.4.9-alpine3.21");
+    expect(compose).toMatch(
+      /image: postgres:[^\s@]+@sha256:[a-f0-9]{64}/,
+    );
+    expect(compose.match(/image: redis:[^\s@]+@sha256:[a-f0-9]{64}/g)).toHaveLength(2);
+    expect(compose).toMatch(
+      /image: cloudflare\/cloudflared:[^\s@]+@sha256:[a-f0-9]{64}/,
+    );
   });
 
   it("refuses to interpolate production data-service credentials from unsafe defaults", async () => {

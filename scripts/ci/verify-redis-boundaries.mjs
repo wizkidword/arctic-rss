@@ -2,7 +2,8 @@ import assert from "node:assert/strict"
 import { randomBytes } from "node:crypto"
 import { spawnSync } from "node:child_process"
 
-const redisImage = "redis:7.4.9-alpine3.21"
+const redisImage =
+  "redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
 const suffix = `${process.pid}-${randomBytes(6).toString("hex")}`
 const durableNetwork = `arctic-rss-durable-${suffix}`
 const ephemeralNetwork = `arctic-rss-ephemeral-${suffix}`

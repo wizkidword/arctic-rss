@@ -33,7 +33,8 @@ x-worker-runtime: &worker-runtime
 
 services:
   postgres:
-    image: postgres:17.10-alpine3.23
+    # PostgreSQL 17.10 on Alpine 3.23 (multi-architecture manifest digest).
+    image: postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4
     restart: unless-stopped
     cpus: 0.75
     mem_limit: 512m
@@ -67,7 +68,8 @@ services:
       - web-edge
 
   redis:
-    image: redis:7.4.9-alpine3.21
+    # Durable Redis 7.4.9 on Alpine 3.21 (multi-architecture manifest digest).
+    image: redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     restart: unless-stopped
     cpus: 0.25
     mem_limit: 320m
@@ -93,7 +95,8 @@ services:
       - durable-data
 
   redis-ephemeral:
-    image: redis:7.4.9-alpine3.21
+    # Ephemeral Redis 7.4.9 on Alpine 3.21 (multi-architecture manifest digest).
+    image: redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     restart: unless-stopped
     cpus: 0.25
     mem_limit: 192m
@@ -686,7 +689,8 @@ services:
       - web-edge
 
   cloudflared:
-    image: cloudflare/cloudflared:2026.6.1
+    # cloudflared 2026.6.1 (multi-architecture manifest digest).
+    image: cloudflare/cloudflared:2026.6.1@sha256:6d91c121b803126f7a5344005d17a9324788fc09d305b6e2560ec6040a7ae283
     profiles: ["tunnel"]
     init: true
     restart: unless-stopped
