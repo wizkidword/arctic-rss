@@ -69,6 +69,12 @@ every selected application service, removes stale application workers or chat
 services, and verifies selected-service, local/public health, login, and the
 monitor service.
 
+For either chat topology, the staged CHAT_DATABASE_URL must already name the
+restricted arctic_chat login. After Prisma migration verification and before
+the live-source swap, the command applies the reviewed chat-role bootstrap from
+the exact staged source and proves that the login can connect. It does not
+substitute the broader DATABASE_URL for the gateway.
+
 The image archive is intentionally retained on the local build drive for a
 short-lived recovery/retry path. Review it before removing it; the release
 command never deletes prior local image archives automatically.

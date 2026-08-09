@@ -960,6 +960,75 @@ done
 stage_compose run --rm --no-deps -T migrate </dev/null
 stage_compose run --rm --no-deps -T migrate ./node_modules/.bin/prisma migrate status </dev/null
 migration_status="verified"
+chat_database_role="not-selected"
+case "$topology_name" in
+  all-in-one-with-chat|split-with-chat)
+    # Chat's restricted database login is intentionally provisioned only after
+    # the schema-owning migration service succeeds, while the live source and
+    # application containers are still untouched.
+    migrate_image="$(sudo -n awk -F= '$1 == "MIGRATE_IMAGE" { print $2; exit }' "$stage/.env")"
+    test -n "$migrate_image"
+    chat_secret_directory="$release_root/.release-secrets"
+    sudo -n install -d -m 700 "$chat_secret_directory"
+    chat_url_file="$(sudo -n mktemp "$chat_secret_directory/chat-url-$short_sha.XXXXXX")"
+    sudo -n awk -F= '$1 == "CHAT_DATABASE_URL" { print; exit }' "$stage/.env" | sudo -n tee "$chat_url_file" >/dev/null
+    sudo -n chmod 600 "$chat_url_file"
+    if ! chat_role="$(
+      sudo -n docker run --rm --env-file "$chat_url_file" --entrypoint node "$migrate_image" -e '
+        const value = new URL(process.env.CHAT_DATABASE_URL)
+        const role = decodeURIComponent(value.username)
+        if (role !== "arctic_chat") throw new Error("CHAT_DATABASE_URL must use arctic_chat")
+        process.stdout.write(role)
+      '
+    )"; then
+      sudo -n rm -f "$chat_url_file"
+      exit 1
+    fi
+    if ! chat_password="$(
+      sudo -n docker run --rm --env-file "$chat_url_file" --entrypoint node "$migrate_image" -e '
+        const value = new URL(process.env.CHAT_DATABASE_URL)
+        const password = decodeURIComponent(value.password)
+        if (!password || /[\r\n]/.test(password)) throw new Error("CHAT_DATABASE_URL password is invalid")
+        process.stdout.write(password)
+      '
+    )"; then
+      sudo -n rm -f "$chat_url_file"
+      exit 1
+    fi
+    sudo -n rm -f "$chat_url_file"
+    test "$chat_role" = arctic_chat
+    test -n "$chat_password"
+
+    chat_secret_file="$(sudo -n mktemp "$chat_secret_directory/chat-role-$short_sha.XXXXXX")"
+    chat_role_b64="$(printf '%s' "$chat_role" | base64 | tr -d '\n')"
+    chat_password_b64="$(printf '%s' "$chat_password" | base64 | tr -d '\n')"
+    {
+      printf 'chat_role_b64=%s\n' "$chat_role_b64"
+      printf 'chat_password_b64=%s\n' "$chat_password_b64"
+    } | sudo -n tee "$chat_secret_file" >/dev/null
+    sudo -n chmod 600 "$chat_secret_file"
+    if ! (
+      sudo -n docker cp "$stage/ops/postgres/bootstrap-chat-runtime-role.sql" app-postgres-1:/tmp/arctic-rss-chat-role.sql &&
+      sudo -n docker cp "$chat_secret_file" app-postgres-1:/tmp/arctic-rss-chat-role.env &&
+      sudo -n docker exec app-postgres-1 sh -ceu '
+      set -a
+      . /tmp/arctic-rss-chat-role.env
+      set +a
+      chat_role="$(printf '%s' "$chat_role_b64" | base64 -d)"
+      chat_password="$(printf '%s' "$chat_password_b64" | base64 -d)"
+      psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v chat_role="$chat_role" -v chat_password="$chat_password" -f /tmp/arctic-rss-chat-role.sql >/dev/null
+      PGPASSWORD="$chat_password" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$chat_role" -d "$POSTGRES_DB" -tAc "SELECT 1" | grep -qx 1
+      rm -f /tmp/arctic-rss-chat-role.sql /tmp/arctic-rss-chat-role.env
+      ' sh
+    ); then
+      sudo -n rm -f "$chat_secret_file"
+      sudo -n docker exec app-postgres-1 rm -f /tmp/arctic-rss-chat-role.sql /tmp/arctic-rss-chat-role.env >/dev/null 2>&1 || true
+      exit 1
+    fi
+    sudo -n rm -f "$chat_secret_file"
+    chat_database_role="verified"
+    ;;
+esac
 sudo -n mv "$live" "$previous"
 sudo -n mv "$stage" "$live"
 
@@ -1072,6 +1141,7 @@ printf 'PREVIOUS_IMAGES=%s\n' "${previous_images[*]}"
 printf 'TOPOLOGY=%s\n' "$topology_name"
 printf 'TOPOLOGY_HEALTH=%s\n' "${topology_health[*]}"
 printf 'MIGRATION_STATUS=%s\n' "$migration_status"
+printf 'CHAT_DATABASE_ROLE=%s\n' "$chat_database_role"
 printf 'WEB_HEALTH=%s\n' "$web_health"
 printf 'WEB_IMAGE=%s\n' "$web_image"
 printf 'WORKER_HEALTH=%s\n' "$worker_health"
@@ -1100,6 +1170,7 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
   $deployedTopology = Get-ReleaseMarker -Output $stageOutput -Name "TOPOLOGY"
   $topologyHealth = Get-ReleaseMarker -Output $stageOutput -Name "TOPOLOGY_HEALTH"
   $migrationStatus = Get-ReleaseMarker -Output $stageOutput -Name "MIGRATION_STATUS"
+  $chatDatabaseRole = Get-ReleaseMarker -Output $stageOutput -Name "CHAT_DATABASE_ROLE"
   $webHealth = Get-ReleaseMarker -Output $stageOutput -Name "WEB_HEALTH"
   $webImage = Get-ReleaseMarker -Output $stageOutput -Name "WEB_IMAGE"
   $workerHealth = Get-ReleaseMarker -Output $stageOutput -Name "WORKER_HEALTH"
@@ -1136,6 +1207,7 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
     githubCiRun = $ci.Url
     loginHttpStatus = $loginStatus
     migrationStatus = $migrationStatus
+    chatDatabaseRole = $chatDatabaseRole
     previousRelease = $previousRelease
     previousCommit = $previousCommit
     previousTopology = $previousTopology
