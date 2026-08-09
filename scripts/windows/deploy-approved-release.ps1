@@ -774,11 +774,11 @@ backup_result="$(sudo -n systemctl show arctic-rss-backup.service -p Result --va
 backup_status="$(sudo -n systemctl show arctic-rss-backup.service -p ExecMainStatus --value)"
 test "$backup_result" = "success"
 test "$backup_status" = "0"
-backup_id="$(sudo -n /usr/local/sbin/arctic-rss-latest-backup)"
-test "$backup_id" != ""
-printf 'BACKUP_ID=%s\n' "$backup_id"
+backup_evidence_id="$(sudo -n /usr/local/sbin/arctic-rss-latest-backup)"
+test "$backup_evidence_id" != ""
+printf 'BACKUP_EVIDENCE_ID=%s\n' "$backup_evidence_id"
 '@
-$backupId = Get-ReleaseMarker -Output $backupOutput -Name "BACKUP_ID"
+$backupEvidenceId = Get-ReleaseMarker -Output $backupOutput -Name "BACKUP_EVIDENCE_ID"
 
 $archivePath = Join-Path ([System.IO.Path]::GetTempPath()) "arctic-rss-$shortSha-$PID.tar.gz"
 try {
@@ -1120,7 +1120,7 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
   $recordPath = Join-Path $config.ReleaseRecordDirectory $recordName
   [ordered]@{
     archiveSha256 = $archiveHash
-    backupId = $backupId
+    backupEvidenceId = $backupEvidenceId
     commit = $commit
     deployedAtUtc = $deployedAt
     localImageArchiveBytes = $offHostImages.ArchiveBytes

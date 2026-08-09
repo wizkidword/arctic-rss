@@ -199,6 +199,28 @@ remain literal and inert. Feed text recognizes only a small charset allowlist.
 
 No migration, production action, push, or deployment is included in this phase.
 
+## Phase 9B local structured-backup-evidence result (2026-08-08)
+
+The old host check treated an existing backup metadata file as sufficient. The
+new check reads a bounded, versioned JSON record through a stable latest-record
+link and proves the named database dump is a fresh regular file with nonzero
+expected size and SHA-256. It also requires the expected production identity,
+an off-host acknowledgement recorded only after the Windows copy verifies both
+checksums, and a fresh restore-drill timestamp for the same backup. The health
+report contains status codes and ages only; it does not disclose paths, target
+labels, checksums, data, or credentials.
+
+The backup job creates the initial record, the off-host recorder updates it
+atomically after a checksum-verified pull, and the restore drill updates the
+same record atomically only after its isolated database restore passes. The
+approved-release script records the exact `backupEvidenceId` it observed.
+
+Focused filesystem fixtures cover the accepted record and malformed,
+unsupported, future, stale, wrong-identity, missing-off-host, stale-restore,
+missing-artifact, empty-artifact, resized, altered, and traversal cases. This
+is source and local test evidence only. No VPS backup, off-host copy, restore
+drill, release, push, or deployment was run for this phase.
+
 ## Phase 7A local exact-environment evidence (2026-08-08)
 
 The service-role manifest now also records runtime-only compatibility aliases

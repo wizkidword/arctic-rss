@@ -102,7 +102,7 @@ npm run doctor -- release --topology split-with-chat
 
 - `runtime` checks only the selected service role's required variables and
   runtime dependencies.
-- `host` checks backup-metadata evidence and the real Redis server identities.
+- `host` validates structured backup evidence and the real Redis server identities.
 - `migrations` checks the migration status using the migration-only
   credential boundary.
 - `release` aggregates runtime, host, and migration checks for the selected
@@ -115,9 +115,17 @@ exit-code enforcement. It is not a release approval.
 
 Doctor reports present/missing variable names, not values; runtime and migration
 database role names, not connection strings; selected topology, worker
-ownership, heartbeat and tick ages, queue thresholds, and chat readiness. It
-never prints environment values, credentials, queue payloads, job IDs, backup
-contents, or Redis server IDs.
+ownership, heartbeat and tick ages, queue thresholds, chat readiness, and only
+the backup-evidence result plus its backup/restore ages. It never prints
+environment values, credentials, queue payloads, job IDs, backup paths,
+off-host targets, checksums, backup contents, or Redis server IDs.
+
+The host backup check requires a supported machine-readable record for the
+expected production database and environment. It rejects a missing or malformed
+record; future or stale backup time; absent, empty, resized, or checksum-altered
+artifact; missing off-host acknowledgement; and a missing or stale restore
+drill. The policy and private stable evidence path are documented in the
+[backup and restore checklist](backup-restore-checklist.md).
 
 Host diagnostics compare both the normalized Redis endpoints and live Redis
 server identities. The report distinguishes:

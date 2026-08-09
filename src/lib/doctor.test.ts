@@ -15,7 +15,7 @@ function healthyReport(
   overrides: Partial<DoctorReport> = {}
 ): DoctorReport {
   return {
-    backupMetadata: { ageMs: 1_000, status: "available" },
+    backupEvidence: { ageMs: 1_000, restoreTestAgeMs: 1_000, status: "available" },
     chatGateway: "disabled",
     databaseRoles: { migration: "migrate", runtime: "runtime" },
     maintenanceTick: { ageMs: 1_000, fresh: true },
@@ -183,7 +183,7 @@ describe("doctor report helpers", () => {
     expect(
       evaluateDoctorReport(
         healthyReport({
-          backupMetadata: { ageMs: null, status: "unavailable" },
+          backupEvidence: { ageMs: null, restoreTestAgeMs: null, status: "unavailable" },
           scope: "host",
         })
       ).exitCode

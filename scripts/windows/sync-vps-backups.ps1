@@ -79,6 +79,42 @@ function Send-FailureNotification {
   }
 }
 
+function Confirm-RemoteOffHostEvidence {
+  param(
+    [Parameter(Mandatory)][pscustomobject]$Config,
+    [Parameter(Mandatory)][string]$BackupId
+  )
+
+  $output = Invoke-RequiredCommand -FilePath "ssh" -Arguments @(
+    "-o", "BatchMode=yes",
+    "-i", $Config.SshKeyPath,
+    "$($Config.SshUser)@$($Config.SshHost)",
+    "sudo /usr/local/sbin/arctic-rss-record-backup-offhost $BackupId"
+  )
+  $evidenceId = ($output | Where-Object { $_ -match '^BACKUP_EVIDENCE_ID=' } | Select-Object -Last 1)
+  if ($evidenceId -ne "BACKUP_EVIDENCE_ID=$BackupId") {
+    throw "The VPS did not acknowledge the copied backup evidence."
+  }
+}
+
+function Copy-RemoteEvidence {
+  param(
+    [Parameter(Mandatory)][pscustomobject]$Config,
+    [Parameter(Mandatory)][string]$BackupId,
+    [Parameter(Mandatory)][string]$Destination
+  )
+
+  $remoteEvidence = "$($Config.SshUser)@$($Config.SshHost):$($Config.RemoteBackupDirectory)/$BackupId/backup-evidence.json"
+  Invoke-RequiredCommand -FilePath "scp" -Arguments @(
+    "-p",
+    "-q",
+    "-o", "BatchMode=yes",
+    "-i", $Config.SshKeyPath,
+    $remoteEvidence,
+    (Join-Path $Destination "backup-evidence.json")
+  ) | Out-Null
+}
+
 if (-not (Test-Path -LiteralPath $ConfigurationPath -PathType Leaf)) {
   throw "Backup sync configuration was not found."
 }
@@ -105,7 +141,8 @@ $backupFiles = @(
   "database.globals.sql",
   "database.dump.sha256",
   "database.globals.sql.sha256",
-  "metadata"
+  "metadata",
+  "backup-evidence.json"
 )
 
 try {
@@ -124,8 +161,10 @@ try {
   if (Test-Path -LiteralPath $final -PathType Container) {
     Assert-Checksum -FilePath (Join-Path $final "database.dump") -ChecksumPath (Join-Path $final "database.dump.sha256")
     Assert-Checksum -FilePath (Join-Path $final "database.globals.sql") -ChecksumPath (Join-Path $final "database.globals.sql.sha256")
+    Confirm-RemoteOffHostEvidence -Config $config -BackupId $latest
+    Copy-RemoteEvidence -Config $config -BackupId $latest -Destination $final
     Remove-ExpiredBackups -Destination $destination -RetentionDays $retentionDays
-    Write-SyncLog "Backup $latest is already present and verified."
+    Write-SyncLog "Backup $latest is already present, verified, and acknowledged."
     exit 0
   }
 
@@ -154,9 +193,12 @@ try {
     }
   }
 
+  Confirm-RemoteOffHostEvidence -Config $config -BackupId $latest
+  Copy-RemoteEvidence -Config $config -BackupId $latest -Destination $final
+
   Remove-ExpiredBackups -Destination $destination -RetentionDays $retentionDays
 
-  Write-SyncLog "Backup $latest copied and checksum verified."
+  Write-SyncLog "Backup $latest copied, checksum verified, and acknowledged."
 } catch {
   Write-SyncLog "Backup sync failed."
   Send-FailureNotification -Config $config
