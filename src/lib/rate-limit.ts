@@ -26,6 +26,7 @@ type RateLimitRule = {
 }
 
 export type RateLimitAction =
+  | "account_export"
   | "account_deletion_confirmation"
   | "account_deletion_handoff"
   | "account_deletion_confirmation_request"
@@ -104,6 +105,10 @@ const combinedSubject = (
   }
 
 const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
+  account_export: [
+    { limit: 3, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
+    { limit: 20, scope: "ip", subject: inputSubject("ip"), windowMs: 60 * 60_000 },
+  ],
   account_deletion_confirmation: [
     { limit: 5, scope: "user", subject: inputSubject("userId"), windowMs: 15 * 60_000 },
     {

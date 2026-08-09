@@ -52,7 +52,7 @@ export default async function ImportExportSettingsPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-3 flex items-center gap-2">
             <DownloadIcon className="size-4 text-muted-foreground" />
@@ -69,6 +69,30 @@ export default async function ImportExportSettingsPage() {
           >
             <DownloadIcon data-icon="inline-start" />
             Export OPML
+          </a>
+        </div>
+
+        <div className="rounded-lg border bg-card p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <DownloadIcon className="size-4 text-muted-foreground" />
+            <h2 className="font-heading text-base font-medium">Export account data</h2>
+          </div>
+          <p className="mb-2 text-sm text-muted-foreground">
+            Download your feed and podcast subscriptions, folders, saved
+            collections and references, starred article references, saved
+            searches, Smart Digest rules, and reader settings as JSON.
+          </p>
+          <p className="mb-4 text-sm text-muted-foreground">
+            This one-time download is not retained. It excludes passwords,
+            sessions, provider secrets, and full publisher article bodies.
+          </p>
+          <a
+            className={cn(buttonVariants(), "w-fit")}
+            download
+            href="/api/account/export"
+          >
+            <DownloadIcon data-icon="inline-start" />
+            Export account data
           </a>
         </div>
 

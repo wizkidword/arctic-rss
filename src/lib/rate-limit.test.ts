@@ -90,6 +90,63 @@ describe("rate limiter", () => {
     })
   })
 
+  it("limits account exports by both account and trusted client IP", async () => {
+    const store = createCounterStore()
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(
+        enforceRateLimit(
+          {
+            action: "account_export",
+            ip: `198.51.100.${attempt + 1}`,
+            userId: "user-789",
+          },
+          { store }
+        )
+      ).resolves.toEqual({ allowed: true })
+    }
+
+    await expect(
+      enforceRateLimit(
+        { action: "account_export", ip: "198.51.100.99", userId: "user-789" },
+        { store }
+      )
+    ).resolves.toMatchObject({
+      allowed: false,
+      retryAfterSeconds: 3600,
+      scope: "user",
+    })
+
+    const ipStore = createCounterStore()
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await expect(
+        enforceRateLimit(
+          {
+            action: "account_export",
+            ip: "198.51.100.200",
+            userId: `user-${attempt}`,
+          },
+          { store: ipStore }
+        )
+      ).resolves.toEqual({ allowed: true })
+    }
+
+    await expect(
+      enforceRateLimit(
+        {
+          action: "account_export",
+          ip: "198.51.100.200",
+          userId: "user-over-ip-limit",
+        },
+        { store: ipStore }
+      )
+    ).resolves.toMatchObject({
+      allowed: false,
+      retryAfterSeconds: 3600,
+      scope: "ip",
+    })
+  })
+
   it("bounds reader-triggered cited story comparisons per account", async () => {
     const store = createCounterStore()
 
