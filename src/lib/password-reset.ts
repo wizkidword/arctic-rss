@@ -7,6 +7,11 @@ import { getAppOrigin } from "@/lib/app-origin"
 import { getPrisma } from "@/lib/db"
 import { sendPasswordResetEmail } from "@/lib/mail"
 import { hashPassword } from "@/lib/password"
+import {
+  BCRYPT_PASSWORD_BYTE_LIMIT_MESSAGE,
+  isBcryptPasswordByteLengthValid,
+  PASSWORD_MINIMUM_LENGTH,
+} from "@/lib/password-policy"
 import { notifyAccountSecurityChange } from "@/lib/chat/security-events"
 
 const RESET_TOKEN_BYTES = 32
@@ -30,8 +35,20 @@ export const passwordResetRequestSchema = z.object({
 export const passwordResetConfirmSchema = z
   .object({
     token: z.string().trim().min(32).max(512),
-    password: z.string().min(8).max(256),
-    confirmPassword: z.string().min(8).max(256),
+    password: z
+      .string()
+      .min(PASSWORD_MINIMUM_LENGTH)
+      .max(256)
+      .refine(isBcryptPasswordByteLengthValid, {
+        message: BCRYPT_PASSWORD_BYTE_LIMIT_MESSAGE,
+      }),
+    confirmPassword: z
+      .string()
+      .min(PASSWORD_MINIMUM_LENGTH)
+      .max(256)
+      .refine(isBcryptPasswordByteLengthValid, {
+        message: BCRYPT_PASSWORD_BYTE_LIMIT_MESSAGE,
+      }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match.",

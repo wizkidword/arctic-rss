@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/card"
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { trackAnalyticsEvent } from "@/lib/google-analytics-events"
+import { PASSWORD_REQUIREMENTS } from "@/lib/password-policy"
 
 import { signupAction, type SignupActionState } from "./actions"
 
@@ -120,6 +122,7 @@ export function SignupForm({
                 minLength={8}
                 required
               />
+              <FieldDescription>{PASSWORD_REQUIREMENTS}</FieldDescription>
               <FieldError errors={state.errors?.password?.map((message) => ({ message }))} />
             </Field>
           </FieldGroup>

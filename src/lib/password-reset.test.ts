@@ -75,6 +75,22 @@ describe("password reset helpers", () => {
     ).toBe(false)
   })
 
+  it("rejects reset passwords over bcrypt's UTF-8 byte limit", () => {
+    const parsed = passwordResetConfirmSchema.safeParse({
+      token: "x".repeat(40),
+      password: "😀".repeat(19),
+      confirmPassword: "😀".repeat(19),
+    })
+
+    expect(parsed.success).toBe(false)
+    if (!parsed.success) {
+      expect(parsed.error.flatten().fieldErrors).toEqual({
+        password: ["Password must use no more than 72 UTF-8 bytes."],
+        confirmPassword: ["Password must use no more than 72 UTF-8 bytes."],
+      })
+    }
+  })
+
   it("creates reset tokens and stores only a stable hash", () => {
     const { token, tokenHash } = createPasswordResetToken()
 

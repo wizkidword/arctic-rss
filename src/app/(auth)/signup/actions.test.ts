@@ -233,4 +233,19 @@ describe("signupAction", () => {
     expect(mocks.verifyTurnstileToken).not.toHaveBeenCalled()
     expect(prisma.user.create).not.toHaveBeenCalled()
   })
+
+  it("rejects a password over bcrypt's UTF-8 byte limit before side effects", async () => {
+    const formData = createSignupFormData()
+    formData.set("password", "😀".repeat(19))
+
+    await expect(signupAction({}, formData)).resolves.toEqual({
+      message: "Please fix the highlighted fields.",
+      errors: {
+        password: ["Password must use no more than 72 UTF-8 bytes."],
+      },
+    })
+
+    expect(mocks.getCurrentRequestIp).not.toHaveBeenCalled()
+    expect(mocks.hashPassword).not.toHaveBeenCalled()
+  })
 })
