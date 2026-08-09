@@ -377,6 +377,9 @@ describe("disableUserAction", () => {
       aiDigest: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
+      importJob: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       smartDigestRule: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
@@ -448,6 +451,15 @@ describe("disableUserAction", () => {
       },
       where: {
         status: { in: ["PENDING", "PROCESSING", "FAILED"] },
+        userId: "user-1",
+      },
+    })
+    expect(transaction.importJob.updateMany).toHaveBeenCalledWith({
+      data: {
+        cancelRequestedAt: expect.any(Date),
+      },
+      where: {
+        status: { in: ["PENDING", "PROCESSING"] },
         userId: "user-1",
       },
     })

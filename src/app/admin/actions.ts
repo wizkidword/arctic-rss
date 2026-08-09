@@ -416,6 +416,15 @@ export async function disableUserAction(
             userId: user.id,
           },
         }),
+        transaction.importJob.updateMany({
+          data: {
+            cancelRequestedAt: disabledAt,
+          },
+          where: {
+            status: { in: ["PENDING", "PROCESSING"] },
+            userId: user.id,
+          },
+        }),
         transaction.digestRun.updateMany({
           data: {
             completedAt: disabledAt,

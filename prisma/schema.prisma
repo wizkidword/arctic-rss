@@ -73,6 +73,7 @@ enum ImportStatus {
 
 enum ImportEntryStatus {
   PENDING
+  PROCESSING
   ADDED
   SKIPPED
   FAILED
@@ -1240,22 +1241,27 @@ model ImportJob {
 }
 
 model ImportJobEntry {
-  id           String            @id @default(cuid())
-  importJobId  String
-  sequence     Int
-  folderName   String?
-  title        String
-  xmlUrl       String
-  status       ImportEntryStatus @default(PENDING)
-  errorMessage String?
-  processedAt  DateTime?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id                  String            @id @default(cuid())
+  importJobId         String
+  sequence            Int
+  folderName          String?
+  title               String
+  xmlUrl              String
+  status              ImportEntryStatus @default(PENDING)
+  attempt             Int               @default(0)
+  leaseOwner          String?
+  leaseExpiresAt      DateTime?
+  processingStartedAt DateTime?
+  errorMessage        String?
+  processedAt         DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
 
   @@unique([importJobId, sequence])
   @@index([importJobId, status, sequence])
+  @@index([importJobId, status, leaseExpiresAt, sequence])
 }
 
 model BugReport {

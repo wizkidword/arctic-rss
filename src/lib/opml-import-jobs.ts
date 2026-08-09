@@ -1,9 +1,15 @@
 import { getPrisma } from "./db"
+import { getBackgroundEligibility } from "./background-eligibility"
 import { enqueueFeedRefresh } from "./feed-refresh-queue"
 import {
   FeedSubscriptionError,
   subscribeToFeed,
 } from "./feed-subscriptions"
+import {
+  claimOpmlImportEntry,
+  finalizeOpmlImportEntry,
+  runWithOpmlImportEntryLeaseHeartbeat,
+} from "./opml-import-leases"
 import { enqueueOpmlImportJob } from "./opml-import-queue"
 import { parseOpmlSubscriptions } from "./opml"
 
@@ -126,6 +132,16 @@ export async function processOpmlImportJob({
     return { status: "CANCELED" as const }
   }
 
+  if (
+    !(await getBackgroundEligibility({
+      store: prisma,
+      userId: job.userId,
+    })).active
+  ) {
+    await markOpmlImportCanceled(job.id, now())
+    return { status: "CANCELED" as const }
+  }
+
   const startedAt = job.startedAt ?? now()
 
   if (now().getTime() - startedAt.getTime() >= OPML_IMPORT_OPERATION_DEADLINE_MS) {
@@ -146,31 +162,10 @@ export async function processOpmlImportJob({
     where: { id: job.id },
   })
 
-  const entries = await prisma.importJobEntry.findMany({
-    orderBy: { sequence: "asc" },
-    select: {
-      folderName: true,
-      id: true,
-      sequence: true,
-      title: true,
-      xmlUrl: true,
-    },
-    take: OPML_IMPORT_BATCH_SIZE,
-    where: {
-      importJobId: job.id,
-      status: "PENDING",
-    },
-  })
-
-  if (entries.length === 0) {
-    await completeOpmlImportJob(job.id, now())
-    return { status: "COMPLETED" as const }
-  }
-
   const batchDeadline = Date.now() + OPML_IMPORT_BATCH_DEADLINE_MS
   const folderIdsByName = new Map<string, string>()
 
-  for (const entry of entries) {
+  for (let processedInBatch = 0; processedInBatch < OPML_IMPORT_BATCH_SIZE; processedInBatch += 1) {
     job = await prisma.importJob.findUnique({
       select: {
         cancelRequestedAt: true,
@@ -189,37 +184,65 @@ export async function processOpmlImportJob({
       return { status: job ? ("CANCELED" as const) : "missing" }
     }
 
+    if (
+      !(await getBackgroundEligibility({
+        store: prisma,
+        userId: job.userId,
+      })).active
+    ) {
+      await markOpmlImportCanceled(job.id, now())
+      return { status: "CANCELED" as const }
+    }
+
     if (Date.now() >= batchDeadline) {
       return { status: "PROCESSING" as const }
     }
 
-    const result = await importOpmlEntry({
-      entry,
-      folderIdsByName,
-      userId: job.userId,
+    const userId = job.userId
+    const entry = await claimOpmlImportEntry({
+      importJobId: job.id,
+      now: now(),
+      store: prisma,
     })
 
-    await prisma.$transaction([
-      prisma.importJobEntry.update({
-        data: {
-          errorMessage: result.errorMessage,
-          processedAt: now(),
-          status: result.status,
-        },
-        where: { id: entry.id },
-      }),
-      prisma.importJob.update({
-        data: importJobCountUpdate(result.status),
-        where: { id: job.id },
-      }),
-    ])
+    if (!entry) {
+      break
+    }
+
+    const processed = await runWithOpmlImportEntryLeaseHeartbeat({
+      lease: entry,
+      now,
+      store: prisma,
+      work: () =>
+        importOpmlEntry({
+          entry,
+          folderIdsByName,
+          userId,
+        }),
+    })
+
+    if (!processed.leaseHeld) {
+      return { status: "PROCESSING" as const }
+    }
+
+    const finalized = await finalizeOpmlImportEntry({
+      errorMessage: processed.result.errorMessage,
+      lease: entry,
+      now: now(),
+      status: processed.result.status,
+      store: prisma,
+    })
+
+    if (!finalized) {
+      return { status: "PROCESSING" as const }
+    }
   }
 
   const pendingEntry = await prisma.importJobEntry.findFirst({
     select: { id: true },
     where: {
       importJobId: job.id,
-      status: "PENDING",
+      status: { in: ["PENDING", "PROCESSING"] },
     },
   })
 
@@ -290,12 +313,15 @@ export async function retryOpmlImportJob({
       await transaction.importJobEntry.updateMany({
         data: {
           errorMessage: null,
+          leaseExpiresAt: null,
+          leaseOwner: null,
           processedAt: null,
+          processingStartedAt: null,
           status: "PENDING",
         },
         where: {
           importJobId: job.id,
-          status: "FAILED",
+          status: { in: ["FAILED", "PROCESSING"] },
         },
       })
 
@@ -473,6 +499,12 @@ async function completeOpmlImportJob(jobId: string, completedAt: Date) {
     },
     where: {
       id: jobId,
+      cancelRequestedAt: null,
+      entries: {
+        none: {
+          status: { in: ["PENDING", "PROCESSING"] },
+        },
+      },
       status: { in: ["PENDING", "PROCESSING"] },
     },
   })
@@ -511,27 +543,6 @@ async function markOpmlImportFailed({
       status: { in: ["PENDING", "PROCESSING"] },
     },
   })
-}
-
-function importJobCountUpdate(status: "ADDED" | "FAILED" | "SKIPPED") {
-  if (status === "ADDED") {
-    return {
-      addedFeeds: { increment: 1 },
-      processedFeeds: { increment: 1 },
-    }
-  }
-
-  if (status === "SKIPPED") {
-    return {
-      processedFeeds: { increment: 1 },
-      skippedFeeds: { increment: 1 },
-    }
-  }
-
-  return {
-    failedFeeds: { increment: 1 },
-    processedFeeds: { increment: 1 },
-  }
 }
 
 function isDuplicateSubscriptionError(error: unknown) {
