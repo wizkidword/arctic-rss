@@ -7,7 +7,7 @@ or operator-verified.
 
 | Finding ID | Source implementation | Unit/integration coverage | Browser evidence | Redis/PostgreSQL/Compose evidence | Migration required | Production release status | Operator verification | Mobile dependency | Remaining owner gate |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| FP-001 | Initial policy slice implemented: current-record eligibility, transactional monitor/rule pause on disablement, monitor and Smart Digest rechecks, and email suppression | Policy plus disable-before-claim and disable-during-processing coverage; full suite passes (284 files, 1,397 tests) | Not run this pass | No schema change; disposable background-worker fixture remains pending | No for this slice; later run-cancellation work may require one | Not deployed | No | Required before device sessions | Finish all background workload boundaries and planned run-state work; release remains `DEPLOY <short-sha>` gated |
+| FP-001 | Initial policy slice implemented: current-record eligibility, transactional monitor/rule pause, durable cancellation of pending/failed Smart Digest runs, monitor/DigestRun rechecks, and email suppression | Policy plus disable-before-claim, disable-during-processing, and canceled-run coverage; full suite passes (284 files, 1,398 tests) | Not run this pass | All 43 migrations, including `20260809120000_cancel_ineligible_digest_runs`, apply to a disposable PostgreSQL 17.10 fixture; background-worker fixture remains pending | Yes — additive `CANCELED` enum value; production ready false | Not deployed | No | Required before device sessions | Finish AI/chat background boundaries and remaining Phase 1 worker coverage; release remains `DEPLOY <short-sha>` gated |
 | FP-002 | Not started | No fenced replay test | Not run | Real PostgreSQL replay fixture pending | Yes | Not deployed | No | None | Migration evidence and release approval |
 | FP-003 | Not started | No fenced stale-reclaim test | Not run | Real PostgreSQL reclaim fixture pending | Yes | Not deployed | No | None | Migration evidence and release approval |
 | FP-004 | Not started | Publisher-only fault injection pending | Not run | Redis/readiness fault injection pending | No | Not deployed | No | None | Release approval after evidence |
@@ -17,3 +17,10 @@ or operator-verified.
 | FP-008 | Existing fourth-pass fix requires revalidation | Regression fixture pending | Not run | PostgreSQL test if query semantics change | No expected | Not deployed | No | None | Release approval only if changed |
 | FP-009 | Existing reader projections require measurement | Shell benchmark pending | Authenticated payload capture pending | Query measurement pending | No expected | Not deployed | No | Mobile read API depends on stable projection | None for measurement |
 | FP-010 | Static boundary checks pass; runtime proof pending | ACL/role negative tests pending | Not run | Compose and disposable Redis/PostgreSQL evidence pending | No expected | Not deployed | No | Required before mobile API exposure | Credential rollout and release approval |
+
+## Account re-enable behavior
+
+This pass deliberately pauses monitor and Smart Digest rules on disablement and
+does not provide any automatic reactivation path. If an administrator later
+re-enables an account, automation must remain paused until the user or an
+explicitly reviewed administrator action opts into each rule again.

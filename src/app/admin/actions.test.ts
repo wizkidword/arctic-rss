@@ -377,6 +377,12 @@ describe("disableUserAction", () => {
       smartDigestRule: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
+      digestRun: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      smartDigest: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       user: {
         findUnique: vi.fn().mockResolvedValue({
           disabledAt: null,
@@ -431,11 +437,45 @@ describe("disableUserAction", () => {
         userId: "user-1",
       },
     })
+    expect(transaction.digestRun.updateMany).toHaveBeenNthCalledWith(1, {
+      data: {
+        completedAt: expect.any(Date),
+        emailErrorMessage: "ACCOUNT_DISABLED",
+        emailStatus: "NOT_REQUESTED",
+        errorMessage: "ACCOUNT_DISABLED",
+        processingStartedAt: null,
+        status: "CANCELED",
+      },
+      where: {
+        rule: { userId: "user-1" },
+        status: { in: ["PENDING", "FAILED"] },
+      },
+    })
+    expect(transaction.smartDigest.updateMany).toHaveBeenCalledWith({
+      data: {
+        emailErrorMessage: "ACCOUNT_DISABLED",
+        emailStatus: "NOT_REQUESTED",
+      },
+      where: {
+        emailStatus: { in: ["PENDING", "FAILED"] },
+        userId: "user-1",
+      },
+    })
+    expect(transaction.digestRun.updateMany).toHaveBeenNthCalledWith(2, {
+      data: {
+        emailErrorMessage: "ACCOUNT_DISABLED",
+        emailStatus: "NOT_REQUESTED",
+      },
+      where: {
+        emailStatus: { in: ["PENDING", "FAILED"] },
+        rule: { userId: "user-1" },
+      },
+    })
     expect(transaction.adminAuditLog.create).toHaveBeenCalledWith({
       data: {
         action: "USER_DISABLED",
         adminUserId: "admin-1",
-        metadata: { source: "admin-dashboard" },
+        metadata: { reason: "account_disabled", source: "admin-dashboard" },
         targetId: "user-1",
         targetType: "User",
       },

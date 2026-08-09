@@ -342,6 +342,7 @@ export async function disableUserAction(
 
   try {
     const target = await getPrisma().$transaction(async (transaction) => {
+      const disabledAt = new Date()
       const existingUser = await transaction.user.findUnique({
         select: {
           disabledAt: true,
@@ -374,7 +375,7 @@ export async function disableUserAction(
         where: { id: existingUser.id },
         data: {
           authVersion: { increment: 1 },
-          disabledAt: new Date(),
+          disabledAt,
         },
         select: {
           authVersion: true,
@@ -404,6 +405,40 @@ export async function disableUserAction(
             userId: user.id,
           },
         }),
+        transaction.digestRun.updateMany({
+          data: {
+            completedAt: disabledAt,
+            emailErrorMessage: "ACCOUNT_DISABLED",
+            emailStatus: "NOT_REQUESTED",
+            errorMessage: "ACCOUNT_DISABLED",
+            processingStartedAt: null,
+            status: "CANCELED",
+          },
+          where: {
+            rule: { userId: user.id },
+            status: { in: ["PENDING", "FAILED"] },
+          },
+        }),
+        transaction.smartDigest.updateMany({
+          data: {
+            emailErrorMessage: "ACCOUNT_DISABLED",
+            emailStatus: "NOT_REQUESTED",
+          },
+          where: {
+            emailStatus: { in: ["PENDING", "FAILED"] },
+            userId: user.id,
+          },
+        }),
+        transaction.digestRun.updateMany({
+          data: {
+            emailErrorMessage: "ACCOUNT_DISABLED",
+            emailStatus: "NOT_REQUESTED",
+          },
+          where: {
+            emailStatus: { in: ["PENDING", "FAILED"] },
+            rule: { userId: user.id },
+          },
+        }),
       ])
 
       await transaction.adminAuditLog.create({
@@ -411,6 +446,7 @@ export async function disableUserAction(
           action: "USER_DISABLED",
           adminUserId: admin.id,
           metadata: {
+            reason: "account_disabled",
             source: "admin-dashboard",
           },
           targetId: user.id,

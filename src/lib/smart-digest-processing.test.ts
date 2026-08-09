@@ -130,6 +130,28 @@ describe("smart digest processing", () => {
     )
   })
 
+  it("never reclaims a run canceled by account disablement", async () => {
+    const { mocks, store } = createStore({
+      run: digestRun({ status: "CANCELED" }),
+    })
+
+    await expect(
+      processSmartDigestRuleWithClient({
+        enqueueEmail: vi.fn(),
+        now,
+        ruleId: "rule-1",
+        scheduledFor,
+        store,
+      })
+    ).resolves.toEqual({
+      articleCount: 0,
+      digestId: null,
+      status: "SKIPPED",
+    })
+
+    expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
+  })
+
   it("does not create a run or digest for an account disabled after scheduling", async () => {
     const { mocks, store } = createStore({
       user: {

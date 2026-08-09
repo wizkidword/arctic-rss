@@ -194,6 +194,7 @@ enum DigestRunStatus {
   PROCESSING
   COMPLETED
   FAILED
+  CANCELED
 }
 
 enum ChatRoomVisibility {

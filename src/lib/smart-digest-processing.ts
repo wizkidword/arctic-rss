@@ -19,7 +19,12 @@ export const SMART_DIGEST_PROCESSING_LEASE_MS = 10 * 60 * 1000
 
 type SmartDigestStatusForProcessing = "COMPLETED" | "COMPLETED_NO_MATCHES"
 type SmartDigestEmailStatusForProcessing = "NOT_REQUESTED" | "PENDING"
-export type DigestRunStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
+export type DigestRunStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELED"
 
 type SmartDigestRuleFindUniqueArgs = {
   include: {
