@@ -27,6 +27,26 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     );
   });
 
+  it("passes the bounded durable-Redis recovery grace to every worker mode", async () => {
+    const compose = await readFile("docker-compose.yml", "utf8");
+
+    for (const worker of [
+      "worker",
+      "worker-ingestion",
+      "worker-ai-mail",
+      "worker-imports",
+      "worker-maintenance",
+      "worker-chat-events",
+    ]) {
+      const section = compose.match(
+        new RegExp(`  ${worker}:\\r?\\n([\\s\\S]*?)(?=\\r?\\n  [a-z][a-z-]+:|\\r?\\nvolumes:|$)`),
+      );
+      expect(section?.[0]).toContain(
+        "WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}",
+      );
+    }
+  });
+
   it("allows a release to select immutable application image tags", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
 
@@ -41,11 +61,16 @@ describe("Cloudflare Tunnel Compose configuration", () => {
     );
   });
 
-  it("pins the reviewed PostgreSQL and Redis base images", async () => {
+  it("pins the reviewed PostgreSQL, Redis, and Cloudflared images by digest", async () => {
     const compose = await readFile("docker-compose.yml", "utf8");
 
-    expect(compose).toContain("image: postgres:17.10-alpine3.23");
-    expect(compose).toContain("image: redis:7.4.9-alpine3.21");
+    expect(compose).toMatch(
+      /image: postgres:[^\s@]+@sha256:[a-f0-9]{64}/,
+    );
+    expect(compose.match(/image: redis:[^\s@]+@sha256:[a-f0-9]{64}/g)).toHaveLength(2);
+    expect(compose).toMatch(
+      /image: cloudflare\/cloudflared:[^\s@]+@sha256:[a-f0-9]{64}/,
+    );
   });
 
   it("refuses to interpolate production data-service credentials from unsafe defaults", async () => {
@@ -55,8 +80,12 @@ describe("Cloudflare Tunnel Compose configuration", () => {
       "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}",
     );
     expect(compose).toContain(
-      "REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}",
+      "DURABLE_REDIS_PASSWORD: ${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}",
     );
+    expect(compose).toContain(
+      "EPHEMERAL_REDIS_PASSWORD: ${EPHEMERAL_REDIS_PASSWORD:?EPHEMERAL_REDIS_PASSWORD is required}",
+    );
+    expect(compose).toContain('"--user", "default", "off"');
     expect(compose).toContain(
       "DATABASE_URL: ${MIGRATE_DATABASE_URL:?MIGRATE_DATABASE_URL is required}",
     );

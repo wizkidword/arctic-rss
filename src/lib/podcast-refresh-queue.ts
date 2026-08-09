@@ -1,11 +1,16 @@
 import { Queue, type JobsOptions } from "bullmq"
 
 import { durableRedisConnectionOptions } from "./redis-config"
+import type {
+  SourceRefreshEnqueueResult,
+  SourceRefreshTrigger,
+} from "./source-refresh-queue"
 
 export const PODCAST_REFRESH_QUEUE_NAME = "podcast-refresh"
 
 export type PodcastRefreshJobData = {
   podcastId: string
+  trigger?: SourceRefreshTrigger
 }
 
 let podcastRefreshQueue: Queue<PodcastRefreshJobData> | undefined
@@ -31,26 +36,32 @@ export async function closePodcastRefreshQueue() {
 
 export async function enqueuePodcastRefresh(
   podcastId: string,
-  options: JobsOptions = {}
-) {
-  return getPodcastRefreshQueue().add(
+  { trigger = "scheduler", ...options }: JobsOptions & { trigger?: SourceRefreshTrigger } = {}
+): Promise<SourceRefreshEnqueueResult> {
+  const queue = getPodcastRefreshQueue()
+  const jobId = options.jobId ?? podcastRefreshJobId(podcastId)
+
+  if (await queue.getJob(jobId)) {
+    return { jobId, outcome: "already-queued" }
+  }
+
+  await queue.add(
     "refresh-podcast",
-    { podcastId },
+    { podcastId, trigger },
     {
       attempts: 3,
       backoff: {
         delay: 30_000,
         type: "exponential",
       },
-      jobId: podcastRefreshJobId(podcastId),
+      jobId,
       removeOnComplete: true,
-      removeOnFail: {
-        age: 24 * 60 * 60,
-        count: 1000,
-      },
+      removeOnFail: true,
       ...options,
     }
   )
+
+  return { jobId, outcome: "queued" }
 }
 
 export function podcastRefreshJobId(podcastId: string) {

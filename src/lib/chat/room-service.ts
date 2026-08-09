@@ -800,6 +800,7 @@ async function persistChatRoomMessage({
 
     await transaction.chatRoom.update({
       data: { lastActivityAt: message.createdAt },
+      select: { id: true },
       where: { id: roomId },
     })
 

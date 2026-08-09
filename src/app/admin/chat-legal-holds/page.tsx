@@ -1,20 +1,24 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
-import { requireAuthenticatedUser, requireFreshAdmin } from "@/lib/authorization"
+import {
+  requireFreshAdmin,
+  withAuthenticatedRequestScope,
+} from "@/lib/authorization"
 import { AdminChatLegalHolds } from "@/components/admin-chat-legal-holds"
 import { listActiveChatLegalHolds } from "@/lib/chat/legal-holds"
 
 export const dynamic = "force-dynamic"
 
 export default async function ChatLegalHoldsAdminPage() {
-  const session = await requireAuthenticatedUser().catch(() => null)
+  const admin = await withAuthenticatedRequestScope((session) =>
+    requireFreshAdmin(session).catch(() => null)
+  ).catch(() => undefined)
 
-  if (!session?.user?.id) {
+  if (admin === undefined) {
     redirect("/login")
   }
 
-  const admin = await requireFreshAdmin(session).catch(() => null)
   if (!admin) {
     redirect("/app")
   }

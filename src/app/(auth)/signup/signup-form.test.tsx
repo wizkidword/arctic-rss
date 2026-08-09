@@ -51,4 +51,14 @@ describe("SignupForm", () => {
     })
     expect(mocks.signIn).toHaveBeenCalledWith("google", { redirectTo: "/app" })
   })
+
+  it("explains the UTF-8 byte limit for new passwords", () => {
+    render(<SignupForm googleAuthEnabled={false} turnstileSiteKey="" />)
+
+    expect(
+      screen.getByText(
+        "Use at least 8 characters and no more than 72 UTF-8 bytes. Emoji and accented characters can use more than one byte."
+      )
+    ).toBeTruthy()
+  })
 })

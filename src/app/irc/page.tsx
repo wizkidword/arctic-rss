@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation"
 
-import { auth } from "@/auth"
 import { IrcClientShell } from "@/components/irc/irc-client-shell"
 import { ChatActivation } from "@/components/irc/chat-activation"
+import { AuthorizationError, withAuthenticatedRequestScope } from "@/lib/authorization"
 import { ChatAccessError, requireChatEligibleUser } from "@/lib/chat/access"
 import { listChatBlockedUserIds } from "@/lib/chat/blocks"
 import { isChatEnabled } from "@/lib/chat/feature-flags"
@@ -16,21 +16,21 @@ export default async function IrcPage({
 }: {
   searchParams: Promise<{ room?: string | string[] }>
 }) {
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    redirect("/login")
-  }
-
-  if (!isChatEnabled()) {
-    notFound()
-  }
-
   let user: Awaited<ReturnType<typeof requireChatEligibleUser>>
 
   try {
-    user = await requireChatEligibleUser({ session })
+    user = await withAuthenticatedRequestScope(async (session) => {
+      if (!isChatEnabled()) {
+        notFound()
+      }
+
+      return requireChatEligibleUser({ session })
+    })
   } catch (error) {
+    if (error instanceof AuthorizationError) {
+      redirect("/login")
+    }
+
     if (error instanceof ChatAccessError) {
       const betaAccessRequired = error.code === "beta-access-required"
 

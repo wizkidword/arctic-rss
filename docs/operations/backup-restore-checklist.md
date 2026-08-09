@@ -9,16 +9,22 @@ the secure server session; do not put credentials in shell history or commits.
 `scripts/production-backup.sh` creates a custom-format PostgreSQL database
 backup plus a separate SQL export of cluster-wide role definitions. It validates
 the database archive with `pg_restore -l`, verifies checksums for both files,
-and retains only the configured number of dated backup directories. The role
+and retains only the configured number of dated backup directories. Each
+completed directory also contains a small `backup-evidence.json` record. It
+binds a versioned schema, environment, database name, backup ID, UTC completion
+time, dump byte count, dump SHA-256, and a relative artifact name. The role
 export may contain password hashes, so treat the whole backup directory as
-sensitive and encrypt it before any off-host copy. The script requires these
-non-secret systemd environment values outside the repository:
+sensitive and encrypt it before any off-host copy. The script requires Python
+3 and these non-secret systemd environment values outside the repository:
 
 ```dotenv
 APP_DIR=/private/path/to/active/arctic-rss-release
 BACKUP_DIR=/private/path/to/arctic-rss-backups
 COMPOSE_PROJECT=app
 RETENTION_DAYS=30
+ARCTIC_RSS_BACKUP_ENVIRONMENT=production
+# Opaque label only; never put a storage URL, account, or credential here.
+BACKUP_OFF_HOST_TARGET=encrypted-windows-replica
 ```
 
 Install the matching service and timer templates from `ops/systemd/`, then
@@ -30,6 +36,34 @@ systemctl start arctic-rss-backup.service
 systemctl show arctic-rss-backup.service -p Result -p ExecMainStatus
 ```
 
+Install the four root-only helpers together before enabling this evidence
+workflow. Keep their source and installed modes aligned; do not copy a backup
+directory, role export, or private environment file into the repository.
+
+```bash
+install -m 700 scripts/production-backup.sh /usr/local/sbin/arctic-rss-backup
+install -m 700 scripts/production-latest-backup.sh /usr/local/sbin/arctic-rss-latest-backup
+install -m 700 scripts/production-record-backup-offhost.sh /usr/local/sbin/arctic-rss-record-backup-offhost
+install -m 700 scripts/production-restore-drill.sh /usr/local/sbin/arctic-rss-restore-drill
+```
+
+`latest-backup-evidence.json` is an atomically replaced relative symlink to
+the newest completed record. Configure doctor with its stable path and the
+expected identity and policy values in the same private host environment that
+runs doctor:
+
+```dotenv
+ARCTIC_RSS_BACKUP_EVIDENCE_PATH=/private/path/to/arctic-rss-backups/latest-backup-evidence.json
+ARCTIC_RSS_BACKUP_EXPECTED_ENVIRONMENT=production
+ARCTIC_RSS_BACKUP_EXPECTED_DATABASE=the-production-database-name
+ARCTIC_RSS_BACKUP_MAX_AGE_SECONDS=108000
+ARCTIC_RSS_RESTORE_TEST_MAX_AGE_SECONDS=7776000
+```
+
+Doctor follows the stable link but resolves the record before checking its
+relative artifact. It emits only a status and ages; it never prints the backup
+path, target label, storage location, credentials, checksum, or backup data.
+
 The separate build-cache timer removes all unused Docker build cache every 72
 hours. It does not remove running containers, images, volumes, or database
 backups.
@@ -40,10 +74,20 @@ to encrypted off-host storage and perform regular restore drills.
 For a Windows-operated off-VPS copy, use
 `scripts/windows/sync-vps-backups.ps1` with a private JSON configuration file
 outside the repository. It copies only a completed backup directory, verifies
-both SHA-256 checksums locally, and can request a VPS email alert if the copy
-fails. Its VPS counterpart, `scripts/production-latest-backup.sh`, exposes
-only the identifier of a completed backup. Schedule the Windows task after the
-VPS backup timer and keep its SSH host, account, and key path out of Git.
+both SHA-256 checksums locally, then invokes the narrowly scoped root helper
+with the already validated backup ID. That helper adds the configured opaque
+target label and acknowledgement time to the matching evidence record
+atomically; the Windows job retrieves the updated record into the off-host
+copy. It can request a VPS email alert if the copy fails. Its VPS counterpart,
+`scripts/production-latest-backup.sh`, exposes only the identifier of a
+completed backup. Schedule the Windows task after the VPS backup timer and
+keep its SSH host, account, key path, and storage details out of Git.
+
+Grant the backup-sync account permission only to run
+`/usr/local/sbin/arctic-rss-record-backup-offhost` with one timestamp-shaped
+backup ID, in addition to its existing read-only backup access. Do not grant
+it a shell or broad write access to the backup root. Until this acknowledgement
+is present, doctor intentionally treats the backup as not off-host verified.
 
 `scripts/production-notify.sh` and
 `ops/systemd/arctic-rss-backup-alert@.service` provide a failure-only SMTP
@@ -136,8 +180,10 @@ sudo /usr/local/sbin/arctic-rss-restore-drill
 The result is safe to record as passed or failed, but do not copy its role dump,
 database dump, passwords, or detailed database contents into an issue or task
 log. A root-only status record is written outside the repository after a
-successful drill. Run a drill after backup-format changes and at least
-quarterly.
+successful drill, and the exact backup's evidence record is atomically updated
+with `restoreTestedAt`. Run a drill after backup-format changes and at least
+quarterly. Doctor rejects an absent, future, older-than-policy, or
+pre-backup restore timestamp.
 
 ```bash
 psql --set=ON_ERROR_STOP=on --dbname=postgres \
@@ -156,6 +202,8 @@ the drill date, operator, target, duration, and result outside the repository.
 - A VPS snapshot alone does not prove PostgreSQL recovery.
 - An existing file does not prove the backup is readable.
 - A local-only copy does not satisfy off-host recovery.
+- An off-host target label without a successful checksum-verified copy and
+  remote acknowledgement does not satisfy off-host evidence.
 - An unencrypted `.env` copy is not an acceptable durable backup.
 - A role-definition export contains credential hashes and must receive the same
   access controls and encryption as the database archive.

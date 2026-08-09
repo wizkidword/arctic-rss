@@ -1,3 +1,17 @@
+x-worker-durable-dependencies: &worker-durable-dependencies
+  migrate:
+    condition: service_completed_successfully
+  redis:
+    condition: service_healthy
+
+x-worker-realtime-dependencies: &worker-realtime-dependencies
+  migrate:
+    condition: service_completed_successfully
+  redis:
+    condition: service_healthy
+  redis-ephemeral:
+    condition: service_healthy
+
 x-worker-runtime: &worker-runtime
   image: ${WORKER_IMAGE:-arctic-rss-worker}
   build:
@@ -12,13 +26,6 @@ x-worker-runtime: &worker-runtime
     - ALL
   security_opt:
     - no-new-privileges:true
-  depends_on:
-    migrate:
-      condition: service_completed_successfully
-    redis:
-      condition: service_healthy
-    redis-ephemeral:
-      condition: service_healthy
   stop_grace_period: 60s
   command: ["node", "worker.mjs"]
   logging:
@@ -26,7 +33,8 @@ x-worker-runtime: &worker-runtime
 
 services:
   postgres:
-    image: postgres:17.10-alpine3.23
+    # PostgreSQL 17.10 on Alpine 3.23 (multi-architecture manifest digest).
+    image: postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4
     restart: unless-stopped
     cpus: 0.75
     mem_limit: 512m
@@ -35,6 +43,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-arctic_rss}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    # The connection budget is calculated from this explicit ceiling rather
+    # than inheriting an image default that could vary on a future upgrade.
+    command: ["postgres", "-c", "max_connections=100"]
     healthcheck:
       test:
         [
@@ -50,20 +61,27 @@ services:
       driver: journald
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    # The gateway needs PostgreSQL until Phase 7D introduces its restricted
+    # database role, but it must never share the durable Redis network.
+    networks:
+      - durable-data
+      - web-edge
 
   redis:
-    image: redis:7.4.9-alpine3.21
+    # Durable Redis 7.4.9 on Alpine 3.21 (multi-architecture manifest digest).
+    image: redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     restart: unless-stopped
     cpus: 0.25
     mem_limit: 320m
     pids_limit: 64
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      DURABLE_REDIS_USERNAME: ${DURABLE_REDIS_USERNAME:?DURABLE_REDIS_USERNAME is required}
+      DURABLE_REDIS_PASSWORD: ${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}
     # Durable BullMQ data must never be evicted. Keep a memory margin below the
     # container limit so Redis can safely rewrite AOF files under load.
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--auto-aof-rewrite-min-size", "64mb", "--auto-aof-rewrite-percentage", "100", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--auto-aof-rewrite-min-size", "64mb", "--auto-aof-rewrite-percentage", "100", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--user", "${DURABLE_REDIS_USERNAME:?DURABLE_REDIS_USERNAME is required}", "on", ">${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}", "~*", "&*", "+@all", "--user", "default", "off"]
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning --user \"$${DURABLE_REDIS_USERNAME}\" -a \"$${DURABLE_REDIS_PASSWORD}\" ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -73,21 +91,25 @@ services:
       driver: journald
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    networks:
+      - durable-data
 
   redis-ephemeral:
-    image: redis:7.4.9-alpine3.21
+    # Ephemeral Redis 7.4.9 on Alpine 3.21 (multi-architecture manifest digest).
+    image: redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     restart: unless-stopped
     cpus: 0.25
     mem_limit: 192m
     pids_limit: 64
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      EPHEMERAL_REDIS_USERNAME: ${EPHEMERAL_REDIS_USERNAME:?EPHEMERAL_REDIS_USERNAME is required}
+      EPHEMERAL_REDIS_PASSWORD: ${EPHEMERAL_REDIS_PASSWORD:?EPHEMERAL_REDIS_PASSWORD is required}
     # Socket.IO, presence, replay, rate-limit, and security-event state is
     # intentionally disposable. Every application key has a bounded TTL, so
     # volatile-ttl can reclaim the shortest-lived state under memory pressure.
-    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-ttl", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-ttl", "--user", "${EPHEMERAL_REDIS_USERNAME:?EPHEMERAL_REDIS_USERNAME is required}", "on", ">${EPHEMERAL_REDIS_PASSWORD:?EPHEMERAL_REDIS_PASSWORD is required}", "~*", "&*", "+@all", "--user", "default", "off"]
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning --user \"$${EPHEMERAL_REDIS_USERNAME}\" -a \"$${EPHEMERAL_REDIS_PASSWORD}\" ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -97,6 +119,8 @@ services:
     # no Redis service is reachable from the public network.
     ports:
       - "127.0.0.1:${EPHEMERAL_REDIS_PORT:-6380}:6379"
+    networks:
+      - ephemeral-realtime
 
   migrate:
     image: ${MIGRATE_IMAGE:-arctic-rss-migrate}
@@ -124,6 +148,8 @@ services:
       - no-new-privileges:true
     logging:
       driver: journald
+    networks:
+      - web-edge
 
   web:
     image: ${WEB_IMAGE:-arctic-rss-web}
@@ -152,7 +178,23 @@ services:
       # The all-in-one default keeps direct local Compose use deterministic.
       ARCTIC_RSS_TOPOLOGY: ${ARCTIC_RSS_TOPOLOGY:-all-in-one}
       FEED_SCHEDULER_INTERVAL_MS: ${FEED_SCHEDULER_INTERVAL_MS:-60000}
+      INGESTION_MAX_AGGREGATE_CONTENT_BYTES: ${INGESTION_MAX_AGGREGATE_CONTENT_BYTES:-}
+      INGESTION_MAX_AUTHOR_CHARACTERS: ${INGESTION_MAX_AUTHOR_CHARACTERS:-}
+      INGESTION_MAX_CONTENT_BYTES_PER_FIELD: ${INGESTION_MAX_CONTENT_BYTES_PER_FIELD:-}
+      INGESTION_MAX_DISCOVERY_CANDIDATES: ${INGESTION_MAX_DISCOVERY_CANDIDATES:-}
+      INGESTION_MAX_DISCOVERY_DURATION_MS: ${INGESTION_MAX_DISCOVERY_DURATION_MS:-}
+      INGESTION_MAX_EXTERNAL_ID_BYTES: ${INGESTION_MAX_EXTERNAL_ID_BYTES:-}
+      INGESTION_MAX_FEED_ITEMS: ${INGESTION_MAX_FEED_ITEMS:-}
+      INGESTION_MAX_PODCAST_EPISODES: ${INGESTION_MAX_PODCAST_EPISODES:-}
+      INGESTION_MAX_SUMMARY_CHARACTERS: ${INGESTION_MAX_SUMMARY_CHARACTERS:-}
+      INGESTION_MAX_TITLE_CHARACTERS: ${INGESTION_MAX_TITLE_CHARACTERS:-}
+      INGESTION_MAX_URL_CHARACTERS: ${INGESTION_MAX_URL_CHARACTERS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DB_POOL_MAX: "6"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-web
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
       ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION: ${ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION:-false}
@@ -219,9 +261,14 @@ services:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
     logging:
       driver: journald
+    networks:
+      - durable-data
+      - ephemeral-realtime
+      - web-edge
 
   worker:
     <<: *worker-runtime
+    depends_on: *worker-realtime-dependencies
     profiles: ["all-in-one"]
     cpus: 0.75
     mem_limit: 1g
@@ -231,7 +278,13 @@ services:
       NODE_OPTIONS: "--max-old-space-size=640"
       WORKER_MODE: "all"
       ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
+      WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DB_POOL_MAX: "6"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-worker-all
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
       ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION: ${ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION:-false}
@@ -257,6 +310,15 @@ services:
       FEED_REFRESH_CONCURRENCY: ${FEED_REFRESH_CONCURRENCY:-}
       FEED_SCHEDULER_BATCH_SIZE: ${FEED_SCHEDULER_BATCH_SIZE:-}
       FEED_SCHEDULER_INTERVAL_MS: ${FEED_SCHEDULER_INTERVAL_MS:-}
+      INGESTION_MAX_AGGREGATE_CONTENT_BYTES: ${INGESTION_MAX_AGGREGATE_CONTENT_BYTES:-}
+      INGESTION_MAX_AUTHOR_CHARACTERS: ${INGESTION_MAX_AUTHOR_CHARACTERS:-}
+      INGESTION_MAX_CONTENT_BYTES_PER_FIELD: ${INGESTION_MAX_CONTENT_BYTES_PER_FIELD:-}
+      INGESTION_MAX_EXTERNAL_ID_BYTES: ${INGESTION_MAX_EXTERNAL_ID_BYTES:-}
+      INGESTION_MAX_FEED_ITEMS: ${INGESTION_MAX_FEED_ITEMS:-}
+      INGESTION_MAX_PODCAST_EPISODES: ${INGESTION_MAX_PODCAST_EPISODES:-}
+      INGESTION_MAX_SUMMARY_CHARACTERS: ${INGESTION_MAX_SUMMARY_CHARACTERS:-}
+      INGESTION_MAX_TITLE_CHARACTERS: ${INGESTION_MAX_TITLE_CHARACTERS:-}
+      INGESTION_MAX_URL_CHARACTERS: ${INGESTION_MAX_URL_CHARACTERS:-}
       PODCAST_REFRESH_CONCURRENCY: ${PODCAST_REFRESH_CONCURRENCY:-}
       SAVED_MONITOR_BATCH_SIZE: ${SAVED_MONITOR_BATCH_SIZE:-}
       SAVED_MONITOR_MATCH_BATCH_SIZE: ${SAVED_MONITOR_MATCH_BATCH_SIZE:-}
@@ -284,9 +346,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
+      - ephemeral-realtime
 
   worker-ingestion:
     <<: *worker-runtime
+    depends_on: *worker-durable-dependencies
     profiles: ["split-workers"]
     cpus: 0.5
     mem_limit: 640m
@@ -296,9 +362,24 @@ services:
       NODE_OPTIONS: "--max-old-space-size=384"
       WORKER_MODE: ingestion
       ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
+      WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DB_POOL_MAX: "4"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-worker-ingestion
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       FEED_REFRESH_CONCURRENCY: ${FEED_REFRESH_CONCURRENCY:-}
+      INGESTION_MAX_AGGREGATE_CONTENT_BYTES: ${INGESTION_MAX_AGGREGATE_CONTENT_BYTES:-}
+      INGESTION_MAX_AUTHOR_CHARACTERS: ${INGESTION_MAX_AUTHOR_CHARACTERS:-}
+      INGESTION_MAX_CONTENT_BYTES_PER_FIELD: ${INGESTION_MAX_CONTENT_BYTES_PER_FIELD:-}
+      INGESTION_MAX_EXTERNAL_ID_BYTES: ${INGESTION_MAX_EXTERNAL_ID_BYTES:-}
+      INGESTION_MAX_FEED_ITEMS: ${INGESTION_MAX_FEED_ITEMS:-}
+      INGESTION_MAX_PODCAST_EPISODES: ${INGESTION_MAX_PODCAST_EPISODES:-}
+      INGESTION_MAX_SUMMARY_CHARACTERS: ${INGESTION_MAX_SUMMARY_CHARACTERS:-}
+      INGESTION_MAX_TITLE_CHARACTERS: ${INGESTION_MAX_TITLE_CHARACTERS:-}
+      INGESTION_MAX_URL_CHARACTERS: ${INGESTION_MAX_URL_CHARACTERS:-}
       PODCAST_REFRESH_CONCURRENCY: ${PODCAST_REFRESH_CONCURRENCY:-}
       ARCTIC_IRC_ENABLED: ${ARCTIC_IRC_ENABLED:-false}
       ARCTIC_IRC_BOT_ENABLED: ${ARCTIC_IRC_BOT_ENABLED:-false}
@@ -308,9 +389,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
 
   worker-ai-mail:
     <<: *worker-runtime
+    depends_on: *worker-durable-dependencies
     profiles: ["split-workers"]
     cpus: 0.75
     mem_limit: 768m
@@ -320,7 +404,13 @@ services:
       NODE_OPTIONS: "--max-old-space-size=512"
       WORKER_MODE: ai-mail
       ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
+      WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DB_POOL_MAX: "3"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-worker-ai-mail
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
       AI_PROVIDER: ${AI_PROVIDER:-}
@@ -347,9 +437,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
 
   worker-imports:
     <<: *worker-runtime
+    depends_on: *worker-durable-dependencies
     profiles: ["split-workers"]
     cpus: 0.5
     mem_limit: 768m
@@ -359,7 +452,13 @@ services:
       NODE_OPTIONS: "--max-old-space-size=512"
       WORKER_MODE: imports
       ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
+      WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DB_POOL_MAX: "2"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-worker-imports
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
     healthcheck:
       test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-imports').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
@@ -367,9 +466,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
 
   worker-maintenance:
     <<: *worker-runtime
+    depends_on: *worker-durable-dependencies
     profiles: ["split-workers"]
     cpus: 0.35
     mem_limit: 384m
@@ -379,7 +481,13 @@ services:
       NODE_OPTIONS: "--max-old-space-size=256"
       WORKER_MODE: maintenance
       ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
+      WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DB_POOL_MAX: "2"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-worker-maintenance
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       FEED_SCHEDULER_BATCH_SIZE: ${FEED_SCHEDULER_BATCH_SIZE:-}
       FEED_SCHEDULER_INTERVAL_MS: ${FEED_SCHEDULER_INTERVAL_MS:-}
@@ -401,9 +509,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
 
   worker-chat-events:
     <<: *worker-runtime
+    depends_on: *worker-realtime-dependencies
     profiles: ["chat-workers"]
     cpus: 0.35
     mem_limit: 384m
@@ -413,7 +524,13 @@ services:
       NODE_OPTIONS: "--max-old-space-size=256"
       WORKER_MODE: chat-events
       ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
+      WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DB_POOL_MAX: "2"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-worker-chat-events
       DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
       EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
       CHAT_EVENT_OUTBOX_PUBLISH_INTERVAL_MS: ${CHAT_EVENT_OUTBOX_PUBLISH_INTERVAL_MS:-}
@@ -423,6 +540,45 @@ services:
       timeout: 5s
       retries: 3
       start_period: 45s
+    networks:
+      - durable-data
+      - ephemeral-realtime
+
+  # The health probe is deliberately separate from durable-only maintenance:
+  # it is the sole worker with the network paths required to inspect every
+  # dependency and publish the shared readiness snapshot.
+  worker-health:
+    <<: *worker-runtime
+    depends_on: *worker-realtime-dependencies
+    profiles: ["health"]
+    cpus: 0.25
+    mem_limit: 384m
+    pids_limit: 128
+    environment:
+      ARCTIC_RSS_SERVICE_ROLE: worker-health
+      NODE_OPTIONS: "--max-old-space-size=256"
+      WORKER_MODE: health
+      ARCTIC_RSS_BUILD_SHA: ${ARCTIC_RSS_BUILD_SHA:-unknown}
+      ARCTIC_RSS_TOPOLOGY: ${ARCTIC_RSS_TOPOLOGY:-all-in-one}
+      WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS: ${WORKER_CONTROL_PLANE_RECOVERY_GRACE_MS:-}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DB_POOL_MAX: "2"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-worker-health
+      DURABLE_REDIS_URL: ${DURABLE_REDIS_URL:?DURABLE_REDIS_URL is required}
+      EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('node:fs'); try { const age = Date.now() - fs.statSync('/tmp/arctic-rss-worker-heartbeat-health').mtimeMs; process.exit(age < 90000 ? 0 : 1) } catch { process.exit(1) }"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - durable-data
+      - ephemeral-realtime
+      - web-edge
 
   chat-gateway:
     image: ${CHAT_GATEWAY_IMAGE:-arctic-rss-chat-gateway}
@@ -447,7 +603,12 @@ services:
     stop_grace_period: 30s
     environment:
       ARCTIC_RSS_SERVICE_ROLE: chat-gateway
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CHAT_DATABASE_URL: ${CHAT_DATABASE_URL:?CHAT_DATABASE_URL is required}
+      DB_POOL_MAX: "4"
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-3000}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_APPLICATION_NAME: arctic-rss-chat-gateway
       EPHEMERAL_REDIS_URL: ${EPHEMERAL_REDIS_URL:?EPHEMERAL_REDIS_URL is required}
       APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
       ARCTIC_IRC_ENABLED: ${ARCTIC_IRC_ENABLED:-false}
@@ -483,6 +644,9 @@ services:
     # proxy is the only permitted browser-facing route to this service.
     logging:
       driver: journald
+    networks:
+      - ephemeral-realtime
+      - web-edge
 
   edge-proxy:
     image: ${EDGE_PROXY_IMAGE:-arctic-rss-edge-proxy}
@@ -521,9 +685,12 @@ services:
       - "127.0.0.1:${EDGE_PROXY_HOST_PORT:-8080}:8080"
     logging:
       driver: journald
+    networks:
+      - web-edge
 
   cloudflared:
-    image: cloudflare/cloudflared:2026.6.1
+    # cloudflared 2026.6.1 (multi-architecture manifest digest).
+    image: cloudflare/cloudflared:2026.6.1@sha256:6d91c121b803126f7a5344005d17a9324788fc09d305b6e2560ec6040a7ae283
     profiles: ["tunnel"]
     init: true
     restart: unless-stopped
@@ -545,7 +712,14 @@ services:
         condition: service_healthy
     logging:
       driver: journald
+    networks:
+      - web-edge
 
 volumes:
   postgres-data:
   redis-data:
+
+networks:
+  durable-data:
+  ephemeral-realtime:
+  web-edge:

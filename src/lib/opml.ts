@@ -2,6 +2,8 @@ import { XMLParser } from "fast-xml-parser"
 
 import { getPrisma } from "./db"
 import { enqueueFeedRefresh as enqueueFeedRefreshJob } from "./feed-refresh-queue"
+import { decodeStandardXmlEntities, safeXmlParserOptions } from "./ingestion-limits"
+import type { SourceRefreshTrigger } from "./source-refresh-queue"
 import {
   FeedSubscriptionError,
   subscribeToFeed as subscribeToFeedSubscription,
@@ -102,7 +104,10 @@ export type OpmlImportJobListItem = {
 }
 
 type ImportOpmlOptions = {
-  enqueueFeedRefresh?: (feedId: string) => Promise<unknown>
+  enqueueFeedRefresh?: (
+    feedId: string,
+    options: { trigger: SourceRefreshTrigger }
+  ) => Promise<unknown>
   opmlXml: string
   store?: OpmlStore
   subscribeToFeed?: typeof subscribeToFeedSubscription
@@ -118,11 +123,9 @@ export class OpmlError extends Error {
 
 export function parseOpmlSubscriptions(opmlXml: string): OpmlSubscriptionEntry[] {
   const parser = new XMLParser({
-    allowBooleanAttributes: true,
     attributeNamePrefix: "",
-    ignoreAttributes: false,
     parseAttributeValue: false,
-    trimValues: true,
+    ...safeXmlParserOptions,
   })
   let parsed: unknown
 
@@ -240,10 +243,12 @@ export async function importOpmlWithClient({
       })
 
       addedFeeds += 1
-      try {
-        await enqueueFeedRefresh(subscription.feedId)
-      } catch {
-        // Import success should not be reversed by a transient queue outage.
+      if (typeof subscription.initialArticleCount !== "number") {
+        try {
+          await enqueueFeedRefresh(subscription.feedId, { trigger: "opml-retry" })
+        } catch {
+          // Import success should not be reversed by a transient queue outage.
+        }
       }
     } catch (error) {
       if (isDuplicateSubscriptionError(error)) {
@@ -489,7 +494,9 @@ function normalizeFolderName(name: string) {
 }
 
 function stringAttribute(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
+  return typeof value === "string" && value.trim()
+    ? decodeStandardXmlEntities(value).trim()
+    : undefined
 }
 
 function escapeXmlAttribute(value: string) {

@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto"
 
-import Redis from "ioredis"
-
-import { durableRedisConnectionOptions } from "../src/lib/redis-config"
+import {
+  createWorkerControlPlaneRedis,
+  type WorkerControlPlaneState,
+} from "./control-plane-redis"
 
 const MAINTENANCE_LOCK_KEY = "arctic-rss:worker:maintenance-lock:v1"
 const MAINTENANCE_LOCK_TTL_MS = 5 * 60_000
@@ -32,7 +33,7 @@ type MaintenanceLockClient = {
     condition: "NX"
   ): Promise<"OK" | null>
 }
-type LeaseLostReason = "ownership_lost" | "renewal_error" | "shutdown"
+type LeaseLostReason = "connection_lost" | "ownership_lost" | "renewal_error" | "shutdown"
 type MaintenanceLeaseEvent = Record<string, boolean | number | string>
 type MaintenanceLeaseTimer = {
   clearInterval(interval: ReturnType<typeof setInterval>): void
@@ -63,27 +64,38 @@ type ActiveLease = {
 }
 
 export function createMaintenanceLock({
-  client = new Redis(durableRedisConnectionOptions().url, {
-    connectTimeout: 2_000,
-    enableOfflineQueue: false,
-    maxRetriesPerRequest: 0,
-    retryStrategy: () => null,
-  }),
+  client: suppliedClient,
+  isReady: suppliedIsReady,
   log = defaultLog,
   now = Date.now,
+  onStateChange: suppliedOnStateChange,
+  onRecoveryGraceExpired,
   renewIntervalMs = MAINTENANCE_LOCK_RENEW_INTERVAL_MS,
   timer = globalThis,
   tokenFactory = randomUUID,
   ttlMs = MAINTENANCE_LOCK_TTL_MS,
 }: {
   client?: MaintenanceLockClient
+  isReady?: () => boolean
   log?: (event: MaintenanceLeaseEvent) => void
   now?: () => number
+  onRecoveryGraceExpired?: () => void
+  onStateChange?: (
+    listener: (state: WorkerControlPlaneState) => void
+  ) => () => void
   renewIntervalMs?: number
   timer?: MaintenanceLeaseTimer
   tokenFactory?: () => string
   ttlMs?: number
 } = {}) {
+  const controlPlane = suppliedClient
+    ? undefined
+    : createWorkerControlPlaneRedis({
+        name: "maintenance-lease",
+        onGraceExpired: onRecoveryGraceExpired,
+      })
+  const client = suppliedClient ?? (controlPlane?.client as unknown as MaintenanceLockClient)
+  const isReady = suppliedIsReady ?? controlPlane?.isReady ?? (() => true)
   let activeLease: ActiveLease | undefined
   let closed = false
 
@@ -146,6 +158,23 @@ export function createMaintenanceLock({
       await lease.renewalPromise
       const leaseDurationMs = Math.max(0, now() - lease.acquiredAt)
 
+      if (
+        lease.lostReason === "connection_lost" ||
+        lease.lostReason === "ownership_lost" ||
+        lease.lostReason === "renewal_error"
+      ) {
+        record({
+          leaseDurationMs,
+          outcome: "release_skipped",
+          overrun: leaseDurationMs > ttlMs,
+          reason: lease.lostReason,
+        })
+        if (activeLease === lease) {
+          activeLease = undefined
+        }
+        return
+      }
+
       try {
         const released = await client.eval(
           RELEASE_LOCK_IF_OWNED,
@@ -172,6 +201,9 @@ export function createMaintenanceLock({
 
   const leaseView = (lease: ActiveLease): MaintenanceLease => ({
     assertHeld() {
+      if (!isReady()) {
+        loseLease(lease, "connection_lost")
+      }
       if (lease.lostReason) {
         throw new MaintenanceLeaseLostError(lease.lostReason)
       }
@@ -179,34 +211,57 @@ export function createMaintenanceLock({
     signal: lease.abortController.signal,
   })
 
+  const forgetLeaseOnConnectionLoss = (state: WorkerControlPlaneState) => {
+    if (state !== "ready" && activeLease) {
+      loseLease(activeLease, "connection_lost")
+    }
+  }
+  const removeConnectionListener = (
+    suppliedOnStateChange ?? controlPlane?.onStateChange
+  )?.(forgetLeaseOnConnectionLoss)
+
   return {
     async close() {
       closed = true
+      removeConnectionListener?.()
       if (activeLease) {
         loseLease(activeLease, "shutdown")
         await release(activeLease)
       }
 
-      try {
-        await client.quit()
-      } catch {
-        client.disconnect()
+      if (controlPlane) {
+        await controlPlane.close()
+      } else {
+        try {
+          await client.quit()
+        } catch {
+          client.disconnect()
+        }
       }
     },
     async run<T>(operation: (lease: MaintenanceLease) => Promise<T>) {
-      if (closed || activeLease) {
-        record({ outcome: "skipped", reason: closed ? "closed" : "already_running" })
+      if (closed || activeLease || !isReady()) {
+        record({
+          outcome: "skipped",
+          reason: closed ? "closed" : activeLease ? "already_running" : "redis_unavailable",
+        })
         return { acquired: false as const }
       }
 
       const token = tokenFactory()
-      const acquired = await client.set(
-        MAINTENANCE_LOCK_KEY,
-        token,
-        "PX",
-        ttlMs,
-        "NX"
-      )
+      let acquired: "OK" | null
+      try {
+        acquired = await client.set(
+          MAINTENANCE_LOCK_KEY,
+          token,
+          "PX",
+          ttlMs,
+          "NX"
+        )
+      } catch {
+        record({ outcome: "skipped", reason: "redis_unavailable" })
+        return { acquired: false as const }
+      }
       if (acquired !== "OK") {
         record({ outcome: "skipped", reason: "owned_by_another_worker" })
         return { acquired: false as const }
@@ -236,6 +291,7 @@ export function createMaintenanceLock({
 
       const operationStartedAt = now()
       try {
+        leaseView(lease).assertHeld()
         const value = await operation(leaseView(lease))
         leaseView(lease).assertHeld()
         const durationMs = Math.max(0, now() - operationStartedAt)

@@ -84,6 +84,22 @@ vi.mock("@/components/article-read-tracker", () => ({
   ),
 }))
 
+vi.mock("@/components/collection-retention-notice", () => ({
+  CollectionRetentionNotice: ({
+    articleId,
+    feedTitle,
+    savedAt,
+  }: {
+    articleId: string
+    feedTitle: string
+    savedAt: string
+  }) => (
+    <div data-retained-article={articleId}>
+      Saved from {feedTitle} on {savedAt}
+    </div>
+  ),
+}))
+
 vi.mock("@/components/article-state-controls", () => ({
   ArticleStateControls: () => null,
   MarkAllReadButton: () => null,
@@ -525,6 +541,42 @@ describe("ReaderSurface display modes", () => {
     expect(markup.match(/data-current-collection="Read Later"/g) ?? []).toHaveLength(
       4
     )
+  })
+
+  it("shows a retained-source notice in collection cards and the article reader", () => {
+    const markup = renderToStaticMarkup(
+      <ReaderSurface
+        articles={[
+          {
+            ...articles[0],
+            collectionRetention: {
+              savedAt: new Date("2026-08-09T12:00:00.000Z"),
+              sourceIsFollowed: false,
+            },
+          },
+        ]}
+        basePath="/app/collections/collection-later"
+        currentCollection={{
+          id: "collection-later",
+          name: "Read Later",
+        }}
+        dateTimePreferences={{
+          dateFormat: "YYYY_MM_DD",
+          timeFormat: "HOUR_24",
+          timeZone: "UTC",
+        }}
+        defaultView="CARD"
+        displayMode="THREE_PANE"
+        description="Saved articles"
+        emptyMessage="No saved articles."
+        title="Read Later"
+      />
+    )
+
+    expect(markup.match(/data-retained-article="article-1"/g) ?? []).toHaveLength(
+      2
+    )
+    expect(markup).toContain("Saved from Example Feed on 2026-08-09, 12:00")
   })
 })
 

@@ -38,20 +38,23 @@ service. Run `npm run compose:verify-env` after changing service configuration
 and consult [the service secret matrix](docs/operations/service-secret-matrix.md)
 before rotating or adding a variable.
 
-Use distinct PostgreSQL credentials for `DATABASE_URL` and
-`MIGRATE_DATABASE_URL`: the runtime account needs only normal application data
-access, while the migration account owns the schema and is used solely by the
-one-shot `migrate` service. Do not use the PostgreSQL superuser connection for
-either application runtime service.
+Use distinct PostgreSQL credentials for `DATABASE_URL`, `CHAT_DATABASE_URL`,
+and `MIGRATE_DATABASE_URL`. `DATABASE_URL` is the normal application runtime
+account; `CHAT_DATABASE_URL` is supplied only to the chat gateway and is the
+restricted role described in the [chat database role runbook](docs/operations/chat-database-role-runbook.md);
+and `MIGRATE_DATABASE_URL` owns the schema and is used solely by the one-shot
+`migrate` service. Do not use the PostgreSQL superuser connection for an
+application runtime service, and do not give the chat gateway `DATABASE_URL`.
 
-Set `REDIS_PASSWORD` to a separate high-entropy value, then include that value
-in both `DURABLE_REDIS_URL` and `EPHEMERAL_REDIS_URL`. Durable Redis protects
-the BullMQ queue with AOF and `noeviction`; ephemeral Redis carries only
-TTL-bounded rate-limit and chat transport state. Production rejects a legacy
-`REDIS_URL` fallback or matching normalized endpoints unless the reviewed,
-temporary `ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION=true` exception is
-set. Remove that exception and `REDIS_URL` only through the owner-gated
-[compatibility retirement checklist](docs/operations/legacy-redis-compatibility-retirement.md).
+Set distinct high-entropy `DURABLE_REDIS_PASSWORD` and
+`EPHEMERAL_REDIS_PASSWORD` values, each with its own ACL username. Include
+the matching username/password pair in its workload-specific URL. Durable
+Redis protects the BullMQ queue with AOF and `noeviction`; ephemeral Redis
+carries only TTL-bounded rate-limit and chat transport state. Production
+rejects shared Redis endpoints, ACL usernames, and passwords. The legacy
+`REDIS_URL` fallback is a reviewed direct-process migration exception only;
+normal Compose services never receive it. Retire it only through the
+owner-gated [compatibility retirement checklist](docs/operations/legacy-redis-compatibility-retirement.md).
 Both Redis containers are loopback-bound and are never public services.
 
 For transactional email, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
@@ -99,6 +102,12 @@ expand/contract rollout: add compatible fields first, deploy dual-read/write
 code, backfill in bounded batches, switch reads, then remove old fields in a
 later release.
 
+Prisma migrations must never create login roles or grant runtime privileges.
+The `migrate` service is the only schema-owning application path. Apply the
+reviewed, idempotent chat-role bootstrap separately after a successful
+migration, using the controlled schema owner; see the chat database role
+runbook.
+
 ## Rollback
 
 1. Keep the failed release, logs, and matching backup for diagnosis.
@@ -115,5 +124,6 @@ later release.
 - [Deployment and rollback](docs/operations/deployment-rollback-runbook.md)
 - [Backup and restore checklist](docs/operations/backup-restore-checklist.md)
 - [Migration baseline](docs/operations/migration-baseline-runbook.md)
+- [Chat database role](docs/operations/chat-database-role-runbook.md)
 - [Canonical origin and proxy](docs/operations/canonical-origin-proxy-runbook.md)
 - [Supported deployment topologies](docs/operations/deployment-topologies.md)

@@ -32,9 +32,16 @@ export type SafeFetchTextResult = {
   etag?: string
   lastModified?: string
   notModified?: boolean
+  redirects?: SafeFetchRedirect[]
   status?: number
   text: string
   url: URL
+}
+
+export type SafeFetchRedirect = {
+  from: string
+  status: number
+  to: string
 }
 
 export type SafeFetchBytesResult = {
@@ -43,6 +50,7 @@ export type SafeFetchBytesResult = {
   etag?: string
   lastModified?: string
   notModified: boolean
+  redirects?: SafeFetchRedirect[]
   status: number
   url: URL
 }
@@ -52,6 +60,7 @@ type SafeFetchOptions = {
   fetchImpl?: typeof fetch
   lookup?: typeof dns.lookup
   maxBytes?: number
+  parentSignal?: AbortSignal
   timeoutMs?: number
   totalTimeoutMs?: number
   globalRequestLimiter?: HostRequestLimiter
@@ -316,8 +325,9 @@ export async function safeFetchText(
     etag: result.etag,
     lastModified: result.lastModified,
     notModified: result.notModified,
+    redirects: result.redirects,
     status: result.status,
-    text: new TextDecoder().decode(result.bytes),
+    text: decodeSafeText(result.bytes, result.contentType),
     url: result.url,
   }
 }
@@ -334,6 +344,7 @@ export async function safeFetchBytes(
   const hostRequestLimiter = options.hostRequestLimiter ?? sharedHostRequestLimiter
   const now = options.now ?? Date.now
   const deadline = now() + totalTimeoutMs
+  const redirects: SafeFetchRedirect[] = []
   let url = inputUrl
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
@@ -343,7 +354,11 @@ export async function safeFetchBytes(
       throw new FeedFetchError("The URL request timed out.")
     }
 
-    const signal = AbortSignal.timeout(Math.max(1, Math.floor(remainingMs)))
+    const requestSignal = createRequestSignal(
+      Math.max(1, Math.floor(remainingMs)),
+      options.parentSignal
+    )
+    const { signal } = requestSignal
     let releaseGlobalSlot: (() => void) | undefined
     let releaseHostSlot: (() => void) | undefined
     let dispose: () => Promise<void> = async () => undefined
@@ -380,6 +395,7 @@ export async function safeFetchBytes(
         return responseResult({
           bytes: new Uint8Array(),
           notModified: true,
+          redirects,
           response,
           url,
         })
@@ -392,7 +408,9 @@ export async function safeFetchBytes(
           throw new FeedFetchError("The URL redirected without a Location header.")
         }
 
-        url = normalizeHttpUrl(new URL(location, url).href)
+        const nextUrl = normalizeHttpUrl(new URL(location, url).href)
+        redirects.push({ from: url.href, status: response.status, to: nextUrl.href })
+        url = nextUrl
         continue
       }
 
@@ -403,6 +421,7 @@ export async function safeFetchBytes(
       return responseResult({
         bytes: await readResponseBytes(response, maxBytes),
         notModified: false,
+        redirects,
         response,
         url,
       })
@@ -423,10 +442,93 @@ export async function safeFetchBytes(
       await dispose()
       releaseGlobalSlot?.()
       releaseHostSlot?.()
+      requestSignal.dispose()
     }
   }
 
   throw new FeedFetchError("The URL redirected too many times.")
+}
+
+export function decodeSafeText(bytes: Uint8Array, contentType: string) {
+  const charset = textCharset(bytes, contentType)
+
+  try {
+    return new TextDecoder(charset).decode(bytes)
+  } catch {
+    return new TextDecoder("utf-8").decode(bytes)
+  }
+}
+
+function textCharset(bytes: Uint8Array, contentType: string) {
+  const bomCharset = byteOrderMarkCharset(bytes)
+  if (bomCharset) {
+    return bomCharset
+  }
+
+  const contentTypeCharset = supportedCharset(contentType.match(/charset\s*=\s*["']?([^;"'\s]+)/i)?.[1])
+  if (contentTypeCharset) {
+    return contentTypeCharset
+  }
+
+  const declaration = new TextDecoder("utf-8").decode(bytes.subarray(0, 512))
+  return (
+    supportedCharset(declaration.match(/<\?xml[^>]*\bencoding\s*=\s*["']([^"']+)["']/i)?.[1]) ??
+    "utf-8"
+  )
+}
+
+function byteOrderMarkCharset(bytes: Uint8Array) {
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return "utf-8"
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return "utf-16le"
+  }
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return "utf-16be"
+  }
+  return undefined
+}
+
+function supportedCharset(value: string | undefined) {
+  switch (value?.trim().toLowerCase()) {
+    case "utf-8":
+    case "utf8":
+      return "utf-8"
+    case "utf-16le":
+    case "utf-16":
+      return "utf-16le"
+    case "utf-16be":
+      return "utf-16be"
+    case "windows-1252":
+    case "cp1252":
+      return "windows-1252"
+    case "iso-8859-1":
+    case "latin1":
+      return "iso-8859-1"
+    default:
+      return undefined
+  }
+}
+
+function createRequestSignal(timeoutMs: number, parentSignal: AbortSignal | undefined) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  const abortFromParent = () => controller.abort()
+
+  if (parentSignal?.aborted) {
+    controller.abort()
+  } else {
+    parentSignal?.addEventListener("abort", abortFromParent, { once: true })
+  }
+
+  return {
+    dispose() {
+      clearTimeout(timeout)
+      parentSignal?.removeEventListener("abort", abortFromParent)
+    },
+    signal: controller.signal,
+  }
 }
 
 export function createHostRequestLimiter(
@@ -688,11 +790,13 @@ function requestHeaders(
 function responseResult({
   bytes,
   notModified,
+  redirects,
   response,
   url,
 }: {
   bytes: Uint8Array
   notModified: boolean
+  redirects: SafeFetchRedirect[]
   response: FetchResponse
   url: URL
 }): SafeFetchBytesResult {
@@ -702,6 +806,7 @@ function responseResult({
     etag: safeHeaderValue(response.headers.get("etag")),
     lastModified: safeHeaderValue(response.headers.get("last-modified")),
     notModified,
+    ...(redirects.length ? { redirects } : {}),
     status: response.status,
     url,
   }

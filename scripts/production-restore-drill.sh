@@ -4,7 +4,8 @@ set -euo pipefail
 umask 077
 
 BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/etc/arctic-rss/backup.env}"
-RESTORE_IMAGE="${POSTGRES_RESTORE_IMAGE:-postgres:17-alpine}"
+# PostgreSQL 17.10 on Alpine 3.23, pinned to the same manifest as production.
+RESTORE_IMAGE="${POSTGRES_RESTORE_IMAGE:-postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4}"
 RESTORE_MEMORY_LIMIT="${RESTORE_MEMORY_LIMIT:-512m}"
 RESTORE_CPU_LIMIT="${RESTORE_CPU_LIMIT:-0.75}"
 RESTORE_PIDS_LIMIT="${RESTORE_PIDS_LIMIT:-128}"
@@ -58,7 +59,7 @@ case "$backup_path" in
     ;;
 esac
 
-for file in database.dump database.dump.sha256 database.globals.sql database.globals.sql.sha256 metadata; do
+for file in database.dump database.dump.sha256 database.globals.sql database.globals.sql.sha256 metadata backup-evidence.json; do
   if [[ ! -f "$backup_path/$file" ]]; then
     echo "Backup is missing required file: $file" >&2
     exit 1
@@ -143,5 +144,34 @@ printf 'completed_at=%s\nbackup=%s\nresult=passed\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$backup_path")" \
   > "$STATE_DIR/latest-success"
 chmod 600 "$STATE_DIR/latest-success"
+
+python3 - "$backup_path/backup-evidence.json" "$(basename "$backup_path")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" <<'PY'
+import json
+import os
+import stat
+import sys
+import tempfile
+
+path, backup_id, tested_at = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    evidence = json.load(handle)
+if evidence.get("schemaVersion") != 1 or evidence.get("backupId") != backup_id:
+    raise SystemExit("Backup evidence does not match the restored backup.")
+
+evidence["restoreTestedAt"] = tested_at
+mode = stat.S_IMODE(os.stat(path).st_mode)
+descriptor, temporary_path = tempfile.mkstemp(prefix=".backup-evidence-", dir=os.path.dirname(path))
+try:
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        json.dump(evidence, handle, separators=(",", ":"), sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(temporary_path, mode)
+    os.replace(temporary_path, path)
+finally:
+    if os.path.exists(temporary_path):
+        os.unlink(temporary_path)
+PY
 
 printf 'Arctic RSS restore drill passed: backup=%s tables=validated representative_data=present\n' "$(basename "$backup_path")"

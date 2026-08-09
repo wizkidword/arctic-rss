@@ -1,8 +1,9 @@
 const MAX_STORY_TITLE_LENGTH = 500
 
 export type StorySignalArticle = {
-  canonicalUrl?: string | null
-  publishedAt?: Date | null
+  canonicalUrl: string | null
+  id: string
+  publishedAt: Date | null
   title: string
   url: string
 }

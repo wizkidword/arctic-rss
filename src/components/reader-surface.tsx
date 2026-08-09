@@ -9,6 +9,7 @@ import {
 } from "@/components/article-context-menu"
 import { ArticleSourceIcon } from "@/components/article-source-icon"
 import { ArticleReadTracker } from "@/components/article-read-tracker"
+import { CollectionRetentionNotice } from "@/components/collection-retention-notice"
 import { StoryClusterDismissButton } from "@/components/story-cluster-dismiss-button"
 import { StoryClusterPanel } from "@/components/story-cluster-panel"
 import { StoryClusterSplitButton } from "@/components/story-cluster-split-button"
@@ -382,28 +383,39 @@ function ArticleListItem({
         faviconUrl={article.feedFaviconUrl}
         title={article.feedTitle}
       />
-      <Link
-        className="min-w-0 flex-1 text-left"
-        href={articleSelectionHref(basePath, article.id)}
-      >
-        <span
-          className={cn(
-            "block truncate text-sm",
-            !article.isRead && "font-semibold"
-          )}
-        >
-          {article.title}
-        </span>
-        <span className="mt-1 block truncate text-xs text-muted-foreground">
-          {article.feedTitle}
-          {article.publishedAt
-            ? ` - ${formatArticleDateTime(
-                article.publishedAt,
-                dateTimePreferences
-              )}`
-            : ""}
-        </span>
-      </Link>
+      <div className="min-w-0 flex-1 text-left">
+        <Link href={articleSelectionHref(basePath, article.id)}>
+          <span
+            className={cn(
+              "block truncate text-sm",
+              !article.isRead && "font-semibold"
+            )}
+          >
+            {article.title}
+          </span>
+          <span className="mt-1 block truncate text-xs text-muted-foreground">
+            {article.feedTitle}
+            {article.publishedAt
+              ? ` - ${formatArticleDateTime(
+                  article.publishedAt,
+                  dateTimePreferences
+                )}`
+              : ""}
+          </span>
+        </Link>
+        {article.collectionRetention &&
+        !article.collectionRetention.sourceIsFollowed ? (
+          <CollectionRetentionNotice
+            articleId={article.id}
+            collectionId={currentCollection?.id}
+            feedTitle={article.feedTitle}
+            savedAt={formatArticleDateTime(
+              article.collectionRetention.savedAt,
+              dateTimePreferences
+            )}
+          />
+        ) : null}
+      </div>
       {article.isStarred && (
         <StarIcon className="mt-0.5 size-3.5 fill-current text-primary" />
       )}
@@ -652,6 +664,18 @@ function ArticleReaderCard({
           </div>
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4 overflow-hidden text-sm leading-6 text-muted-foreground">
+          {article.collectionRetention &&
+          !article.collectionRetention.sourceIsFollowed ? (
+            <CollectionRetentionNotice
+              articleId={article.id}
+              collectionId={currentCollection?.id}
+              feedTitle={article.feedTitle}
+              savedAt={formatArticleDateTime(
+                article.collectionRetention.savedAt,
+                dateTimePreferences
+              )}
+            />
+          ) : null}
           <ArticleAiSummaryPanel
             articleId={article.id}
             readOnlyReason={readOnlyActionReason}

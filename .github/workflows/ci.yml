@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17.10-alpine3.23
+        image: postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4 # PostgreSQL 17.10 / Alpine 3.23
         env:
           POSTGRES_DB: arctic_rss
           POSTGRES_PASSWORD: ci-postgres-password
@@ -54,7 +54,7 @@ jobs:
           npx prisma validate
       - name: Generate Prisma client
         run: npm run prisma:generate
-      - name: Classify changed migration risk
+      - name: Verify changed migration risk evidence
         env:
           MIGRATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
@@ -70,6 +70,10 @@ jobs:
           npx prisma migrate diff --from-config-datasource --to-schema=prisma/schema.prisma --exit-code
       - name: Run unit, concurrency, and security regression tests
         run: npm test
+      - name: Verify restricted chat database role SQL boundaries
+        run: npm run db:verify-chat-role
+      - name: Verify OPML import admission across database clients
+        run: npm run db:verify-opml-import-admission
       - name: Check types
         run: npm run typecheck
       - name: Lint
@@ -82,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17.10-alpine3.23
+        image: postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4 # PostgreSQL 17.10 / Alpine 3.23
         env:
           POSTGRES_DB: arctic_rss
           POSTGRES_PASSWORD: csp-e2e-database-password
@@ -96,8 +100,8 @@ jobs:
           - 5432:5432
     env:
       E2E_DATABASE_URL: postgresql://csp_e2e:csp-e2e-database-password@localhost:5432/arctic_rss?schema=public
-      E2E_DURABLE_REDIS_URL: redis://:csp-e2e-redis-password@localhost:6379
-      E2E_EPHEMERAL_REDIS_URL: redis://:csp-e2e-redis-password@localhost:6380
+      E2E_DURABLE_REDIS_URL: redis://csp_e2e_durable:csp-e2e-durable-redis-password@localhost:6379
+      E2E_EPHEMERAL_REDIS_URL: redis://csp_e2e_ephemeral:csp-e2e-ephemeral-redis-password@localhost:6380
     steps:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -112,10 +116,10 @@ jobs:
         run: npm ci
       - name: Start isolated durable and ephemeral Redis services
         run: |
-          docker run --detach --name arctic-rss-e2e-durable-redis --publish 6379:6379 redis:7.4.9-alpine3.21 redis-server --appendonly yes --requirepass csp-e2e-redis-password
-          docker run --detach --name arctic-rss-e2e-ephemeral-redis --publish 6380:6379 redis:7.4.9-alpine3.21 redis-server --save "" --requirepass csp-e2e-redis-password
-          docker exec arctic-rss-e2e-durable-redis redis-cli --no-auth-warning -a csp-e2e-redis-password ping
-          docker exec arctic-rss-e2e-ephemeral-redis redis-cli --no-auth-warning -a csp-e2e-redis-password ping
+          docker run --detach --name arctic-rss-e2e-durable-redis --publish 6379:6379 redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99 redis-server --appendonly yes --user csp_e2e_durable on ">csp-e2e-durable-redis-password" "~*" "+@all"
+          docker run --detach --name arctic-rss-e2e-ephemeral-redis --publish 6380:6379 redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99 redis-server --save "" --user csp_e2e_ephemeral on ">csp-e2e-ephemeral-redis-password" "~*" "+@all"
+          docker exec arctic-rss-e2e-durable-redis redis-cli --no-auth-warning --user csp_e2e_durable --pass csp-e2e-durable-redis-password ping
+          docker exec arctic-rss-e2e-ephemeral-redis redis-cli --no-auth-warning --user csp_e2e_ephemeral --pass csp-e2e-ephemeral-redis-password ping
       - name: Apply browser-test migrations
         run: DATABASE_URL="$E2E_DATABASE_URL" npm run prisma:deploy
       - name: Install Chromium
@@ -181,11 +185,13 @@ jobs:
             -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
             -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
             -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
-            -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_DURABLE_REDIS_PASSWORD/ci-durable-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_EPHEMERAL_REDIS_PASSWORD/ci-ephemeral-redis-password/g' \
             -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
             -e 's/CHANGE_ME_GENERATE_A_SEPARATE_32_BYTE_SECRET/ci-chat-token-secret-that-is-at-least-32-bytes/g' \
             -e 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
             -e 's#^MIGRATE_DATABASE_URL=.*#MIGRATE_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
+            -e 's#^CHAT_DATABASE_URL=.*#CHAT_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
             -e 's#APP_ORIGIN=http://localhost:3000#APP_ORIGIN=https://arcticrss.test#' \
             -e 's#AUTH_URL=http://localhost:3000#AUTH_URL=https://arcticrss.test#' \
             -e 's/ARCTIC_IRC_ENABLED=false/ARCTIC_IRC_ENABLED=true/' \
@@ -205,6 +211,11 @@ jobs:
           node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- restart redis-ephemeral
           node scripts/ci/assert-running-topology.mjs ${{ matrix.topology }}
           node scripts/ci/assert-compose-chat-release-gates.mjs --after-redis-restart
+      - name: Verify workers recover after durable Redis restart
+        run: |
+          recovery_started=$(date +%s%3N)
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- restart redis
+          node scripts/ci/assert-worker-redis-recovery.mjs ${{ matrix.topology }} --after "$recovery_started"
       - name: Run authenticated, real-time, worker, retention, and CSP release gates
         run: npm run test:chat:release-gates
       - name: Capture Compose status on failure
@@ -212,6 +223,63 @@ jobs:
         run: |
           node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- ps
           node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- logs --no-color chat-gateway
+      - name: Stop Compose topology
+        if: always()
+        run: node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- down --volumes --remove-orphans
+
+  worker-redis-recovery-gates:
+    name: Compose-backed worker Redis recovery gates (${{ matrix.topology }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        topology: [all-in-one, split]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Configure isolated production-like Compose environment
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
+            -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
+            -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
+            -e 's/CHANGE_ME_LOCAL_DURABLE_REDIS_PASSWORD/ci-durable-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_EPHEMERAL_REDIS_PASSWORD/ci-ephemeral-redis-password/g' \
+            -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
+            -e 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
+            -e 's#^MIGRATE_DATABASE_URL=.*#MIGRATE_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
+            -e 's#^CHAT_DATABASE_URL=.*#CHAT_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
+            -e 's#APP_ORIGIN=http://localhost:3000#APP_ORIGIN=https://arcticrss.test#' \
+            -e 's#AUTH_URL=http://localhost:3000#AUTH_URL=https://arcticrss.test#' \
+            -e 's/^FEED_SCHEDULER_INTERVAL_MS=60000/FEED_SCHEDULER_INTERVAL_MS=10000/' \
+            .env
+      - name: Validate selected topology and Compose services
+        run: npm run topology:validate -- --topology ${{ matrix.topology }}
+      - name: Start the selected web, worker, Redis, and database topology
+        run: >-
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} --
+          up --build --detach --wait --wait-timeout 300
+      - name: Verify workers recover after durable Redis restart
+        run: |
+          recovery_started=$(date +%s%3N)
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- restart redis
+          node scripts/ci/assert-worker-redis-recovery.mjs ${{ matrix.topology }} --after "$recovery_started"
+      - name: Capture Compose status on failure
+        if: failure()
+        run: |
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- ps
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- logs --no-color worker worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-health worker-chat-events
       - name: Stop Compose topology
         if: always()
         run: node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- down --volumes --remove-orphans
@@ -267,6 +335,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@1ad29ea4a422cce9a242a9fae469541dcd08addc # v4
         with:
+          config-file: ./.github/codeql/codeql-config.yml
           languages: javascript-typescript
           build-mode: none
       - name: Analyze source
@@ -289,12 +358,16 @@ jobs:
             -e 's/CHANGE_ME_LOCAL_DATABASE_PASSWORD/ci-postgres-password/' \
             -e 's/CHANGE_ME_LOCAL_RUNTIME_PASSWORD/ci-runtime-password/' \
             -e 's/CHANGE_ME_LOCAL_MIGRATE_PASSWORD/ci-migration-password/' \
-            -e 's/CHANGE_ME_LOCAL_REDIS_PASSWORD/ci-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_DURABLE_REDIS_PASSWORD/ci-durable-redis-password/g' \
+            -e 's/CHANGE_ME_LOCAL_EPHEMERAL_REDIS_PASSWORD/ci-ephemeral-redis-password/g' \
             -e 's/CHANGE_ME_GENERATE_A_32_BYTE_SECRET/ci-auth-secret-that-is-at-least-32-bytes/' \
             .env
           docker compose config -q
           npm run topology:validate
           npm run compose:verify-env
+          npm run compose:verify-dependencies
+          npm run compose:verify-redis-boundaries
+          npm run redis:boundaries:verify
           npm run compatibility:verify-legacy-redis
           docker info --format '{{range .Plugins.Log}}{{println .}}{{end}}' | grep -qx journald
           rm .env

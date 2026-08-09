@@ -1,26 +1,23 @@
 import { AuthorizationError, requireFreshAdmin } from "@/lib/authorization"
-import {
-  healthSnapshotAgeMs,
-  refreshDetailedHealthSnapshot,
-} from "@/lib/health-snapshot"
+import { checkSystemHealth } from "@/lib/system-health"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
     await requireFreshAdmin()
-    const snapshot = await refreshDetailedHealthSnapshot()
+    const startedAt = Date.now()
+    const result = await checkSystemHealth()
 
     return Response.json(
       {
-        checkDurationMs: snapshot.durationMs,
-        checks: snapshot.result?.checks ?? null,
-        snapshotAgeMs: healthSnapshotAgeMs(snapshot),
-        status: snapshot.status,
+        checkDurationMs: Math.max(0, Date.now() - startedAt),
+        checks: result.checks,
+        status: result.status,
       },
       {
         headers: { "Cache-Control": "no-store" },
-        status: snapshot.status === "ok" ? 200 : 503,
+        status: result.status === "ok" ? 200 : 503,
       }
     )
   } catch (error) {

@@ -4,6 +4,7 @@ import type { AnyNode } from "domhandler"
 import { normalizeHttpUrl } from "./url-safety"
 
 export type ExtractedArticleContent = {
+  canonicalUrl?: string
   contentHtml: string
   contentText: string
   imageUrl?: string
@@ -73,11 +74,28 @@ export function extractReadableArticleContent(
   }
 
   return {
+    canonicalUrl: pageCanonicalUrl($, pageUrl),
     contentHtml,
     contentText,
     imageUrl: pageImageUrl($, selected, pageUrl),
     summary: pageSummary($),
   }
+}
+
+function pageCanonicalUrl($: cheerio.CheerioAPI, pageUrl: string) {
+  const declaredCanonical = $("link[rel]")
+    .toArray()
+    .map((element) => ({
+      href: $(element).attr("href"),
+      relation: $(element).attr("rel")?.toLowerCase().split(/\s+/) ?? [],
+    }))
+    .find((link) => link.relation.includes("canonical"))?.href
+
+  return (
+    normalizeOptionalUrl(declaredCanonical, pageUrl) ??
+    normalizeOptionalUrl($("meta[property='og:url']").attr("content"), pageUrl) ??
+    normalizeOptionalUrl(pageUrl, pageUrl)
+  )
 }
 
 function bestReadableCandidate(

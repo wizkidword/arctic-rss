@@ -1,18 +1,30 @@
-import { createHmac, scryptSync, timingSafeEqual } from "node:crypto"
+import { timingSafeEqual } from "node:crypto"
+
+import { signLegacyV1AccountDeletionHandoff } from "./account-deletion-handoff-legacy-v1"
+import { signV2AccountDeletionHandoff } from "./account-deletion-handoff-v2-signature"
 
 export const ACCOUNT_DELETION_HANDOFF_COOKIE = "arcticrss-account-deletion-handoff"
 export const ACCOUNT_DELETION_HANDOFF_COOKIE_PATH = "/api/account/deletion/confirmation"
+export const ACCOUNT_DELETION_HANDOFF_MAX_COOKIE_BYTES = 512
 
 const HANDOFF_PREFIX = "arcticrss-account-deletion-handoff"
-const HANDOFF_VERSION = "v1"
+const HANDOFF_VERSION = "v2"
+const LEGACY_HANDOFF_VERSION = "v1"
 const MIN_SECRET_BYTES = 32
-const HANDOFF_SIGNATURE_DERIVATION_BYTES = 32
-const HANDOFF_SIGNATURE_DERIVATION_COST = 16_384
-const HANDOFF_SIGNATURE_DERIVATION_CONTEXT = "arcticrss-account-deletion-handoff-v1"
+const HANDOFF_SIGNATURE_BYTES = 32
+const MAX_PAYLOAD_SEGMENT_LENGTH = 256
+const MAX_LEGACY_V1_REMAINING_LIFETIME_SECONDS = 15 * 60
+const BASE64URL_SEGMENT = /^[A-Za-z0-9_-]+$/
 
 type AccountDeletionHandoffPayload = {
   exp: number
   tokenHash: string
+}
+
+type ParsedHandoff = {
+  encodedPayload: string
+  signature: Buffer
+  version: typeof HANDOFF_VERSION | typeof LEGACY_HANDOFF_VERSION
 }
 
 export class AccountDeletionHandoffError extends Error {
@@ -47,47 +59,39 @@ export function createAccountDeletionHandoff(
   }
 
   if (!isPayload(payload) || payload.exp <= Math.floor(now.getTime() / 1_000)) {
-    throw new AccountDeletionHandoffError("Account deletion confirmation is invalid or expired.")
+    throw invalidHandoff()
   }
 
   const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url")
-  const signature = sign(encodedPayload, secret)
+  const signature = signV2(encodedPayload, secret).toString("base64url")
 
   return `${HANDOFF_PREFIX}.${HANDOFF_VERSION}.${encodedPayload}.${signature}`
 }
 
-export function verifyAccountDeletionHandoff(
+export async function verifyAccountDeletionHandoff(
   handoff: string,
   { now = new Date(), secret }: { now?: Date; secret: string }
 ) {
   assertSecret(secret)
-  const [prefix, version, encodedPayload, suppliedSignature, ...extraParts] = handoff.split(".")
+  const parsed = parseHandoff(handoff)
+  const payload = parsePayload(parsed.encodedPayload)
+  const nowSeconds = Math.floor(now.getTime() / 1_000)
 
   if (
-    prefix !== HANDOFF_PREFIX ||
-    version !== HANDOFF_VERSION ||
-    !encodedPayload ||
-    !suppliedSignature ||
-    extraParts.length
+    payload.exp <= nowSeconds ||
+    (parsed.version === LEGACY_HANDOFF_VERSION &&
+      payload.exp > nowSeconds + MAX_LEGACY_V1_REMAINING_LIFETIME_SECONDS)
   ) {
-    throw new AccountDeletionHandoffError("Account deletion confirmation is invalid or expired.")
+    throw invalidHandoff()
   }
 
-  const expectedSignature = sign(encodedPayload, secret)
+  const expectedSignature =
+    parsed.version === HANDOFF_VERSION
+      ? signV2(parsed.encodedPayload, secret)
+      : await signLegacyV1AccountDeletionHandoff(parsed.encodedPayload, secret)
 
-  if (!signaturesMatch(suppliedSignature, expectedSignature)) {
-    throw new AccountDeletionHandoffError("Account deletion confirmation is invalid or expired.")
-  }
-
-  let payload: unknown
-  try {
-    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"))
-  } catch {
-    throw new AccountDeletionHandoffError("Account deletion confirmation is invalid or expired.")
-  }
-
-  if (!isPayload(payload) || payload.exp <= Math.floor(now.getTime() / 1_000)) {
-    throw new AccountDeletionHandoffError("Account deletion confirmation is invalid or expired.")
+  if (!signaturesMatch(parsed.signature, expectedSignature)) {
+    throw invalidHandoff()
   }
 
   return payload
@@ -152,20 +156,67 @@ function assertSecret(secret: string) {
   }
 }
 
-function sign(encodedPayload: string, secret: string) {
-  const signingInput = scryptSync(
-    `${HANDOFF_PREFIX}.${HANDOFF_VERSION}.${encodedPayload}`,
-    HANDOFF_SIGNATURE_DERIVATION_CONTEXT,
-    HANDOFF_SIGNATURE_DERIVATION_BYTES,
-    {
-      N: HANDOFF_SIGNATURE_DERIVATION_COST,
-      maxmem: 64 * 1024 * 1024,
-    }
-  )
+function parseHandoff(handoff: string): ParsedHandoff {
+  if (Buffer.byteLength(handoff, "utf8") > ACCOUNT_DELETION_HANDOFF_MAX_COOKIE_BYTES) {
+    throw invalidHandoff()
+  }
 
-  return createHmac("sha256", secret)
-    .update(signingInput)
-    .digest("base64url")
+  const [prefix, version, encodedPayload, suppliedSignature, ...extraParts] = handoff.split(".")
+
+  if (
+    prefix !== HANDOFF_PREFIX ||
+    (version !== HANDOFF_VERSION && version !== LEGACY_HANDOFF_VERSION) ||
+    !encodedPayload ||
+    !suppliedSignature ||
+    extraParts.length ||
+    encodedPayload.length > MAX_PAYLOAD_SEGMENT_LENGTH
+  ) {
+    throw invalidHandoff()
+  }
+
+  decodeBase64url(encodedPayload)
+  const signature = decodeBase64url(suppliedSignature)
+  if (signature.length !== HANDOFF_SIGNATURE_BYTES) {
+    throw invalidHandoff()
+  }
+
+  return { encodedPayload, signature, version }
+}
+
+function parsePayload(encodedPayload: string) {
+  let payload: unknown
+  try {
+    payload = JSON.parse(decodeBase64url(encodedPayload).toString("utf8"))
+  } catch {
+    throw invalidHandoff()
+  }
+
+  if (!isPayload(payload)) {
+    throw invalidHandoff()
+  }
+
+  return payload
+}
+
+function decodeBase64url(value: string) {
+  if (!BASE64URL_SEGMENT.test(value)) {
+    throw invalidHandoff()
+  }
+
+  const decoded = Buffer.from(value, "base64url")
+  if (!decoded.length || decoded.toString("base64url") !== value) {
+    throw invalidHandoff()
+  }
+
+  return decoded
+}
+
+function signV2(encodedPayload: string, secret: string) {
+  return signV2AccountDeletionHandoff(signingInput(HANDOFF_VERSION, encodedPayload), secret)
+}
+
+function signingInput(version: string, encodedPayload: string) {
+  return `${HANDOFF_PREFIX}.${version}.${encodedPayload}`
 }
 
 function isPayload(value: unknown): value is AccountDeletionHandoffPayload {
@@ -184,9 +235,10 @@ function isPayload(value: unknown): value is AccountDeletionHandoffPayload {
   )
 }
 
-function signaturesMatch(suppliedSignature: string, expectedSignature: string) {
-  const supplied = Buffer.from(suppliedSignature)
-  const expected = Buffer.from(expectedSignature)
-
+function signaturesMatch(supplied: Buffer, expected: Buffer) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected)
+}
+
+function invalidHandoff() {
+  return new AccountDeletionHandoffError("Account deletion confirmation is invalid or expired.")
 }

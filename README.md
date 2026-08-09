@@ -19,6 +19,10 @@ Docker-based self-hosting stack and non-secret operational documentation.
   resume episodes, and save articles or episodes into personal collections.
 - **AI digests:** Generate on-demand article summaries, keep digest history,
   and create topic-focused Smart Digests from selected sources.
+- **Private portability:** Download a signed-in account's subscriptions,
+  folders, collection references, saved-search and Smart Digest rules, and
+  reader settings in a bounded one-time JSON export. It excludes credentials,
+  provider secrets, and publisher article bodies.
 - **Arctic IRC:** Use the same Arctic account for browser-first native community
   rooms, article sharing, reporting, moderation, and room discovery. Arctic
   IRC is an account-based chat experience, not an IRC protocol server.
@@ -38,8 +42,8 @@ See [PROJECT.md](PROJECT.md) for the operating model,
 [DEPLOYMENT.md](DEPLOYMENT.md) for generic deployment and recovery guidance,
 and [docs/roadmaps/product-roadmap.md](docs/roadmaps/product-roadmap.md) for
 planned product work. The current source, test, browser, and production
-evidence for the third-pass stabilization work is kept separately in the
-[capability status record](docs/audits/third-pass-capability-status.md); source
+evidence for the fourth-pass stabilization work is kept separately in the
+[capability status record](docs/audits/fourth-pass-capability-status.md); source
 completion is not a claim that a change has been released.
 
 ## Stack

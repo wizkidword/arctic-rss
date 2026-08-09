@@ -13,6 +13,7 @@ vi.mock("./db", () => ({
 }))
 
 import {
+  articleAccessWhere,
   getReaderArticleForUser,
   listReaderArticles,
   loadReaderArticleView,
@@ -42,7 +43,7 @@ describe("reader articles", () => {
     ).toBe(50)
   })
 
-  it("fetches a single subscribed article for stable detail routes", async () => {
+  it("fetches a single actively subscribed or collection-retained article for stable detail routes", async () => {
     findFirst.mockResolvedValue({
       aiSummaries: [],
       author: "Ada",
@@ -79,14 +80,7 @@ describe("reader articles", () => {
       where: {
         AND: [
           {
-            feed: {
-              subscriptions: {
-                some: {
-                  isPaused: false,
-                  userId: "user-1",
-                },
-              },
-            },
+            ...articleAccessWhere("user-1"),
           },
           {
             id: "article-1",

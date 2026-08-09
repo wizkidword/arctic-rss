@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { PlusIcon, SparklesIcon } from "lucide-react"
 
 import { auth } from "@/auth"
+import { BriefingsWorkflowGuide } from "@/components/briefings-workflow-guide"
 import { SmartDigestRuleList } from "@/components/smart-digest-rule-list"
 import { buttonVariants } from "@/components/ui/button"
 import { listSmartDigestRulesForUser } from "@/lib/smart-digests"
@@ -40,6 +41,7 @@ export default async function SmartDigestsPage() {
         </Link>
       </section>
 
+      <BriefingsWorkflowGuide />
       <SmartDigestRuleList rules={rules} />
     </div>
   )

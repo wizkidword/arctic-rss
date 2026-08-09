@@ -57,6 +57,7 @@ export async function enqueueChatRoomEvent({
       payload: canonicalEvent as Prisma.InputJsonValue,
       version: CHAT_EVENT_OUTBOX_VERSION,
     },
+    select: { id: true },
   })
 }
 

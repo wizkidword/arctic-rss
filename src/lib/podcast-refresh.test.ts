@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { PodcastRefreshError, refreshPodcastWithClient } from "./podcast-refresh"
+import { podcastEpisodeIngestionFingerprint } from "./ingestion-fingerprint"
+import { parsePodcastFeed } from "./podcast-parser"
 
 function createStore(feedUrl = "https://example.com/podcast.xml") {
   return {
@@ -73,10 +75,11 @@ describe("refreshPodcastWithClient", () => {
     expect(result.metrics).toEqual(
       expect.objectContaining({
         conditionalHit: false,
+        changedCount: 0,
+        duplicateInputCount: 0,
         insertedCount: 1,
         parsedCount: 1,
-        skippedCount: 0,
-        updatedCount: 0,
+        unchangedCount: 0,
       })
     )
     expect(store.podcastEpisode.createMany).toHaveBeenCalledWith({
@@ -90,6 +93,7 @@ describe("refreshPodcastWithClient", () => {
           description: "Episode description",
           durationSeconds: 3723,
           externalId: "ep-1",
+          ingestionFingerprint: expect.stringMatching(/^v1:[a-f0-9]{64}$/),
           imageUrl: "https://example.com/episode.jpg",
           podcastId: "podcast-1",
           publishedAt: new Date("2026-06-29T11:30:00.000Z"),
@@ -121,7 +125,9 @@ describe("refreshPodcastWithClient", () => {
 
   it("updates existing episodes in a bounded transaction batch", async () => {
     const store = createStore()
-    store.podcastEpisode.findMany.mockResolvedValue([{ externalId: "ep-1" }])
+    store.podcastEpisode.findMany.mockResolvedValue([
+      { externalId: "ep-1", ingestionFingerprint: "outdated" },
+    ])
 
     await refreshPodcastWithClient({
       podcastId: "podcast-1",
@@ -150,7 +156,9 @@ describe("refreshPodcastWithClient", () => {
 
   it("clears stale transcript metadata when the feed stops advertising it", async () => {
     const store = createStore()
-    store.podcastEpisode.findMany.mockResolvedValue([{ externalId: "ep-1" }])
+    store.podcastEpisode.findMany.mockResolvedValue([
+      { externalId: "ep-1", ingestionFingerprint: "outdated" },
+    ])
 
     await refreshPodcastWithClient({
       podcastId: "podcast-1",
@@ -169,6 +177,81 @@ describe("refreshPodcastWithClient", () => {
           transcriptRel: null,
           transcriptType: null,
           transcriptUrl: null,
+        }),
+      })
+    )
+  })
+
+  it("does not rewrite an episode whose normalized source content is unchanged", async () => {
+    const store = createStore()
+    const [episode] = parsePodcastFeed(
+      podcastXml,
+      "https://example.com/podcast.xml"
+    ).episodes
+    store.podcastEpisode.findMany.mockResolvedValue([
+      {
+        externalId: "ep-1",
+        ingestionFingerprint: podcastEpisodeIngestionFingerprint(episode),
+      },
+    ])
+
+    const result = await refreshPodcastWithClient({
+      podcastId: "podcast-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: podcastXml,
+        url: new URL("https://example.com/podcast.xml"),
+      }),
+      store,
+    })
+
+    expect(store.podcastEpisode.createMany).not.toHaveBeenCalled()
+    expect(store.podcastEpisode.update).not.toHaveBeenCalled()
+    expect(result.metrics).toEqual(
+      expect.objectContaining({
+        changedCount: 0,
+        insertedCount: 0,
+        unchangedCount: 1,
+      })
+    )
+  })
+
+  it("persists transcript additions only when they change an episode fingerprint", async () => {
+    const store = createStore()
+    const [original] = parsePodcastFeed(
+      podcastXml,
+      "https://example.com/podcast.xml"
+    ).episodes
+    store.podcastEpisode.findMany.mockResolvedValue([
+      {
+        externalId: "ep-1",
+        ingestionFingerprint: podcastEpisodeIngestionFingerprint(original),
+      },
+    ])
+    const transcriptXml = podcastXml.replace(
+      "<enclosure url=\"https://cdn.example.com/ep.mp3\" type=\"audio/mpeg\" length=\"12345\" />",
+      "<podcast:transcript url=\"https://cdn.example.com/ep.vtt\" type=\"text/vtt\" />\n      <enclosure url=\"https://cdn.example.com/ep.mp3\" type=\"audio/mpeg\" length=\"12345\" />"
+    ).replace(
+      'xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"',
+      'xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0"'
+    )
+
+    await refreshPodcastWithClient({
+      podcastId: "podcast-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: transcriptXml,
+        url: new URL("https://example.com/podcast.xml"),
+      }),
+      store,
+    })
+
+    expect(store.podcastEpisode.createMany).not.toHaveBeenCalled()
+    expect(store.podcastEpisode.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          transcriptType: "text/vtt",
+          transcriptUrl: "https://cdn.example.com/ep.vtt",
         }),
       })
     )

@@ -12,9 +12,7 @@ export const STORY_CLUSTER_POLICY_VERSION =
   "canonical-url-or-normalized-title-72h-v1"
 export const STORY_CLUSTER_TITLE_TIME_WINDOW_MS = 72 * 60 * 60 * 1000
 
-export type StoryClusterCandidateArticle = StorySignalArticle & {
-  id: string
-}
+export type StoryClusterCandidateArticle = StorySignalArticle
 
 export type StoryClusterCandidate = {
   algorithmVersion: typeof STORY_CLUSTER_POLICY_VERSION

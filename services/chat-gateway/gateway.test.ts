@@ -1,4 +1,7 @@
+import { EventEmitter } from "node:events"
+
 import { io as createSocketClient } from "socket.io-client"
+import type { Socket } from "socket.io"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createChatGateway, type ChatGateway } from "./gateway"
@@ -58,6 +61,10 @@ describe("chat gateway", () => {
       handle: "northernlights",
       profileId: "profile-1",
       role: "USER",
+    })
+    expect(gateway.getPendingAdmissionMetrics()).toEqual({
+      oldestPendingAgeMs: 0,
+      pendingAdmissions: 0,
     })
   })
 
@@ -136,6 +143,174 @@ describe("chat gateway", () => {
       (gateway.io.engine as unknown as { opts: { maxHttpBufferSize: number } }).opts
         .maxHttpBufferSize
     ).toBe(1_024)
+  })
+
+  it("releases a pending admission when transport closes after authentication", async () => {
+    gateway = createChatGateway({
+      authenticateConnection: async () => identity,
+      logger,
+    })
+    const socket = createPendingHandshakeSocket()
+
+    await expect(runAdmissionMiddleware(gateway, socket)).resolves.toBeUndefined()
+    expect(gateway.getPendingAdmissionMetrics().pendingAdmissions).toBe(1)
+
+    socket.conn.emit("close")
+    socket.emit("disconnect")
+
+    expect(gateway.getPendingAdmissionMetrics()).toEqual({
+      oldestPendingAgeMs: 0,
+      pendingAdmissions: 0,
+    })
+  })
+
+  it("releases a pending admission when a client aborts after middleware continues", async () => {
+    gateway = createChatGateway({
+      authenticateConnection: async () => identity,
+      logger,
+    })
+    const socket = createPendingHandshakeSocket()
+
+    await expect(runAdmissionMiddleware(gateway, socket)).resolves.toBeUndefined()
+    socket.emit("disconnect")
+
+    expect(gateway.getPendingAdmissionMetrics()).toEqual({
+      oldestPendingAgeMs: 0,
+      pendingAdmissions: 0,
+    })
+  })
+
+  it("releases a pending admission when middleware rejects after reserving it", async () => {
+    gateway = createChatGateway({
+      authenticateConnection: async () => identity,
+      logger,
+    })
+    const socket = createPendingHandshakeSocket({
+      data: new Proxy<Record<string, unknown>>({}, {
+        set(target, property, value) {
+          if (property === "chatAbuse") {
+            throw new Error("abuse controls unavailable")
+          }
+
+          return Reflect.set(target, property, value)
+        },
+      }),
+    })
+
+    await expect(runAdmissionMiddleware(gateway, socket)).resolves.toBeInstanceOf(Error)
+    expect(gateway.getPendingAdmissionMetrics()).toEqual({
+      oldestPendingAgeMs: 0,
+      pendingAdmissions: 0,
+    })
+  })
+
+  it("expires a pending admission and closes its incomplete transport", async () => {
+    gateway = createChatGateway({
+      authenticateConnection: async () => identity,
+      logger,
+      pendingAdmissionTtlMs: 1,
+    })
+    const socket = createPendingHandshakeSocket()
+
+    await expect(runAdmissionMiddleware(gateway, socket)).resolves.toBeUndefined()
+    await delay(10)
+
+    expect(socket.conn.close).toHaveBeenCalledTimes(1)
+    expect(gateway.getPendingAdmissionMetrics()).toEqual({
+      oldestPendingAgeMs: 0,
+      pendingAdmissions: 0,
+    })
+  })
+
+  it("reclaims both shared-IP and per-user admission capacity after cleanup", async () => {
+    gateway = createChatGateway({
+      abuseSettings: {
+        ...DEFAULT_CHAT_GATEWAY_ABUSE_SETTINGS,
+        maxActiveSocketsPerIp: 1,
+        maxActiveSocketsPerUser: 1,
+      },
+      authenticateConnection: async ({ token }) => ({
+        ...identity,
+        userId: String(token),
+      }),
+      logger,
+    })
+    const first = createPendingHandshakeSocket({
+      clientIp: "198.51.100.44",
+      token: "user-1",
+    })
+    const sameUser = createPendingHandshakeSocket({
+      clientIp: "198.51.100.45",
+      token: "user-1",
+    })
+    const sameIp = createPendingHandshakeSocket({
+      clientIp: "198.51.100.44",
+      token: "user-2",
+    })
+
+    await expect(runAdmissionMiddleware(gateway, first)).resolves.toBeUndefined()
+    await expect(runAdmissionMiddleware(gateway, sameUser)).resolves.toBeInstanceOf(Error)
+    await expect(runAdmissionMiddleware(gateway, sameIp)).resolves.toBeInstanceOf(Error)
+
+    first.conn.emit("close")
+
+    const recovered = createPendingHandshakeSocket({
+      clientIp: "198.51.100.44",
+      token: "user-1",
+    })
+    await expect(runAdmissionMiddleware(gateway, recovered)).resolves.toBeUndefined()
+    recovered.emit("disconnect")
+
+    expect(gateway.getPendingAdmissionMetrics()).toEqual({
+      oldestPendingAgeMs: 0,
+      pendingAdmissions: 0,
+    })
+  })
+
+  it("handles unavailable authorization-failure accounting without an unhandled rejection", async () => {
+    const limitChatAction = vi.fn(async ({ action }: { action: string }) => {
+      if (action === "chat_authorization_failure") {
+        throw new Error("Redis unavailable")
+      }
+
+      return true
+    })
+    gateway = createChatGateway({
+      authenticateConnection: async () => {
+        throw new Error("invalid token")
+      },
+      limitChatAction,
+      logger,
+    })
+
+    await expect(
+      runAdmissionMiddleware(gateway, createPendingHandshakeSocket())
+    ).resolves.toBeInstanceOf(Error)
+    await Promise.resolve()
+
+    expect(logger.warn).toHaveBeenCalledWith("limiter_accounting_failed", {
+      action: "chat_authorization_failure",
+    })
+  })
+
+  it("releases pending handshakes during server shutdown", async () => {
+    gateway = createChatGateway({
+      authenticateConnection: async () => identity,
+      logger,
+    })
+    const socket = createPendingHandshakeSocket()
+
+    await expect(runAdmissionMiddleware(gateway, socket)).resolves.toBeUndefined()
+    expect(gateway.getPendingAdmissionMetrics().pendingAdmissions).toBe(1)
+
+    await gateway.close()
+    expect(gateway.getPendingAdmissionMetrics()).toEqual({
+      oldestPendingAgeMs: 0,
+      pendingAdmissions: 0,
+    })
+    gateway = undefined
+
+    expect(socket.conn.close).not.toHaveBeenCalled()
   })
 
   it("closes a raw Socket.IO client that exceeds the configured payload ceiling", async () => {
@@ -218,5 +393,64 @@ function once(client: ReturnType<typeof createSocketClient>, event: string) {
 
     client.once(event, resolve)
     client.once("connect_error", reject)
+  })
+}
+
+type PendingHandshakeSocket = EventEmitter & {
+  conn: EventEmitter & { close: ReturnType<typeof vi.fn> }
+  data: Record<string, unknown>
+  disconnect: ReturnType<typeof vi.fn>
+  handshake: {
+    auth: { token: string }
+    headers: { "cf-connecting-ip"?: string; origin: string }
+  }
+}
+
+function createPendingHandshakeSocket({
+  clientIp,
+  data = {},
+  token = "user-1",
+}: {
+  clientIp?: string
+  data?: Record<string, unknown>
+  token?: string
+} = {}) {
+  return Object.assign(new EventEmitter(), {
+    conn: Object.assign(new EventEmitter(), { close: vi.fn() }),
+    data,
+    disconnect: vi.fn(),
+    handshake: {
+      auth: { token },
+      headers: {
+        ...(clientIp ? { "cf-connecting-ip": clientIp } : {}),
+        origin: "https://arcticrss.com",
+      },
+    },
+  }) as PendingHandshakeSocket
+}
+
+async function runAdmissionMiddleware(
+  gateway: ChatGateway,
+  socket: PendingHandshakeSocket
+) {
+  const middleware = (
+    gateway.io.of("/") as unknown as {
+      _fns: Array<
+        (socket: Socket, next: (error?: Error) => void) => Promise<void>
+      >
+    }
+  )._fns[0]
+  let nextError: Error | undefined
+
+  await middleware(socket as unknown as Socket, (error) => {
+    nextError = error
+  })
+
+  return nextError
+}
+
+function delay(milliseconds: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds)
   })
 }

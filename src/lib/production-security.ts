@@ -5,9 +5,16 @@ import {
   getAllowedAppHosts,
   getAppOrigin,
 } from "./app-origin"
+import {
+  assertDatabaseConnectionSettings,
+  DatabaseConnectionConfigurationError,
+} from "./database-connection-settings"
 import { LEGACY_REDIS_MIGRATION_FLAG } from "./redis-config"
 import { assertRuntimeTopology } from "./runtime-topology"
-import { getRuntimeRequiredServiceRoleEnvironment } from "./service-role-environment"
+import {
+  findUnexpectedManagedServiceRoleEnvironmentVariables,
+  getRuntimeRequiredServiceRoleEnvironment,
+} from "./service-role-environment"
 import { assertTurnstileConfiguration } from "./turnstile"
 
 export class UnsafeProductionConfigurationError extends Error {
@@ -23,6 +30,7 @@ export const PRODUCTION_SERVICE_ROLES = [
   "worker-ai-mail",
   "worker-all",
   "worker-chat-events",
+  "worker-health",
   "worker-imports",
   "worker-ingestion",
   "worker-maintenance",
@@ -45,21 +53,11 @@ const WORKER_ROLES = new Set<ProductionServiceRole>([
   "worker-ai-mail",
   "worker-all",
   "worker-chat-events",
+  "worker-health",
   "worker-imports",
   "worker-ingestion",
   "worker-maintenance",
 ])
-
-const WORKER_FORBIDDEN_VARIABLES = [
-  "AUTH_GOOGLE_ID",
-  "AUTH_GOOGLE_SECRET",
-  "AUTH_SECRET",
-  "CLOUDFLARE_TUNNEL_TOKEN",
-  "MIGRATE_DATABASE_URL",
-  "POSTGRES_PASSWORD",
-  "REDIS_PASSWORD",
-  "TURNSTILE_SECRET_KEY",
-] as const
 
 function assertRequiredValue(
   environment: ProductionEnvironment,
@@ -82,6 +80,22 @@ function assertManifestRequiredVariables(
 ) {
   for (const variable of getRuntimeRequiredServiceRoleEnvironment(role)) {
     assertRequiredValue(environment, variable)
+  }
+}
+
+function assertExactServiceRoleEnvironment(
+  environment: ProductionEnvironment,
+  role: ProductionServiceRole
+) {
+  assertManifestRequiredVariables(environment, role)
+
+  for (const variable of findUnexpectedManagedServiceRoleEnvironmentVariables(
+    environment,
+    role
+  )) {
+    throw new UnsafeProductionConfigurationError(
+      `${variable} must not be present for the ${role} service.`
+    )
   }
 }
 
@@ -185,8 +199,7 @@ function assertRedisUrl(
     return assertCredentialedUrlValue(
       workloadUrl,
       workloadVariable,
-      new Set(["redis:", "rediss:"]),
-      { requireUsername: false }
+      new Set(["redis:", "rediss:"])
     )
   }
 
@@ -223,6 +236,25 @@ function assertRedisWorkloadSeparation(environment: ProductionEnvironment) {
       "DURABLE_REDIS_URL and EPHEMERAL_REDIS_URL must not target the same Redis endpoint in production."
     )
   }
+
+  if (
+    !allowsLegacyRedisMigration(environment) &&
+    durable.username === ephemeral.username
+  ) {
+    throw new UnsafeProductionConfigurationError(
+      "DURABLE_REDIS_URL and EPHEMERAL_REDIS_URL must use distinct Redis ACL usernames in production."
+    )
+  }
+
+  if (
+    !allowsLegacyRedisMigration(environment) &&
+    decodeUrlCredential(durable, "DURABLE_REDIS_URL") ===
+      decodeUrlCredential(ephemeral, "EPHEMERAL_REDIS_URL")
+  ) {
+    throw new UnsafeProductionConfigurationError(
+      "DURABLE_REDIS_URL and EPHEMERAL_REDIS_URL must use distinct Redis passwords in production."
+    )
+  }
 }
 
 function allowsLegacyRedisMigration(environment: ProductionEnvironment) {
@@ -256,17 +288,18 @@ function assertRuntimeDatabaseUrl(environment: ProductionEnvironment) {
   )
 }
 
-function assertNoSensitiveVariables(
+function assertDatabaseConnectionConfiguration(
   environment: ProductionEnvironment,
-  role: ProductionServiceRole,
-  variables: readonly string[]
+  role: ProductionServiceRole
 ) {
-  for (const variable of variables) {
-    if (environment[variable]?.trim()) {
-      throw new UnsafeProductionConfigurationError(
-        `${variable} must not be present for the ${role} service.`
-      )
+  try {
+    assertDatabaseConnectionSettings(environment, role)
+  } catch (error) {
+    if (error instanceof DatabaseConnectionConfigurationError) {
+      throw new UnsafeProductionConfigurationError(error.message)
     }
+
+    throw error
   }
 }
 
@@ -328,15 +361,10 @@ function assertWebOrigins(environment: ProductionEnvironment) {
 }
 
 function assertWebConfiguration(environment: ProductionEnvironment) {
-  assertManifestRequiredVariables(environment, "web")
-  assertNoSensitiveVariables(environment, "web", [
-    "CLOUDFLARE_TUNNEL_TOKEN",
-    "MIGRATE_DATABASE_URL",
-    "POSTGRES_PASSWORD",
-    "REDIS_PASSWORD",
-  ])
+  assertExactServiceRoleEnvironment(environment, "web")
   assertWebOrigins(environment)
   assertRuntimeDatabaseUrl(environment)
+  assertDatabaseConnectionConfiguration(environment, "web")
   assertRedisWorkloadSeparation(environment)
   assertRequiredSecret(environment, "AUTH_SECRET", 32)
   assertTurnstileConfiguration(environment)
@@ -346,36 +374,26 @@ function assertWorkerConfiguration(
   environment: ProductionEnvironment,
   role: ProductionServiceRole
 ) {
-  assertManifestRequiredVariables(environment, role)
-  assertNoSensitiveVariables(environment, role, WORKER_FORBIDDEN_VARIABLES)
+  assertExactServiceRoleEnvironment(environment, role)
   assertRuntimeDatabaseUrl(environment)
+  assertDatabaseConnectionConfiguration(environment, role)
   assertRedisUrl(environment, "DURABLE_REDIS_URL")
 
   if (role === "worker-all" || role === "worker-chat-events") {
     assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
   }
 
-  if (role === "worker-all") {
+  if (role === "worker-health") {
+    assertRuntimeTopology(environment)
+  }
+
+  if (role === "worker-all" || role === "worker-health") {
     assertRedisWorkloadSeparation(environment)
   }
 }
 
 function assertChatGatewayConfiguration(environment: ProductionEnvironment) {
-  assertManifestRequiredVariables(environment, "chat-gateway")
-  assertNoSensitiveVariables(environment, "chat-gateway", [
-    "ANTHROPIC_API_KEY",
-    "AUTH_GOOGLE_ID",
-    "AUTH_GOOGLE_SECRET",
-    "AUTH_SECRET",
-    "CLOUDFLARE_TUNNEL_TOKEN",
-    "MIGRATE_DATABASE_URL",
-    "OPENAI_API_KEY",
-    "POSTGRES_PASSWORD",
-    "REDIS_PASSWORD",
-    "SMTP_PASSWORD",
-    "SMTP_USER",
-    "TURNSTILE_SECRET_KEY",
-  ])
+  assertExactServiceRoleEnvironment(environment, "chat-gateway")
 
   try {
     assertProductionAppOrigin(environment)
@@ -387,7 +405,12 @@ function assertChatGatewayConfiguration(environment: ProductionEnvironment) {
     throw error
   }
 
-  assertRuntimeDatabaseUrl(environment)
+  assertCredentialedUrl(
+    environment,
+    "CHAT_DATABASE_URL",
+    new Set(["postgres:", "postgresql:"])
+  )
+  assertDatabaseConnectionConfiguration(environment, "chat-gateway")
   assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
   assertRequiredSecret(environment, "ARCTIC_IRC_TOKEN_SECRET", 32)
 }

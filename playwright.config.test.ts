@@ -10,6 +10,7 @@ describe("production browser-smoke configuration", () => {
     expect(config).toContain('ARCTIC_RSS_TOPOLOGY: "all-in-one"')
     expect(config).not.toContain("MIGRATE_DATABASE_URL:")
     expect(config).not.toContain("POSTGRES_PASSWORD:")
-    expect(config).not.toContain("REDIS_PASSWORD:")
+    expect(config).not.toContain("DURABLE_REDIS_PASSWORD:")
+    expect(config).not.toContain("EPHEMERAL_REDIS_PASSWORD:")
   })
 })

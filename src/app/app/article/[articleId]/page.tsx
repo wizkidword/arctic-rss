@@ -82,7 +82,7 @@ export default async function ArticleDetailPage({
       defaultView={defaultView}
       displayMode={displayMode}
       description={`${selectedArticle.feedTitle} - stable article view.`}
-      emptyMessage="That article is not available in your active subscriptions."
+      emptyMessage="That article is not available in your active subscriptions or saved collections."
       riverArticles={riverArticles}
       selectedArticle={selectedArticle}
       selectedArticleId={selectedArticle.id}

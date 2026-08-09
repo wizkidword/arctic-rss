@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const queueAdd = vi.fn()
+const queueGetJob = vi.fn()
 const queueConstructor = vi.fn(function Queue() {
   return {
     add: queueAdd,
+    getJob: queueGetJob,
   }
 })
 
@@ -15,6 +17,7 @@ describe("podcast refresh queue", () => {
   beforeEach(() => {
     vi.resetModules()
     queueAdd.mockReset()
+    queueGetJob.mockReset()
     queueConstructor.mockClear()
   })
 
@@ -45,11 +48,14 @@ describe("podcast refresh queue", () => {
       "./podcast-refresh-queue"
     )
 
-    await enqueuePodcastRefresh("podcast-1")
+    await expect(enqueuePodcastRefresh("podcast-1")).resolves.toEqual({
+      jobId: podcastRefreshJobId("podcast-1"),
+      outcome: "queued",
+    })
 
     expect(queueAdd).toHaveBeenCalledWith(
       "refresh-podcast",
-      { podcastId: "podcast-1" },
+      { podcastId: "podcast-1", trigger: "scheduler" },
       {
         attempts: 3,
         backoff: {
@@ -58,10 +64,7 @@ describe("podcast refresh queue", () => {
         },
         jobId: podcastRefreshJobId("podcast-1"),
         removeOnComplete: true,
-        removeOnFail: {
-          age: 24 * 60 * 60,
-          count: 1000,
-        },
+        removeOnFail: true,
       }
     )
   })
@@ -76,7 +79,7 @@ describe("podcast refresh queue", () => {
 
     expect(queueAdd).toHaveBeenCalledWith(
       "refresh-podcast",
-      { podcastId: "podcast-1" },
+      { podcastId: "podcast-1", trigger: "scheduler" },
       {
         attempts: 1,
         backoff: {
@@ -85,11 +88,19 @@ describe("podcast refresh queue", () => {
         },
         jobId: "manual-job",
         removeOnComplete: true,
-        removeOnFail: {
-          age: 24 * 60 * 60,
-          count: 1000,
-        },
+        removeOnFail: true,
       }
     )
+  })
+
+  it("reports an already queued source without adding a duplicate job", async () => {
+    const { enqueuePodcastRefresh, podcastRefreshJobId } = await import("./podcast-refresh-queue")
+    queueGetJob.mockResolvedValueOnce({ id: podcastRefreshJobId("podcast-1") })
+
+    await expect(enqueuePodcastRefresh("podcast-1", { trigger: "manual" })).resolves.toEqual({
+      jobId: podcastRefreshJobId("podcast-1"),
+      outcome: "already-queued",
+    })
+    expect(queueAdd).not.toHaveBeenCalled()
   })
 })

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "postgres": {
+    "maxConnections": 100,
+    "reserves": {
+      "superuserAdmin": 8,
+      "migrationRecovery": 4,
+      "monitoring": 3
+    }
+  },
+  "roles": {
+    "web": { "poolMax": 6, "applicationName": "arctic-rss-web" },
+    "worker-all": { "poolMax": 6, "applicationName": "arctic-rss-worker-all" },
+    "worker-ingestion": { "poolMax": 4, "applicationName": "arctic-rss-worker-ingestion" },
+    "worker-ai-mail": { "poolMax": 3, "applicationName": "arctic-rss-worker-ai-mail" },
+    "worker-imports": { "poolMax": 2, "applicationName": "arctic-rss-worker-imports" },
+    "worker-maintenance": { "poolMax": 2, "applicationName": "arctic-rss-worker-maintenance" },
+    "worker-health": { "poolMax": 2, "applicationName": "arctic-rss-worker-health" },
+    "worker-chat-events": { "poolMax": 2, "applicationName": "arctic-rss-worker-chat-events" },
+    "chat-gateway": { "poolMax": 4, "applicationName": "arctic-rss-chat-gateway" },
+    "migrate": { "poolMax": 1, "applicationName": "arctic-rss-migrate" }
+  }
+}

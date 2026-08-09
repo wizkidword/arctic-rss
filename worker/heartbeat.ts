@@ -5,6 +5,7 @@ import { writeDurableWorkerHeartbeat, writeWorkerHeartbeat } from "../src/lib/wo
 export function startWorkerHeartbeat({
   instanceId,
   intervalMs,
+  isControlPlaneReady = () => true,
   mode,
   path,
   store,
@@ -12,27 +13,28 @@ export function startWorkerHeartbeat({
 }: {
   instanceId: string
   intervalMs: number
-  mode: "ai-mail" | "all" | "chat-events" | "imports" | "ingestion" | "maintenance"
+  isControlPlaneReady?: () => boolean
+  mode: "ai-mail" | "all" | "chat-events" | "health" | "imports" | "ingestion" | "maintenance"
   path: string
   store: Redis
   version: string
 }) {
   const record = () => {
+    if (!isControlPlaneReady()) {
+      return
+    }
+
     const timestamp = Date.now()
-    writeWorkerHeartbeat({ path }).catch((error) => {
-      console.error(`[worker] could not update health heartbeat: ${errorMessage(error)}`)
-    })
-    writeDurableWorkerHeartbeat({ client: store, instanceId, mode, timestamp, version }).catch((error) => {
-      console.error(`[worker] could not update durable health heartbeat: ${errorMessage(error)}`)
-    })
+    writeDurableWorkerHeartbeat({ client: store, instanceId, mode, timestamp, version })
+      .then(() => writeWorkerHeartbeat({ path }))
+      .catch(() => {
+        // Connection state is reported once by the control-plane client. A
+        // failed durable write must not refresh the local health file.
+      })
   }
 
   const interval = setInterval(record, intervalMs)
   record()
 
   return { stop: () => clearInterval(interval) }
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "unknown error"
 }

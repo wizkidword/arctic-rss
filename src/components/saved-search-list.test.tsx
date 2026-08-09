@@ -37,9 +37,10 @@ describe("SavedSearchList", () => {
             monitorCursorArticleId: null,
             monitorCursorCreatedAt: null,
             monitorEnabled: true,
-            monitorLastRunAt: null,
+            monitorFailureCount: 0,
+            monitorLastRunAt: new Date("2026-08-08T12:10:00.000Z"),
             monitorNewMatchCount: 0,
-            monitorNextRunAt: null,
+            monitorNextRunAt: new Date("2026-08-08T12:15:00.000Z"),
             name: "Sea ice watch",
             publishedAfter: null,
             publishedBefore: null,
@@ -54,6 +55,9 @@ describe("SavedSearchList", () => {
     )
 
     expect(markup).toContain("Create digest")
+    expect(markup).toContain("Preview matches")
+    expect(markup).toContain("Preview this saved view before monitoring.")
+    expect(markup).toContain("Latest monitor activity: checked")
     expect(markup).toContain(
       'href="/app/smart-digests/new?include=sea+ice&amp;name=Sea+ice+watch&amp;topic=sea+ice&amp;folder=folder-1&amp;sourceScope=FOLDERS"'
     )

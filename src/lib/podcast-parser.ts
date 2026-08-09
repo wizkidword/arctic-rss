@@ -1,12 +1,19 @@
 import { XMLParser } from "fast-xml-parser"
 
+import {
+  decodeStandardXmlEntities,
+  ingestionLimits,
+  isWithinUtf8ByteLimit,
+  safeXmlParserOptions,
+  truncateCharacters,
+  truncateUtf8Bytes,
+  type IngestionParseStats,
+} from "./ingestion-limits"
 import { normalizeHttpUrl } from "./url-safety"
 
 const xmlParser = new XMLParser({
-  allowBooleanAttributes: true,
   attributeNamePrefix: "@",
-  ignoreAttributes: false,
-  trimValues: true,
+  ...safeXmlParserOptions,
 })
 
 const audioExtensions = new Set([
@@ -65,18 +72,32 @@ export class PodcastParseError extends Error {
 }
 
 export function parsePodcastFeed(xml: string, feedUrl: string): ParsedPodcastFeed {
-  const parsed = parseXml(xml)
-  const podcast = parseRssPodcast(parsed, feedUrl) ?? parseAtomPodcast(parsed, feedUrl)
+  return parsePodcastFeedWithMetrics(xml, feedUrl).podcast
+}
 
-  if (!podcast) {
+export function parsePodcastFeedWithMetrics(xml: string, feedUrl: string) {
+  const parsed = parseXml(xml)
+  const candidate = parseRssPodcast(parsed, feedUrl) ?? parseAtomPodcast(parsed, feedUrl)
+
+  if (!candidate) {
     throw new PodcastParseError("Podcast RSS channel was not found.")
   }
 
-  if (podcast.episodes.length === 0) {
+  if (candidate.podcast.episodes.length === 0) {
     throw new PodcastParseError("No audio episodes were found in that podcast feed.")
   }
 
-  return podcast
+  const normalized = applyContentBudget(candidate.podcast.episodes)
+  return {
+    podcast: { ...candidate.podcast, episodes: normalized.episodes },
+    stats: {
+      acceptedCount: normalized.episodes.length,
+      contentBytes: normalized.contentBytes,
+      fieldsTruncated: candidate.fieldsTruncated + normalized.fieldsTruncated,
+      parsedCount: candidate.parsedCount,
+      truncatedCount: candidate.truncatedCount,
+    } satisfies IngestionParseStats,
+  }
 }
 
 function parseXml(xml: string) {
@@ -90,7 +111,7 @@ function parseXml(xml: string) {
 function parseRssPodcast(
   parsed: Record<string, unknown>,
   feedUrl: string
-): ParsedPodcastFeed | null {
+): ParsedPodcastCandidate | null {
   const rss = toRecord(parsed.rss)
   const rdf = toRecord(parsed["rdf:RDF"])
   const channel = firstRecord(rss?.channel ?? rdf?.channel)
@@ -99,23 +120,35 @@ function parseRssPodcast(
     return null
   }
 
-  const title = textValue(channel.title) ?? "Untitled Podcast"
+  const title = truncateCharacters(textValue(channel.title), ingestionLimits.maxTitleCharacters) ?? "Untitled Podcast"
   const language = textValue(channel.language)
-  const description =
-    textValue(channel.description) ?? textValue(channel["itunes:subtitle"])
-  const episodes = [...toArray(channel.item), ...toArray(rdf?.item)]
+  const description = truncateCharacters(
+    textValue(channel.description) ?? textValue(channel["itunes:subtitle"]),
+    ingestionLimits.maxSummaryCharacters
+  )
+  const sourceEpisodes = [...toArray(channel.item), ...toArray(rdf?.item)]
+  const selectedEpisodes = sourceEpisodes.slice(0, ingestionLimits.maxPodcastEpisodes)
+  const episodes = selectedEpisodes
     .map((item) => parseRssEpisode(item, feedUrl, language))
     .filter((episode) => episode !== null)
 
   return {
-    artworkUrl: imageFromItunes(channel["itunes:image"], feedUrl),
-    author: textValue(channel["itunes:author"]) ?? textValue(channel.author),
-    description,
-    episodes,
-    feedUrl,
-    language,
-    siteUrl: normalizeOptionalUrl(textValue(channel.link), feedUrl),
-    title,
+    fieldsTruncated: 0,
+    parsedCount: sourceEpisodes.length,
+    podcast: {
+      artworkUrl: imageFromItunes(channel["itunes:image"], feedUrl),
+      author: truncateCharacters(
+        textValue(channel["itunes:author"]) ?? textValue(channel.author),
+        ingestionLimits.maxAuthorCharacters
+      ),
+      description,
+      episodes,
+      feedUrl,
+      language,
+      siteUrl: normalizeOptionalUrl(textValue(channel.link), feedUrl),
+      title,
+    },
+    truncatedCount: sourceEpisodes.length - selectedEpisodes.length,
   }
 }
 
@@ -136,10 +169,13 @@ function parseRssEpisode(
     return null
   }
 
-  const title = textValue(record.title) ?? "Untitled Episode"
+  const title = truncateCharacters(textValue(record.title), ingestionLimits.maxTitleCharacters) ?? "Untitled Episode"
   const url = normalizeOptionalUrl(textValue(record.link), feedUrl)
-  const description = textValue(record.description)
-  const contentHtml = textValue(record["content:encoded"])
+  const description = truncateCharacters(textValue(record.description), ingestionLimits.maxSummaryCharacters)
+  const contentHtml = truncateUtf8Bytes(
+    textValue(record["content:encoded"]),
+    ingestionLimits.maxContentBytesPerField
+  )
   const transcript = preferredTranscript(record["podcast:transcript"], feedUrl)
   const publishedAt = parseOptionalDate(
     textValue(record.pubDate) ??
@@ -148,20 +184,28 @@ function parseRssEpisode(
       textValue(record.updated)
   )
 
+  const externalId =
+    textValue(record.guid) ??
+    textValue(record.id) ??
+    url ??
+    enclosure.url ??
+    stableTitleFallback(title, publishedAt)
+  if (!isWithinUtf8ByteLimit(externalId, ingestionLimits.maxExternalIdBytes)) {
+    return null
+  }
+
   return {
     audioLengthBytes: parseOptionalBigInt(enclosure.length),
     audioType: enclosure.type,
     audioUrl: enclosure.url,
     contentHtml,
-    contentText: textValue(record["itunes:summary"]) ?? description,
+    contentText: truncateUtf8Bytes(
+      textValue(record["itunes:summary"]) ?? description,
+      ingestionLimits.maxContentBytesPerField
+    ),
     description,
     durationSeconds: parseDuration(textValue(record["itunes:duration"])),
-    externalId:
-      textValue(record.guid) ??
-      textValue(record.id) ??
-      url ??
-      enclosure.url ??
-      stableTitleFallback(title, publishedAt),
+    externalId,
     imageUrl:
       imageFromItunes(record["itunes:image"], feedUrl) ??
       imageFromMediaContent(record["media:content"], feedUrl) ??
@@ -176,30 +220,43 @@ function parseRssEpisode(
 function parseAtomPodcast(
   parsed: Record<string, unknown>,
   feedUrl: string
-): ParsedPodcastFeed | null {
+): ParsedPodcastCandidate | null {
   const feed = toRecord(parsed.feed)
 
   if (!feed) {
     return null
   }
 
-  const title = textValue(feed.title) ?? "Untitled Podcast"
+  const title = truncateCharacters(textValue(feed.title), ingestionLimits.maxTitleCharacters) ?? "Untitled Podcast"
   const language = textValue(feed["@xml:lang"] ?? feed["@lang"])
-  const episodes = toArray(feed.entry)
+  const sourceEpisodes = toArray(feed.entry)
+  const selectedEpisodes = sourceEpisodes.slice(0, ingestionLimits.maxPodcastEpisodes)
+  const episodes = selectedEpisodes
     .map((entry) => parseAtomEpisode(entry, feedUrl, language))
     .filter((episode) => episode !== null)
 
   return {
-    artworkUrl:
-      imageFromItunes(feed["itunes:image"], feedUrl) ??
-      normalizeOptionalUrl(textValue(feed.icon) ?? textValue(feed.logo), feedUrl),
-    author: textValue(feed["itunes:author"]) ?? atomAuthor(feed.author),
-    description: textValue(feed.subtitle) ?? textValue(feed.summary),
-    episodes,
-    feedUrl,
-    language,
-    siteUrl: normalizeOptionalUrl(findAtomAlternateLink(feed.link), feedUrl),
-    title,
+    fieldsTruncated: 0,
+    parsedCount: sourceEpisodes.length,
+    podcast: {
+      artworkUrl:
+        imageFromItunes(feed["itunes:image"], feedUrl) ??
+        normalizeOptionalUrl(textValue(feed.icon) ?? textValue(feed.logo), feedUrl),
+      author: truncateCharacters(
+        textValue(feed["itunes:author"]) ?? atomAuthor(feed.author),
+        ingestionLimits.maxAuthorCharacters
+      ),
+      description: truncateCharacters(
+        textValue(feed.subtitle) ?? textValue(feed.summary),
+        ingestionLimits.maxSummaryCharacters
+      ),
+      episodes,
+      feedUrl,
+      language,
+      siteUrl: normalizeOptionalUrl(findAtomAlternateLink(feed.link), feedUrl),
+      title,
+    },
+    truncatedCount: sourceEpisodes.length - selectedEpisodes.length,
   }
 }
 
@@ -220,25 +277,32 @@ function parseAtomEpisode(
     return null
   }
 
-  const title = textValue(record.title) ?? "Untitled Episode"
+  const title = truncateCharacters(textValue(record.title), ingestionLimits.maxTitleCharacters) ?? "Untitled Episode"
   const url = normalizeOptionalUrl(findAtomAlternateLink(record.link), feedUrl)
-  const description = textValue(record.summary)
-  const contentHtml = textValue(record.content)
+  const description = truncateCharacters(textValue(record.summary), ingestionLimits.maxSummaryCharacters)
+  const contentHtml = truncateUtf8Bytes(textValue(record.content), ingestionLimits.maxContentBytesPerField)
   const transcript = preferredTranscript(record["podcast:transcript"], feedUrl)
   const publishedAt = parseOptionalDate(
     textValue(record.published) ?? textValue(record.updated)
   )
+
+  const externalId = textValue(record.id) ?? url ?? enclosure.url ?? stableTitleFallback(title, publishedAt)
+  if (!isWithinUtf8ByteLimit(externalId, ingestionLimits.maxExternalIdBytes)) {
+    return null
+  }
 
   return {
     audioLengthBytes: parseOptionalBigInt(enclosure.length),
     audioType: enclosure.type,
     audioUrl: enclosure.url,
     contentHtml,
-    contentText: description ?? textValue(record.content),
+    contentText: truncateUtf8Bytes(
+      description ?? textValue(record.content),
+      ingestionLimits.maxContentBytesPerField
+    ),
     description,
     durationSeconds: parseDuration(textValue(record["itunes:duration"])),
-    externalId:
-      textValue(record.id) ?? url ?? enclosure.url ?? stableTitleFallback(title, publishedAt),
+    externalId,
     imageUrl:
       imageFromItunes(record["itunes:image"], feedUrl) ??
       imageFromMediaContent(record["media:content"], feedUrl) ??
@@ -435,7 +499,7 @@ function firstRecord(value: unknown): Record<string, unknown> | null {
 
 function textValue(value: unknown): string | undefined {
   if (typeof value === "string" || typeof value === "number") {
-    return String(value).trim() || undefined
+    return decodeStandardXmlEntities(String(value)).trim() || undefined
   }
 
   if (Array.isArray(value)) {
@@ -452,15 +516,53 @@ function textValue(value: unknown): string | undefined {
 }
 
 function normalizeOptionalUrl(value: string | undefined, baseUrl: string) {
-  if (!value) {
+  if (!value || value.length > ingestionLimits.maxUrlCharacters) {
     return undefined
   }
 
   try {
-    return normalizeHttpUrl(new URL(value, baseUrl).href).href
+    const normalized = normalizeHttpUrl(new URL(value, baseUrl).href).href
+    return normalized.length <= ingestionLimits.maxUrlCharacters ? normalized : undefined
   } catch {
     return undefined
   }
+}
+
+type ParsedPodcastCandidate = {
+  fieldsTruncated: number
+  parsedCount: number
+  podcast: ParsedPodcastFeed
+  truncatedCount: number
+}
+
+function applyContentBudget(episodes: ParsedPodcastEpisode[]) {
+  const normalized: ParsedPodcastEpisode[] = []
+  let remainingContentBytes = ingestionLimits.maxAggregateContentBytes
+  let contentBytes = 0
+  let fieldsTruncated = 0
+
+  for (const episode of episodes) {
+    const result = { ...episode }
+    for (const field of ["contentHtml", "contentText"] as const) {
+      const value = result[field]
+      if (!value) {
+        continue
+      }
+
+      const bytes = Buffer.byteLength(value, "utf8")
+      if (bytes > remainingContentBytes) {
+        delete result[field]
+        fieldsTruncated += 1
+        continue
+      }
+
+      remainingContentBytes -= bytes
+      contentBytes += bytes
+    }
+    normalized.push(result)
+  }
+
+  return { contentBytes, episodes: normalized, fieldsTruncated }
 }
 
 function imageFromItunes(value: unknown, feedUrl: string) {

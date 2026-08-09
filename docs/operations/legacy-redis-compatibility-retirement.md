@@ -9,6 +9,12 @@ the workload-specific `DURABLE_REDIS_URL` and `EPHEMERAL_REDIS_URL` values;
 the exact service-role manifest and Compose validation do not inject
 `REDIS_URL` into them.
 
+The newer Compose configuration creates separate durable and ephemeral Redis
+ACL users and disables the Redis default user. Consequently, the compatibility
+path is only meaningful for a reviewed pre-ACL recovery state; it cannot
+silently fall back after the ACL rollout. The owner-gated rollout sequence is
+in [redis-credential-network-rollout.md](redis-credential-network-rollout.md).
+
 The dormant `ops/compose/emergency-env-file.override.yml` is a separate,
 owner-approved rollback-only compatibility file. It is not part of normal
 Compose, CI, release, or rollback commands. It must not be used as a routine
@@ -34,8 +40,8 @@ The owner must first authorize a production-readiness check and the subsequent
 approved release. Do not print any environment value while performing it.
 
 1. On OVH, verify by variable name only that the root-only environment file has
-   non-empty `DURABLE_REDIS_URL` and `EPHEMERAL_REDIS_URL`, and has no
-   `REDIS_URL` or legacy-flag entry.
+   non-empty durable and ephemeral Redis ACL usernames, passwords, and URLs,
+   and has no `REDIS_URL` or legacy-flag entry.
 2. Run the scoped doctor/readiness procedure for the selected topology and
    confirm durable and ephemeral Redis identities remain intentionally
    separate.
@@ -50,7 +56,8 @@ approved release. Do not print any environment value while performing it.
    longer needed.
 6. Run the full release gate, deploy only through the approved immutable-image
    procedure, then verify public health, protected diagnostics, login, feed
-   work, required heartbeats, and both Redis workload identities.
+   work, required heartbeats, both Redis workload identities, and the expected
+   network-denial boundaries.
 
 ## Risk of deferral
 

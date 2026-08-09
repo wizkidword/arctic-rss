@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 
 export const TOPOLOGY_MANIFEST_PATH = fileURLToPath(new URL("./topologies.json", import.meta.url))
 
-const REQUIRED_RESPONSIBILITIES = ["ingestion", "ai-mail", "imports", "maintenance"]
+const REQUIRED_RESPONSIBILITIES = ["ingestion", "ai-mail", "imports", "maintenance", "health"]
 const CHAT_RESPONSIBILITY = "chat-events"
 
 function assertStringArray(value, label) {
@@ -50,7 +50,13 @@ function assertTopology(topologyName, topology, manifest) {
 
   const activeWorkers = manifest.workerServices.filter((serviceName) => topology.requiredServices.includes(serviceName))
   assert.ok(activeWorkers.length > 0, `${topologyName} must include at least one worker.`)
-  assert.ok(!(activeWorkers.includes("worker") && activeWorkers.length > 1), `${topologyName} cannot enable worker mode all with split workers.`)
+  const nonAllApplicationWorkers = activeWorkers.filter(
+    (serviceName) => serviceName !== "worker" && serviceName !== "worker-health"
+  )
+  assert.ok(
+    !(activeWorkers.includes("worker") && nonAllApplicationWorkers.length > 0),
+    `${topologyName} cannot enable worker mode all with split workers.`
+  )
 
   const responsibilities = [...REQUIRED_RESPONSIBILITIES, ...(topology.chatEnabled ? [CHAT_RESPONSIBILITY] : [])]
   for (const responsibility of responsibilities) {
@@ -68,6 +74,7 @@ function assertTopology(topologyName, topology, manifest) {
       assert.ok(topology.requiredServices.includes(serviceName), `${topologyName} enables chat without ${serviceName}.`)
     }
     assert.ok(topology.requiredEnvironment.includes("ARCTIC_IRC_TOKEN_SECRET"), `${topologyName} enables chat without ARCTIC_IRC_TOKEN_SECRET.`)
+    assert.ok(topology.requiredEnvironment.includes("CHAT_DATABASE_URL"), `${topologyName} enables chat without CHAT_DATABASE_URL.`)
   } else {
     for (const serviceName of ["chat-gateway", "edge-proxy", "worker-chat-events"]) {
       assert.ok(!topology.requiredServices.includes(serviceName), `${topologyName} enables ${serviceName} without chat.`)

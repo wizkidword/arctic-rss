@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
-import {
-  type ReaderArticle,
-  type StoryClusterArticleProjection,
-} from "./articles"
+import { type StoryClusterArticleProjection } from "./articles"
+import type { StorySignalArticle } from "./story-signals"
 import {
   evaluateStoryClustersForArticleUserWithDependencies,
   listStoryClustersForArticleUserWithClient,
@@ -13,7 +11,7 @@ import {
 
 describe("story cluster reader evaluation", () => {
   it("persists only the selected article's candidate from a capped reader window", async () => {
-    const selectedArticle = createReaderArticle(
+    const selectedArticle = createStorySignalArticle(
       "article-1",
       "Shared story",
       "story"
@@ -26,12 +24,12 @@ describe("story cluster reader evaluation", () => {
     const result = await evaluateStoryClustersForArticleUserWithDependencies({
       articleId: selectedArticle.id,
       dependencies: {
-        getReaderArticle: vi.fn().mockResolvedValue(selectedArticle),
-        listReaderArticles: vi
+        getStorySignalArticle: vi.fn().mockResolvedValue(selectedArticle),
+        listStorySignalArticles: vi
           .fn()
           .mockResolvedValue([
-            createReaderArticle("article-2", "Shared story", "story"),
-            createReaderArticle("article-3", "Unrelated", "unrelated")
+            createStorySignalArticle("article-2", "Shared story", "story"),
+            createStorySignalArticle("article-3", "Unrelated", "unrelated")
           ]),
         persistCandidate
       },
@@ -48,7 +46,7 @@ describe("story cluster reader evaluation", () => {
   })
 
   it("does not reach beyond the declared reader window", async () => {
-    const selectedArticle = createReaderArticle(
+    const selectedArticle = createStorySignalArticle(
       "article-1",
       "Shared story",
       "story"
@@ -57,7 +55,7 @@ describe("story cluster reader evaluation", () => {
     const readerArticles = Array.from(
       { length: STORY_CLUSTER_READER_WINDOW_SIZE },
       (_, index) =>
-        createReaderArticle(
+        createStorySignalArticle(
           `article-${index + 2}`,
           index === STORY_CLUSTER_READER_WINDOW_SIZE - 1
             ? "Shared story"
@@ -71,8 +69,8 @@ describe("story cluster reader evaluation", () => {
     const result = await evaluateStoryClustersForArticleUserWithDependencies({
       articleId: selectedArticle.id,
       dependencies: {
-        getReaderArticle: vi.fn().mockResolvedValue(selectedArticle),
-        listReaderArticles: vi.fn().mockResolvedValue(readerArticles),
+        getStorySignalArticle: vi.fn().mockResolvedValue(selectedArticle),
+        listStorySignalArticles: vi.fn().mockResolvedValue(readerArticles),
         persistCandidate
       },
       userId: "user-1"
@@ -80,6 +78,38 @@ describe("story cluster reader evaluation", () => {
 
     expect(result).toEqual({ created: false, dismissed: false, matched: false })
     expect(persistCandidate).not.toHaveBeenCalled()
+  })
+
+  it("evaluates only signal fields and never touches an article body or sanitizer input", async () => {
+    const selectedArticle = createStorySignalArticle(
+      "article-1",
+      "Shared story",
+      "story"
+    )
+    Object.defineProperty(selectedArticle, "contentHtml", {
+      get() {
+        throw new Error("Story evaluation must not read article HTML.")
+      },
+    })
+
+    await expect(
+      evaluateStoryClustersForArticleUserWithDependencies({
+        articleId: selectedArticle.id,
+        dependencies: {
+          getStorySignalArticle: vi.fn().mockResolvedValue(selectedArticle),
+          listStorySignalArticles: vi
+            .fn()
+            .mockResolvedValue([
+              createStorySignalArticle("article-2", "Shared story", "story"),
+            ]),
+          persistCandidate: vi.fn().mockResolvedValue({
+            created: false,
+            dismissed: false,
+          }),
+        },
+        userId: "user-1",
+      })
+    ).resolves.toEqual({ created: false, dismissed: false, matched: true })
   })
 })
 
@@ -91,7 +121,7 @@ describe("story cluster reader presentation", () => {
       listStoryClustersForArticlesUserWithClient({
         articleIds: ["article-1", "article-2", "article-1"],
         loadArticles: vi.fn(),
-        store: { storyClusterVersion: { findMany } },
+        store: { storyCluster: { findMany } },
         userId: "user-1"
       })
     ).resolves.toEqual([])
@@ -100,22 +130,33 @@ describe("story cluster reader presentation", () => {
       expect.objectContaining({
         take: 24,
         where: expect.objectContaining({
-          cluster: { status: "ACTIVE", userId: "user-1" },
-          members: {
+          status: "ACTIVE",
+          userId: "user-1",
+          versions: {
             some: {
-              articleId: { in: ["article-1", "article-2"] }
+              members: {
+                some: {
+                  articleId: { in: ["article-1", "article-2"] }
+                }
+              }
             }
           }
-        })
+        }),
+        select: expect.objectContaining({
+          versions: expect.objectContaining({
+            orderBy: { version: "desc" },
+            take: 1,
+          }),
+        }),
       })
     )
   })
 
   it("returns only current clusters whose members remain visible to the user", async () => {
     const store = {
-      storyClusterVersion: {
+      storyCluster: {
         findMany: vi.fn().mockResolvedValue([
-          {
+          currentClusterFromVersion({
             analyses: [],
             cluster: { currentVersionNumber: 1, id: "cluster-current" },
             evidence: [
@@ -130,8 +171,8 @@ describe("story cluster reader presentation", () => {
               { articleId: "article-2", id: "member-2" }
             ],
             version: 1
-          },
-          {
+          }),
+          currentClusterFromVersion({
             analyses: [],
             cluster: { currentVersionNumber: 2, id: "cluster-stale" },
             evidence: [
@@ -146,7 +187,7 @@ describe("story cluster reader presentation", () => {
               { articleId: "article-3", id: "member-3" }
             ],
             version: 1
-          }
+          })
         ])
       }
     }
@@ -193,18 +234,90 @@ describe("story cluster reader presentation", () => {
       articleIds: ["article-1", "article-2"],
       userId: "user-1"
     })
-    expect(store.storyClusterVersion.findMany).toHaveBeenCalledWith(
+    expect(store.storyCluster.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         take: 12,
         where: expect.objectContaining({
-          cluster: { status: "ACTIVE", userId: "user-1" },
-          members: { some: { articleId: "article-1" } }
+          status: "ACTIVE",
+          userId: "user-1",
+          versions: { some: { members: { some: { articleId: "article-1" } } } }
+        }),
+        select: expect.objectContaining({
+          versions: expect.objectContaining({ take: 1 })
         })
       })
     )
   })
 
-  it("suppresses a cluster if an old snapshot member is no longer visible", async () => {
+  it("keeps an older current cluster when another cluster has more than twelve historical versions", async () => {
+    const heavilyVersionedCluster = currentClusterFromVersion({
+      analyses: [],
+      cluster: { currentVersionNumber: 14, id: "cluster-heavily-versioned" },
+      evidence: [
+        {
+          leftMember: { articleId: "article-1" },
+          rightMember: { articleId: "article-2" },
+          signal: "CANONICAL_URL" as const,
+        },
+      ],
+      members: [
+        { articleId: "article-1", id: "member-heavy-1" },
+        { articleId: "article-2", id: "member-heavy-2" },
+      ],
+      version: 14,
+    })
+    heavilyVersionedCluster.versions.push(
+      ...Array.from({ length: 13 }, (_, index) => ({
+        ...heavilyVersionedCluster.versions[0]!,
+        version: 13 - index,
+      }))
+    )
+    const olderCurrentCluster = currentClusterFromVersion({
+      analyses: [],
+      cluster: { currentVersionNumber: 1, id: "cluster-older-current" },
+      evidence: [
+        {
+          leftMember: { articleId: "article-1" },
+          rightMember: { articleId: "article-3" },
+          signal: "CANONICAL_URL" as const,
+        },
+      ],
+      members: [
+        { articleId: "article-1", id: "member-older-1" },
+        { articleId: "article-3", id: "member-older-3" },
+      ],
+      version: 1,
+    })
+    const findMany = vi
+      .fn()
+      .mockResolvedValue([heavilyVersionedCluster, olderCurrentCluster])
+
+    const clusters = await listStoryClustersForArticlesUserWithClient({
+      articleIds: ["article-1"],
+      loadArticles: vi.fn().mockResolvedValue([
+        createStoryClusterArticle("article-1", "Selected article", "selected"),
+        createStoryClusterArticle("article-2", "Heavily versioned", "heavy"),
+        createStoryClusterArticle("article-3", "Older current", "older"),
+      ]),
+      maxResults: 2,
+      store: { storyCluster: { findMany } },
+      userId: "user-1",
+    })
+
+    expect(clusters.map((cluster) => cluster.id)).toEqual([
+      "cluster-heavily-versioned",
+      "cluster-older-current",
+    ])
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          versions: expect.objectContaining({ take: 1 }),
+        }),
+      })
+    )
+  })
+
+  it("suppresses a cluster if a member is paused, unsubscribed, or archived", async () => {
     const clusters = await listStoryClustersForArticleUserWithClient({
       articleId: "article-1",
       loadArticles: vi
@@ -213,9 +326,9 @@ describe("story cluster reader presentation", () => {
           createStoryClusterArticle("article-1", "Current article", "current")
         ]),
       store: {
-        storyClusterVersion: {
+        storyCluster: {
           findMany: vi.fn().mockResolvedValue([
-            {
+            currentClusterFromVersion({
               analyses: [],
               cluster: { currentVersionNumber: 1, id: "cluster-hidden-member" },
               evidence: [
@@ -230,7 +343,7 @@ describe("story cluster reader presentation", () => {
                 { articleId: "article-2", id: "member-2" }
               ],
               version: 1
-            }
+            })
           ])
         }
       },
@@ -250,9 +363,9 @@ describe("story cluster reader presentation", () => {
           createStoryClusterArticle("article-2", "Related article", "related")
         ]),
       store: {
-        storyClusterVersion: {
+        storyCluster: {
           findMany: vi.fn().mockResolvedValue([
-            {
+            currentClusterFromVersion({
               analyses: [
                 {
                   claims: [
@@ -265,7 +378,7 @@ describe("story cluster reader presentation", () => {
                   ],
                   model: "gpt-5.4-mini",
                   provider: "openai",
-                  sourceCount: 2
+                  sourceCount: 3
                 }
               ],
               cluster: { currentVersionNumber: 1, id: "cluster-current" },
@@ -281,7 +394,7 @@ describe("story cluster reader presentation", () => {
                 { articleId: "article-2", id: "member-2" }
               ],
               version: 1
-            }
+            })
           ])
         }
       },
@@ -298,34 +411,35 @@ describe("story cluster reader presentation", () => {
       ],
       model: "gpt-5.4-mini",
       provider: "openai",
-      sourceCount: 2
+      sourceCount: 3
     })
   })
 })
 
-function createReaderArticle(
+function createStorySignalArticle(
   id: string,
   title: string,
   path: string
-): ReaderArticle {
+): StorySignalArticle {
   return {
-    aiSummary: null,
-    author: null,
-    contentText: null,
-    feedFaviconUrl: null,
-    feedId: "feed-1",
-    feedTitle: "Example Feed",
+    canonicalUrl: null,
     id,
-    imageUrl: null,
-    isRead: false,
-    isStarred: false,
     publishedAt: new Date("2026-07-28T12:00:00.000Z"),
-    readAt: null,
-    sanitizedContentHtml: null,
-    starredAt: null,
-    summary: null,
     title,
     url: `https://example.com/${path}`
+  }
+}
+
+function currentClusterFromVersion<
+  T extends {
+    cluster: { currentVersionNumber: number; id: string }
+  },
+>(version: T) {
+  const { cluster, ...currentVersion } = version
+
+  return {
+    ...cluster,
+    versions: [currentVersion],
   }
 }
 

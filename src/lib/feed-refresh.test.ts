@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { refreshFeedWithClient } from "./feed-refresh"
+import { articleIngestionFingerprint } from "./ingestion-fingerprint"
+import { parseFeedArticles } from "./feed-articles"
 
 const rssXml = `<?xml version="1.0"?>
 <rss version="2.0">
@@ -29,11 +31,14 @@ function createStore(feedUrl = "https://example.com/rss.xml") {
     feed: {
       findUnique: vi.fn().mockResolvedValue({
         consecutiveFailures: 0,
-        etag: null,
-        feedUrl,
-        id: "feed-1",
-        lastModified: null,
-        refreshIntervalMinutes: 60,
+      etag: null,
+      feedUrl,
+      id: "feed-1",
+      lastError: null,
+      lastFeedSelfUrl: null,
+      lastModified: null,
+      lastResolvedFeedUrl: null,
+      refreshIntervalMinutes: 60,
       }),
       update: vi.fn().mockResolvedValue({}),
     },
@@ -88,28 +93,87 @@ describe("feed refresh", () => {
     expect(result.metrics).toEqual(
       expect.objectContaining({
         conditionalHit: false,
+        changedCount: 0,
+        duplicateInputCount: 0,
         insertedCount: 1,
         parsedCount: 1,
-        skippedCount: 0,
-        updatedCount: 0,
+        unchangedCount: 0,
       })
     )
     expect(store.feed.update).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         lastError: null,
+        lastFeedSelfUrl: null,
         lastFailedAt: null,
         lastFetchedAt: now,
+        lastPermanentRedirectUrl: null,
+        lastResolvedFeedUrl: "https://example.com/rss.xml",
         lastSuccessfulFetchAt: now,
+        lastSourceUrlObservedAt: now,
         consecutiveFailures: 0,
         nextFetchAt: new Date("2026-06-22T13:00:00.000Z"),
-      },
+      }),
       where: { id: "feed-1" },
     })
   })
 
+  it("records source URL evidence and recovery after a successful redirected refresh", async () => {
+    const store = createStore("https://example.com/old.xml")
+    const now = new Date("2026-08-09T14:30:00.000Z")
+    store.feed.findUnique.mockResolvedValue({
+      consecutiveFailures: 2,
+      etag: null,
+      feedUrl: "https://example.com/old.xml",
+      id: "feed-1",
+      lastError: "The URL request timed out.",
+      lastFeedSelfUrl: "https://example.com/previous-self.xml",
+      lastModified: null,
+      lastResolvedFeedUrl: "https://example.com/old.xml",
+      refreshIntervalMinutes: 60,
+    })
+
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        redirects: [
+          {
+            from: "https://example.com/old.xml",
+            status: 308,
+            to: "https://feeds.example.com/current.xml",
+          },
+        ],
+        text: rssXml.replace(
+          "<channel>",
+          '<channel><atom:link href="https://feeds.example.com/self.xml" rel="self" />'
+        ),
+        url: new URL("https://feeds.example.com/current.xml"),
+      }),
+      now: () => now,
+      random: () => 0.5,
+      store,
+    })
+
+    expect(store.feed.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lastFeedSelfUrl: "https://feeds.example.com/self.xml",
+          lastPermanentRedirectUrl: "https://feeds.example.com/current.xml",
+          lastRecoveredAt: now,
+          lastResolvedFeedUrl: "https://feeds.example.com/current.xml",
+          lastSourceUrlObservedAt: now,
+          previousFeedSelfUrl: "https://example.com/previous-self.xml",
+          previousResolvedFeedUrl: "https://example.com/old.xml",
+        }),
+      })
+    )
+  })
+
   it("updates existing feed items in a bounded transaction batch", async () => {
     const store = createStore()
-    store.article.findMany.mockResolvedValue([{ externalId: "item-1" }])
+    store.article.findMany.mockResolvedValue([
+      { externalId: "item-1", ingestionFingerprint: "outdated" },
+    ])
 
     await refreshFeedWithClient({
       feedId: "feed-1",
@@ -136,6 +200,65 @@ describe("feed refresh", () => {
       },
     })
     expect(store.$transaction).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not rewrite an article whose normalized source content is unchanged", async () => {
+    const store = createStore()
+    const [article] = parseFeedArticles(rssXml, "https://example.com/rss.xml")
+    store.article.findMany.mockResolvedValue([
+      {
+        externalId: "item-1",
+        ingestionFingerprint: articleIngestionFingerprint(article),
+      },
+    ])
+
+    const result = await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: rssXml,
+        url: new URL("https://example.com/rss.xml"),
+      }),
+      store,
+    })
+
+    expect(store.article.createMany).not.toHaveBeenCalled()
+    expect(store.article.update).not.toHaveBeenCalled()
+    expect(result.metrics).toEqual(
+      expect.objectContaining({
+        changedCount: 0,
+        insertedCount: 0,
+        unchangedCount: 1,
+      })
+    )
+  })
+
+  it("persists a corrected article only when its fingerprint changes", async () => {
+    const store = createStore()
+    const [original] = parseFeedArticles(rssXml, "https://example.com/rss.xml")
+    store.article.findMany.mockResolvedValue([
+      {
+        externalId: "item-1",
+        ingestionFingerprint: articleIngestionFingerprint(original),
+      },
+    ])
+
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: vi.fn().mockResolvedValue({
+        contentType: "application/rss+xml",
+        text: rssXml.replace("Stored Article", "Corrected Article"),
+        url: new URL("https://example.com/rss.xml"),
+      }),
+      store,
+    })
+
+    expect(store.article.createMany).not.toHaveBeenCalled()
+    expect(store.article.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ title: "Corrected Article" }),
+      })
+    )
   })
 
   it("uses stored validators and skips parsing after a 304 response", async () => {
@@ -211,6 +334,7 @@ describe("feed refresh", () => {
       text: `<!doctype html>
         <html>
           <head>
+            <link rel="canonical" href="/canonical-useful-thing" />
             <meta name="description" content="A useful thing for careful readers." />
             <meta property="og:image" content="/preview.jpg" />
           </head>
@@ -241,6 +365,7 @@ describe("feed refresh", () => {
       expect.objectContaining({
         data: [
           expect.objectContaining({
+            canonicalUrl: "https://example.com/canonical-useful-thing",
             contentText:
               "Useful Thing This is the full article body that Hacker News did not include in its RSS item. It has enough readable text to be worth showing inside Arctic RSS.",
             imageUrl: "https://example.com/preview.jpg",

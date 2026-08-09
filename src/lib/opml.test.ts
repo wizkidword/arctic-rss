@@ -182,7 +182,7 @@ describe("OPML import", () => {
       url: "https://xkcd.com/atom.xml",
       userId: "user-1",
     })
-    expect(enqueueFeedRefresh).toHaveBeenCalledWith("feed-1")
+    expect(enqueueFeedRefresh).toHaveBeenCalledWith("feed-1", { trigger: "opml-retry" })
     expect(store.importJob.update).toHaveBeenCalledWith({
       data: {
         addedFeeds: 1,
@@ -238,5 +238,53 @@ describe("OPML import", () => {
       totalFeeds: 1,
       errors: [],
     })
+  })
+
+  it("does not enqueue a duplicate OPML refresh when the initial import succeeded", async () => {
+    const store = {
+      folder: {
+        create: vi.fn(),
+        findFirst: vi.fn(),
+      },
+      importJob: {
+        create: vi.fn().mockResolvedValue({ id: "job-1" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    }
+    const enqueueFeedRefresh = vi.fn()
+    const subscribeToFeed = vi.fn().mockResolvedValue({
+      feedId: "feed-1",
+      initialArticleCount: 0,
+    })
+
+    await importOpmlWithClient({
+      enqueueFeedRefresh,
+      opmlXml: `
+        <opml version="1.0">
+          <body>
+            <outline text="xkcd" xmlUrl="https://xkcd.com/atom.xml" />
+          </body>
+        </opml>
+      `,
+      store,
+      subscribeToFeed,
+      userId: "user-1",
+    })
+
+    expect(enqueueFeedRefresh).not.toHaveBeenCalled()
+  })
+
+  it("does not expand custom entities and rejects repeated doctypes", () => {
+    const [entry] = parseOpmlSubscriptions(
+      `<!DOCTYPE opml [<!ENTITY url "https://attacker.example/feed.xml">]>
+      <opml><body><outline text="Safe &amp; &url;" xmlUrl="https://example.com/feed.xml" /></body></opml>`
+    )
+
+    expect(entry.title).toBe("Safe & &url;")
+    expect(() =>
+      parseOpmlSubscriptions(
+        "<!DOCTYPE opml><!DOCTYPE opml><opml><body><outline xmlUrl=\"https://example.com/feed.xml\" /></body></opml>"
+      )
+    ).toThrow()
   })
 })

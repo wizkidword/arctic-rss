@@ -12,6 +12,7 @@
     "worker-imports",
     "worker-maintenance",
     "worker-chat-events",
+    "worker-health",
     "chat-gateway",
     "edge-proxy",
     "cloudflared"
@@ -22,7 +23,8 @@
     "worker-ai-mail",
     "worker-imports",
     "worker-maintenance",
-    "worker-chat-events"
+    "worker-chat-events",
+    "worker-health"
   ],
   "tunnelVariant": {
     "profiles": ["tunnel"],
@@ -34,72 +36,76 @@
   },
   "topologies": {
     "all-in-one": {
-      "profiles": ["all-in-one"],
-      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker"],
+      "profiles": ["all-in-one", "health"],
+      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker", "worker-health"],
       "optionalServices": ["cloudflared"],
       "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL"],
       "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
-      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker"],
-      "releaseServices": ["web", "worker"],
-      "rollbackServices": ["web", "worker"],
+      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker", "worker-health"],
+      "releaseServices": ["web", "worker", "worker-health"],
+      "rollbackServices": ["web", "worker", "worker-health"],
       "workerOwnership": {
         "ingestion": "worker",
         "ai-mail": "worker",
         "imports": "worker",
         "maintenance": "worker",
+        "health": "worker-health",
         "chat-events": "worker"
       },
       "chatEnabled": false
     },
     "all-in-one-with-chat": {
-      "profiles": ["all-in-one", "chat"],
-      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker", "chat-gateway", "edge-proxy"],
+      "profiles": ["all-in-one", "health", "chat"],
+      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker", "worker-health", "chat-gateway", "edge-proxy"],
       "optionalServices": ["cloudflared"],
-      "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL", "ARCTIC_IRC_TOKEN_SECRET"],
+      "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL", "CHAT_DATABASE_URL", "ARCTIC_IRC_TOKEN_SECRET"],
       "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
-      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker", "chat-gateway", "edge-proxy"],
-      "releaseServices": ["web", "worker", "chat-gateway", "edge-proxy"],
-      "rollbackServices": ["web", "worker", "chat-gateway", "edge-proxy"],
+      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker", "worker-health", "chat-gateway", "edge-proxy"],
+      "releaseServices": ["web", "worker", "worker-health", "chat-gateway", "edge-proxy"],
+      "rollbackServices": ["web", "worker", "worker-health", "chat-gateway", "edge-proxy"],
       "workerOwnership": {
         "ingestion": "worker",
         "ai-mail": "worker",
         "imports": "worker",
         "maintenance": "worker",
+        "health": "worker-health",
         "chat-events": "worker"
       },
       "chatEnabled": true
     },
     "split": {
-      "profiles": ["split-workers"],
-      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance"],
+      "profiles": ["split-workers", "health"],
+      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-health"],
       "optionalServices": ["cloudflared"],
       "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL"],
       "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
-      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance"],
-      "releaseServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance"],
-      "rollbackServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance"],
-      "workerOwnership": {
-        "ingestion": "worker-ingestion",
-        "ai-mail": "worker-ai-mail",
-        "imports": "worker-imports",
-        "maintenance": "worker-maintenance"
-      },
-      "chatEnabled": false
-    },
-    "split-with-chat": {
-      "profiles": ["split-workers", "chat-workers", "chat"],
-      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-chat-events", "chat-gateway", "edge-proxy"],
-      "optionalServices": ["cloudflared"],
-      "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL", "ARCTIC_IRC_TOKEN_SECRET"],
-      "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
-      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-chat-events", "chat-gateway", "edge-proxy"],
-      "releaseServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-chat-events", "chat-gateway", "edge-proxy"],
-      "rollbackServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-health"],
+      "releaseServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-health"],
+      "rollbackServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-health"],
       "workerOwnership": {
         "ingestion": "worker-ingestion",
         "ai-mail": "worker-ai-mail",
         "imports": "worker-imports",
         "maintenance": "worker-maintenance",
+        "health": "worker-health"
+      },
+      "chatEnabled": false
+    },
+    "split-with-chat": {
+      "profiles": ["split-workers", "health", "chat-workers", "chat"],
+      "requiredServices": ["postgres", "redis", "redis-ephemeral", "migrate", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-health", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "optionalServices": ["cloudflared"],
+      "requiredEnvironment": ["DATABASE_URL", "DURABLE_REDIS_URL", "EPHEMERAL_REDIS_URL", "MIGRATE_DATABASE_URL", "CHAT_DATABASE_URL", "ARCTIC_IRC_TOKEN_SECRET"],
+      "requiredRedisWorkloads": ["durable-queues", "ephemeral-security-and-transport"],
+      "requiredHealthServices": ["postgres", "redis", "redis-ephemeral", "web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-health", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "releaseServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-health", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "rollbackServices": ["web", "worker-ingestion", "worker-ai-mail", "worker-imports", "worker-maintenance", "worker-health", "worker-chat-events", "chat-gateway", "edge-proxy"],
+      "workerOwnership": {
+        "ingestion": "worker-ingestion",
+        "ai-mail": "worker-ai-mail",
+        "imports": "worker-imports",
+        "maintenance": "worker-maintenance",
+        "health": "worker-health",
         "chat-events": "worker-chat-events"
       },
       "chatEnabled": true

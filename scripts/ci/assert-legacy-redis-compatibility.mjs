@@ -17,6 +17,8 @@ const expectedFiles = [
   "docs/operations/current-production-inventory.md",
   "docs/operations/deployment-rollback-runbook.md",
   "docs/operations/legacy-redis-compatibility-retirement.md",
+  "docs/operations/redis-credential-network-rollout.md",
+  "docs/operations/service-role-environment-boundaries.md",
   "docs/superpowers/specs/2026-06-24-production-deployment-design.md",
   "scripts/ci/assert-legacy-redis-compatibility.mjs",
   "src/lib/production-security.test.ts",

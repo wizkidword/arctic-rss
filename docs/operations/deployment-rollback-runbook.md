@@ -18,10 +18,12 @@ reviewed target commit are mandatory first.
   committed, reviewed Prisma migrations.
 - Before the migration service runs, the approved release script compares the
   staged migration names with the current release and runs the dependency-free
-  migration-risk classifier for every new migration. A flagged migration must
-  have a complete record under
-  [`migration-risk`](migration-risk) before Prisma is allowed to start. This
-  is an owner-decision gate, not an automatic approval.
+  migration-risk verifier for every new migration. Every new migration must
+  have a complete record under [`migration-risk`](migration-risk), bound to
+  its exact SQL SHA-256. Classifier findings are advisory prompts, not a
+  safety verdict; a migration with no classifier finding still needs the
+  record before Prisma is allowed to start. This is an owner-decision gate,
+  not an automatic approval.
 - The migration service has its own Docker image. Rebuild that image from the
   staged release immediately before running it; `docker compose run migrate`
   alone may reuse an older image that cannot see a newly committed migration.
@@ -43,12 +45,17 @@ data changes, direct non-null additions, unstaged foreign keys, and enum
 replacement. A safe result means no recognized high-risk pattern was found; it
 does not prove the SQL is safe for a material production table.
 
-For each flagged migration, create
+For each new migration, create
 `docs/operations/migration-risk/<migration-name>.md` with all required fields:
-migration name, author/date, affected tables, row and size estimates, lock and
-rewrite risk, duration, online strategy, backfill and validation plans,
-maintenance decision, rollback and forward recovery, backup evidence, owner
-approval, and production result.
+migration name; exact migration SQL SHA-256; author/date; affected tables;
+measured row counts and table/index sizes; lock and rewrite risk; duration;
+online strategy; backfill and validation plans; maintenance decision; rollback
+and forward recovery; backup evidence ID requirement; approver; approval
+timestamp; `Production ready: true|false`; and production result. A
+`Production ready: true` record cannot contain “not recorded,” “not measured,”
+“not verified,” “retrospective only,” or “pending evidence.” Historical
+records may describe missing old evidence only when `Production ready: false`;
+they never approve a future equivalent migration.
 
 Use expand-and-contract for material data changes: expand the schema, backfill
 bounded resumable batches outside the schema transaction, create or validate
@@ -67,20 +74,20 @@ normal backup gate and a typed deployment approval have been recorded.
 1. Preserve the existing `redis-data` volume and do not create a backup policy
    for `redis-ephemeral`: only the durable Redis has recoverable state.
 2. Without printing values, add `DURABLE_REDIS_URL` and
-   `EPHEMERAL_REDIS_URL` to the root-only production `.env`. Both URLs must
-   use the existing `REDIS_PASSWORD`; they target `redis` and
-   `redis-ephemeral` respectively. `REDIS_URL` is deprecated; production
-   requires those workload-specific values and rejects a shared target unless
-   `ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION=true` is a reviewed,
-   temporary migration exception. Remove that exception and `REDIS_URL` before
-   Phase 5 begins.
+   `EPHEMERAL_REDIS_URL` to the root-only production `.env`, using distinct
+   `DURABLE_REDIS_USERNAME`/`DURABLE_REDIS_PASSWORD` and
+   `EPHEMERAL_REDIS_USERNAME`/`EPHEMERAL_REDIS_PASSWORD` ACL pairs. Each URL
+   targets its matching service (`redis` or `redis-ephemeral`). `REDIS_URL` is
+   deprecated; normal Compose services never receive it. Use the explicit,
+   temporary direct-process compatibility exception only under the
+   [credential-and-network rollout runbook](redis-credential-network-rollout.md).
 3. Confirm the new keys exist, render the staged Compose file, then start the
    data services in order. Do not start the application containers until both
    Redis health checks pass:
 
    ```bash
    cd "$APP_DIR"
-   for key in DURABLE_REDIS_URL EPHEMERAL_REDIS_URL; do
+   for key in DURABLE_REDIS_USERNAME DURABLE_REDIS_PASSWORD DURABLE_REDIS_URL EPHEMERAL_REDIS_USERNAME EPHEMERAL_REDIS_PASSWORD EPHEMERAL_REDIS_URL; do
      grep -q "^${key}=." .env || {
        echo "missing required Redis migration key: ${key}" >&2
        exit 1
@@ -119,6 +126,8 @@ chat-enabled split topology:
 - `worker-maintenance`: schedulers, cleanup, reconciliation, retention, and
   source-health maintenance. A durable Redis lease permits only one scheduler
   holder at a time.
+- `worker-health`: the only worker allowed to inspect both Redis workloads and
+  the chat gateway; it publishes the shared public-health snapshot.
 - `worker-chat-events`: chat article integration, bot scheduling, and the
   transactional outbox publisher.
 
@@ -132,8 +141,8 @@ owners:
 cd "$APP_DIR"
 docker compose --profile all-in-one stop worker
 docker compose --profile all-in-one rm -f worker
-docker compose --profile split-workers up -d \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance
+docker compose --profile split-workers --profile health up -d \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-health
 docker compose ps
 ```
 
@@ -144,11 +153,11 @@ queue-ownership concern appears, stop the split services and recreate the
 safe compatibility worker:
 
 ```bash
-docker compose --profile split-workers stop \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance
-docker compose --profile split-workers rm -f \
-  worker-ingestion worker-ai-mail worker-imports worker-maintenance
-docker compose --profile all-in-one up -d --no-deps --force-recreate worker
+docker compose --profile split-workers --profile health stop \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-health
+docker compose --profile split-workers --profile health rm -f \
+  worker-ingestion worker-ai-mail worker-imports worker-maintenance worker-health
+docker compose --profile all-in-one --profile health up -d --no-deps --force-recreate worker worker-health
 ```
 
 Do not activate both forms as a steady state. BullMQ may safely coordinate
@@ -357,7 +366,7 @@ without displaying their values:
 
 ```bash
 cd "$APP_DIR"
-for key in POSTGRES_PASSWORD DATABASE_URL MIGRATE_DATABASE_URL REDIS_PASSWORD AUTH_SECRET; do
+for key in POSTGRES_PASSWORD DATABASE_URL MIGRATE_DATABASE_URL DURABLE_REDIS_USERNAME DURABLE_REDIS_PASSWORD EPHEMERAL_REDIS_USERNAME EPHEMERAL_REDIS_PASSWORD AUTH_SECRET; do
   if ! grep -q "^${key}=." .env; then
     echo "missing required environment key: ${key}" >&2
     exit 1

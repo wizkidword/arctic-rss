@@ -176,7 +176,8 @@ function Get-ReleaseTopology {
   $workerServices = @($manifest.workerServices | ForEach-Object { [string]$_ })
   $requiredServices = @($topology.requiredServices | ForEach-Object { [string]$_ })
   $activeWorkers = @($requiredServices | Where-Object { $workerServices -contains $_ })
-  if ($activeWorkers.Count -eq 0 -or (($activeWorkers -contains "worker") -and $activeWorkers.Count -gt 1)) {
+  $nonAllApplicationWorkers = @($activeWorkers | Where-Object { $_ -notin @("worker", "worker-health") })
+  if ($activeWorkers.Count -eq 0 -or (($activeWorkers -contains "worker") -and $nonAllApplicationWorkers.Count -gt 0)) {
     throw "The selected topology has ambiguous worker ownership."
   }
 
@@ -361,6 +362,7 @@ function New-OffHostReleaseImages {
     "worker-imports" = "Worker"
     "worker-maintenance" = "Worker"
     "worker-chat-events" = "Worker"
+    "worker-health" = "Worker"
     "chat-gateway" = "ChatGateway"
     "edge-proxy" = "EdgeProxy"
   }
@@ -635,6 +637,7 @@ if ($commit -ne $originMain) {
 
 Invoke-LocalCheck -Label "Checking patch integrity" -FilePath "git" -Arguments @("diff", "--check")
 Invoke-LocalCheck -Label "Validating selected topology" -FilePath "npm" -Arguments @("run", "topology:validate", "--", "--topology", $releaseTopology.Name)
+Invoke-LocalCheck -Label "Verifying database connection budgets" -FilePath "npm" -Arguments @("run", "db:connection-budgets:verify")
 Invoke-LocalCheck -Label "Running unit tests" -FilePath "npm" -Arguments @("test")
 Invoke-LocalCheck -Label "Checking TypeScript" -FilePath "npm" -Arguments @("run", "typecheck")
 Invoke-LocalCheck -Label "Running lint" -FilePath "npm" -Arguments @("run", "lint")
@@ -772,11 +775,11 @@ backup_result="$(sudo -n systemctl show arctic-rss-backup.service -p Result --va
 backup_status="$(sudo -n systemctl show arctic-rss-backup.service -p ExecMainStatus --value)"
 test "$backup_result" = "success"
 test "$backup_status" = "0"
-backup_id="$(sudo -n /usr/local/sbin/arctic-rss-latest-backup)"
-test "$backup_id" != ""
-printf 'BACKUP_ID=%s\n' "$backup_id"
+backup_evidence_id="$(sudo -n /usr/local/sbin/arctic-rss-latest-backup)"
+test "$backup_evidence_id" != ""
+printf 'BACKUP_EVIDENCE_ID=%s\n' "$backup_evidence_id"
 '@
-$backupId = Get-ReleaseMarker -Output $backupOutput -Name "BACKUP_ID"
+$backupEvidenceId = Get-ReleaseMarker -Output $backupOutput -Name "BACKUP_EVIDENCE_ID"
 
 $archivePath = Join-Path ([System.IO.Path]::GetTempPath()) "arctic-rss-$shortSha-$PID.tar.gz"
 try {
@@ -1118,7 +1121,7 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
   $recordPath = Join-Path $config.ReleaseRecordDirectory $recordName
   [ordered]@{
     archiveSha256 = $archiveHash
-    backupId = $backupId
+    backupEvidenceId = $backupEvidenceId
     commit = $commit
     deployedAtUtc = $deployedAt
     localImageArchiveBytes = $offHostImages.ArchiveBytes

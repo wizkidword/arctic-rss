@@ -69,7 +69,7 @@ export function StoryClusterAnalysis({
       {cluster.analysis ? (
         <StoredAnalysis
           analysis={cluster.analysis}
-          sourceCount={cluster.members.length}
+          visibleSourceCount={cluster.members.length}
           sourcesByMemberId={sourcesByMemberId}
         />
       ) : (
@@ -101,17 +101,17 @@ export function StoryClusterAnalysis({
 
 function StoredAnalysis({
   analysis,
-  sourceCount,
+  visibleSourceCount,
   sourcesByMemberId,
 }: {
   analysis: StoryClusterAnalysisPresentation
-  sourceCount: number
+  visibleSourceCount: number
   sourcesByMemberId: Map<string, StoryClusterPresentationMember>
 }) {
   return (
     <div className="mt-3">
       <p className="text-xs text-muted-foreground">
-        Generated with {analysis.provider} / {analysis.model} from {analysis.sourceCount < sourceCount ? "a chronological sample of " : "all "}{analysis.sourceCount} of {sourceCount} currently visible {sourceCount === 1 ? "source" : "sources"}.
+        Generated with {analysis.provider} / {analysis.model} using {analysis.sourceCount} {analysis.sourceCount === 1 ? "source" : "sources"} at generation. {visibleSourceCount} {visibleSourceCount === 1 ? "source is" : "sources are"} currently visible in this group.
       </p>
       <ol className="mt-3 space-y-3">
         {analysis.claims.map((claim, index) => (

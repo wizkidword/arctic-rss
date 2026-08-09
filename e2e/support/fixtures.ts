@@ -6,6 +6,10 @@ export const e2eCredentials = {
     email: "admin@e2e.arcticrss.test",
     name: "E2E Admin",
   },
+  collection: {
+    email: "collection@e2e.arcticrss.test",
+    name: "E2E Collection Reader",
+  },
   oauth: {
     email: "oauth@e2e.arcticrss.test",
     name: "E2E OAuth Reader",

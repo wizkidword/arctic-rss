@@ -1,4 +1,3 @@
-import { stat } from "node:fs/promises"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 
@@ -9,6 +8,7 @@ import {
   PRODUCTION_SERVICE_ROLES,
   type ProductionServiceRole,
 } from "./production-security"
+import { inspectBackupEvidence, type BackupEvidenceReport } from "./backup-evidence"
 import { inspectQueueReadiness } from "./queue-readiness"
 import { durableRedisConnectionOptions } from "./redis-config"
 import { getRuntimeTopology } from "./runtime-topology"
@@ -59,7 +59,7 @@ export type DoctorCommand = {
 }
 
 export type DoctorReport = {
-  backupMetadata: { ageMs: number | null; status: "available" | "unconfigured" | "unavailable" }
+  backupEvidence: BackupEvidenceReport
   chatGateway: "disabled" | "failed" | "ok" | "unavailable"
   databaseRoles: { migration: string | null; runtime: string | null }
   migrationStatus: "not-configured" | "pending-or-unavailable" | "up-to-date"
@@ -98,7 +98,7 @@ export async function collectDoctorReport(
   const includeRuntimeDiagnostics = scope === "runtime" || scope === "release"
   const includeHostDiagnostics = scope === "host" || scope === "release"
   const includeMigrationDiagnostics = scope === "migrations" || scope === "release"
-  const [queueReadiness, migrationStatus, backupMetadata, redisIdentity] = await Promise.all([
+  const [queueReadiness, migrationStatus, backupEvidence, redisIdentity] = await Promise.all([
     includeRuntimeDiagnostics
       ? inspectQueueReadiness().catch(() => unavailableQueueReadiness())
       : Promise.resolve(unavailableQueueReadiness()),
@@ -106,8 +106,8 @@ export async function collectDoctorReport(
       ? inspectMigrationStatus(environment)
       : Promise.resolve("not-configured" as const),
     includeHostDiagnostics
-      ? inspectBackupMetadata(environment)
-      : Promise.resolve({ ageMs: null, status: "unconfigured" as const }),
+      ? inspectBackupEvidence(environment)
+      : Promise.resolve({ ageMs: null, restoreTestAgeMs: null, status: "unconfigured" as const }),
     includeHostDiagnostics
       ? inspectRedisServerIdentity(environment)
       : Promise.resolve({
@@ -126,7 +126,7 @@ export async function collectDoctorReport(
       }
 
   return {
-    backupMetadata,
+    backupEvidence,
     chatGateway: includeRuntimeDiagnostics
       ? await inspectChatGateway(topology?.chatEnabled ?? false, environment)
       : "disabled",
@@ -287,9 +287,9 @@ export function evaluateDoctorReport(
 
   if (includesHost) {
     checks.push({
-      name: "host.backup-metadata",
+      name: "host.backup-evidence",
       required: true,
-      status: report.backupMetadata.status === "available" ? "OK" : "FAILURE",
+      status: report.backupEvidence.status === "available" ? "OK" : "FAILURE",
     })
     checks.push({
       name: "host.redis-server-identity",
@@ -598,24 +598,6 @@ async function inspectMigrationStatus(environment: DoctorEnvironment) {
     return "up-to-date" as const
   } catch {
     return "pending-or-unavailable" as const
-  }
-}
-
-async function inspectBackupMetadata(environment: DoctorEnvironment) {
-  const metadataPath = environment.ARCTIC_RSS_BACKUP_METADATA_PATH?.trim()
-
-  if (!metadataPath) {
-    return { ageMs: null, status: "unconfigured" as const }
-  }
-
-  try {
-    const metadata = await stat(metadataPath)
-    return {
-      ageMs: Math.max(0, Date.now() - metadata.mtimeMs),
-      status: "available" as const,
-    }
-  } catch {
-    return { ageMs: null, status: "unavailable" as const }
   }
 }
 

@@ -1,7 +1,10 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
-import { requireAuthenticatedUser, requireFreshAdmin } from "@/lib/authorization"
+import {
+  requireFreshAdmin,
+  withAuthenticatedRequestScope,
+} from "@/lib/authorization"
 import { isChatEnabled } from "@/lib/chat/feature-flags"
 import { listChatReports } from "@/lib/chat/moderation"
 import { AdminChatReportResolution } from "@/components/admin-chat-report-resolution"
@@ -9,13 +12,14 @@ import { AdminChatReportResolution } from "@/components/admin-chat-report-resolu
 export const dynamic = "force-dynamic"
 
 export default async function ChatReportsAdminPage() {
-  const session = await requireAuthenticatedUser().catch(() => null)
+  const admin = await withAuthenticatedRequestScope((session) =>
+    requireFreshAdmin(session).catch(() => null)
+  ).catch(() => undefined)
 
-  if (!session?.user?.id) {
+  if (admin === undefined) {
     redirect("/login")
   }
 
-  const admin = await requireFreshAdmin(session).catch(() => null)
   if (!admin) {
     redirect("/app")
   }

@@ -4,9 +4,10 @@ import {
   buildStoryClusterCandidates,
   STORY_CLUSTER_POLICY_VERSION,
   STORY_CLUSTER_TITLE_TIME_WINDOW_MS,
+  type StoryClusterCandidateArticle,
 } from "./story-cluster-policy"
 
-const articles = [
+const articles: StoryClusterCandidateArticle[] = [
   {
     canonicalUrl: "https://publisher.example/story?utm_source=feed",
     id: "article-canonical-a",
@@ -22,12 +23,14 @@ const articles = [
     url: "https://reader.example/outbound-b",
   },
   {
+    canonicalUrl: null,
     id: "article-title-a",
     publishedAt: new Date("2026-07-28T12:00:00.000Z"),
     title: "Arctic News: Event Update!",
     url: "https://first.example/event",
   },
   {
+    canonicalUrl: null,
     id: "article-title-b",
     publishedAt: new Date(
       new Date("2026-07-28T12:00:00.000Z").getTime() +
@@ -37,6 +40,7 @@ const articles = [
     url: "https://second.example/event",
   },
   {
+    canonicalUrl: null,
     id: "article-title-late",
     publishedAt: new Date(
       new Date("2026-07-28T12:00:00.000Z").getTime() +
@@ -47,6 +51,7 @@ const articles = [
     url: "https://third.example/event",
   },
   {
+    canonicalUrl: null,
     id: "article-unrelated",
     publishedAt: new Date("2026-07-28T12:00:00.000Z"),
     title: "Different coverage",

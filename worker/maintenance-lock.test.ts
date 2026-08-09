@@ -292,4 +292,43 @@ describe("maintenance lock", () => {
     await expect(lock.run(operation)).resolves.toEqual({ acquired: false })
     expect(operation).not.toHaveBeenCalled()
   })
+
+  it("waits for a ready control plane and abandons an acquisition that loses readiness", async () => {
+    const redis = client("OK")
+    let ready = false
+    const lock = createMaintenanceLock({
+      client: redis,
+      isReady: () => ready,
+      tokenFactory: () => "owner",
+    })
+
+    await expect(lock.run(async () => "too early")).resolves.toEqual({ acquired: false })
+    expect(redis.set).not.toHaveBeenCalled()
+
+    ready = true
+    redis.set.mockImplementationOnce(async () => {
+      ready = false
+      return "OK"
+    })
+    const operation = vi.fn()
+
+    await expect(lock.run(operation)).rejects.toMatchObject({ reason: "connection_lost" })
+    expect(operation).not.toHaveBeenCalled()
+    expect(redis.eval).not.toHaveBeenCalled()
+  })
+
+  it("permits a later maintenance tick after Redis recovery without duplicate ownership", async () => {
+    const redis = client("OK")
+    let ready = false
+    const lock = createMaintenanceLock({ client: redis, isReady: () => ready })
+
+    await expect(lock.run(async () => "first")).resolves.toEqual({ acquired: false })
+
+    ready = true
+    await expect(lock.run(async () => "recovered")).resolves.toEqual({
+      acquired: true,
+      value: "recovered",
+    })
+    expect(redis.set).toHaveBeenCalledOnce()
+  })
 })

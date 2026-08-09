@@ -1,7 +1,6 @@
 import "dotenv/config"
 
 import { Worker } from "bullmq"
-import Redis from "ioredis"
 
 import { cleanupExpiredAuthTokens } from "../src/lib/auth-token-maintenance"
 import {
@@ -29,6 +28,7 @@ import {
 import { processAiDigest } from "../src/lib/ai-digests"
 import { reconcileExpiredAiUsageOperations } from "../src/lib/ai-usage"
 import { getPrisma } from "../src/lib/db"
+import { writeHealthSnapshot } from "../src/lib/health-snapshot"
 import { refreshFeed } from "../src/lib/feed-refresh"
 import {
   processChatArticleIntegration,
@@ -54,6 +54,7 @@ import {
   FEED_REFRESH_QUEUE_NAME,
   type FeedRefreshJobData,
 } from "../src/lib/feed-refresh-queue"
+import type { SourceRefreshTrigger } from "../src/lib/source-refresh-queue"
 import { durableRedisConnectionOptions } from "../src/lib/redis-config"
 import { refreshPodcast } from "../src/lib/podcast-refresh"
 import {
@@ -62,6 +63,7 @@ import {
   PODCAST_REFRESH_QUEUE_NAME,
   type PodcastRefreshJobData,
 } from "../src/lib/podcast-refresh-queue"
+import { recordSourceRefreshFailure } from "../src/lib/source-refresh-failures"
 import {
   enqueueDueFeedRefreshes,
   enqueueDuePodcastRefreshes,
@@ -73,7 +75,9 @@ import {
   savedMonitorSettings,
 } from "../src/lib/saved-monitors"
 import { assertSecureProductionConfiguration } from "../src/lib/production-security"
+import { getRuntimeTopology } from "../src/lib/runtime-topology"
 import { cleanupExpiredSecurityEvents } from "../src/lib/security-event-maintenance"
+import { reportSourceOrphanRetention } from "../src/lib/source-orphan-retention"
 import { processSmartDigestEmailDelivery } from "../src/lib/smart-digest-delivery"
 import {
   closeSmartDigestEmailQueue,
@@ -88,6 +92,7 @@ import {
   type SmartDigestJobData,
 } from "../src/lib/smart-digest-queue"
 import { processSmartDigestRule } from "../src/lib/smart-digest-processing"
+import { checkSystemHealth, type SystemHealthResult } from "../src/lib/system-health"
 import {
   clearWorkerHeartbeat,
   maintenanceTickMaxAgeMs,
@@ -104,6 +109,8 @@ import {
   workerHeartbeatPath,
 } from "./mode"
 import { createMaintenanceLock, type MaintenanceLease } from "./maintenance-lock"
+import { MaintenanceSchedule } from "./maintenance-schedule"
+import { createWorkerControlPlaneRedis } from "./control-plane-redis"
 import { logWorkerMemory } from "./memory-log"
 import { startWorkerHeartbeat } from "./heartbeat"
 import { createManagedWorkerTargets } from "./managed-workers"
@@ -113,17 +120,36 @@ assertSecureProductionConfiguration(process.env, `worker-${workerMode}`)
 const heartbeatPath = workerHeartbeatPath(workerMode)
 const heartbeatInstanceId = process.env.HOSTNAME?.trim() || `worker-${process.pid}`
 const heartbeatVersion = process.env.ARCTIC_RSS_BUILD_SHA?.trim() || "unknown"
-const durableHeartbeatStore = new Redis(durableRedisConnectionOptions().url, {
-  connectTimeout: 2_000,
-  enableOfflineQueue: false,
-  maxRetriesPerRequest: 0,
-  retryStrategy: () => null,
+const runsHealthSnapshotProducer = workerMode === "health"
+let controlPlaneRestartRequested = false
+
+function requestControlPlaneRestart() {
+  if (controlPlaneRestartRequested) {
+    return
+  }
+
+  controlPlaneRestartRequested = true
+  console.error(
+    JSON.stringify({
+      event: "worker_control_plane_redis",
+      outcome: "recovery_grace_expired",
+    })
+  )
+  void shutdown()
+    .catch((error) => {
+      console.error(`[worker] control-plane shutdown failed: ${schedulerErrorMessage(error)}`)
+    })
+    .finally(() => process.exit(1))
+}
+
+const durableHeartbeatControl = createWorkerControlPlaneRedis({
+  name: "durable-heartbeat",
+  onGraceExpired: requestControlPlaneRestart,
 })
-durableHeartbeatStore.on("error", () => {
-  // The retry loop below records a redacted operational error without secrets.
-})
-const maintenanceLock = runsWorkerResponsibility(workerMode, "maintenance")
-  ? createMaintenanceLock()
+const durableHeartbeatStore = durableHeartbeatControl.client
+const maintenanceLock =
+  runsWorkerResponsibility(workerMode, "maintenance") || runsHealthSnapshotProducer
+  ? createMaintenanceLock({ onRecoveryGraceExpired: requestControlPlaneRestart })
   : undefined
 
 const {
@@ -151,6 +177,30 @@ const chatEventOutboxIntervalMs = readClampedPositiveInteger({
 })
 const WORKER_HEARTBEAT_INTERVAL_MS = 30_000
 const WORKER_MEMORY_LOG_INTERVAL_MS = 5 * 60_000
+const HEALTH_SNAPSHOT_INTERVAL_MS = 20_000
+const HEALTH_SNAPSHOT_INITIAL_DELAY_MS = 5_000
+const SOURCE_ORPHAN_REPORT_INTERVAL_MS = 24 * 60 * 60_000
+const authTokenMaintenanceSchedule = new MaintenanceSchedule({
+  normalIntervalMs: authTokenMaintenanceIntervalMs,
+})
+const chatRetentionMaintenanceSchedule = new MaintenanceSchedule({
+  normalIntervalMs: chatRetentionIntervalMs,
+})
+const securityEventMaintenanceSchedule = new MaintenanceSchedule({
+  normalIntervalMs: securityEventMaintenanceIntervalMs,
+})
+const aiOperationReconciliationSchedule = new MaintenanceSchedule({
+  normalIntervalMs: schedulerIntervalMs,
+})
+const savedMonitorMaintenanceSchedule = new MaintenanceSchedule({
+  normalIntervalMs: schedulerIntervalMs,
+})
+const sourceOrphanReportSchedule = new MaintenanceSchedule({
+  normalIntervalMs: SOURCE_ORPHAN_REPORT_INTERVAL_MS,
+})
+const healthSnapshotSchedule = new MaintenanceSchedule({
+  normalIntervalMs: HEALTH_SNAPSHOT_INTERVAL_MS,
+})
 
 console.log(`Arctic RSS ${workerMode} worker online`)
 console.log(
@@ -166,6 +216,7 @@ const worker = runsWorkerResponsibility(workerMode, "ingestion")
       kind: "feed",
       refresh: () => refreshFeedAndQueueChatIntegration(job.data.feedId),
       sourceId: job.data.feedId,
+      trigger: job.data.trigger ?? "scheduler",
     })
   },
   {
@@ -307,6 +358,7 @@ const podcastWorker = runsWorkerResponsibility(workerMode, "ingestion")
       kind: "podcast",
       refresh: () => refreshPodcast(job.data.podcastId),
       sourceId: job.data.podcastId,
+      trigger: job.data.trigger ?? "scheduler",
     })
   },
   {
@@ -331,6 +383,7 @@ worker?.on("failed", (job, error) => {
   console.error(
     `[worker] refresh failed for ${job?.data.feedId ?? "unknown feed"}: ${error.message}`
   )
+  recordTerminalSourceRefreshFailure("feed", job)
 })
 
 aiDigestWorker?.on("failed", (job, error) => {
@@ -395,6 +448,7 @@ podcastWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] podcast refresh failed for ${job?.data.podcastId ?? "unknown podcast"}: ${error.message}`
   )
+  recordTerminalSourceRefreshFailure("podcast", job)
 })
 
 async function enqueueDueFeeds(lease?: MaintenanceLease) {
@@ -482,14 +536,34 @@ async function enqueueDueSmartDigests(lease?: MaintenanceLease) {
 
 let schedulerRunning = false
 let schedulerTickPromise: Promise<void> | undefined
-let nextAuthTokenMaintenanceAt = 0
-let nextChatRetentionAt = 0
-let nextSecurityEventMaintenanceAt = 0
+let healthSnapshotPromise: Promise<void> | undefined
 let chatRetentionContinuation: ChatRetentionContinuation | undefined
-let chatRetentionFailureCount = 0
 
 function schedulerErrorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : "unknown error"
+}
+
+function maintenanceScheduleMetrics(schedule: MaintenanceSchedule) {
+  const snapshot = schedule.snapshot(Date.now())
+
+  return {
+    failureCount: snapshot.failureCount,
+    lastSuccessAgeMs: snapshot.lastSuccessAgeMs,
+    nextEligibleAt: new Date(snapshot.nextEligibleAt).toISOString(),
+  }
+}
+
+function recordTerminalSourceRefreshFailure(
+  kind: "feed" | "podcast",
+  job: { attemptsMade: number; opts: { attempts?: number } } | undefined
+) {
+  if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) {
+    return
+  }
+
+  recordSourceRefreshFailure({ client: durableHeartbeatStore, kind }).catch(() => {
+    console.error(`[worker] could not record ${kind} refresh failure evidence`)
+  })
 }
 
 async function runLeaseAwareMaintenance<T>(
@@ -512,10 +586,12 @@ async function runTrackedRefresh<
   kind,
   refresh,
   sourceId,
+  trigger,
 }: {
   kind: "feed" | "podcast"
   refresh: () => Promise<Result>
   sourceId: string
+  trigger: SourceRefreshTrigger
 }) {
   const startedAt = performance.now()
 
@@ -530,6 +606,7 @@ async function runTrackedRefresh<
         kind,
         outcome: "success",
         sourceId,
+        trigger,
       })
     )
 
@@ -543,6 +620,7 @@ async function runTrackedRefresh<
         kind,
         outcome: "failed",
         sourceId,
+        trigger,
       })
     )
 
@@ -569,6 +647,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       securityEventMaintenanceResult,
       aiOperationReconciliationResult,
       savedMonitorResult,
+      sourceOrphanReportResult,
     ] = await Promise.allSettled([
       runLeaseAwareMaintenance(lease, () => enqueueDueFeeds(lease)),
       runLeaseAwareMaintenance(lease, () => enqueueDuePodcasts(lease)),
@@ -580,6 +659,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       runLeaseAwareMaintenance(lease, runSecurityEventMaintenance),
       runLeaseAwareMaintenance(lease, () => runAiOperationReconciliation(lease)),
       runLeaseAwareMaintenance(lease, () => runSavedMonitors(lease)),
+      runLeaseAwareMaintenance(lease, () => runSourceOrphanReporting(lease)),
     ])
 
     if (feedResult.status === "fulfilled") {
@@ -621,20 +701,6 @@ async function schedulerTick(lease?: MaintenanceLease) {
       )
     }
 
-    if (
-      chatRetentionResult.status === "fulfilled" &&
-      !("disabled" in chatRetentionResult.value && chatRetentionResult.value.disabled)
-    ) {
-      chatRetentionFailureCount = 0
-      console.log(
-        JSON.stringify({
-          event: "chat_retention",
-          ...chatRetentionResult.value,
-          outcome: "success",
-        })
-      )
-    }
-
     if (feedResult.status === "rejected") {
       console.error(
         `[worker] feed scheduler failed: ${schedulerErrorMessage(feedResult.reason)}`
@@ -670,11 +736,10 @@ async function schedulerTick(lease?: MaintenanceLease) {
     }
 
     if (chatRetentionResult.status === "rejected") {
-      chatRetentionFailureCount += 1
       console.error(
         JSON.stringify({
           event: "chat_retention",
-          failureCount: chatRetentionFailureCount,
+          ...maintenanceScheduleMetrics(chatRetentionMaintenanceSchedule),
           outcome: "failure",
           reason: schedulerErrorMessage(chatRetentionResult.reason),
         })
@@ -683,63 +748,56 @@ async function schedulerTick(lease?: MaintenanceLease) {
 
     if (maintenanceResult.status === "rejected") {
       console.error(
-        `[worker] auth token maintenance failed: ${schedulerErrorMessage(
-          maintenanceResult.reason
-        )}`
-      )
-    }
-
-    if (securityEventMaintenanceResult.status === "fulfilled") {
-      console.log(
         JSON.stringify({
-          event: "security_event_maintenance",
-          outcome: "success",
-          ...securityEventMaintenanceResult.value,
+          event: "auth_token_maintenance",
+          ...maintenanceScheduleMetrics(authTokenMaintenanceSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(maintenanceResult.reason),
         })
       )
     }
 
     if (securityEventMaintenanceResult.status === "rejected") {
       console.error(
-        `[worker] security event maintenance failed: ${schedulerErrorMessage(
-          securityEventMaintenanceResult.reason
-        )}`
-      )
-    }
-
-    if (aiOperationReconciliationResult.status === "fulfilled") {
-      console.log(
         JSON.stringify({
-          event: "ai_operation_reconciliation",
-          outcome: "success",
-          ...aiOperationReconciliationResult.value,
+          event: "security_event_maintenance",
+          ...maintenanceScheduleMetrics(securityEventMaintenanceSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(securityEventMaintenanceResult.reason),
         })
       )
     }
 
     if (aiOperationReconciliationResult.status === "rejected") {
       console.error(
-        `[worker] AI operation reconciliation failed: ${schedulerErrorMessage(
-          aiOperationReconciliationResult.reason
-        )}`
-      )
-    }
-
-    if (savedMonitorResult.status === "fulfilled") {
-      console.log(
         JSON.stringify({
-          event: "saved_monitor_scheduler",
-          outcome: "success",
-          ...savedMonitorResult.value,
+          event: "ai_operation_reconciliation",
+          ...maintenanceScheduleMetrics(aiOperationReconciliationSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(aiOperationReconciliationResult.reason),
         })
       )
     }
 
     if (savedMonitorResult.status === "rejected") {
       console.error(
-        `[worker] saved monitor scheduler failed: ${schedulerErrorMessage(
-          savedMonitorResult.reason
-        )}`
+        JSON.stringify({
+          event: "saved_monitor_scheduler",
+          ...maintenanceScheduleMetrics(savedMonitorMaintenanceSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(savedMonitorResult.reason),
+        })
+      )
+    }
+
+    if (sourceOrphanReportResult.status === "rejected") {
+      console.error(
+        JSON.stringify({
+          event: "source_orphan_retention_report",
+          ...maintenanceScheduleMetrics(sourceOrphanReportSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(sourceOrphanReportResult.reason),
+        })
       )
     }
 
@@ -754,6 +812,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       securityEventMaintenanceResult,
       aiOperationReconciliationResult,
       savedMonitorResult,
+      sourceOrphanReportResult,
     ].every((result) => result.status === "fulfilled")
   } finally {
     schedulerRunning = false
@@ -819,34 +878,136 @@ function runSchedulerTick() {
   return schedulerTickPromise
 }
 
+function failedSystemHealthResult(): SystemHealthResult {
+  const topology = getRuntimeTopology()
+
+  return {
+    checks: {
+      chatGateway: topology.chatEnabled ? "failed" : "disabled",
+      database: "failed",
+      durableRedis: "failed",
+      ephemeralRedis: "failed",
+      maintenance: "failed",
+      queues: "failed",
+      workers: Object.fromEntries(
+        topology.workerModes.map((mode) => [mode, "failed" as const])
+      ),
+    },
+    status: "degraded",
+  }
+}
+
+function runHealthSnapshot() {
+  if (
+    healthSnapshotPromise ||
+    !maintenanceLock ||
+    !healthSnapshotSchedule.isDue(Date.now())
+  ) {
+    return healthSnapshotPromise
+  }
+
+  const topology = getRuntimeTopology()
+  healthSnapshotPromise = maintenanceLock
+    .run(async (lease) => {
+      const startedAt = Date.now()
+      let checkFailed = false
+      const result = await checkSystemHealth().catch(() => {
+        checkFailed = true
+        return failedSystemHealthResult()
+      })
+
+      lease.assertHeld()
+      const snapshot = await writeHealthSnapshot({
+        checkedAt: Date.now(),
+        result,
+        store: durableHeartbeatStore,
+        topology: topology.name,
+      })
+      lease.assertHeld()
+
+      if (checkFailed) {
+        healthSnapshotSchedule.recordFailure(Date.now())
+      } else {
+        healthSnapshotSchedule.recordSuccess(Date.now())
+      }
+
+      console.info(
+        JSON.stringify({
+          checkFailed,
+          durationMs: Math.max(0, Date.now() - startedAt),
+          event: "health_snapshot",
+          outcome: checkFailed ? "failure" : "success",
+          ...maintenanceScheduleMetrics(healthSnapshotSchedule),
+          status: snapshot.status,
+          topology: snapshot.topology,
+        })
+      )
+    })
+    .then((leaseResult) => {
+      if (!leaseResult.acquired) {
+        console.warn(JSON.stringify({ event: "health_snapshot", outcome: "lease_unavailable" }))
+      }
+    })
+    .catch((error) => {
+      healthSnapshotSchedule.recordFailure(Date.now())
+      console.error(
+        JSON.stringify({
+          event: "health_snapshot",
+          ...maintenanceScheduleMetrics(healthSnapshotSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(error),
+        })
+      )
+    })
+    .finally(() => {
+      healthSnapshotPromise = undefined
+    })
+
+  return healthSnapshotPromise
+}
+
 async function runChatRetention(lease?: MaintenanceLease) {
-  if (!getChatFeatureFlags().enabled) {
+  if (!chatRetentionMaintenanceSchedule.isDue(Date.now())) {
     return { disabled: true }
   }
 
-  const now = Date.now()
+  try {
+    if (!getChatFeatureFlags().enabled) {
+      return { disabled: true }
+    }
 
-  if (now < nextChatRetentionAt) {
-    return { disabled: true }
+    const result = await purgeExpiredChatRecords({
+      assertLeaseHeld: lease?.assertHeld,
+      batchSize: chatRetentionSettings.batchSize,
+      continuation: chatRetentionContinuation,
+      maxBatches: chatRetentionSettings.maxBatches,
+      maxRuntimeMs: chatRetentionSettings.maxRuntimeMs,
+      store: prisma,
+    })
+    // Another worker may own the distributed lock. Preserve our local cursor in
+    // that case so a skipped pass cannot make the next successful pass rescan
+    // from the beginning.
+    if (!result.skipped) {
+      chatRetentionContinuation = result.continuation ?? undefined
+      chatRetentionMaintenanceSchedule.recordSuccess(Date.now())
+    } else {
+      chatRetentionMaintenanceSchedule.recordDeferred(Date.now())
+    }
+
+    console.log(
+      JSON.stringify({
+        event: "chat_retention",
+        ...result,
+        outcome: result.skipped ? "skipped" : "success",
+        ...maintenanceScheduleMetrics(chatRetentionMaintenanceSchedule),
+      })
+    )
+
+    return result
+  } catch (error) {
+    chatRetentionMaintenanceSchedule.recordFailure(Date.now())
+    throw error
   }
-
-  nextChatRetentionAt = now + chatRetentionIntervalMs
-  const result = await purgeExpiredChatRecords({
-    assertLeaseHeld: lease?.assertHeld,
-    batchSize: chatRetentionSettings.batchSize,
-    continuation: chatRetentionContinuation,
-    maxBatches: chatRetentionSettings.maxBatches,
-    maxRuntimeMs: chatRetentionSettings.maxRuntimeMs,
-    store: prisma,
-  })
-  // Another worker may own the distributed lock. Preserve our local cursor in
-  // that case so a skipped pass cannot make the next successful pass rescan
-  // from the beginning.
-  if (!result.skipped) {
-    chatRetentionContinuation = result.continuation ?? undefined
-  }
-
-  return result
 }
 
 async function enqueuePendingSmartDigestEmails(lease?: MaintenanceLease) {
@@ -870,63 +1031,149 @@ async function enqueuePendingSmartDigestEmails(lease?: MaintenanceLease) {
 }
 
 async function runAuthTokenMaintenance() {
-  const now = Date.now()
-
-  if (now < nextAuthTokenMaintenanceAt) {
+  if (!authTokenMaintenanceSchedule.isDue(Date.now())) {
     return
   }
 
-  nextAuthTokenMaintenanceAt = now + authTokenMaintenanceIntervalMs
-
-  const result = await cleanupExpiredAuthTokens({
-    batchSize: authTokenMaintenanceBatchSize,
-    store: prisma,
-  })
-  const deleted =
-    result.passwordResetTokensDeleted +
-    result.emailVerificationTokensDeleted +
-    result.accountDeletionConfirmationTokensDeleted
-
-  console.log(
-    JSON.stringify({
-      accountDeletionConfirmationTokensDeleted: result.accountDeletionConfirmationTokensDeleted,
-      emailVerificationTokensDeleted: result.emailVerificationTokensDeleted,
-      event: "auth_token_maintenance",
-      outcome: "success",
-      passwordResetTokensDeleted: result.passwordResetTokensDeleted,
-      totalDeleted: deleted,
+  try {
+    const result = await cleanupExpiredAuthTokens({
+      batchSize: authTokenMaintenanceBatchSize,
+      store: prisma,
     })
-  )
+    const deleted =
+      result.passwordResetTokensDeleted +
+      result.emailVerificationTokensDeleted +
+      result.accountDeletionConfirmationTokensDeleted
+
+    authTokenMaintenanceSchedule.recordSuccess(Date.now())
+    console.log(
+      JSON.stringify({
+        accountDeletionConfirmationTokensDeleted: result.accountDeletionConfirmationTokensDeleted,
+        emailVerificationTokensDeleted: result.emailVerificationTokensDeleted,
+        event: "auth_token_maintenance",
+        outcome: "success",
+        passwordResetTokensDeleted: result.passwordResetTokensDeleted,
+        totalDeleted: deleted,
+        ...maintenanceScheduleMetrics(authTokenMaintenanceSchedule),
+      })
+    )
+  } catch (error) {
+    authTokenMaintenanceSchedule.recordFailure(Date.now())
+    throw error
+  }
 }
 
 async function runSecurityEventMaintenance() {
-  const now = Date.now()
-
-  if (now < nextSecurityEventMaintenanceAt) {
-    return { securityEventsDeleted: 0 }
+  if (!securityEventMaintenanceSchedule.isDue(Date.now())) {
+    return
   }
 
-  nextSecurityEventMaintenanceAt = now + securityEventMaintenanceIntervalMs
-  return cleanupExpiredSecurityEvents({
-    batchSize: securityEventMaintenanceBatchSize,
-    store: prisma,
-  })
+  try {
+    const result = await cleanupExpiredSecurityEvents({
+      batchSize: securityEventMaintenanceBatchSize,
+      store: prisma,
+    })
+    securityEventMaintenanceSchedule.recordSuccess(Date.now())
+    console.log(
+      JSON.stringify({
+        event: "security_event_maintenance",
+        outcome: "success",
+        ...result,
+        ...maintenanceScheduleMetrics(securityEventMaintenanceSchedule),
+      })
+    )
+  } catch (error) {
+    securityEventMaintenanceSchedule.recordFailure(Date.now())
+    throw error
+  }
 }
 
 async function runAiOperationReconciliation(lease?: MaintenanceLease) {
-  return reconcileExpiredAiUsageOperations({
-    assertLeaseHeld: lease?.assertHeld,
-    batchSize: schedulerBatchSize,
-    store: prisma as unknown as Parameters<typeof reconcileExpiredAiUsageOperations>[0]["store"],
-  })
+  if (!aiOperationReconciliationSchedule.isDue(Date.now())) {
+    return
+  }
+
+  try {
+    const result = await reconcileExpiredAiUsageOperations({
+      assertLeaseHeld: lease?.assertHeld,
+      batchSize: schedulerBatchSize,
+      store: prisma as unknown as Parameters<typeof reconcileExpiredAiUsageOperations>[0]["store"],
+    })
+    aiOperationReconciliationSchedule.recordSuccess(Date.now())
+    console.log(
+      JSON.stringify({
+        event: "ai_operation_reconciliation",
+        outcome: "success",
+        ...result,
+        ...maintenanceScheduleMetrics(aiOperationReconciliationSchedule),
+      })
+    )
+  } catch (error) {
+    aiOperationReconciliationSchedule.recordFailure(Date.now())
+    throw error
+  }
 }
 
 async function runSavedMonitors(lease?: MaintenanceLease) {
-  return processDueSavedMonitors({
-    assertLeaseHeld: lease?.assertHeld,
-    settings: savedMonitorSchedulerSettings,
-    store: prisma as unknown as Parameters<typeof processDueSavedMonitors>[0]["store"],
-  })
+  if (!savedMonitorMaintenanceSchedule.isDue(Date.now())) {
+    return
+  }
+
+  try {
+    const result = await processDueSavedMonitors({
+      assertLeaseHeld: lease?.assertHeld,
+      settings: savedMonitorSchedulerSettings,
+      store: prisma as unknown as Parameters<typeof processDueSavedMonitors>[0]["store"],
+    })
+    if (result.failed) {
+      savedMonitorMaintenanceSchedule.recordFailure(Date.now())
+      console.error(
+        JSON.stringify({
+          event: "saved_monitor_scheduler",
+          outcome: "partial_failure",
+          ...result,
+          ...maintenanceScheduleMetrics(savedMonitorMaintenanceSchedule),
+        })
+      )
+    } else {
+      savedMonitorMaintenanceSchedule.recordSuccess(Date.now())
+      console.log(
+        JSON.stringify({
+          event: "saved_monitor_scheduler",
+          outcome: "success",
+          ...result,
+          ...maintenanceScheduleMetrics(savedMonitorMaintenanceSchedule),
+        })
+      )
+    }
+  } catch (error) {
+    savedMonitorMaintenanceSchedule.recordFailure(Date.now())
+    throw error
+  }
+}
+
+async function runSourceOrphanReporting(lease?: MaintenanceLease) {
+  if (!sourceOrphanReportSchedule.isDue(Date.now())) {
+    return
+  }
+
+  try {
+    lease?.assertHeld()
+    const report = await reportSourceOrphanRetention({ store: prisma })
+    lease?.assertHeld()
+    sourceOrphanReportSchedule.recordSuccess(Date.now())
+    console.info(
+      JSON.stringify({
+        event: "source_orphan_retention_report",
+        outcome: "success",
+        ...report,
+        ...maintenanceScheduleMetrics(sourceOrphanReportSchedule),
+      })
+    )
+  } catch (error) {
+    sourceOrphanReportSchedule.recordFailure(Date.now())
+    throw error
+  }
 }
 
 let chatOutboxPublishPromise: Promise<void> | undefined
@@ -972,17 +1219,16 @@ const chatOutboxPublisher = runsWorkerResponsibility(workerMode, "chat-events")
       void publishPendingChatEvents()
     }, chatEventOutboxIntervalMs)
   : undefined
-
-if (scheduler) {
-  void runSchedulerTick()
-}
-if (chatOutboxPublisher) {
-  void publishPendingChatEvents()
-}
+const healthSnapshotPublisher = runsHealthSnapshotProducer
+  ? setInterval(() => {
+      void runHealthSnapshot()
+    }, HEALTH_SNAPSHOT_INTERVAL_MS)
+  : undefined
 
 const heartbeat = startWorkerHeartbeat({
   instanceId: heartbeatInstanceId,
   intervalMs: WORKER_HEARTBEAT_INTERVAL_MS,
+  isControlPlaneReady: durableHeartbeatControl.isReady,
   mode: workerMode,
   path: heartbeatPath,
   store: durableHeartbeatStore,
@@ -992,6 +1238,18 @@ const memoryTelemetry = setInterval(
   () => logWorkerMemory({ trigger: "interval" }),
   WORKER_MEMORY_LOG_INTERVAL_MS
 )
+
+if (scheduler) {
+  void runSchedulerTick()
+}
+if (chatOutboxPublisher) {
+  void publishPendingChatEvents()
+}
+if (healthSnapshotPublisher) {
+  setTimeout(() => {
+    void runHealthSnapshot()
+  }, HEALTH_SNAPSHOT_INITIAL_DELAY_MS)
+}
 
 let shutdownPromise: ReturnType<typeof shutdownWorkerRuntime> | undefined
 
@@ -1008,7 +1266,7 @@ function shutdown() {
           closeChatArticleIntegrationQueue(),
           closeChatRoomEventPublisher(),
           maintenanceLock?.close() ?? Promise.resolve(),
-          closeDurableHeartbeatStore(),
+          durableHeartbeatControl.close(),
         ])
         await clearWorkerHeartbeat({ path: heartbeatPath }).catch((error) => {
           console.error(
@@ -1018,7 +1276,7 @@ function shutdown() {
       },
       disconnectDatabase: () => prisma.$disconnect(),
       getPendingWork: () =>
-        [schedulerTickPromise, chatOutboxPublishPromise].filter(
+        [schedulerTickPromise, chatOutboxPublishPromise, healthSnapshotPromise].filter(
           (work): work is Promise<void> => Boolean(work)
         ),
       stopScheduling: () => {
@@ -1027,6 +1285,9 @@ function shutdown() {
         }
         if (chatOutboxPublisher) {
           clearInterval(chatOutboxPublisher)
+        }
+        if (healthSnapshotPublisher) {
+          clearInterval(healthSnapshotPublisher)
         }
         heartbeat.stop()
         clearInterval(memoryTelemetry)
@@ -1037,14 +1298,6 @@ function shutdown() {
   }
 
   return shutdownPromise
-}
-
-async function closeDurableHeartbeatStore() {
-  try {
-    await durableHeartbeatStore.quit()
-  } catch {
-    durableHeartbeatStore.disconnect()
-  }
 }
 
 installWorkerSignalHandlers({

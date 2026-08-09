@@ -54,11 +54,11 @@ describe("system health", () => {
         ephemeralRedis: "ok",
         maintenance: "ok",
         queues: "ok",
-        workers: { all: "ok" },
+        workers: { all: "ok", health: "ok" },
       },
       status: "ok",
     })
-    expect(clients.workerHeartbeats.readWorkerHeartbeats).toHaveBeenCalledWith(["all"])
+    expect(clients.workerHeartbeats.readWorkerHeartbeats).toHaveBeenCalledWith(["all", "health"])
     expect(clients.chatGateway.checkConnection).not.toHaveBeenCalled()
   })
 
@@ -121,7 +121,7 @@ describe("system health", () => {
       topology: {
         chatEnabled: false,
         name: "split",
-        workerModes: ["ingestion", "ai-mail", "imports", "maintenance"],
+        workerModes: ["ingestion", "ai-mail", "imports", "maintenance", "health"],
       },
     })
 
@@ -132,6 +132,7 @@ describe("system health", () => {
           imports: "failed",
           ingestion: "failed",
           maintenance: "failed",
+          health: "failed",
         },
       },
       status: "degraded",
@@ -178,7 +179,7 @@ describe("system health", () => {
       topology: {
         chatEnabled: true,
         name: "all-in-one-with-chat",
-        workerModes: ["all"],
+        workerModes: ["all", "health"],
       },
     })
 

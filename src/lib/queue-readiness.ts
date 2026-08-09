@@ -34,6 +34,7 @@ import {
   SMART_DIGEST_QUEUE_NAME,
   type SmartDigestJobData,
 } from "./smart-digest-queue"
+import { countRecentSourceRefreshFailures } from "./source-refresh-failures"
 
 export const MAX_QUEUE_ACTIVE_JOB_AGE_MS = 15 * 60_000
 export const MAX_QUEUE_WAITING_JOB_AGE_MS = 15 * 60_000
@@ -59,6 +60,7 @@ export type QueueReadinessReader = {
 }
 
 export type QueueReadinessClient = {
+  failureEvidence?: "queue" | "source"
   name: string
   reader: QueueReadinessReader
 }
@@ -98,8 +100,21 @@ export async function inspectQueueReadiness(): Promise<QueueReadinessReport> {
     ]
 
     try {
+      const recentSourceFailureCount = await countRecentSourceRefreshFailures({
+        client: redis,
+        windowMs: RECENT_QUEUE_FAILURE_WINDOW_MS,
+      })
       return await inspectQueueReadinessWithClients({
-        queues: queues.map((queue) => ({ name: queue.name, reader: queue })),
+        queues: queues.map((queue) => ({
+          failureEvidence:
+            queue.name === FEED_REFRESH_QUEUE_NAME ||
+            queue.name === PODCAST_REFRESH_QUEUE_NAME
+              ? "source"
+              : "queue",
+          name: queue.name,
+          reader: queue,
+        })),
+        recentSourceFailureCount,
       })
     } finally {
       await Promise.allSettled(queues.map((queue) => queue.close()))
@@ -118,6 +133,7 @@ export async function inspectQueueReadinessWithClients({
   now = Date.now,
   queues,
   recentFailureWindowMs = RECENT_QUEUE_FAILURE_WINDOW_MS,
+  recentSourceFailureCount = 0,
 }: {
   maxActiveJobAgeMs?: number
   maxRecentFailures?: number
@@ -125,19 +141,22 @@ export async function inspectQueueReadinessWithClients({
   now?: () => number
   queues: QueueReadinessClient[]
   recentFailureWindowMs?: number
+  recentSourceFailureCount?: number
 }): Promise<QueueReadinessReport> {
   try {
     const currentTime = now()
     const snapshots = await Promise.all(
-      queues.map(async ({ reader }) => {
+      queues.map(async ({ failureEvidence = "queue", reader }) => {
         const [counts, waitingJobs, activeJobs, failedJobs] = await Promise.all([
           reader.getJobCounts("waiting", "active", "failed"),
           reader.getJobs(["waiting"], 0, 0, true),
           reader.getJobs(["active"], 0, 99, true),
-          reader.getJobs(["failed"], 0, 24, false),
+          failureEvidence === "source"
+            ? Promise.resolve([])
+            : reader.getJobs(["failed"], 0, 24, false),
         ])
 
-        return { activeJobs, counts, failedJobs, waitingJobs }
+        return { activeJobs, counts, failedJobs, failureEvidence, waitingJobs }
       })
     )
     const oldestWaitingTimestamp = oldestTimestamp(
@@ -149,10 +168,15 @@ export async function inspectQueueReadinessWithClients({
     )
     const oldestWaitingJobAgeMs = ageFromTimestamp(oldestWaitingTimestamp, currentTime)
     const oldestActiveJobAgeMs = ageFromTimestamp(oldestActiveTimestamp, currentTime)
-    const recentFailureCount = snapshots
-      .flatMap(({ failedJobs }) => failedJobs)
-      .filter((job) => (job.finishedOn ?? job.timestamp) >= currentTime - recentFailureWindowMs)
-      .length
+    const recentFailureCount =
+      snapshots
+        .filter(({ failureEvidence }) => failureEvidence === "queue")
+        .flatMap(({ failedJobs }) => failedJobs)
+        .filter(
+          (job) =>
+            (job.finishedOn ?? job.timestamp) >=
+            currentTime - recentFailureWindowMs
+        ).length + Math.max(0, Math.floor(recentSourceFailureCount))
     const suspectedStalledJobCount = activeJobs.filter((job) => {
       const timestamp = job.processedOn ?? job.timestamp
       return currentTime - timestamp > maxActiveJobAgeMs

@@ -5,11 +5,17 @@ import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
 import { getDiscoverDirectoryFeed } from "@/lib/discover-directory"
+import {
+  CollectionRetentionError,
+  getCollectionArticleSourceForUser,
+} from "@/lib/collection-retention"
 import { FeedValidationError } from "@/lib/feed-discovery"
-import { FeedRefreshError, refreshFeed } from "@/lib/feed-refresh"
+import { enqueueFeedRefresh } from "@/lib/feed-refresh-queue"
 import {
   FeedSubscriptionError,
   getUserFeedSubscription,
+  markFeedSubscriptionAttentionReviewed,
+  replaceFeedSubscription,
   setFeedSubscriptionPaused,
   subscribeToFeed,
   unsubscribeFromFeed,
@@ -29,9 +35,12 @@ export type SourceSubscriptionAnalytics = {
 export type AddFeedActionState = ActionState & { analytics?: SourceSubscriptionAnalytics }
 export type SubscribeDirectoryFeedActionState = ActionState & { analytics?: SourceSubscriptionAnalytics }
 export type RefreshFeedActionState = ActionState
+export type ReplaceFeedSubscriptionActionState = ActionState
+export type ReviewFeedAttentionActionState = ActionState
 export type SetFeedPausedActionState = ActionState
 export type UnsubscribeFeedActionState = ActionState
 export type BulkFeedAttentionActionState = ActionState
+export type FollowCollectionArticleSourceActionState = ActionState
 
 type ActionState = { message: string; status: "idle" | "success" | "error" }
 
@@ -49,20 +58,13 @@ export async function addFeedAction(
 
   try {
     const subscription = await subscribeToFeed({ folderId, url, userId: session.user.id })
-    let refreshMessage = typeof subscription.initialArticleCount === "number"
-      ? `Imported ${subscription.initialArticleCount} articles.`
-      : "Article refresh will retry if needed."
-    if (typeof subscription.initialArticleCount !== "number") {
-      try {
-        refreshMessage = `Imported ${(await refreshFeed(subscription.feedId)).articleCount} articles.`
-      } catch {
-        refreshMessage = "Subscribed. Article refresh will retry."
-      }
-    }
+    const refreshMessage = await initialRefreshMessage(subscription)
     revalidatePath("/app")
     refresh()
     return {
-      analytics: getFeedSubscriptionAnalytics(subscription),
+      ...(getFeedSubscriptionAnalytics(subscription)
+        ? { analytics: getFeedSubscriptionAnalytics(subscription) }
+        : {}),
       message: `Subscribed to ${subscription.customTitle || subscription.feed.title}. ${refreshMessage}`,
       status: "success",
     }
@@ -96,20 +98,13 @@ export async function subscribeDirectoryFeedAction(
     return subscriptionError(error, "Arctic RSS could not subscribe to that directory feed.")
   }
 
-  let refreshMessage = typeof subscription.initialArticleCount === "number"
-    ? `Imported ${subscription.initialArticleCount} articles.`
-    : "Article refresh will retry."
-  if (typeof subscription.initialArticleCount !== "number") {
-    try {
-      refreshMessage = `Imported ${(await refreshFeed(subscription.feedId)).articleCount} articles.`
-    } catch {
-      // The subscription is committed and the worker can retry the refresh.
-    }
-  }
+  const refreshMessage = await initialRefreshMessage(subscription)
   try { revalidatePath("/app") } catch { /* best effort after a committed mutation */ }
   try { refresh() } catch { /* best effort after a committed mutation */ }
   return {
-    analytics: getFeedSubscriptionAnalytics(subscription),
+    ...(getFeedSubscriptionAnalytics(subscription)
+      ? { analytics: getFeedSubscriptionAnalytics(subscription) }
+      : {}),
     message: `Subscribed to ${directoryFeed.label}. ${refreshMessage}`,
     status: "success",
   }
@@ -130,16 +125,19 @@ export async function refreshFeedAction(
   const cooldownMessage = manualFeedRefreshCooldownMessage(subscription.feed.lastFetchedAt)
   if (cooldownMessage) return { message: cooldownMessage, status: "error" }
   try {
-    const result = await refreshFeed(subscription.feedId)
+    const result = await enqueueFeedRefresh(subscription.feedId, {
+      priority: 1,
+      trigger: "manual",
+    })
     revalidatePath("/app")
     revalidatePath(`/app/feed/${subscription.id}`)
     refresh()
-    return { message: `Fetched ${result.articleCount} articles.`, status: "success" }
-  } catch (error) {
-    if (error instanceof FeedRefreshError || error instanceof FeedFetchError || error instanceof UnsafeUrlError) {
-      return { message: error.message, status: "error" }
+    return {
+      message: result.outcome === "queued" ? "Refresh queued." : "Refresh already queued.",
+      status: "success",
     }
-    return { message: "Arctic RSS could not refresh that feed.", status: "error" }
+  } catch {
+    return { message: "Arctic RSS could not queue that feed refresh.", status: "error" }
   }
 }
 
@@ -266,18 +264,146 @@ export async function bulkFeedAttentionAction(
     }
   }
 
-  const refreshed = await Promise.allSettled(
-    subscriptions.map((subscription) => refreshFeed(subscription!.feedId))
+  const enqueued = await Promise.allSettled(
+    subscriptions.map((subscription) =>
+      enqueueFeedRefresh(subscription!.feedId, {
+        priority: 1,
+        trigger: "source-attention",
+      })
+    )
   )
-  const succeeded = refreshed.filter((result) => result.status === "fulfilled").length
+  const queued = enqueued.filter(
+    (result) => result.status === "fulfilled" && result.value.outcome === "queued"
+  ).length
+  const alreadyQueued = enqueued.filter(
+    (result) => result.status === "fulfilled" && result.value.outcome === "already-queued"
+  ).length
   revalidatePath("/app")
   refresh()
   return {
-    message:
-      succeeded === subscriptionIds.length
-        ? `${succeeded} ${sourceLabel(succeeded)} retried.`
-        : `${succeeded} of ${subscriptionIds.length} selected ${sourceLabel(subscriptionIds.length)} retried.`,
-    status: succeeded ? "success" : "error",
+    message: sourceAttentionMessage({ alreadyQueued, queued, total: subscriptionIds.length }),
+    status: queued || alreadyQueued ? "success" : "error",
+  }
+}
+
+export async function followCollectionArticleSourceAction(
+  _previousState: FollowCollectionArticleSourceActionState,
+  formData: FormData
+): Promise<FollowCollectionArticleSourceActionState> {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { message: "You need to sign in before following sources.", status: "error" }
+  }
+
+  const articleId = String(formData.get("articleId") ?? "").trim()
+  const collectionId = String(formData.get("collectionId") ?? "").trim()
+  if (!articleId || !collectionId) {
+    return { message: "That saved collection article is unavailable.", status: "error" }
+  }
+  if (!(await canDiscover(session.user.id))) return rateLimitFailure()
+
+  try {
+    const source = await getCollectionArticleSourceForUser({
+      articleId,
+      collectionId,
+      userId: session.user.id,
+    })
+    if (source.sourceIsFollowed) {
+      return { message: `You already follow ${source.title}.`, status: "success" }
+    }
+
+    const subscription = await subscribeToFeed({
+      url: source.feedUrl,
+      userId: session.user.id,
+    })
+    const refreshMessage = await initialRefreshMessage(subscription)
+    revalidateFeedSubscriptionPaths()
+    revalidatePath(`/app/collections/${collectionId}`)
+    refresh()
+    return {
+      message: `Following ${source.title}. ${refreshMessage}`,
+      status: "success",
+    }
+  } catch (error) {
+    return error instanceof CollectionRetentionError
+      ? { message: error.message, status: "error" }
+      : subscriptionError(error, "Arctic RSS could not follow that saved source.")
+  }
+}
+
+export async function reviewFeedAttentionAction(
+  _previousState: ReviewFeedAttentionActionState,
+  formData: FormData
+): Promise<ReviewFeedAttentionActionState> {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { message: "You need to sign in before reviewing source health.", status: "error" }
+  }
+
+  const subscriptionId = String(formData.get("subscriptionId") ?? "").trim()
+  if (!subscriptionId) {
+    return { message: "Choose a source to review.", status: "error" }
+  }
+
+  try {
+    await markFeedSubscriptionAttentionReviewed({ subscriptionId, userId: session.user.id })
+    revalidatePath("/app/folders")
+    refresh()
+    return { message: "Source recovery marked as reviewed.", status: "success" }
+  } catch (error) {
+    return error instanceof FeedSubscriptionError
+      ? { message: error.message, status: "error" }
+      : { message: "Arctic RSS could not record that review.", status: "error" }
+  }
+}
+
+export async function replaceFeedSubscriptionAction(
+  _previousState: ReplaceFeedSubscriptionActionState,
+  formData: FormData
+): Promise<ReplaceFeedSubscriptionActionState> {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { message: "You need to sign in before replacing a source.", status: "error" }
+  }
+
+  const subscriptionId = String(formData.get("subscriptionId") ?? "").trim()
+  const candidateUrl = String(formData.get("candidateUrl") ?? "").trim()
+  if (!subscriptionId || !candidateUrl) {
+    return { message: "That proposed replacement source is unavailable.", status: "error" }
+  }
+  if (formData.get("confirmation") !== "REPLACE") {
+    return { message: "Type REPLACE to confirm changing this source.", status: "error" }
+  }
+  if (!(await canDiscover(session.user.id))) {
+    return rateLimitFailure()
+  }
+
+  try {
+    const replacement = await replaceFeedSubscription({
+      candidateUrl,
+      subscriptionId,
+      userId: session.user.id,
+    })
+    const queued = await enqueueFeedRefresh(replacement.feedId, {
+      priority: 1,
+      trigger: "source-hygiene-replacement",
+    })
+    revalidatePath("/app", "layout")
+    revalidateFeedSubscriptionPaths()
+    revalidatePath(`/app/feed/${subscriptionId}`)
+    refresh()
+    return {
+      message:
+        queued.outcome === "queued"
+          ? `${replacement.title} now follows the verified replacement. Its refresh is queued.`
+          : `${replacement.title} now follows the verified replacement. Its refresh is already queued.`,
+      status: "success",
+    }
+  } catch (error) {
+    return subscriptionError(
+      error,
+      "Arctic RSS could not verify and replace that source."
+    )
   }
 }
 
@@ -294,6 +420,25 @@ function subscriptionError(error: unknown, fallback: string): AddFeedActionState
     return { message: error.message, status: "error" }
   }
   return { message: fallback, status: "error" }
+}
+
+async function initialRefreshMessage(subscription: {
+  feedId: string
+  initialArticleCount?: number
+}) {
+  if (typeof subscription.initialArticleCount === "number") {
+    return `Imported ${subscription.initialArticleCount} articles.`
+  }
+
+  try {
+    const result = await enqueueFeedRefresh(subscription.feedId, {
+      priority: 1,
+      trigger: "subscription-initial-retry",
+    })
+    return result.outcome === "queued" ? "Article refresh queued." : "Article refresh already queued."
+  } catch {
+    return "Article refresh will retry."
+  }
 }
 
 function getFeedSubscriptionAnalytics(subscription: { sourceCountBeforeSubscribe?: number }): SourceSubscriptionAnalytics | undefined {
@@ -318,4 +463,28 @@ function isBulkFeedAttentionOperation(
 
 function sourceLabel(count: number) {
   return count === 1 ? "source" : "sources"
+}
+
+function sourceAttentionMessage({
+  alreadyQueued,
+  queued,
+  total,
+}: {
+  alreadyQueued: number
+  queued: number
+  total: number
+}) {
+  if (!queued && !alreadyQueued) {
+    return `Arctic RSS could not queue the selected ${sourceLabel(total)}.`
+  }
+
+  const parts = []
+  if (queued) {
+    parts.push(`${queued} ${sourceLabel(queued)} queued`)
+  }
+  if (alreadyQueued) {
+    parts.push(`${alreadyQueued} ${sourceLabel(alreadyQueued)} already queued`)
+  }
+
+  return `${parts.join("; ")}.`
 }

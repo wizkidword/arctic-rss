@@ -8,12 +8,14 @@ import {
   parseDoctorCommand,
   type DoctorReport,
 } from "./doctor"
+import { getServiceRoleEnvironment } from "./service-role-environment"
+import { PRODUCTION_SERVICE_ROLES } from "./production-security"
 
 function healthyReport(
   overrides: Partial<DoctorReport> = {}
 ): DoctorReport {
   return {
-    backupMetadata: { ageMs: 1_000, status: "available" },
+    backupEvidence: { ageMs: 1_000, restoreTestAgeMs: 1_000, status: "available" },
     chatGateway: "disabled",
     databaseRoles: { migration: "migrate", runtime: "runtime" },
     maintenanceTick: { ageMs: 1_000, fresh: true },
@@ -74,8 +76,18 @@ describe("doctor report helpers", () => {
     expect(DOCTOR_REQUIRED_VARIABLES.web).toContain("AUTH_SECRET")
     expect(DOCTOR_REQUIRED_VARIABLES["worker-ingestion"]).toEqual([
       "DATABASE_URL",
+      "DB_APPLICATION_NAME",
+      "DB_CONNECTION_TIMEOUT_MS",
+      "DB_IDLE_TIMEOUT_MS",
+      "DB_POOL_MAX",
+      "DB_STATEMENT_TIMEOUT_MS",
       "DURABLE_REDIS_URL",
     ])
+    for (const role of PRODUCTION_SERVICE_ROLES) {
+      expect(DOCTOR_REQUIRED_VARIABLES[role]).toEqual(
+        getServiceRoleEnvironment(role).required
+      )
+    }
   })
 
   it("compares Redis endpoints without exposing credentials", () => {
@@ -176,7 +188,7 @@ describe("doctor report helpers", () => {
     expect(
       evaluateDoctorReport(
         healthyReport({
-          backupMetadata: { ageMs: null, status: "unavailable" },
+          backupEvidence: { ageMs: null, restoreTestAgeMs: null, status: "unavailable" },
           scope: "host",
         })
       ).exitCode

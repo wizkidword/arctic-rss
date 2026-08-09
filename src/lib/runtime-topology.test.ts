@@ -11,7 +11,7 @@ describe("runtime topology", () => {
     expect(getRuntimeTopology({})).toMatchObject({
       chatEnabled: false,
       name: "all-in-one",
-      workerModes: ["all"],
+      workerModes: ["all", "health"],
     })
   })
 
@@ -21,7 +21,7 @@ describe("runtime topology", () => {
     ).toMatchObject({
       chatEnabled: true,
       name: "split-with-chat",
-      workerModes: ["ingestion", "ai-mail", "imports", "maintenance", "chat-events"],
+      workerModes: ["ingestion", "ai-mail", "imports", "maintenance", "health", "chat-events"],
     })
   })
 

@@ -1,6 +1,7 @@
 import { Prisma } from "../generated/prisma/client"
 import { cache } from "react"
 
+import { articleAccessWhere } from "./articles"
 import { getPrisma } from "./db"
 
 export const COLLECTION_LIMIT = 100
@@ -455,13 +456,7 @@ async function assertArticleBelongsToUser({
   const article = await store.article.findFirst({
     select: { id: true },
     where: {
-      feed: {
-        subscriptions: {
-          some: {
-            userId,
-          },
-        },
-      },
+      ...articleAccessWhere(userId),
       id: articleId,
     },
   })

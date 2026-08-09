@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import {
   createServer,
   type IncomingMessage,
@@ -26,6 +27,10 @@ export type ChatGatewayAuthenticator = (input: {
 export type ChatGateway = {
   close: () => Promise<void>
   disconnectUser: (userId: string, reason: string) => number
+  getPendingAdmissionMetrics: () => {
+    oldestPendingAgeMs: number
+    pendingAdmissions: number
+  }
   httpServer: HttpServer
   io: Server
   start: (port: number) => Promise<number>
@@ -40,6 +45,7 @@ export function createChatGateway({
   isConnectionReady = () => true,
   limitChatAction = async () => true,
   logger,
+  pendingAdmissionTtlMs = 10_000,
   readiness = async () => {},
   revalidateAuthorization,
 }: {
@@ -51,13 +57,15 @@ export function createChatGateway({
   isConnectionReady?: () => boolean
   limitChatAction?: ChatGatewayEventLimiter
   logger: ChatGatewayLogger
+  pendingAdmissionTtlMs?: number
   readiness?: () => Promise<void>
   revalidateAuthorization?: (identity: ChatGatewayIdentity) => Promise<ChatGatewayIdentity>
 }): ChatGateway {
   const socketsByUser = new Map<string, Set<Socket>>()
   const socketsByIp = new Map<string, Set<Socket>>()
-  const pendingConnectionsByIp = new Map<string, number>()
-  const pendingConnectionsByUser = new Map<string, number>()
+  const pendingAdmissions = new Map<string, PendingAdmission>()
+  const pendingAdmissionTokensByIp = new Map<string, Set<string>>()
+  const pendingAdmissionTokensByUser = new Map<string, Set<string>>()
   let activeSockets = 0
   let forcedSecurityDisconnects = 0
   let staleAuthorizationDisconnects = 0
@@ -103,15 +111,16 @@ export function createChatGateway({
         token: socket.handshake.auth?.token,
       })
 
-      const admission = reserveConnection(identity.userId, clientIp)
-      if (admission !== "accepted") {
+      const admission = reserveConnection(identity.userId, clientIp, socket)
+      if (typeof admission === "string") {
         logger.warn("connection_rejected", { reason: admission })
         next(new Error("connection-limit"))
         return
       }
 
       socket.data.chat = identity
-      socket.data.chatAdmission = { clientIp, userId: identity.userId }
+      socket.data.chatAdmission = admission
+      bindPendingAdmissionCleanup(socket, admission.reservationToken)
       socket.data.chatAbuse = createChatSocketAbuseControls({
         clientIp,
         identity,
@@ -122,7 +131,18 @@ export function createChatGateway({
       })
       next()
     } catch {
-      void limitChatAction({ action: "chat_authorization_failure", ip: clientIp })
+      const admission = socket.data.chatAdmission as ChatAdmission | undefined
+      if (admission) {
+        releasePendingAdmission(admission.reservationToken, "middleware_rejection")
+      }
+      void limitChatAction({
+        action: "chat_authorization_failure",
+        ip: clientIp,
+      }).catch(() => {
+        logger.warn("limiter_accounting_failed", {
+          action: "chat_authorization_failure",
+        })
+      })
       logger.warn("connection_rejected", { reason: "authorization_failed" })
       next(new Error("unauthorized"))
     }
@@ -130,11 +150,12 @@ export function createChatGateway({
 
   io.on("connection", (socket) => {
     const identity = socket.data.chat as ChatGatewayIdentity
-    const admission = socket.data.chatAdmission as {
-      clientIp: string | undefined
-      userId: string
+    const admission = socket.data.chatAdmission as ChatAdmission | undefined
+    if (!admission || !releasePendingAdmission(admission.reservationToken, "connected")) {
+      logger.warn("connection_rejected", { reason: "pending_admission_expired" })
+      socket.disconnect(true)
+      return
     }
-    releasePendingConnection(admission.userId, admission.clientIp)
     const userSockets = socketsByUser.get(identity.userId) ?? new Set<Socket>()
     userSockets.add(socket)
     socketsByUser.set(identity.userId, userSockets)
@@ -210,9 +231,13 @@ export function createChatGateway({
     )
   }
 
-  function reserveConnection(userId: string, clientIp: string | undefined) {
+  function reserveConnection(
+    userId: string,
+    clientIp: string | undefined,
+    socket: Socket
+  ): ChatAdmission | "ip_connection_limit" | "user_connection_limit" {
     const activeUserSockets = socketsByUser.get(userId)?.size ?? 0
-    const pendingUserSockets = pendingConnectionsByUser.get(userId) ?? 0
+    const pendingUserSockets = pendingAdmissionTokensByUser.get(userId)?.size ?? 0
 
     if (activeUserSockets + pendingUserSockets >= abuseSettings.maxActiveSocketsPerUser) {
       return "user_connection_limit"
@@ -220,24 +245,115 @@ export function createChatGateway({
 
     if (clientIp) {
       const activeIpSockets = socketsByIp.get(clientIp)?.size ?? 0
-      const pendingIpSockets = pendingConnectionsByIp.get(clientIp) ?? 0
+      const pendingIpSockets = pendingAdmissionTokensByIp.get(clientIp)?.size ?? 0
 
       if (activeIpSockets + pendingIpSockets >= abuseSettings.maxActiveSocketsPerIp) {
         return "ip_connection_limit"
       }
 
-      pendingConnectionsByIp.set(clientIp, pendingIpSockets + 1)
     }
 
-    pendingConnectionsByUser.set(userId, pendingUserSockets + 1)
-    return "accepted"
+    const reservationToken = randomUUID()
+    const pendingAdmission: PendingAdmission = {
+      clientIp,
+      createdAt: Date.now(),
+      reservationToken,
+      timeout: undefined,
+      userId,
+    }
+    pendingAdmissions.set(reservationToken, pendingAdmission)
+    addPendingAdmissionToken(pendingAdmissionTokensByUser, userId, reservationToken)
+    if (clientIp) {
+      addPendingAdmissionToken(pendingAdmissionTokensByIp, clientIp, reservationToken)
+    }
+    pendingAdmission.timeout = setTimeout(() => {
+      const released = releasePendingAdmission(reservationToken, "timeout")
+      if (released) {
+        logger.warn("pending_admission_expired", pendingAdmissionMetricFields())
+        socket.conn.close()
+      }
+    }, pendingAdmissionTtlMs)
+    pendingAdmission.timeout.unref()
+    recordPendingAdmissionMetrics("reserved")
+
+    return { clientIp, reservationToken, userId }
   }
 
-  function releasePendingConnection(userId: string, clientIp: string | undefined) {
-    decrementConnectionCount(pendingConnectionsByUser, userId)
-    if (clientIp) {
-      decrementConnectionCount(pendingConnectionsByIp, clientIp)
+  function bindPendingAdmissionCleanup(socket: Socket, reservationToken: string) {
+    socket.conn.once("close", () => {
+      releasePendingAdmission(reservationToken, "transport_closed")
+    })
+    socket.once("disconnect", () => {
+      releasePendingAdmission(reservationToken, "client_aborted")
+    })
+  }
+
+  function releasePendingAdmission(
+    reservationToken: string,
+    reason:
+      | "client_aborted"
+      | "connected"
+      | "middleware_rejection"
+      | "server_shutdown"
+      | "timeout"
+      | "transport_closed"
+  ) {
+    const pendingAdmission = pendingAdmissions.get(reservationToken)
+    if (!pendingAdmission) {
+      return false
     }
+
+    pendingAdmissions.delete(reservationToken)
+    clearTimeout(pendingAdmission.timeout)
+    removePendingAdmissionToken(
+      pendingAdmissionTokensByUser,
+      pendingAdmission.userId,
+      reservationToken
+    )
+    if (pendingAdmission.clientIp) {
+      removePendingAdmissionToken(
+        pendingAdmissionTokensByIp,
+        pendingAdmission.clientIp,
+        reservationToken
+      )
+    }
+
+    recordPendingAdmissionMetrics(reason)
+    return true
+  }
+
+  function releaseAllPendingAdmissions() {
+    for (const reservationToken of [...pendingAdmissions.keys()]) {
+      releasePendingAdmission(reservationToken, "server_shutdown")
+    }
+  }
+
+  function getPendingAdmissionMetrics() {
+    let oldestPendingAgeMs = 0
+    const now = Date.now()
+    for (const admission of pendingAdmissions.values()) {
+      oldestPendingAgeMs = Math.max(oldestPendingAgeMs, now - admission.createdAt)
+    }
+
+    return {
+      oldestPendingAgeMs,
+      pendingAdmissions: pendingAdmissions.size,
+    }
+  }
+
+  function pendingAdmissionMetricFields() {
+    const metrics = getPendingAdmissionMetrics()
+    return {
+      oldestPendingAgeMs: String(metrics.oldestPendingAgeMs),
+      pendingAdmissions: String(metrics.pendingAdmissions),
+    }
+  }
+
+  function recordPendingAdmissionMetrics(reason: string) {
+    logger.info("pending_admission_metrics", {
+      reason,
+      ...pendingAdmissionMetricFields(),
+    })
   }
 
   function disconnectUser(userId: string, reason: string) {
@@ -260,24 +376,49 @@ export function createChatGateway({
       if (revalidationTimer) {
         clearInterval(revalidationTimer)
       }
+      releaseAllPendingAdmissions()
       await closeGateway(io, httpServer)
     },
     disconnectUser,
+    getPendingAdmissionMetrics,
     httpServer,
     io,
     start: (port) => startGateway(httpServer, port),
   }
 }
 
-function decrementConnectionCount(connections: Map<string, number>, key: string) {
-  const current = connections.get(key) ?? 0
+type ChatAdmission = {
+  clientIp: string | undefined
+  reservationToken: string
+  userId: string
+}
 
-  if (current <= 1) {
-    connections.delete(key)
-    return
+type PendingAdmission = ChatAdmission & {
+  createdAt: number
+  timeout: NodeJS.Timeout | undefined
+}
+
+function addPendingAdmissionToken(
+  reservations: Map<string, Set<string>>,
+  key: string,
+  reservationToken: string
+) {
+  const tokens = reservations.get(key) ?? new Set<string>()
+  tokens.add(reservationToken)
+  reservations.set(key, tokens)
+}
+
+function removePendingAdmissionToken(
+  reservations: Map<string, Set<string>>,
+  key: string,
+  reservationToken: string
+) {
+  const tokens = reservations.get(key)
+  tokens?.delete(reservationToken)
+
+  if (tokens?.size === 0) {
+    reservations.delete(key)
   }
-
-  connections.set(key, current - 1)
 }
 
 function getGatewayClientIp(socket: Socket) {

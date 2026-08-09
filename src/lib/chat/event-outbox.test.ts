@@ -48,6 +48,7 @@ describe("chat event outbox", () => {
         payload: event,
         version: 1,
       }),
+      select: { id: true },
     })
   })
 

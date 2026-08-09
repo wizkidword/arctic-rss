@@ -59,6 +59,7 @@ describe("SmartDigestsPage", () => {
     expect(markup).toContain("Smart Digests")
     expect(markup).toContain('href="/app/smart-digests/new"')
     expect(markup).toContain("No Smart Digests yet")
+    expect(markup).toContain("From search to briefing")
   })
 
   it("redirects anonymous visitors to login", async () => {

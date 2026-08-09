@@ -1,7 +1,11 @@
 import type { Session } from "next-auth"
 
 import { auth } from "@/auth"
-import { getFreshUserState, type FreshUser } from "@/lib/fresh-user"
+import {
+  getFreshUserState,
+  type FreshUser,
+  withFreshUserRequestScope,
+} from "@/lib/fresh-user"
 
 export class AuthorizationError extends Error {
   constructor(message: string) {
@@ -20,19 +24,36 @@ export async function requireAuthenticatedUser(): Promise<Session> {
   return session
 }
 
+export async function withAuthenticatedRequestScope<T>(
+  callback: (session: Session) => Promise<T>
+): Promise<T> {
+  // Auth.js runs its authoritative JWT callback during auth(). Keeping the
+  // callback and the subsequent fresh authorization check inside one explicit
+  // AsyncLocalStorage scope makes them share one read for this request only.
+  return withFreshUserRequestScope(async () => {
+    const session = await requireAuthenticatedUser()
+
+    return callback(session)
+  })
+}
+
 export async function requireFreshUser(
   session?: Session
 ): Promise<FreshUser> {
-  const authenticatedSession = session ?? (await requireAuthenticatedUser())
+  if (!session) {
+    return withAuthenticatedRequestScope((authenticatedSession) =>
+      requireFreshUser(authenticatedSession)
+    )
+  }
 
-  const user = await getFreshUserState(authenticatedSession.user.id)
+  const user = await getFreshUserState(session.user.id)
 
   if (
     !user ||
     user.disabledAt ||
-    user.authVersion !== authenticatedSession.user.authVersion ||
-    user.role !== authenticatedSession.user.role ||
-    user.plan !== authenticatedSession.user.plan
+    user.authVersion !== session.user.authVersion ||
+    user.role !== session.user.role ||
+    user.plan !== session.user.plan
   ) {
     throw new AuthorizationError("Your session is no longer valid.")
   }

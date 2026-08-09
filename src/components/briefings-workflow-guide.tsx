@@ -1,4 +1,11 @@
-import { BellRingIcon, BookmarkIcon, SparklesIcon } from "lucide-react"
+import Link from "next/link"
+import {
+  BellRingIcon,
+  BookmarkIcon,
+  ListChecksIcon,
+  SearchIcon,
+  SparklesIcon,
+} from "lucide-react"
 
 export function BriefingsWorkflowGuide() {
   return (
@@ -6,27 +13,56 @@ export function BriefingsWorkflowGuide() {
       <h2 className="font-heading text-base font-medium">
         From search to briefing
       </h2>
-      <ol className="mt-3 grid gap-3 text-sm leading-6 text-muted-foreground md:grid-cols-3">
+      <ol className="mt-3 grid gap-3 text-sm leading-6 text-muted-foreground lg:grid-cols-5">
         <li>
-          <div className="flex items-center gap-2 font-medium text-foreground">
-            <BookmarkIcon className="size-4" />
-            Saved view
-          </div>
-          <p className="mt-1">A private shortcut to the search filters you use again.</p>
+          <Link
+            className="flex items-center gap-2 font-medium text-foreground underline-offset-4 hover:underline"
+            href="/app/search"
+          >
+            <SearchIcon className="size-4" />
+            Search
+          </Link>
+          <p className="mt-1">Find articles by topic, source, folder, date, or reading state.</p>
         </li>
         <li>
-          <div className="flex items-center gap-2 font-medium text-foreground">
+          <Link
+            className="flex items-center gap-2 font-medium text-foreground underline-offset-4 hover:underline"
+            href="/app/saved-searches"
+          >
+            <BookmarkIcon className="size-4" />
+            Save view
+          </Link>
+          <p className="mt-1">Keep the filters you want to return to as a private saved view.</p>
+        </li>
+        <li>
+          <Link
+            className="flex items-center gap-2 font-medium text-foreground underline-offset-4 hover:underline"
+            href="/app/saved-searches"
+          >
             <BellRingIcon className="size-4" />
             Monitor
-          </div>
-          <p className="mt-1">A saved view that checks for new matches and can count or star them.</p>
+          </Link>
+          <p className="mt-1">Preview the saved view, then count or star new matches. You can pause it anytime.</p>
         </li>
         <li>
-          <div className="flex items-center gap-2 font-medium text-foreground">
+          <Link
+            className="flex items-center gap-2 font-medium text-foreground underline-offset-4 hover:underline"
+            href="/app/smart-digests"
+          >
             <SparklesIcon className="size-4" />
             Smart Digest
-          </div>
-          <p className="mt-1">A scheduled briefing you explicitly create from your chosen topic and sources.</p>
+          </Link>
+          <p className="mt-1">Create a scheduled briefing from the topic and sources you choose.</p>
+        </li>
+        <li>
+          <Link
+            className="flex items-center gap-2 font-medium text-foreground underline-offset-4 hover:underline"
+            href="/app/smart-digests"
+          >
+            <ListChecksIcon className="size-4" />
+            Review results
+          </Link>
+          <p className="mt-1">Open the latest briefing to review each matching article and source.</p>
         </li>
       </ol>
     </section>

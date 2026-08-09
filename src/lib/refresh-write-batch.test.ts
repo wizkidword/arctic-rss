@@ -3,10 +3,8 @@ import { describe, expect, it, vi } from "vitest"
 import { writeRefreshItems } from "./refresh-write-batch"
 
 describe("writeRefreshItems", () => {
-  it("creates new records in bounded bulk batches and updates existing records together", async () => {
-    const createMany = vi.fn(async (items: Array<{ externalId: string }>) => ({
-      count: items.filter((item) => item.externalId !== "existing").length,
-    }))
+  it("creates only new records and updates changed records in bounded batches", async () => {
+    const createMany = vi.fn(async (items: Array<{ externalId: string }>) => ({ count: items.length }))
     const update = vi.fn().mockResolvedValue({})
     const runUpdateBatch = vi.fn(async (operations: Array<Promise<unknown>>) =>
       Promise.all(operations)
@@ -15,51 +13,77 @@ describe("writeRefreshItems", () => {
     const result = await writeRefreshItems({
       batchSize: 2,
       createMany,
-      findExistingExternalIds: vi.fn().mockResolvedValue([{ externalId: "existing" }]),
+      findExistingItems: vi.fn().mockResolvedValue([
+        { externalId: "existing", ingestionFingerprint: "old" },
+      ]),
       items: [
-        { externalId: "new-1" },
-        { externalId: "existing" },
-        { externalId: "new-2" },
+        { externalId: "new-1", ingestionFingerprint: "new-1" },
+        { externalId: "existing", ingestionFingerprint: "new" },
+        { externalId: "new-2", ingestionFingerprint: "new-2" },
       ],
       runUpdateBatch,
       update,
     })
 
-    expect(createMany).toHaveBeenCalledTimes(2)
+    expect(createMany).toHaveBeenCalledTimes(1)
     expect(createMany).toHaveBeenNthCalledWith(1, [
-      { externalId: "new-1" },
-      { externalId: "existing" },
+      { externalId: "new-1", ingestionFingerprint: "new-1" },
+      { externalId: "new-2", ingestionFingerprint: "new-2" },
     ])
-    expect(createMany).toHaveBeenNthCalledWith(2, [{ externalId: "new-2" }])
-    expect(update).toHaveBeenCalledWith({ externalId: "existing" })
+    expect(update).toHaveBeenCalledWith({ externalId: "existing", ingestionFingerprint: "new" })
     expect(runUpdateBatch).toHaveBeenCalledTimes(1)
     expect(result).toEqual({
+      changedCount: 1,
+      duplicateInputCount: 0,
       insertedCount: 2,
-      skippedCount: 0,
-      updatedCount: 1,
+      unchangedCount: 0,
     })
   })
 
-  it("deduplicates repeated external IDs and records them as skipped", async () => {
+  it("skips identical existing data and reports duplicate input separately", async () => {
     const createMany = vi.fn().mockResolvedValue({ count: 1 })
+    const update = vi.fn()
 
     const result = await writeRefreshItems({
       createMany,
-      findExistingExternalIds: vi.fn().mockResolvedValue([]),
+      findExistingItems: vi.fn().mockResolvedValue([
+        { externalId: "same", ingestionFingerprint: "new" },
+      ]),
       items: [
-        { externalId: "same", value: "old" },
-        { externalId: "same", value: "new" },
+        { externalId: "same", ingestionFingerprint: "old", value: "old" },
+        { externalId: "same", ingestionFingerprint: "new", value: "new" },
       ],
-      update: vi.fn(),
+      update,
     })
 
-    expect(createMany).toHaveBeenCalledWith([
-      { externalId: "same", value: "new" },
-    ])
+    expect(createMany).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
     expect(result).toEqual({
-      insertedCount: 1,
-      skippedCount: 1,
-      updatedCount: 0,
+      changedCount: 0,
+      duplicateInputCount: 1,
+      insertedCount: 0,
+      unchangedCount: 1,
+    })
+  })
+
+  it("updates a legacy item once so it gains a fingerprint", async () => {
+    const update = vi.fn().mockResolvedValue({})
+
+    const result = await writeRefreshItems({
+      createMany: vi.fn(),
+      findExistingItems: vi.fn().mockResolvedValue([
+        { externalId: "legacy", ingestionFingerprint: null },
+      ]),
+      items: [{ externalId: "legacy", ingestionFingerprint: "current" }],
+      update,
+    })
+
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      changedCount: 1,
+      duplicateInputCount: 0,
+      insertedCount: 0,
+      unchangedCount: 0,
     })
   })
 })

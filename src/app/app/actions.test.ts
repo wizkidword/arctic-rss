@@ -22,6 +22,13 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockCollectionRetentionError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "CollectionRetentionError"
+    }
+  }
+
   class MockFeedSubscriptionError extends Error {
     constructor(message: string) {
       super(message)
@@ -73,20 +80,24 @@ const mocks = vi.hoisted(() => {
     auth: vi.fn(),
     deleteArticleForUser: vi.fn(),
     dismissStoryClusterForUser: vi.fn(),
+    enqueueFeedRefresh: vi.fn(),
     enqueueAiDigest: vi.fn(),
     evaluateStoryClustersForArticleUser: vi.fn(),
     generateStoryClusterAnalysisForUser: vi.fn(),
     generateArticleSummaryForUser: vi.fn(),
     getPrisma: vi.fn(),
     getDiscoverDirectoryFeed: vi.fn(),
+    getCollectionArticleSourceForUser: vi.fn(),
     getUserFeedSubscription: vi.fn(),
     isAiDigestPeriod: vi.fn(
       (value: unknown) => value === "DAILY" || value === "WEEKLY",
     ),
     mergeStoryClustersForUser: vi.fn(),
+    markFeedSubscriptionAttentionReviewed: vi.fn(),
     MockAiDigestError,
     MockAiSummaryError,
     MockArticleCollectionError,
+    MockCollectionRetentionError,
     MockFeedSubscriptionError,
     MockFeedValidationError,
     MockOpmlImportJobError,
@@ -101,6 +112,7 @@ const mocks = vi.hoisted(() => {
     removePodcastEpisodeFromCollection: vi.fn(),
     refresh: vi.fn(),
     refreshFeed: vi.fn(),
+    replaceFeedSubscription: vi.fn(),
     requestEmailVerification: vi.fn(),
     requestAiDigestForUser: vi.fn(),
     retryOpmlImportJob: vi.fn(),
@@ -152,6 +164,11 @@ vi.mock("@/lib/article-collections", () => ({
     mocks.removePodcastEpisodeFromCollection,
 }))
 
+vi.mock("@/lib/collection-retention", () => ({
+  CollectionRetentionError: mocks.MockCollectionRetentionError,
+  getCollectionArticleSourceForUser: mocks.getCollectionArticleSourceForUser,
+}))
+
 vi.mock("@/lib/bug-reports", () => ({
   createBugReportForUser: mocks.createBugReportForUser,
 }))
@@ -188,6 +205,10 @@ vi.mock("@/lib/feed-discovery", () => ({
   FeedValidationError: mocks.MockFeedValidationError,
 }))
 
+vi.mock("@/lib/feed-refresh-queue", () => ({
+  enqueueFeedRefresh: mocks.enqueueFeedRefresh,
+}))
+
 vi.mock("@/lib/feed-refresh", () => ({
   FeedRefreshError: class FeedRefreshError extends Error {},
   refreshFeed: mocks.refreshFeed,
@@ -196,6 +217,8 @@ vi.mock("@/lib/feed-refresh", () => ({
 vi.mock("@/lib/feed-subscriptions", () => ({
   FeedSubscriptionError: mocks.MockFeedSubscriptionError,
   getUserFeedSubscription: mocks.getUserFeedSubscription,
+  markFeedSubscriptionAttentionReviewed: mocks.markFeedSubscriptionAttentionReviewed,
+  replaceFeedSubscription: mocks.replaceFeedSubscription,
   setFeedSubscriptionPaused: mocks.setFeedSubscriptionPaused,
   subscribeToFeed: mocks.subscribeToFeed,
   unsubscribeFromFeed: mocks.unsubscribeFromFeed,
@@ -262,6 +285,7 @@ import {
   generateAiDigestAction,
   generateArticleSummaryAction,
   generateStoryClusterAnalysisAction,
+  followCollectionArticleSourceAction,
   importOpmlAction,
   markArticleReadOnOpen,
   mergeStoryClustersAction,
@@ -269,6 +293,8 @@ import {
   removeArticleFromCollectionAction,
   removePodcastEpisodeFromCollectionAction,
   refreshFeedAction,
+  replaceFeedSubscriptionAction,
+  reviewFeedAttentionAction,
   setFeedPausedAction,
   subscribeDirectoryFeedAction,
   resendEmailVerificationAction,
@@ -877,6 +903,8 @@ describe("bulkFeedAttentionAction", () => {
     mocks.enforceRateLimit.mockReset()
     mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
     mocks.getUserFeedSubscription.mockReset()
+    mocks.enqueueFeedRefresh.mockReset()
+    mocks.enqueueFeedRefresh.mockResolvedValue({ jobId: "feed-1", outcome: "queued" })
     mocks.refresh.mockReset()
     mocks.refreshFeed.mockReset()
     mocks.revalidatePath.mockReset()
@@ -980,7 +1008,242 @@ describe("bulkFeedAttentionAction", () => {
       message: "Resume selected sources before retrying them.",
       status: "error",
     })
+    expect(mocks.enqueueFeedRefresh).not.toHaveBeenCalled()
+  })
+
+  it("queues selected sources promptly and reports already-queued work", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getUserFeedSubscription
+      .mockResolvedValueOnce({ feedId: "feed-1", id: "subscription-1", isPaused: false })
+      .mockResolvedValueOnce({ feedId: "feed-2", id: "subscription-2", isPaused: false })
+    mocks.enqueueFeedRefresh
+      .mockResolvedValueOnce({ jobId: "feed-feed-1", outcome: "queued" })
+      .mockResolvedValueOnce({ jobId: "feed-feed-2", outcome: "already-queued" })
+    const formData = new FormData()
+    formData.set("operation", "retry")
+    formData.append("subscriptionIds", "subscription-1")
+    formData.append("subscriptionIds", "subscription-2")
+
+    await expect(
+      bulkFeedAttentionAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "1 source queued; 1 source already queued.",
+      status: "success",
+    })
+    expect(mocks.enqueueFeedRefresh).toHaveBeenNthCalledWith(1, "feed-1", {
+      priority: 1,
+      trigger: "source-attention",
+    })
+    expect(mocks.enqueueFeedRefresh).toHaveBeenNthCalledWith(2, "feed-2", {
+      priority: 1,
+      trigger: "source-attention",
+    })
     expect(mocks.refreshFeed).not.toHaveBeenCalled()
+  })
+})
+
+describe("source hygiene actions", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enqueueFeedRefresh.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.markFeedSubscriptionAttentionReviewed.mockReset()
+    mocks.refresh.mockReset()
+    mocks.replaceFeedSubscription.mockReset()
+    mocks.revalidatePath.mockReset()
+  })
+
+  it("requires a reader to type REPLACE before changing a source", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    const formData = new FormData()
+    formData.set("candidateUrl", "https://feeds.example.com/new.xml")
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      replaceFeedSubscriptionAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "Type REPLACE to confirm changing this source.",
+      status: "error",
+    })
+
+    expect(mocks.replaceFeedSubscription).not.toHaveBeenCalled()
+    expect(mocks.enqueueFeedRefresh).not.toHaveBeenCalled()
+  })
+
+  it("verifies, replaces, and queues a reader-owned source", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.replaceFeedSubscription.mockResolvedValue({
+      feedId: "feed-new",
+      previousFeedUrl: "https://example.com/old.xml",
+      title: "My source",
+    })
+    mocks.enqueueFeedRefresh.mockResolvedValue({
+      jobId: "feed-new",
+      outcome: "queued",
+    })
+    const formData = new FormData()
+    formData.set("candidateUrl", "https://feeds.example.com/new.xml")
+    formData.set("confirmation", "REPLACE")
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      replaceFeedSubscriptionAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message:
+        "My source now follows the verified replacement. Its refresh is queued.",
+      status: "success",
+    })
+
+    expect(mocks.replaceFeedSubscription).toHaveBeenCalledWith({
+      candidateUrl: "https://feeds.example.com/new.xml",
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(mocks.enqueueFeedRefresh).toHaveBeenCalledWith("feed-new", {
+      priority: 1,
+      trigger: "source-hygiene-replacement",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app", "layout")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/feed/subscription-1")
+  })
+
+  it("records a recovery review only for the signed-in reader", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      reviewFeedAttentionAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({
+      message: "Source recovery marked as reviewed.",
+      status: "success",
+    })
+
+    expect(mocks.markFeedSubscriptionAttentionReviewed).toHaveBeenCalledWith({
+      subscriptionId: "subscription-1",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/folders")
+  })
+})
+
+describe("followCollectionArticleSourceAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enqueueFeedRefresh.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.getCollectionArticleSourceForUser.mockReset()
+    mocks.refresh.mockReset()
+    mocks.revalidatePath.mockReset()
+    mocks.subscribeToFeed.mockReset()
+  })
+
+  it("requires a signed-in reader before looking up a saved source", async () => {
+    mocks.auth.mockResolvedValue(null)
+
+    await expect(
+      followCollectionArticleSourceAction(
+        { message: "", status: "idle" },
+        new FormData()
+      )
+    ).resolves.toEqual({
+      message: "You need to sign in before following sources.",
+      status: "error",
+    })
+
+    expect(mocks.getCollectionArticleSourceForUser).not.toHaveBeenCalled()
+  })
+
+  it("rechecks the reader-owned saved article before following its source", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getCollectionArticleSourceForUser.mockResolvedValue({
+      feedUrl: "https://example.com/feed.xml",
+      sourceIsFollowed: false,
+      title: "Example Source",
+    })
+    mocks.subscribeToFeed.mockResolvedValue({ feedId: "feed-1" })
+    mocks.enqueueFeedRefresh.mockResolvedValue({
+      jobId: "refresh-1",
+      outcome: "queued",
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("collectionId", "collection-1")
+
+    await expect(
+      followCollectionArticleSourceAction(
+        { message: "", status: "idle" },
+        formData
+      )
+    ).resolves.toEqual({
+      message: "Following Example Source. Article refresh queued.",
+      status: "success",
+    })
+
+    expect(mocks.getCollectionArticleSourceForUser).toHaveBeenCalledWith({
+      articleId: "article-1",
+      collectionId: "collection-1",
+      userId: "user-1",
+    })
+    expect(mocks.subscribeToFeed).toHaveBeenCalledWith({
+      url: "https://example.com/feed.xml",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/app/collections/collection-1"
+    )
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+  })
+
+  it("does not create a duplicate subscription when the source is already followed", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getCollectionArticleSourceForUser.mockResolvedValue({
+      feedUrl: "https://example.com/feed.xml",
+      sourceIsFollowed: true,
+      title: "Example Source",
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("collectionId", "collection-1")
+
+    await expect(
+      followCollectionArticleSourceAction(
+        { message: "", status: "idle" },
+        formData
+      )
+    ).resolves.toEqual({
+      message: "You already follow Example Source.",
+      status: "success",
+    })
+
+    expect(mocks.subscribeToFeed).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+
+  it("returns a readable error when the collection item is no longer owned", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getCollectionArticleSourceForUser.mockRejectedValue(
+      new mocks.MockCollectionRetentionError(
+        "That saved collection article was not found."
+      )
+    )
+    const formData = new FormData()
+    formData.set("articleId", "article-other")
+    formData.set("collectionId", "collection-other")
+
+    await expect(
+      followCollectionArticleSourceAction(
+        { message: "", status: "idle" },
+        formData
+      )
+    ).resolves.toEqual({
+      message: "That saved collection article was not found.",
+      status: "error",
+    })
+
+    expect(mocks.subscribeToFeed).not.toHaveBeenCalled()
   })
 })
 
@@ -988,6 +1251,8 @@ describe("refreshFeedAction", () => {
   beforeEach(() => {
     mocks.auth.mockReset()
     mocks.getUserFeedSubscription.mockReset()
+    mocks.enqueueFeedRefresh.mockReset()
+    mocks.enqueueFeedRefresh.mockResolvedValue({ jobId: "feed-1", outcome: "queued" })
     mocks.refresh.mockReset()
     mocks.refreshFeed.mockReset()
     mocks.revalidatePath.mockReset()
@@ -1025,7 +1290,7 @@ describe("refreshFeedAction", () => {
         message: "This feed was refreshed recently. Try again in 3 minutes.",
         status: "error",
       })
-      expect(mocks.refreshFeed).not.toHaveBeenCalled()
+      expect(mocks.enqueueFeedRefresh).not.toHaveBeenCalled()
       expect(mocks.revalidatePath).not.toHaveBeenCalled()
       expect(mocks.refresh).not.toHaveBeenCalled()
     } finally {
@@ -1050,10 +1315,6 @@ describe("refreshFeedAction", () => {
         feedId: "feed-1",
         id: "subscription-1",
       })
-      mocks.refreshFeed.mockResolvedValue({
-        articleCount: 8,
-        feedId: "feed-1",
-      })
       const formData = new FormData()
       formData.set("subscriptionId", "subscription-1")
 
@@ -1065,14 +1326,17 @@ describe("refreshFeedAction", () => {
         formData
       )
 
-      expect(mocks.refreshFeed).toHaveBeenCalledWith("feed-1")
+      expect(mocks.enqueueFeedRefresh).toHaveBeenCalledWith("feed-1", {
+        priority: 1,
+        trigger: "manual",
+      })
       expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
       expect(mocks.revalidatePath).toHaveBeenCalledWith(
         "/app/feed/subscription-1"
       )
       expect(mocks.refresh).toHaveBeenCalled()
       expect(result).toEqual({
-        message: "Fetched 8 articles.",
+        message: "Refresh queued.",
         status: "success",
       })
     } finally {
@@ -1097,7 +1361,27 @@ describe("refreshFeedAction", () => {
       message: "Resume this feed before reloading it.",
       status: "error",
     })
-    expect(mocks.refreshFeed).not.toHaveBeenCalled()
+    expect(mocks.enqueueFeedRefresh).not.toHaveBeenCalled()
+  })
+
+  it("treats an existing deterministic refresh job as a successful request", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getUserFeedSubscription.mockResolvedValue({
+      feed: { lastFetchedAt: null },
+      feedId: "feed-1",
+      id: "subscription-1",
+      isPaused: false,
+    })
+    mocks.enqueueFeedRefresh.mockResolvedValueOnce({
+      jobId: "feed-feed-1",
+      outcome: "already-queued",
+    })
+    const formData = new FormData()
+    formData.set("subscriptionId", "subscription-1")
+
+    await expect(
+      refreshFeedAction({ message: "", status: "idle" }, formData)
+    ).resolves.toEqual({ message: "Refresh already queued.", status: "success" })
   })
 })
 
@@ -1162,7 +1446,7 @@ describe("setFeedPausedAction", () => {
 
 describe("subscribeDirectoryFeedAction", () => {
   function expectNoPostCommitOperations() {
-    expect(mocks.refreshFeed).not.toHaveBeenCalled()
+    expect(mocks.enqueueFeedRefresh).not.toHaveBeenCalled()
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
     expect(mocks.refresh).not.toHaveBeenCalled()
   }
@@ -1173,6 +1457,8 @@ describe("subscribeDirectoryFeedAction", () => {
     mocks.refreshFeed.mockReset()
     mocks.revalidatePath.mockReset()
     mocks.getDiscoverDirectoryFeed.mockReset()
+    mocks.enqueueFeedRefresh.mockReset()
+    mocks.enqueueFeedRefresh.mockResolvedValue({ jobId: "feed-1", outcome: "queued" })
     mocks.getDiscoverDirectoryFeed.mockImplementation(async (feedId: string) => {
       if (feedId === "npr-national") {
         return {
@@ -1254,9 +1540,6 @@ describe("subscribeDirectoryFeedAction", () => {
     mocks.subscribeToFeed.mockResolvedValue({
       feedId: "feed-1",
     })
-    mocks.refreshFeed.mockResolvedValue({
-      articleCount: 12,
-    })
     const formData = new FormData()
     formData.set("directoryFeedId", "npr-national")
 
@@ -1273,11 +1556,14 @@ describe("subscribeDirectoryFeedAction", () => {
       url: "https://feeds.npr.org/1003/rss.xml",
       userId: "user-1",
     })
-    expect(mocks.refreshFeed).toHaveBeenCalledWith("feed-1")
+    expect(mocks.enqueueFeedRefresh).toHaveBeenCalledWith("feed-1", {
+      priority: 1,
+      trigger: "subscription-initial-retry",
+    })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
-      message: "Subscribed to NPR - National. Imported 12 articles.",
+      message: "Subscribed to NPR - National. Article refresh queued.",
       status: "success",
     })
   })
@@ -1303,7 +1589,7 @@ describe("subscribeDirectoryFeedAction", () => {
       formData
     )
 
-    expect(mocks.refreshFeed).not.toHaveBeenCalled()
+    expect(mocks.enqueueFeedRefresh).not.toHaveBeenCalled()
     expect(result).toEqual({
       message: "Subscribed to NPR - National. Imported 18 articles.",
       status: "success",
@@ -1351,9 +1637,6 @@ describe("subscribeDirectoryFeedAction", () => {
     mocks.subscribeToFeed.mockResolvedValue({
       feedId: "feed-2",
     })
-    mocks.refreshFeed.mockResolvedValue({
-      articleCount: 4,
-    })
     const formData = new FormData()
     formData.set("directoryFeedId", "npr-world")
     formData.set("folderId", "folder-1")
@@ -1372,7 +1655,7 @@ describe("subscribeDirectoryFeedAction", () => {
       userId: "user-1",
     })
     expect(result).toEqual({
-      message: "Subscribed to NPR - World. Imported 4 articles.",
+      message: "Subscribed to NPR - World. Article refresh queued.",
       status: "success",
     })
   })
@@ -1385,9 +1668,6 @@ describe("subscribeDirectoryFeedAction", () => {
     })
     mocks.subscribeToFeed.mockResolvedValue({
       feedId: "feed-2",
-    })
-    mocks.refreshFeed.mockResolvedValue({
-      articleCount: 4,
     })
     const formData = new FormData()
     formData.set("directoryFeedId", "npr-world")
@@ -1408,7 +1688,7 @@ describe("subscribeDirectoryFeedAction", () => {
       userId: "user-1",
     })
     expect(result).toEqual({
-      message: "Subscribed to NPR - World. Imported 4 articles.",
+      message: "Subscribed to NPR - World. Article refresh queued.",
       status: "success",
     })
   })
@@ -1428,9 +1708,6 @@ describe("subscribeDirectoryFeedAction", () => {
     })
     mocks.subscribeToFeed.mockResolvedValue({
       feedId: "feed-imported",
-    })
-    mocks.refreshFeed.mockResolvedValue({
-      articleCount: 6,
     })
     const formData = new FormData()
     formData.set("directoryFeedId", "opml-podcasts-daily-audio")
@@ -1452,7 +1729,7 @@ describe("subscribeDirectoryFeedAction", () => {
       userId: "user-1",
     })
     expect(result).toEqual({
-      message: "Subscribed to Daily Audio. Imported 6 articles.",
+      message: "Subscribed to Daily Audio. Article refresh queued.",
       status: "success",
     })
   })
@@ -1577,7 +1854,7 @@ describe("subscribeDirectoryFeedAction", () => {
     mocks.subscribeToFeed.mockResolvedValue({
       feedId: "feed-1",
     })
-    mocks.refreshFeed.mockRejectedValue(new Error("Feed unavailable"))
+    mocks.enqueueFeedRefresh.mockRejectedValue(new Error("Queue unavailable"))
     const formData = new FormData()
     formData.set("directoryFeedId", "npr-national")
 
@@ -1590,7 +1867,10 @@ describe("subscribeDirectoryFeedAction", () => {
     )
 
     expect(mocks.subscribeToFeed).toHaveBeenCalledTimes(1)
-    expect(mocks.refreshFeed).toHaveBeenCalledWith("feed-1")
+    expect(mocks.enqueueFeedRefresh).toHaveBeenCalledWith("feed-1", {
+      priority: 1,
+      trigger: "subscription-initial-retry",
+    })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
@@ -1599,7 +1879,7 @@ describe("subscribeDirectoryFeedAction", () => {
     })
   })
 
-  it("returns success and attempts refresh when app revalidation fails", async () => {
+  it("returns success after queueing when app revalidation fails", async () => {
     mocks.auth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -1607,9 +1887,6 @@ describe("subscribeDirectoryFeedAction", () => {
     })
     mocks.subscribeToFeed.mockResolvedValue({
       feedId: "feed-1",
-    })
-    mocks.refreshFeed.mockResolvedValue({
-      articleCount: 12,
     })
     mocks.revalidatePath.mockImplementation(() => {
       throw new Error("Cache unavailable")
@@ -1628,12 +1905,12 @@ describe("subscribeDirectoryFeedAction", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
-      message: "Subscribed to NPR - National. Imported 12 articles.",
+      message: "Subscribed to NPR - National. Article refresh queued.",
       status: "success",
     })
   })
 
-  it("returns success when the client refresh fails", async () => {
+  it("returns success when the client refresh fails after queueing", async () => {
     mocks.auth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -1641,9 +1918,6 @@ describe("subscribeDirectoryFeedAction", () => {
     })
     mocks.subscribeToFeed.mockResolvedValue({
       feedId: "feed-1",
-    })
-    mocks.refreshFeed.mockResolvedValue({
-      articleCount: 12,
     })
     mocks.refresh.mockImplementation(() => {
       throw new Error("Client refresh unavailable")
@@ -1662,7 +1936,7 @@ describe("subscribeDirectoryFeedAction", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app")
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
-      message: "Subscribed to NPR - National. Imported 12 articles.",
+      message: "Subscribed to NPR - National. Article refresh queued.",
       status: "success",
     })
   })

@@ -1,0 +1,9 @@
+# These one-purpose handoff helpers have fixed cryptographic compatibility
+# requirements. The v1 verifier preserves its historical scrypt cost for
+# short-lived handoffs. The v2 helper uses HMAC to authenticate an already-
+# derived deletion-token digest in a cookie; it does not store a password.
+# Keeping only these helpers out of CodeQL avoids false positives while the
+# active handoff parsing, expiry checks, and verification remain analyzed.
+paths-ignore:
+  - src/lib/account-deletion-handoff-legacy-v1.ts
+  - src/lib/account-deletion-handoff-v2-signature.ts

@@ -11,6 +11,8 @@ const settings = {
   intervalMs: 5 * 60_000,
   leaseMs: 10 * 60_000,
   matchBatchSize: 2,
+  retryBaseMs: 60_000,
+  retryMaxMs: 60 * 60_000,
 }
 
 function monitor(overrides: Partial<Record<string, unknown>> = {}) {
@@ -21,6 +23,7 @@ function monitor(overrides: Partial<Record<string, unknown>> = {}) {
     monitorCursorArticleId: "article-0",
     monitorCursorCreatedAt: new Date("2026-07-29T11:00:00.000Z"),
     monitorAction: "count",
+    monitorFailureCount: 0,
     monitorNextRunAt: new Date("2026-07-29T11:55:00.000Z"),
     publishedAfter: null,
     publishedBefore: null,
@@ -94,6 +97,7 @@ describe("saved monitors", () => {
       data: {
         monitorCursorArticleId: "article-2",
         monitorCursorCreatedAt: new Date("2026-07-29T11:10:00.000Z"),
+        monitorFailureCount: 0,
         monitorLastRunAt: now,
         monitorNewMatchCount: { increment: 2 },
         monitorNextRunAt: new Date("2026-07-29T12:05:00.000Z"),
@@ -195,7 +199,7 @@ describe("saved monitors", () => {
     expect(findMatches).not.toHaveBeenCalled()
   })
 
-  it("releases a failed monitor for a bounded retry without exposing its search terms", async () => {
+  it("releases a failed monitor for a short bounded retry without exposing its search terms", async () => {
     const store = createStore()
 
     await expect(
@@ -207,7 +211,10 @@ describe("saved monitors", () => {
       })
     ).resolves.toMatchObject({ failed: 1, newMatches: 0 })
     expect(store.savedSearch.updateMany).toHaveBeenLastCalledWith({
-      data: { monitorNextRunAt: new Date("2026-07-29T12:05:00.000Z") },
+      data: {
+        monitorFailureCount: 1,
+        monitorNextRunAt: new Date("2026-07-29T12:01:00.000Z"),
+      },
       where: {
         id: "saved-search-1",
         monitorEnabled: true,
@@ -215,6 +222,44 @@ describe("saved monitors", () => {
         userId: "user-1",
       },
     })
+  })
+
+  it("increases a monitor retry delay after repeated failures and resets it on success", async () => {
+    const failedStore = createStore({
+      due: [monitor({ monitorFailureCount: 1 })],
+    })
+
+    await processDueSavedMonitors({
+      findMatches: vi.fn().mockRejectedValue(new Error("database unavailable")),
+      now,
+      settings,
+      store: failedStore,
+    })
+
+    expect(failedStore.savedSearch.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: {
+          monitorFailureCount: 2,
+          monitorNextRunAt: new Date("2026-07-29T12:02:00.000Z"),
+        },
+      })
+    )
+
+    const recoveredStore = createStore({
+      due: [monitor({ monitorFailureCount: 2 })],
+    })
+    await processDueSavedMonitors({
+      findMatches: vi.fn().mockResolvedValue([]),
+      now,
+      settings,
+      store: recoveredStore,
+    })
+
+    expect(recoveredStore.savedSearch.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ monitorFailureCount: 0 }),
+      })
+    )
   })
 
   it("clamps monitor scheduling settings to a safe bounded range", () => {
@@ -229,6 +274,17 @@ describe("saved monitors", () => {
       intervalMs: 60_000,
       leaseMs: 10 * 60_000,
       matchBatchSize: 500,
+      retryBaseMs: 60_000,
+      retryMaxMs: 60 * 60_000,
     })
+  })
+
+  it("does not allow the configured retry cap to be lower than the retry base", () => {
+    expect(
+      savedMonitorSettings({
+        SAVED_MONITOR_RETRY_BASE_MS: "300000",
+        SAVED_MONITOR_RETRY_MAX_MS: "60000",
+      })
+    ).toMatchObject({ retryBaseMs: 300_000, retryMaxMs: 300_000 })
   })
 })

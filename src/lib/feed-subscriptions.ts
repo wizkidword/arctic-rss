@@ -31,8 +31,18 @@ export type FeedSubscriptionNavItem = {
   id: string
   isPaused: boolean
   lastError: string | null
+  lastFeedSelfUrl: string | null
+  lastPermanentRedirectUrl: string | null
+  lastRecoveredAt: Date | null
+  lastResolvedFeedUrl: string | null
   lastSuccessfulFetchAt: Date | null
+  lastSourceAttentionReviewedAt: Date | null
+  lastSourceUrlObservedAt: Date | null
+  previousFeedSelfUrl: string | null
+  previousFeedUrl: string | null
+  previousResolvedFeedUrl: string | null
   siteUrl: string | null
+  sourceSubscriberCount: number
   title: string
   unreadCount: number
 }
@@ -64,10 +74,22 @@ export const listUserFeedSubscriptions = cache(async function listUserFeedSubscr
         select: {
           faviconUrl: true,
           feedUrl: true,
+          lastFeedSelfUrl: true,
           lastError: true,
+          lastPermanentRedirectUrl: true,
+          lastRecoveredAt: true,
+          lastResolvedFeedUrl: true,
           lastSuccessfulFetchAt: true,
+          lastSourceUrlObservedAt: true,
+          previousFeedSelfUrl: true,
+          previousResolvedFeedUrl: true,
           siteUrl: true,
           title: true,
+          _count: {
+            select: {
+              subscriptions: true,
+            },
+          },
         },
       },
       feedId: true,
@@ -79,6 +101,8 @@ export const listUserFeedSubscriptions = cache(async function listUserFeedSubscr
       folderId: true,
       id: true,
       isPaused: true,
+      lastSourceAttentionReviewedAt: true,
+      previousFeedUrl: true,
     },
     orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
     where: { userId },
@@ -97,8 +121,18 @@ export const listUserFeedSubscriptions = cache(async function listUserFeedSubscr
       id: subscription.id,
       isPaused: subscription.isPaused,
       lastError: subscription.feed.lastError,
+      lastFeedSelfUrl: subscription.feed.lastFeedSelfUrl,
+      lastPermanentRedirectUrl: subscription.feed.lastPermanentRedirectUrl,
+      lastRecoveredAt: subscription.feed.lastRecoveredAt,
+      lastResolvedFeedUrl: subscription.feed.lastResolvedFeedUrl,
       lastSuccessfulFetchAt: subscription.feed.lastSuccessfulFetchAt,
+      lastSourceAttentionReviewedAt: subscription.lastSourceAttentionReviewedAt,
+      lastSourceUrlObservedAt: subscription.feed.lastSourceUrlObservedAt,
+      previousFeedSelfUrl: subscription.feed.previousFeedSelfUrl,
+      previousFeedUrl: subscription.previousFeedUrl,
+      previousResolvedFeedUrl: subscription.feed.previousResolvedFeedUrl,
       siteUrl: subscription.feed.siteUrl,
+      sourceSubscriberCount: subscription.feed._count.subscriptions,
       title: subscription.customTitle || subscription.feed.title,
       unreadCount: unreadCounts.get(subscription.feedId) ?? 0,
     }))
@@ -151,6 +185,146 @@ export async function setFeedSubscriptionPaused({
   }
 
   return { isPaused, subscriptionId }
+}
+
+export async function markFeedSubscriptionAttentionReviewed({
+  subscriptionId,
+  userId,
+}: {
+  subscriptionId: string
+  userId: string
+}) {
+  const update = await getPrisma().feedSubscription.updateMany({
+    data: { lastSourceAttentionReviewedAt: new Date() },
+    where: { id: subscriptionId, userId },
+  })
+
+  if (update.count !== 1) {
+    throw new FeedSubscriptionError("That feed subscription was not found.")
+  }
+}
+
+export async function replaceFeedSubscription({
+  candidateUrl,
+  subscriptionId,
+  userId,
+}: {
+  candidateUrl: string
+  subscriptionId: string
+  userId: string
+}) {
+  const prisma = getPrisma()
+  const subscription = await prisma.feedSubscription.findFirst({
+    where: { id: subscriptionId, userId },
+    select: {
+      customTitle: true,
+      feed: {
+        select: {
+          feedUrl: true,
+          title: true,
+        },
+      },
+      feedId: true,
+      id: true,
+    },
+  })
+
+  if (!subscription) {
+    throw new FeedSubscriptionError("That feed subscription was not found.")
+  }
+
+  const discoveredFeed = await discoverFeedFromUrl(candidateUrl)
+
+  if (discoveredFeed.feedUrl === subscription.feed.feedUrl) {
+    throw new FeedSubscriptionError("This source already uses that feed URL.")
+  }
+
+  const existing = await prisma.feedSubscription.findFirst({
+    where: {
+      userId,
+      feed: {
+        feedUrl: discoveredFeed.feedUrl,
+      },
+    },
+    select: {
+      customTitle: true,
+      id: true,
+      feed: {
+        select: {
+          title: true,
+        },
+      },
+    },
+  })
+
+  if (existing) {
+    throw new FeedSubscriptionError(
+      `You are already subscribed to ${existing.customTitle || existing.feed.title}.`
+    )
+  }
+
+  const now = new Date()
+
+  try {
+    const replacement = await prisma.$transaction(async (transaction) => {
+      const feed = await transaction.feed.upsert({
+        where: { feedUrl: discoveredFeed.feedUrl },
+        create: {
+          description: discoveredFeed.description,
+          faviconUrl: discoveredFeed.faviconUrl,
+          feedUrl: discoveredFeed.feedUrl,
+          language: discoveredFeed.language,
+          lastError: null,
+          lastFetchedAt: now,
+          lastSuccessfulFetchAt: now,
+          siteUrl: discoveredFeed.siteUrl,
+          title: discoveredFeed.title,
+        },
+        update: {
+          description: discoveredFeed.description,
+          faviconUrl: discoveredFeed.faviconUrl,
+          language: discoveredFeed.language,
+          siteUrl: discoveredFeed.siteUrl,
+          title: discoveredFeed.title,
+        },
+        select: {
+          id: true,
+          title: true,
+        },
+      })
+      const update = await transaction.feedSubscription.updateMany({
+        data: {
+          feedId: feed.id,
+          previousFeedUrl: subscription.feed.feedUrl,
+          previousFeedUrlChangedAt: now,
+        },
+        where: { id: subscription.id, userId },
+      })
+
+      if (update.count !== 1) {
+        throw new FeedSubscriptionError("That feed subscription was not found.")
+      }
+
+      return feed
+    })
+
+    return {
+      feedId: replacement.id,
+      previousFeedUrl: subscription.feed.feedUrl,
+      title: subscription.customTitle || replacement.title,
+    }
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new FeedSubscriptionError(
+        "You are already subscribed to the proposed replacement source."
+      )
+    }
+
+    throw error
+  }
 }
 
 export async function unsubscribeFromFeed({

@@ -498,24 +498,31 @@ model Folder {
 }
 
 model Feed {
-  id                     String    @id @default(cuid())
-  feedUrl                String    @unique
-  siteUrl                String?
-  title                  String
-  description            String?
-  faviconUrl             String?
-  language               String?
-  lastFetchedAt          DateTime?
-  lastSuccessfulFetchAt  DateTime?
-  lastFailedAt           DateTime?
-  lastError              String?
-  nextFetchAt            DateTime  @default(now())
-  consecutiveFailures    Int       @default(0)
-  etag                   String?
-  lastModified           String?
-  refreshIntervalMinutes Int       @default(60)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  id                       String    @id @default(cuid())
+  feedUrl                  String    @unique
+  siteUrl                  String?
+  title                    String
+  description              String?
+  faviconUrl               String?
+  language                 String?
+  lastFetchedAt            DateTime?
+  lastSuccessfulFetchAt    DateTime?
+  lastFailedAt             DateTime?
+  lastRecoveredAt          DateTime?
+  lastError                String?
+  lastResolvedFeedUrl      String?
+  previousResolvedFeedUrl  String?
+  lastPermanentRedirectUrl String?
+  lastFeedSelfUrl          String?
+  previousFeedSelfUrl      String?
+  lastSourceUrlObservedAt  DateTime?
+  nextFetchAt              DateTime  @default(now())
+  consecutiveFailures      Int       @default(0)
+  etag                     String?
+  lastModified             String?
+  refreshIntervalMinutes   Int       @default(60)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   subscriptions FeedSubscription[]
   articles      Article[]
@@ -526,17 +533,20 @@ model Feed {
 }
 
 model FeedSubscription {
-  id           String   @id @default(cuid())
-  userId       String
-  feedId       String
-  folderId     String?
-  customTitle  String?
-  sortOrder    Int      @default(0)
-  isMuted      Boolean  @default(false)
-  isPaused     Boolean  @default(false)
-  subscribedAt DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                            String    @id @default(cuid())
+  userId                        String
+  feedId                        String
+  folderId                      String?
+  customTitle                   String?
+  sortOrder                     Int       @default(0)
+  isMuted                       Boolean   @default(false)
+  isPaused                      Boolean   @default(false)
+  lastSourceAttentionReviewedAt DateTime?
+  previousFeedUrl               String?
+  previousFeedUrlChangedAt      DateTime?
+  subscribedAt                  DateTime  @default(now())
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
 
   user             User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
   feed             Feed                          @relation(fields: [feedId], references: [id], onDelete: Cascade)
@@ -596,26 +606,27 @@ model PodcastSubscription {
 }
 
 model PodcastEpisode {
-  id                 String    @id @default(cuid())
-  podcastId          String
-  externalId         String
-  title              String
-  url                String?
-  description        String?
-  contentHtml        String?
-  contentText        String?
-  audioUrl           String
-  audioType          String?
-  audioLengthBytes   BigInt?
-  durationSeconds    Int?
-  imageUrl           String?
-  transcriptUrl      String?
-  transcriptType     String?
-  transcriptLanguage String?
-  transcriptRel      String?
-  publishedAt        DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  podcastId            String
+  externalId           String
+  title                String
+  url                  String?
+  description          String?
+  contentHtml          String?
+  contentText          String?
+  audioUrl             String
+  audioType            String?
+  audioLengthBytes     BigInt?
+  durationSeconds      Int?
+  imageUrl             String?
+  transcriptUrl        String?
+  transcriptType       String?
+  transcriptLanguage   String?
+  transcriptRel        String?
+  ingestionFingerprint String?
+  publishedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   podcast         Podcast                 @relation(fields: [podcastId], references: [id], onDelete: Cascade)
   states          PodcastEpisodeState[]
@@ -646,23 +657,24 @@ model PodcastEpisodeState {
 }
 
 model Article {
-  id             String                   @id @default(cuid())
-  feedId         String
-  externalId     String
-  title          String
-  url            String
-  canonicalUrl   String?
-  author         String?
-  summary        String?
-  contentHtml    String?
-  contentText    String?
+  id                   String                   @id @default(cuid())
+  feedId               String
+  externalId           String
+  title                String
+  url                  String
+  canonicalUrl         String?
+  author               String?
+  summary              String?
+  contentHtml          String?
+  contentText          String?
   // PostgreSQL maintains this weighted vector. Prisma intentionally treats the
   // native type as unsupported; search queries access it through reviewed SQL.
-  searchDocument Unsupported("tsvector")? @default(dbgenerated())
-  imageUrl       String?
-  publishedAt    DateTime?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  searchDocument       Unsupported("tsvector")? @default(dbgenerated())
+  imageUrl             String?
+  ingestionFingerprint String?
+  publishedAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
 
   feed                Feed                    @relation(fields: [feedId], references: [id], onDelete: Cascade)
   states              ArticleState[]
@@ -939,6 +951,9 @@ model SavedSearch {
   monitorEnabled         Boolean   @default(false)
   monitorAction          String    @default("count")
   monitorNewMatchCount   Int       @default(0)
+  // Consecutive failed monitor attempts; monitorLastRunAt remains the last
+  // successful pass and monitorNextRunAt is the next eligible attempt.
+  monitorFailureCount    Int       @default(0)
   monitorLastRunAt       DateTime?
   monitorNextRunAt       DateTime?
   monitorCursorCreatedAt DateTime?
@@ -1215,6 +1230,9 @@ model ImportJob {
   user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   entries ImportJobEntry[]
 
+  // PostgreSQL enforces one active (PENDING or PROCESSING) import per user
+  // with the partial unique index in the corresponding raw SQL migration.
+  // Prisma schema syntax cannot model partial indexes.
   @@index([userId, status, updatedAt])
   @@index([status, updatedAt])
 }

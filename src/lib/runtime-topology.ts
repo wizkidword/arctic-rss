@@ -3,19 +3,19 @@ import type { WorkerMode } from "../../worker/mode"
 export const RUNTIME_TOPOLOGIES = {
   "all-in-one": {
     chatEnabled: false,
-    workerModes: ["all"],
+    workerModes: ["all", "health"],
   },
   "all-in-one-with-chat": {
     chatEnabled: true,
-    workerModes: ["all"],
+    workerModes: ["all", "health"],
   },
   split: {
     chatEnabled: false,
-    workerModes: ["ingestion", "ai-mail", "imports", "maintenance"],
+    workerModes: ["ingestion", "ai-mail", "imports", "maintenance", "health"],
   },
   "split-with-chat": {
     chatEnabled: true,
-    workerModes: ["ingestion", "ai-mail", "imports", "maintenance", "chat-events"],
+    workerModes: ["ingestion", "ai-mail", "imports", "maintenance", "health", "chat-events"],
   },
 } as const satisfies Record<
   string,

@@ -22,20 +22,22 @@ matrix job.
 
 | Topology | Compose profiles | Worker ownership | Chat services |
 | --- | --- | --- | --- |
-| `all-in-one` | `all-in-one` | `worker` owns every worker responsibility | Off |
-| `all-in-one-with-chat` | `all-in-one`, `chat` | `worker` owns every worker responsibility | gateway and edge proxy |
-| `split` | `split-workers` | ingestion, AI/mail, imports, and maintenance each have one worker | Off |
-| `split-with-chat` | `split-workers`, `chat-workers`, `chat` | split workers plus one chat-events worker | gateway and edge proxy |
+| `all-in-one` | `all-in-one`, `health` | `worker` owns application work; `worker-health` owns readiness snapshots | Off |
+| `all-in-one-with-chat` | `all-in-one`, `health`, `chat` | `worker` owns application work; `worker-health` owns readiness snapshots | gateway and edge proxy |
+| `split` | `split-workers`, `health` | ingestion, AI/mail, imports, maintenance, and health each have one worker | Off |
+| `split-with-chat` | `split-workers`, `health`, `chat-workers`, `chat` | split workers plus health and chat-events workers | gateway and edge proxy |
 
 The optional tunnel overlay adds the `tunnel` profile, `cloudflared`, and
 `CLOUDFLARE_TUNNEL_TOKEN` to any selected topology. It does not decide whether
 chat is enabled.
 
 `worker` is behind the explicit `all-in-one` profile and is not part of the
-default `docker compose up`. `worker-chat-events` is behind the explicit
-`chat-workers` profile, so non-chat split deployments do not start a worker
-that owns chat outbox work. Never activate `all-in-one` together with either
-split-worker profile.
+default `docker compose up`. `worker-health` is behind the explicit `health`
+profile and is required in every supported topology. It alone has the reviewed
+network paths for the shared readiness probe, so durable-only maintenance keeps
+its narrower boundary. `worker-chat-events` is behind `chat-workers`, so
+non-chat split deployments do not start a worker that owns chat outbox work.
+Never activate `all-in-one` together with either split-worker profile.
 
 ## Operator requirements
 

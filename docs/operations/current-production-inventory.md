@@ -131,9 +131,13 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
   images copy only compiled output and pruned production dependencies: no
   source tree, tests, documentation, TypeScript compiler, or `tsx` runtime is
   retained.
-- Node, PostgreSQL, and Redis base tags are pinned to reviewed versioned
-  Alpine variants. Existing non-root users, read-only filesystems, dropped
-  capabilities, no-new-privileges policy, and health checks remain in force.
+- The fourth-pass source pins Node, nginx, PostgreSQL, durable Redis,
+  ephemeral Redis, Cloudflared, and the restore-drill PostgreSQL image to a
+  reviewed version plus immutable manifest digest. This is source and CI
+  evidence, not a claim that the currently running OVH release has changed.
+  See [container-image-update-policy.md](container-image-update-policy.md).
+  Existing non-root users, read-only filesystems, dropped capabilities,
+  no-new-privileges policy, and health checks remain in force.
 - CI records byte-accurate image sizes with separate SBOMs, and the private
   release record retains the source-built image identities for rollback.
 

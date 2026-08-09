@@ -4,6 +4,7 @@ import {
   assertUrlResolvesPublicly,
   createHostRequestLimiter,
   createPinnedLookup,
+  decodeSafeText,
   isPrivateIpAddress,
   normalizeHttpUrl,
   safeFetchBytes,
@@ -339,6 +340,38 @@ describe("feed URL safety", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(6)
   })
 
+  it("returns only safely followed redirect evidence", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          headers: { location: "https://feeds.example.com/current.xml" },
+          status: 308,
+        })
+      )
+      .mockResolvedValueOnce(new Response("<rss></rss>"))
+
+    const result = await safeFetchText(
+      new URL("https://feeds.example.com/old.xml"),
+      {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        lookup: lookup as never,
+      }
+    )
+
+    expect(result).toMatchObject({
+      redirects: [
+        {
+          from: "https://feeds.example.com/old.xml",
+          status: 308,
+          to: "https://feeds.example.com/current.xml",
+        },
+      ],
+      url: new URL("https://feeds.example.com/current.xml"),
+    })
+  })
+
   it("returns bounded binary responses for the image proxy", async () => {
     const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
     const fetchImpl = vi.fn(async () =>
@@ -433,5 +466,53 @@ describe("feed URL safety", () => {
         lookup: lookup as never,
       })
     ).rejects.toThrow("The URL request timed out")
+  })
+
+  it("decodes supported legacy feed charsets without trusting arbitrary labels", () => {
+    expect(
+      decodeSafeText(new Uint8Array([67, 97, 102, 233]), "application/rss+xml; charset=windows-1252")
+    ).toBe("Café")
+    expect(
+      decodeSafeText(
+        new Uint8Array([60, 63, 120, 109, 108, 32, 101, 110, 99, 111, 100, 105, 110, 103, 61, 34, 73, 83, 79, 45, 56, 56, 53, 57, 45, 49, 34, 63, 62, 67, 97, 102, 233]),
+        "application/xml"
+      )
+    ).toContain("Café")
+    expect(decodeSafeText(new Uint8Array([67, 97, 102, 233]), "text/xml; charset=not-real")).toBe("Caf�")
+  })
+
+  it("cancels a parent request and releases its host slot", async () => {
+    const lookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }])
+    const limiter = createHostRequestLimiter(1)
+    const controller = new AbortController()
+    const pendingFetch = vi.fn((_url: URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("The operation timed out.", "TimeoutError")),
+          { once: true }
+        )
+      })
+    )
+
+    const pending = safeFetchText(new URL("https://feeds.example.com/slow"), {
+      fetchImpl: pendingFetch as unknown as typeof fetch,
+      globalRequestLimiter: limiter,
+      hostRequestLimiter: limiter,
+      lookup: lookup as never,
+      parentSignal: controller.signal,
+    })
+    await vi.waitFor(() => expect(pendingFetch).toHaveBeenCalledOnce())
+    controller.abort()
+    await expect(pending).rejects.toThrow("The URL request timed out")
+
+    await expect(
+      safeFetchText(new URL("https://feeds.example.com/next"), {
+        fetchImpl: vi.fn(async () => new Response("<rss />")) as unknown as typeof fetch,
+        globalRequestLimiter: limiter,
+        hostRequestLimiter: limiter,
+        lookup: lookup as never,
+      })
+    ).resolves.toMatchObject({ text: "<rss />" })
   })
 })

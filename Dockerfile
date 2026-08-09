@@ -1,5 +1,7 @@
-ARG NODE_IMAGE=node:24.17.0-alpine3.23
-ARG NGINX_IMAGE=nginx:1.30.4-alpine3.24
+# Node.js 24.17.0 on Alpine 3.23 (multi-architecture manifest digest).
+ARG NODE_IMAGE=node:24.17.0-alpine3.23@sha256:7c70d1235c0b4c2bc9eeed5393d19f1bbdde6885ba0d58ba62bb385d7b0f3ff1
+# nginx 1.30.4 on Alpine 3.24 (multi-architecture manifest digest).
+ARG NGINX_IMAGE=nginx:1.30.4-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46
 
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
