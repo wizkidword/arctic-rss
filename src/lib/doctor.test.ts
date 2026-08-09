@@ -76,6 +76,11 @@ describe("doctor report helpers", () => {
     expect(DOCTOR_REQUIRED_VARIABLES.web).toContain("AUTH_SECRET")
     expect(DOCTOR_REQUIRED_VARIABLES["worker-ingestion"]).toEqual([
       "DATABASE_URL",
+      "DB_APPLICATION_NAME",
+      "DB_CONNECTION_TIMEOUT_MS",
+      "DB_IDLE_TIMEOUT_MS",
+      "DB_POOL_MAX",
+      "DB_STATEMENT_TIMEOUT_MS",
       "DURABLE_REDIS_URL",
     ])
     for (const role of PRODUCTION_SERVICE_ROLES) {

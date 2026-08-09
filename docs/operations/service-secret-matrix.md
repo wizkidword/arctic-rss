@@ -15,15 +15,15 @@ required-variable output, and production startup checks consume that source.
 | Service | Required configuration | Explicitly excluded examples |
 | --- | --- | --- |
 | `migrate` | `DATABASE_URL`, interpolated from `MIGRATE_DATABASE_URL` | Runtime DB URL, auth, mail, AI, chat, and tunnel values |
-| `web` | Runtime DB, durable/ephemeral Redis URLs, auth/origin/cron, optional Google, SMTP, Turnstile, AI, and web chat settings | `MIGRATE_DATABASE_URL`, `POSTGRES_PASSWORD`, Redis ACL usernames/passwords, tunnel token |
-| `worker` (`all`) | Runtime DB, both Redis URLs, feed/scheduler settings, optional AI/mail, and required chat-worker settings | Runtime auth/OAuth, Turnstile, migration, PostgreSQL/Redis container passwords, tunnel token |
-| `worker-ingestion` | Runtime DB, durable Redis, feed/podcast concurrency, chat bot flags | OAuth, SMTP, AI, Turnstile, ephemeral Redis, migration, tunnel values |
-| `worker-ai-mail` | Runtime DB, durable Redis, origin, optional AI and SMTP configuration | OAuth, Turnstile, chat token, migration, tunnel values |
-| `worker-imports` | Runtime DB and durable Redis | Auth/OAuth, SMTP, AI, chat, migration, tunnel values |
-| `worker-maintenance` | Runtime DB, durable Redis, scheduler/monitor and chat-retention settings | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
-| `worker-chat-events` | Runtime DB, durable/ephemeral Redis, event-outbox interval | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
-| `worker-health` | Runtime DB, durable/ephemeral Redis, and selected topology | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
-| `chat-gateway` | `CHAT_DATABASE_URL` for the dedicated restricted chat role, ephemeral Redis, canonical origin, chat token and gateway limits | `DATABASE_URL`, migration DB URL, Auth/OAuth, SMTP, AI, PostgreSQL/Redis container passwords, tunnel token |
+| `web` | Runtime DB with reviewed pool/timeouts, durable/ephemeral Redis URLs, auth/origin/cron, optional Google, SMTP, Turnstile, AI, and web chat settings | `MIGRATE_DATABASE_URL`, `POSTGRES_PASSWORD`, Redis ACL usernames/passwords, tunnel token |
+| `worker` (`all`) | Runtime DB with reviewed pool/timeouts, both Redis URLs, feed/scheduler settings, optional AI/mail, and required chat-worker settings | Runtime auth/OAuth, Turnstile, migration, PostgreSQL/Redis container passwords, tunnel token |
+| `worker-ingestion` | Runtime DB with reviewed pool/timeouts, durable Redis, feed/podcast concurrency, chat bot flags | OAuth, SMTP, AI, Turnstile, ephemeral Redis, migration, tunnel values |
+| `worker-ai-mail` | Runtime DB with reviewed pool/timeouts, durable Redis, origin, optional AI and SMTP configuration | OAuth, Turnstile, chat token, migration, tunnel values |
+| `worker-imports` | Runtime DB with reviewed pool/timeouts and durable Redis | Auth/OAuth, SMTP, AI, chat, migration, tunnel values |
+| `worker-maintenance` | Runtime DB with reviewed pool/timeouts, durable Redis, scheduler/monitor and chat-retention settings | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
+| `worker-chat-events` | Runtime DB with reviewed pool/timeouts, durable/ephemeral Redis, event-outbox interval | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
+| `worker-health` | Runtime DB with reviewed pool/timeouts, durable/ephemeral Redis, and selected topology | Auth/OAuth, SMTP, AI, chat token, migration, tunnel values |
+| `chat-gateway` | `CHAT_DATABASE_URL` with its reviewed pool/timeouts for the dedicated restricted chat role, ephemeral Redis, canonical origin, chat token and gateway limits | `DATABASE_URL`, migration DB URL, Auth/OAuth, SMTP, AI, PostgreSQL/Redis container passwords, tunnel token |
 | `cloudflared` | `TUNNEL_TOKEN`, interpolated from `CLOUDFLARE_TUNNEL_TOKEN` | Database, Redis, auth, SMTP, AI, and chat values |
 
 `postgres`, `redis`, and `redis-ephemeral` receive only the database/Redis
@@ -46,6 +46,11 @@ URLs are never given to those infrastructure containers.
   the [chat database role runbook](chat-database-role-runbook.md) for a
   coordinated role-password rotation; never substitute `DATABASE_URL` as a
   shortcut.
+- The application roles also receive exactly five database-pool variables:
+  `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS`, `DB_IDLE_TIMEOUT_MS`,
+  `DB_STATEMENT_TIMEOUT_MS`, and `DB_APPLICATION_NAME`. Compose fixes the
+  role-specific pool size and name; the three timeout defaults are bounded at
+  startup. See [the PostgreSQL connection budget](postgresql-connection-budgets.md).
 
 ## Adding a variable
 

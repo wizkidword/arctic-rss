@@ -5,6 +5,10 @@ import {
   getAllowedAppHosts,
   getAppOrigin,
 } from "./app-origin"
+import {
+  assertDatabaseConnectionSettings,
+  DatabaseConnectionConfigurationError,
+} from "./database-connection-settings"
 import { LEGACY_REDIS_MIGRATION_FLAG } from "./redis-config"
 import { assertRuntimeTopology } from "./runtime-topology"
 import {
@@ -284,6 +288,21 @@ function assertRuntimeDatabaseUrl(environment: ProductionEnvironment) {
   )
 }
 
+function assertDatabaseConnectionConfiguration(
+  environment: ProductionEnvironment,
+  role: ProductionServiceRole
+) {
+  try {
+    assertDatabaseConnectionSettings(environment, role)
+  } catch (error) {
+    if (error instanceof DatabaseConnectionConfigurationError) {
+      throw new UnsafeProductionConfigurationError(error.message)
+    }
+
+    throw error
+  }
+}
+
 function assertWebOrigins(environment: ProductionEnvironment) {
   if (!isEmailVerificationRequired(environment.REQUIRE_EMAIL_VERIFICATION)) {
     throw new UnsafeProductionConfigurationError(
@@ -345,6 +364,7 @@ function assertWebConfiguration(environment: ProductionEnvironment) {
   assertExactServiceRoleEnvironment(environment, "web")
   assertWebOrigins(environment)
   assertRuntimeDatabaseUrl(environment)
+  assertDatabaseConnectionConfiguration(environment, "web")
   assertRedisWorkloadSeparation(environment)
   assertRequiredSecret(environment, "AUTH_SECRET", 32)
   assertTurnstileConfiguration(environment)
@@ -356,6 +376,7 @@ function assertWorkerConfiguration(
 ) {
   assertExactServiceRoleEnvironment(environment, role)
   assertRuntimeDatabaseUrl(environment)
+  assertDatabaseConnectionConfiguration(environment, role)
   assertRedisUrl(environment, "DURABLE_REDIS_URL")
 
   if (role === "worker-all" || role === "worker-chat-events") {
@@ -389,6 +410,7 @@ function assertChatGatewayConfiguration(environment: ProductionEnvironment) {
     "CHAT_DATABASE_URL",
     new Set(["postgres:", "postgresql:"])
   )
+  assertDatabaseConnectionConfiguration(environment, "chat-gateway")
   assertRedisUrl(environment, "EPHEMERAL_REDIS_URL")
   assertRequiredSecret(environment, "ARCTIC_IRC_TOKEN_SECRET", 32)
 }

@@ -637,6 +637,7 @@ if ($commit -ne $originMain) {
 
 Invoke-LocalCheck -Label "Checking patch integrity" -FilePath "git" -Arguments @("diff", "--check")
 Invoke-LocalCheck -Label "Validating selected topology" -FilePath "npm" -Arguments @("run", "topology:validate", "--", "--topology", $releaseTopology.Name)
+Invoke-LocalCheck -Label "Verifying database connection budgets" -FilePath "npm" -Arguments @("run", "db:connection-budgets:verify")
 Invoke-LocalCheck -Label "Running unit tests" -FilePath "npm" -Arguments @("test")
 Invoke-LocalCheck -Label "Checking TypeScript" -FilePath "npm" -Arguments @("run", "typecheck")
 Invoke-LocalCheck -Label "Running lint" -FilePath "npm" -Arguments @("run", "lint")

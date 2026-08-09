@@ -13,6 +13,7 @@ const webProductionEnvironment = {
   AUTH_URL: "https://arcticrss.com",
   DATABASE_URL:
     "postgresql://arctic_runtime:runtime-password@postgres:5432/arctic_rss?schema=public",
+  ...databasePoolEnvironment("web"),
   DURABLE_REDIS_URL: "redis://arctic_durable:durable-redis-password@redis:6379",
   EPHEMERAL_REDIS_URL:
     "redis://arctic_ephemeral:ephemeral-redis-password@redis-ephemeral:6379",
@@ -216,6 +217,7 @@ describe("production security configuration", () => {
   it("limits an ingestion worker to its database and durable queue configuration", () => {
     const environment = {
       DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      ...databasePoolEnvironment("worker-ingestion"),
       DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
       NODE_ENV: "production",
     }
@@ -235,6 +237,7 @@ describe("production security configuration", () => {
   it("requires ephemeral Redis only for worker roles that publish chat events", () => {
     const environment = {
       DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      ...databasePoolEnvironment("worker-chat-events"),
       DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
       NODE_ENV: "production",
     }
@@ -257,6 +260,7 @@ describe("production security configuration", () => {
   it("requires an explicit topology and both Redis workloads for the health worker", () => {
     const environment = {
       DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      ...databasePoolEnvironment("worker-health"),
       DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
       EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
       NODE_ENV: "production",
@@ -288,6 +292,7 @@ describe("production security configuration", () => {
   it("rejects a shared Redis endpoint from the all-in-one worker", () => {
     const environment = {
       DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+      ...databasePoolEnvironment("worker-all"),
       DURABLE_REDIS_URL: "redis://arctic_durable:durable-redis-password@redis:6379/0",
       EPHEMERAL_REDIS_URL: "redis://arctic_ephemeral:ephemeral-redis-password@redis/",
       NODE_ENV: "production",
@@ -303,6 +308,7 @@ describe("production security configuration", () => {
       APP_ORIGIN: "https://arcticrss.com",
       ARCTIC_IRC_TOKEN_SECRET: "chat-token-secret-that-is-at-least-32-bytes",
       CHAT_DATABASE_URL: "postgresql://arctic_chat:chat-runtime-password@postgres:5432/arctic_rss?schema=public",
+      ...databasePoolEnvironment("chat-gateway"),
       EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
       NODE_ENV: "production",
     }
@@ -395,6 +401,7 @@ function validProductionEnvironmentForRole(
       APP_ORIGIN: "https://arcticrss.com",
       ARCTIC_IRC_TOKEN_SECRET: "chat-token-secret-that-is-at-least-32-bytes",
       CHAT_DATABASE_URL: "postgresql://arctic_chat:chat-runtime-password@postgres:5432/arctic_rss?schema=public",
+      ...databasePoolEnvironment("chat-gateway"),
       EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL,
       NODE_ENV: "production",
     }
@@ -402,11 +409,35 @@ function validProductionEnvironmentForRole(
 
   return {
     DATABASE_URL: webProductionEnvironment.DATABASE_URL,
+    ...databasePoolEnvironment(role),
     DURABLE_REDIS_URL: webProductionEnvironment.DURABLE_REDIS_URL,
     ...(role === "worker-chat-events" || role === "worker-health"
       ? { EPHEMERAL_REDIS_URL: webProductionEnvironment.EPHEMERAL_REDIS_URL }
       : {}),
     ...(role === "worker-health" ? { ARCTIC_RSS_TOPOLOGY: "all-in-one" } : {}),
     NODE_ENV: "production",
+  }
+}
+
+function databasePoolEnvironment(role: (typeof PRODUCTION_SERVICE_ROLES)[number]) {
+  const settings = {
+    "chat-gateway": ["arctic-rss-chat-gateway", "4"],
+    web: ["arctic-rss-web", "6"],
+    "worker-ai-mail": ["arctic-rss-worker-ai-mail", "3"],
+    "worker-all": ["arctic-rss-worker-all", "6"],
+    "worker-chat-events": ["arctic-rss-worker-chat-events", "2"],
+    "worker-health": ["arctic-rss-worker-health", "2"],
+    "worker-imports": ["arctic-rss-worker-imports", "2"],
+    "worker-ingestion": ["arctic-rss-worker-ingestion", "4"],
+    "worker-maintenance": ["arctic-rss-worker-maintenance", "2"],
+  } as const
+  const [applicationName, poolMax] = settings[role]
+
+  return {
+    DB_APPLICATION_NAME: applicationName,
+    DB_CONNECTION_TIMEOUT_MS: "3000",
+    DB_IDLE_TIMEOUT_MS: "10000",
+    DB_POOL_MAX: poolMax,
+    DB_STATEMENT_TIMEOUT_MS: "15000",
   }
 }
