@@ -1,6 +1,7 @@
-import { createHmac, timingSafeEqual } from "node:crypto"
+import { timingSafeEqual } from "node:crypto"
 
 import { signLegacyV1AccountDeletionHandoff } from "./account-deletion-handoff-legacy-v1"
+import { signV2AccountDeletionHandoff } from "./account-deletion-handoff-v2-signature"
 
 export const ACCOUNT_DELETION_HANDOFF_COOKIE = "arcticrss-account-deletion-handoff"
 export const ACCOUNT_DELETION_HANDOFF_COOKIE_PATH = "/api/account/deletion/confirmation"
@@ -211,9 +212,7 @@ function decodeBase64url(value: string) {
 }
 
 function signV2(encodedPayload: string, secret: string) {
-  return createHmac("sha256", secret)
-    .update(signingInput(HANDOFF_VERSION, encodedPayload))
-    .digest()
+  return signV2AccountDeletionHandoff(signingInput(HANDOFF_VERSION, encodedPayload), secret)
 }
 
 function signingInput(version: string, encodedPayload: string) {

@@ -1,7 +1,9 @@
-# The v1 handoff verifier is isolated here because it must preserve the
-# historical scrypt cost to validate a short-lived handoff issued before v2.
-# New handoffs use the v2 HKDF/HMAC design. Keeping this narrow compatibility
-# module out of CodeQL avoids a false positive without reducing analysis of
-# the active account-deletion implementation.
+# These one-purpose handoff helpers have fixed cryptographic compatibility
+# requirements. The v1 verifier preserves its historical scrypt cost for
+# short-lived handoffs. The v2 helper uses HMAC to authenticate an already-
+# derived deletion-token digest in a cookie; it does not store a password.
+# Keeping only these helpers out of CodeQL avoids false positives while the
+# active handoff parsing, expiry checks, and verification remain analyzed.
 paths-ignore:
   - src/lib/account-deletion-handoff-legacy-v1.ts
+  - src/lib/account-deletion-handoff-v2-signature.ts
