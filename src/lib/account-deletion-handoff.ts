@@ -1,4 +1,4 @@
-import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto"
+import { createHmac, timingSafeEqual } from "node:crypto"
 
 import { signLegacyV1AccountDeletionHandoff } from "./account-deletion-handoff-legacy-v1"
 
@@ -13,7 +13,6 @@ const MIN_SECRET_BYTES = 32
 const HANDOFF_SIGNATURE_BYTES = 32
 const MAX_PAYLOAD_SEGMENT_LENGTH = 256
 const MAX_LEGACY_V1_REMAINING_LIFETIME_SECONDS = 15 * 60
-const HANDOFF_V2_KEY_DERIVATION_CONTEXT = "arcticrss-account-deletion-handoff-v2"
 const BASE64URL_SEGMENT = /^[A-Za-z0-9_-]+$/
 
 type AccountDeletionHandoffPayload = {
@@ -26,8 +25,6 @@ type ParsedHandoff = {
   signature: Buffer
   version: typeof HANDOFF_VERSION | typeof LEGACY_HANDOFF_VERSION
 }
-
-let cachedV2SigningKey: { key: Buffer; secret: string } | undefined
 
 export class AccountDeletionHandoffError extends Error {
   constructor(message: string) {
@@ -214,27 +211,9 @@ function decodeBase64url(value: string) {
 }
 
 function signV2(encodedPayload: string, secret: string) {
-  return createHmac("sha256", getV2SigningKey(secret))
+  return createHmac("sha256", secret)
     .update(signingInput(HANDOFF_VERSION, encodedPayload))
     .digest()
-}
-
-function getV2SigningKey(secret: string) {
-  if (cachedV2SigningKey?.secret === secret) {
-    return cachedV2SigningKey.key
-  }
-
-  const key = Buffer.from(
-    hkdfSync(
-      "sha256",
-      Buffer.from(secret, "utf8"),
-      Buffer.from(HANDOFF_PREFIX, "utf8"),
-      Buffer.from(HANDOFF_V2_KEY_DERIVATION_CONTEXT, "utf8"),
-      HANDOFF_SIGNATURE_BYTES
-    )
-  )
-  cachedV2SigningKey = { key, secret }
-  return key
 }
 
 function signingInput(version: string, encodedPayload: string) {
