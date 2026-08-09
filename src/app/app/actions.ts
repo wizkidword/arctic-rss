@@ -3,6 +3,7 @@
 export {
   addFeedAction,
   bulkFeedAttentionAction,
+  followCollectionArticleSourceAction,
   replaceFeedSubscriptionAction,
   refreshFeedAction,
   reviewFeedAttentionAction,
@@ -13,6 +14,7 @@ export {
 export type {
   AddFeedActionState,
   BulkFeedAttentionActionState,
+  FollowCollectionArticleSourceActionState,
   ReplaceFeedSubscriptionActionState,
   RefreshFeedActionState,
   ReviewFeedAttentionActionState,

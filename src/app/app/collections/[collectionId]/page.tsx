@@ -9,7 +9,12 @@ import {
   listReaderArticlePage,
   loadReaderArticleView,
   readerArticlePageLimit,
+  type ReaderArticleListItem,
 } from "@/lib/articles"
+import {
+  listCollectionArticleRetentionForUser,
+  type CollectionArticleRetention,
+} from "@/lib/collection-retention"
 import { listCollectionPodcastEpisodesForUser } from "@/lib/podcasts"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
@@ -74,7 +79,8 @@ export default async function CollectionPage({
               </Badge>
             </div>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Saved articles and podcast episodes in this collection.
+              Saved articles and podcast episodes stay here even after you stop
+              following their source.
             </p>
           </div>
         </section>
@@ -88,32 +94,49 @@ export default async function CollectionPage({
     )
   }
 
-  const readerView = await loadReaderArticleView({
-    articleIds: articlePage.articles.map((article) => article.id),
-    defaultView,
-    displayMode,
-    selectedArticleId: articleId,
-    userId: session.user.id,
-  })
+  const articleIds = articlePage.articles.map((article) => article.id)
+  const [retentionByArticleId, readerView] = await Promise.all([
+    listCollectionArticleRetentionForUser({
+      articleIds,
+      collectionId,
+      userId: session.user.id,
+    }),
+    loadReaderArticleView({
+      articleIds,
+      defaultView,
+      displayMode,
+      selectedArticleId: articleId,
+      userId: session.user.id,
+    }),
+  ])
 
   return (
     <>
       <ReaderSurface
-        articles={articlePage.articles}
+        articles={withCollectionRetention(
+          articlePage.articles,
+          retentionByArticleId
+        )}
         articleCollections={collections}
         basePath={`/app/collections/${collection.id}`}
         currentCollection={currentCollection}
         dateTimePreferences={dateTimePreferences}
         defaultView={defaultView}
         displayMode={displayMode}
-        description="Saved articles and podcast episodes in this collection."
+        description="Saved articles and podcast episodes stay here even after you stop following their source. If this is your last saved collection copy, removing it will remove access unless you follow the source again."
         emptyMessage="Save articles or podcast episodes to this collection from their menus."
         nextPageHref={nextPageHref(
           `/app/collections/${collection.id}`,
           articlePage.nextCursor
         )}
-        riverArticles={readerView.riverArticles}
-        selectedArticle={readerView.selectedArticle ?? undefined}
+        riverArticles={withCollectionRetention(
+          readerView.riverArticles,
+          retentionByArticleId
+        )}
+        selectedArticle={withCollectionRetention(
+          readerView.selectedArticle,
+          retentionByArticleId
+        )}
         selectedArticleId={articleId}
         title={collection.name}
         toolbar={
@@ -156,4 +179,37 @@ function firstSearchParam(value: string | string[] | undefined) {
 
 function nextPageHref(path: string, cursor: string | null) {
   return cursor ? `${path}?after=${encodeURIComponent(cursor)}` : undefined
+}
+
+function withCollectionRetention<T extends ReaderArticleListItem>(
+  article: T,
+  retentionByArticleId: Map<string, CollectionArticleRetention>
+): T
+function withCollectionRetention<T extends ReaderArticleListItem>(
+  article: T | null,
+  retentionByArticleId: Map<string, CollectionArticleRetention>
+): T | undefined
+function withCollectionRetention<T extends ReaderArticleListItem>(
+  articles: T[],
+  retentionByArticleId: Map<string, CollectionArticleRetention>
+): T[]
+function withCollectionRetention<T extends ReaderArticleListItem>(
+  articleOrArticles: T | T[] | null,
+  retentionByArticleId: Map<string, CollectionArticleRetention>
+): T | T[] | undefined {
+  if (Array.isArray(articleOrArticles)) {
+    return articleOrArticles.map((article) =>
+      withCollectionRetention(article, retentionByArticleId)
+    )
+  }
+
+  if (!articleOrArticles) {
+    return undefined
+  }
+
+  const retention = retentionByArticleId.get(articleOrArticles.id)
+
+  return retention
+    ? { ...articleOrArticles, collectionRetention: retention }
+    : articleOrArticles
 }

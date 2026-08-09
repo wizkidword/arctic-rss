@@ -5,6 +5,10 @@ import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
 import { getDiscoverDirectoryFeed } from "@/lib/discover-directory"
+import {
+  CollectionRetentionError,
+  getCollectionArticleSourceForUser,
+} from "@/lib/collection-retention"
 import { FeedValidationError } from "@/lib/feed-discovery"
 import { enqueueFeedRefresh } from "@/lib/feed-refresh-queue"
 import {
@@ -36,6 +40,7 @@ export type ReviewFeedAttentionActionState = ActionState
 export type SetFeedPausedActionState = ActionState
 export type UnsubscribeFeedActionState = ActionState
 export type BulkFeedAttentionActionState = ActionState
+export type FollowCollectionArticleSourceActionState = ActionState
 
 type ActionState = { message: string; status: "idle" | "success" | "error" }
 
@@ -278,6 +283,51 @@ export async function bulkFeedAttentionAction(
   return {
     message: sourceAttentionMessage({ alreadyQueued, queued, total: subscriptionIds.length }),
     status: queued || alreadyQueued ? "success" : "error",
+  }
+}
+
+export async function followCollectionArticleSourceAction(
+  _previousState: FollowCollectionArticleSourceActionState,
+  formData: FormData
+): Promise<FollowCollectionArticleSourceActionState> {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return { message: "You need to sign in before following sources.", status: "error" }
+  }
+
+  const articleId = String(formData.get("articleId") ?? "").trim()
+  const collectionId = String(formData.get("collectionId") ?? "").trim()
+  if (!articleId || !collectionId) {
+    return { message: "That saved collection article is unavailable.", status: "error" }
+  }
+  if (!(await canDiscover(session.user.id))) return rateLimitFailure()
+
+  try {
+    const source = await getCollectionArticleSourceForUser({
+      articleId,
+      collectionId,
+      userId: session.user.id,
+    })
+    if (source.sourceIsFollowed) {
+      return { message: `You already follow ${source.title}.`, status: "success" }
+    }
+
+    const subscription = await subscribeToFeed({
+      url: source.feedUrl,
+      userId: session.user.id,
+    })
+    const refreshMessage = await initialRefreshMessage(subscription)
+    revalidateFeedSubscriptionPaths()
+    revalidatePath(`/app/collections/${collectionId}`)
+    refresh()
+    return {
+      message: `Following ${source.title}. ${refreshMessage}`,
+      status: "success",
+    }
+  } catch (error) {
+    return error instanceof CollectionRetentionError
+      ? { message: error.message, status: "error" }
+      : subscriptionError(error, "Arctic RSS could not follow that saved source.")
   }
 }
 

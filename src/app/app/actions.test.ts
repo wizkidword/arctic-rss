@@ -22,6 +22,13 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class MockCollectionRetentionError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "CollectionRetentionError"
+    }
+  }
+
   class MockFeedSubscriptionError extends Error {
     constructor(message: string) {
       super(message)
@@ -80,6 +87,7 @@ const mocks = vi.hoisted(() => {
     generateArticleSummaryForUser: vi.fn(),
     getPrisma: vi.fn(),
     getDiscoverDirectoryFeed: vi.fn(),
+    getCollectionArticleSourceForUser: vi.fn(),
     getUserFeedSubscription: vi.fn(),
     isAiDigestPeriod: vi.fn(
       (value: unknown) => value === "DAILY" || value === "WEEKLY",
@@ -89,6 +97,7 @@ const mocks = vi.hoisted(() => {
     MockAiDigestError,
     MockAiSummaryError,
     MockArticleCollectionError,
+    MockCollectionRetentionError,
     MockFeedSubscriptionError,
     MockFeedValidationError,
     MockOpmlImportJobError,
@@ -153,6 +162,11 @@ vi.mock("@/lib/article-collections", () => ({
   removeArticleFromCollection: mocks.removeArticleFromCollection,
   removePodcastEpisodeFromCollection:
     mocks.removePodcastEpisodeFromCollection,
+}))
+
+vi.mock("@/lib/collection-retention", () => ({
+  CollectionRetentionError: mocks.MockCollectionRetentionError,
+  getCollectionArticleSourceForUser: mocks.getCollectionArticleSourceForUser,
 }))
 
 vi.mock("@/lib/bug-reports", () => ({
@@ -271,6 +285,7 @@ import {
   generateAiDigestAction,
   generateArticleSummaryAction,
   generateStoryClusterAnalysisAction,
+  followCollectionArticleSourceAction,
   importOpmlAction,
   markArticleReadOnOpen,
   mergeStoryClustersAction,
@@ -1110,6 +1125,125 @@ describe("source hygiene actions", () => {
       userId: "user-1",
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/folders")
+  })
+})
+
+describe("followCollectionArticleSourceAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.enqueueFeedRefresh.mockReset()
+    mocks.enforceRateLimit.mockReset()
+    mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
+    mocks.getCollectionArticleSourceForUser.mockReset()
+    mocks.refresh.mockReset()
+    mocks.revalidatePath.mockReset()
+    mocks.subscribeToFeed.mockReset()
+  })
+
+  it("requires a signed-in reader before looking up a saved source", async () => {
+    mocks.auth.mockResolvedValue(null)
+
+    await expect(
+      followCollectionArticleSourceAction(
+        { message: "", status: "idle" },
+        new FormData()
+      )
+    ).resolves.toEqual({
+      message: "You need to sign in before following sources.",
+      status: "error",
+    })
+
+    expect(mocks.getCollectionArticleSourceForUser).not.toHaveBeenCalled()
+  })
+
+  it("rechecks the reader-owned saved article before following its source", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getCollectionArticleSourceForUser.mockResolvedValue({
+      feedUrl: "https://example.com/feed.xml",
+      sourceIsFollowed: false,
+      title: "Example Source",
+    })
+    mocks.subscribeToFeed.mockResolvedValue({ feedId: "feed-1" })
+    mocks.enqueueFeedRefresh.mockResolvedValue({
+      jobId: "refresh-1",
+      outcome: "queued",
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("collectionId", "collection-1")
+
+    await expect(
+      followCollectionArticleSourceAction(
+        { message: "", status: "idle" },
+        formData
+      )
+    ).resolves.toEqual({
+      message: "Following Example Source. Article refresh queued.",
+      status: "success",
+    })
+
+    expect(mocks.getCollectionArticleSourceForUser).toHaveBeenCalledWith({
+      articleId: "article-1",
+      collectionId: "collection-1",
+      userId: "user-1",
+    })
+    expect(mocks.subscribeToFeed).toHaveBeenCalledWith({
+      url: "https://example.com/feed.xml",
+      userId: "user-1",
+    })
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/app/collections/collection-1"
+    )
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+  })
+
+  it("does not create a duplicate subscription when the source is already followed", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getCollectionArticleSourceForUser.mockResolvedValue({
+      feedUrl: "https://example.com/feed.xml",
+      sourceIsFollowed: true,
+      title: "Example Source",
+    })
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("collectionId", "collection-1")
+
+    await expect(
+      followCollectionArticleSourceAction(
+        { message: "", status: "idle" },
+        formData
+      )
+    ).resolves.toEqual({
+      message: "You already follow Example Source.",
+      status: "success",
+    })
+
+    expect(mocks.subscribeToFeed).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+
+  it("returns a readable error when the collection item is no longer owned", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.getCollectionArticleSourceForUser.mockRejectedValue(
+      new mocks.MockCollectionRetentionError(
+        "That saved collection article was not found."
+      )
+    )
+    const formData = new FormData()
+    formData.set("articleId", "article-other")
+    formData.set("collectionId", "collection-other")
+
+    await expect(
+      followCollectionArticleSourceAction(
+        { message: "", status: "idle" },
+        formData
+      )
+    ).resolves.toEqual({
+      message: "That saved collection article was not found.",
+      status: "error",
+    })
+
+    expect(mocks.subscribeToFeed).not.toHaveBeenCalled()
   })
 })
 

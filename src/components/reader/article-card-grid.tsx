@@ -6,6 +6,7 @@ import {
   type ArticleContextMenuArticle,
 } from "@/components/article-context-menu"
 import { ArticleStateControls } from "@/components/article-state-controls"
+import { CollectionRetentionNotice } from "@/components/collection-retention-notice"
 import { type ReaderArticleListItem } from "@/lib/articles"
 import { imageProxyUrl } from "@/lib/image-proxy-url"
 import { articleSelectionHref } from "@/lib/reader-navigation"
@@ -74,6 +75,18 @@ export function ArticleCardGrid({
                   : ""}
               </p>
             </Link>
+            {article.collectionRetention &&
+            !article.collectionRetention.sourceIsFollowed ? (
+              <CollectionRetentionNotice
+                articleId={article.id}
+                collectionId={currentCollection?.id}
+                feedTitle={article.feedTitle}
+                savedAt={formatArticleDateTime(
+                  article.collectionRetention.savedAt,
+                  dateTimePreferences
+                )}
+              />
+            ) : null}
             {article.summary && (
               <p className="line-clamp-3 text-xs leading-5 text-muted-foreground">
                 {article.summary}

@@ -16,6 +16,10 @@ export type ReaderArticleAiSummary = {
 }
 
 export type ReaderArticleListItem = {
+  collectionRetention?: {
+    savedAt: Date
+    sourceIsFollowed: boolean
+  }
   feedFaviconUrl: string | null
   feedId: string
   feedTitle: string

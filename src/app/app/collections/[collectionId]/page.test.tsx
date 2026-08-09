@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   getOrCreateUserSettings: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
+  listCollectionArticleRetentionForUser: vi.fn(),
   listCollectionPodcastEpisodesForUser: vi.fn(),
   listReaderArticlePage: vi.fn(),
   loadReaderArticleView: vi.fn(),
@@ -33,7 +34,10 @@ vi.mock("@/components/reader-surface", () => ({
     description,
     title,
   }: {
-    articles: unknown[]
+    articles: Array<{
+      collectionRetention?: { sourceIsFollowed: boolean }
+      id: string
+    }>
     basePath: string
     currentCollection?: { id: string; name: string }
     description: string
@@ -43,6 +47,9 @@ vi.mock("@/components/reader-surface", () => ({
       data-article-count={articles.length}
       data-base-path={basePath}
       data-current-collection={currentCollection?.name ?? ""}
+      data-retained-article={
+        articles.find((article) => article.collectionRetention)?.id ?? ""
+      }
     >
       <h1>{title}</h1>
       <p>{description}</p>
@@ -68,6 +75,11 @@ vi.mock("@/components/podcast-episode-list", () => ({
 
 vi.mock("@/lib/article-collections", () => ({
   listArticleCollectionsForUser: mocks.listArticleCollectionsForUser,
+}))
+
+vi.mock("@/lib/collection-retention", () => ({
+  listCollectionArticleRetentionForUser:
+    mocks.listCollectionArticleRetentionForUser,
 }))
 
 vi.mock("@/lib/articles", () => ({
@@ -123,6 +135,7 @@ describe("CollectionPage", () => {
       riverArticles: [],
       selectedArticle: null,
     })
+    mocks.listCollectionArticleRetentionForUser.mockResolvedValue(new Map())
     mocks.listCollectionPodcastEpisodesForUser.mockResolvedValue([])
   })
 
@@ -146,13 +159,43 @@ describe("CollectionPage", () => {
       collectionId: "collection-read-later",
       userId: "user-1",
     })
+    expect(mocks.listCollectionArticleRetentionForUser).toHaveBeenCalledWith({
+      articleIds: ["article-1"],
+      collectionId: "collection-read-later",
+      userId: "user-1",
+    })
     expect(markup).toContain("Read Later")
     expect(markup).toContain(
-      "Saved articles and podcast episodes in this collection."
+      "Saved articles and podcast episodes stay here even after you stop following their source."
     )
     expect(markup).toContain('data-base-path="/app/collections/collection-read-later"')
     expect(markup).toContain('data-current-collection="Read Later"')
     expect(markup).toContain('data-article-count="1"')
+  })
+
+  it("passes source-retention details through to the collection reader", async () => {
+    mocks.listCollectionArticleRetentionForUser.mockResolvedValue(
+      new Map([
+        [
+          "article-1",
+          {
+            savedAt: new Date("2026-08-09T12:00:00.000Z"),
+            sourceIsFollowed: false,
+          },
+        ],
+      ])
+    )
+
+    const markup = renderToStaticMarkup(
+      await CollectionPage({
+        params: Promise.resolve({
+          collectionId: "collection-read-later",
+        }),
+        searchParams: Promise.resolve({}),
+      })
+    )
+
+    expect(markup).toContain('data-retained-article="article-1"')
   })
 
   it("renders a podcast section when saved episodes are in the collection", async () => {
@@ -198,7 +241,7 @@ describe("CollectionPage", () => {
 
     expect(markup).toContain("Episode 1")
     expect(markup).toContain(
-      "Saved articles and podcast episodes in this collection."
+      "Saved articles and podcast episodes stay here even after you stop following their source."
     )
     expect(markup).not.toContain('data-article-count="0"')
   })
