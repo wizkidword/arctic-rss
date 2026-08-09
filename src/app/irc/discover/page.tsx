@@ -1,10 +1,12 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import type { Session } from "next-auth"
 
-import { auth } from "@/auth"
 import { Badge } from "@/components/ui/badge"
 import { ChatDiscoveryPreference } from "@/components/irc/chat-discovery-preference"
+import {
+  AuthorizationError,
+  withAuthenticatedRequestScope,
+} from "@/lib/authorization"
 import { getDiscoverDirectory } from "@/lib/discover-directory"
 import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
 import { ChatAccessError, requireChatEligibleUser } from "@/lib/chat/access"
@@ -31,11 +33,10 @@ export default async function IrcDiscoverPage({
     notFound()
   }
 
-  const [{ q }, session] = await Promise.all([
+  const [{ q }, eligibleUser] = await Promise.all([
     searchParams,
-    auth(),
+    getEligibleChatUser(),
   ])
-  const eligibleUser = await getEligibleChatUser(session)
 
   if (!eligibleUser && !flags.guestPreviewEnabled) {
     notFound()
@@ -139,15 +140,16 @@ export default async function IrcDiscoverPage({
   )
 }
 
-async function getEligibleChatUser(session: Session | null) {
-  if (!session?.user?.id) {
-    return null
-  }
-
+async function getEligibleChatUser() {
   try {
-    return await requireChatEligibleUser({ session })
+    return await withAuthenticatedRequestScope((session) =>
+      requireChatEligibleUser({ session })
+    )
   } catch (error) {
-    if (error instanceof ChatAccessError) {
+    if (
+      error instanceof AuthorizationError ||
+      error instanceof ChatAccessError
+    ) {
       return null
     }
 

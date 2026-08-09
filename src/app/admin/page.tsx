@@ -3,8 +3,8 @@ import { redirect } from "next/navigation"
 import { AdminDashboard } from "@/components/admin-dashboard"
 import { parseAdminDashboardFilters } from "@/lib/admin-dashboard"
 import {
-  requireAuthenticatedUser,
   requireFreshAdmin,
+  withAuthenticatedRequestScope,
 } from "@/lib/authorization"
 
 export default async function AdminPage({
@@ -12,13 +12,13 @@ export default async function AdminPage({
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
 } = {}) {
-  const session = await requireAuthenticatedUser().catch(() => null)
+  const admin = await withAuthenticatedRequestScope((session) =>
+    requireFreshAdmin(session).catch(() => null)
+  ).catch(() => undefined)
 
-  if (!session?.user?.id) {
+  if (admin === undefined) {
     redirect("/login")
   }
-
-  const admin = await requireFreshAdmin(session).catch(() => null)
 
   if (!admin) {
     redirect("/app")

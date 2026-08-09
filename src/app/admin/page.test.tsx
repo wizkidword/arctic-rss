@@ -4,20 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const {
   parseAdminDashboardFilters,
   redirect,
-  requireAuthenticatedUser,
   requireFreshAdmin,
+  withAuthenticatedRequestScope,
 } = vi.hoisted(() => ({
     parseAdminDashboardFilters: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
     }),
-    requireAuthenticatedUser: vi.fn(),
     requireFreshAdmin: vi.fn(),
+    withAuthenticatedRequestScope: vi.fn(),
   }))
 
 vi.mock("@/lib/authorization", () => ({
-  requireAuthenticatedUser,
   requireFreshAdmin,
+  withAuthenticatedRequestScope,
 }))
 
 vi.mock("@/lib/admin-dashboard", () => ({
@@ -48,19 +48,18 @@ describe("admin page", () => {
   })
 
   it("redirects anonymous visitors to login", async () => {
-    requireAuthenticatedUser.mockResolvedValue(null)
+    withAuthenticatedRequestScope.mockRejectedValue(
+      new Error("Authentication is required.")
+    )
 
     await expect(AdminPage()).rejects.toThrow("REDIRECT:/login")
     expect(parseAdminDashboardFilters).not.toHaveBeenCalled()
   })
 
   it("redirects non-admin users to the reader", async () => {
-    requireAuthenticatedUser.mockResolvedValue({
-      user: {
-        id: "user-1",
-        role: "USER",
-      },
-    })
+    withAuthenticatedRequestScope.mockImplementation((callback) =>
+      callback({ user: { id: "user-1", role: "USER" } })
+    )
     requireFreshAdmin.mockResolvedValue(null)
 
     await expect(AdminPage()).rejects.toThrow("REDIRECT:/app")
@@ -68,12 +67,9 @@ describe("admin page", () => {
   })
 
   it("loads independently streamed panels only after fresh-admin validation", async () => {
-    requireAuthenticatedUser.mockResolvedValue({
-      user: {
-        id: "admin-1",
-        role: "ADMIN",
-      },
-    })
+    withAuthenticatedRequestScope.mockImplementation((callback) =>
+      callback({ user: { id: "admin-1", role: "ADMIN" } })
+    )
     requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
     const filters = {
       from: "2026-06-01",

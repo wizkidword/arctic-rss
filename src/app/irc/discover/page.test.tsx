@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { authMock, directoryMock, eligibleUserMock, flagsMock, notFoundMock, profileMock, roomsMock, subscriptionsMock } = vi.hoisted(() => ({
-  authMock: vi.fn(),
+const { AuthorizationError, directoryMock, eligibleUserMock, flagsMock, notFoundMock, profileMock, roomsMock, subscriptionsMock, withAuthenticatedRequestScope } = vi.hoisted(() => ({
+  AuthorizationError: class AuthorizationError extends Error {},
   directoryMock: vi.fn(),
   eligibleUserMock: vi.fn(),
   flagsMock: vi.fn(),
@@ -10,12 +10,16 @@ const { authMock, directoryMock, eligibleUserMock, flagsMock, notFoundMock, prof
   profileMock: vi.fn(),
   roomsMock: vi.fn(),
   subscriptionsMock: vi.fn(),
+  withAuthenticatedRequestScope: vi.fn(),
 }))
 
-vi.mock("@/auth", () => ({ auth: authMock }))
 vi.mock("next/navigation", () => ({
   notFound: notFoundMock,
   useRouter: () => ({ refresh: vi.fn() }),
+}))
+vi.mock("@/lib/authorization", () => ({
+  AuthorizationError,
+  withAuthenticatedRequestScope,
 }))
 vi.mock("@/lib/chat/access", () => ({
   ChatAccessError: class ChatAccessError extends Error {},
@@ -39,7 +43,7 @@ const rooms = [
 
 describe("IrcDiscoverPage", () => {
   beforeEach(() => {
-    authMock.mockReset()
+    withAuthenticatedRequestScope.mockReset()
     eligibleUserMock.mockReset()
     flagsMock.mockReturnValue({ enabled: true, guestPreviewEnabled: true })
     notFoundMock.mockReset()
@@ -60,7 +64,9 @@ describe("IrcDiscoverPage", () => {
   })
 
   it("shows guests only public room metadata", async () => {
-    authMock.mockResolvedValue(null)
+    withAuthenticatedRequestScope.mockRejectedValue(
+      new AuthorizationError("Authentication is required.")
+    )
 
     const markup = renderToStaticMarkup(await IrcDiscoverPage({ searchParams: Promise.resolve({}) }))
 
@@ -76,7 +82,9 @@ describe("IrcDiscoverPage", () => {
   })
 
   it("ranks a signed-in reader's matching room without rendering feed data", async () => {
-    authMock.mockResolvedValue({ user: { id: "user-1" } })
+    withAuthenticatedRequestScope.mockImplementation((callback) =>
+      callback({ user: { id: "user-1" } })
+    )
     eligibleUserMock.mockResolvedValue({ id: "user-1" })
     subscriptionsMock.mockResolvedValue([{ feedUrl: "https://private.example.test/feed.xml" }])
 
@@ -88,7 +96,9 @@ describe("IrcDiscoverPage", () => {
   })
 
   it("does not expose the directory when guest preview is disabled and the user is not eligible", async () => {
-    authMock.mockResolvedValue({ user: { id: "user-1" } })
+    withAuthenticatedRequestScope.mockImplementation((callback) =>
+      callback({ user: { id: "user-1" } })
+    )
     eligibleUserMock.mockResolvedValue(null)
     flagsMock.mockReturnValue({ enabled: true, guestPreviewEnabled: false })
 
@@ -97,7 +107,9 @@ describe("IrcDiscoverPage", () => {
   })
 
   it("filters both native rooms and external starter channels", async () => {
-    authMock.mockResolvedValue(null)
+    withAuthenticatedRequestScope.mockRejectedValue(
+      new AuthorizationError("Authentication is required.")
+    )
 
     const markup = renderToStaticMarkup(await IrcDiscoverPage({ searchParams: Promise.resolve({ q: "debian" }) }))
 

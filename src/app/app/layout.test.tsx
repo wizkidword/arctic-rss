@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  auth: vi.fn(),
   getCurrentBulkReadJobForUser: vi.fn(),
   getOrCreateUserSettings: vi.fn(),
   getPrisma: vi.fn(),
@@ -12,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   listUserFeedSubscriptions: vi.fn(),
   listUserFolders: vi.fn(),
   requireFreshUser: vi.fn(),
+  withAuthenticatedRequestScope: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
   }),
@@ -21,13 +21,10 @@ vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
 }))
 
-vi.mock("@/auth", () => ({
-  auth: mocks.auth,
-}))
-
 vi.mock("@/lib/authorization", () => ({
   AuthorizationError: class AuthorizationError extends Error {},
   requireFreshUser: mocks.requireFreshUser,
+  withAuthenticatedRequestScope: mocks.withAuthenticatedRequestScope,
 }))
 
 vi.mock("@/components/app-shell", () => ({
@@ -98,14 +95,12 @@ import AuthenticatedAppLayout from "./layout"
 describe("AuthenticatedAppLayout", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.withAuthenticatedRequestScope.mockImplementation((callback) =>
+      callback({ user: { id: "user-1" } })
+    )
   })
 
   it("passes the saved theme preference into the reader shell", async () => {
-    mocks.auth.mockResolvedValue({
-      user: {
-        id: "user-1",
-      },
-    })
     mocks.requireFreshUser.mockResolvedValue({
       emailVerified: new Date("2026-07-02T12:00:00.000Z"),
     })
@@ -143,9 +138,7 @@ describe("AuthenticatedAppLayout", () => {
     )
 
     expect(mocks.getOrCreateUserSettings).toHaveBeenCalledWith("user-1")
-    expect(mocks.requireFreshUser).toHaveBeenCalledWith({
-      user: { id: "user-1" },
-    })
+    expect(mocks.requireFreshUser).toHaveBeenCalledWith({ user: { id: "user-1" } })
     expect(mocks.listArticleCollectionsForUser).toHaveBeenCalledWith("user-1")
     expect(mocks.listDiscoverInterestNavigation).toHaveBeenCalled()
     expect(markup).toContain('data-theme-preference="DARK"')
