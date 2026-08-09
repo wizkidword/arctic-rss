@@ -1,8 +1,7 @@
 import {
-  getReaderArticleForUser,
-  listReaderArticles,
+  getStorySignalArticleForUser,
+  listStorySignalArticlesForUser,
   listStoryClusterArticlesByIdsForUser,
-  type ReaderArticle,
   type StoryClusterArticleProjection,
 } from "./articles"
 import {
@@ -13,6 +12,7 @@ import {
   buildStoryClusterCandidates,
   type StoryClusterCandidate
 } from "./story-cluster-policy"
+import type { StorySignalArticle } from "./story-signals"
 import {
   persistStoryClusterCandidateForUser,
   StoryClusterPersistenceError
@@ -105,14 +105,14 @@ type StoryClusterArticleLoader = (input: {
 }) => Promise<StoryClusterArticleProjection[]>
 
 type StoryClusterEvaluationDependencies = {
-  getReaderArticle: (input: {
+  getStorySignalArticle: (input: {
     articleId: string
     userId: string
-  }) => Promise<ReaderArticle | null>
-  listReaderArticles: (input: {
+  }) => Promise<StorySignalArticle | null>
+  listStorySignalArticles: (input: {
     limit: number
     userId: string
-  }) => Promise<ReaderArticle[]>
+  }) => Promise<StorySignalArticle[]>
   persistCandidate: (input: {
     candidate: StoryClusterCandidate
     userId: string
@@ -151,8 +151,8 @@ export async function evaluateStoryClustersForArticleUser({
   return evaluateStoryClustersForArticleUserWithDependencies({
     articleId,
     dependencies: {
-      getReaderArticle: getReaderArticleForUser,
-      listReaderArticles,
+      getStorySignalArticle: getStorySignalArticleForUser,
+      listStorySignalArticles: listStorySignalArticlesForUser,
       persistCandidate: persistStoryClusterCandidateForUser
     },
     userId
@@ -175,7 +175,7 @@ export async function evaluateStoryClustersForArticleUserWithDependencies({
     throw new StoryClusterReaderError("Choose an available article first.")
   }
 
-  const selectedArticle = await dependencies.getReaderArticle({
+  const selectedArticle = await dependencies.getStorySignalArticle({
     articleId: normalizedArticleId,
     userId: normalizedUserId
   })
@@ -186,7 +186,7 @@ export async function evaluateStoryClustersForArticleUserWithDependencies({
     )
   }
 
-  const readerArticles = await dependencies.listReaderArticles({
+  const readerArticles = await dependencies.listStorySignalArticles({
     limit: STORY_CLUSTER_READER_WINDOW_SIZE,
     userId: normalizedUserId
   })
@@ -417,11 +417,11 @@ export async function listStoryClustersForArticlesUserWithClient({
 }
 
 function boundedReaderWindow(
-  selectedArticle: ReaderArticle,
-  readerArticles: ReaderArticle[]
+  selectedArticle: StorySignalArticle,
+  readerArticles: StorySignalArticle[]
 ) {
   const articleIds = new Set<string>()
-  const window: ReaderArticle[] = []
+  const window: StorySignalArticle[] = []
 
   for (const article of [selectedArticle, ...readerArticles]) {
     if (articleIds.has(article.id)) {

@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   deleteArticleForUserWithClient,
+  getStorySignalArticleForUserWithClient,
   listReaderArticlePageWithClient,
   listPublicReaderArticlesWithClient,
+  listStorySignalArticlesForUserWithClient,
   listStoryClusterArticlesByIdsForUserWithClient,
   markArticlesReadWithClient,
   sanitizeArticleHtml,
@@ -317,6 +319,68 @@ describe("reader list projections", () => {
         url: "https://example.com/related-coverage",
       },
     ])
+  })
+
+  it("loads deterministic story signals without article bodies, AI data, reader state, or sanitization inputs", async () => {
+    const store = {
+      article: {
+        findFirst: vi.fn().mockResolvedValue({
+          canonicalUrl: "https://publisher.example/coverage",
+          id: "article-selected",
+          publishedAt: new Date("2026-07-02T14:00:00.000Z"),
+          title: "Selected coverage",
+          url: "https://reader.example/selected-coverage",
+        }),
+        findMany: vi.fn().mockResolvedValue([
+          {
+            canonicalUrl: null,
+            id: "article-candidate",
+            publishedAt: new Date("2026-07-02T13:00:00.000Z"),
+            title: "Candidate coverage",
+            url: "https://reader.example/candidate-coverage",
+          },
+        ]),
+      },
+    }
+
+    await expect(
+      getStorySignalArticleForUserWithClient({
+        articleId: "article-selected",
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toEqual({
+      canonicalUrl: "https://publisher.example/coverage",
+      id: "article-selected",
+      publishedAt: new Date("2026-07-02T14:00:00.000Z"),
+      title: "Selected coverage",
+      url: "https://reader.example/selected-coverage",
+    })
+    await expect(
+      listStorySignalArticlesForUserWithClient({
+        limit: 50,
+        store,
+        userId: "user-1",
+      })
+    ).resolves.toHaveLength(1)
+
+    for (const query of [
+      store.article.findFirst.mock.calls[0]?.[0],
+      store.article.findMany.mock.calls[0]?.[0],
+    ]) {
+      expect(query.select).toEqual({
+        canonicalUrl: true,
+        id: true,
+        publishedAt: true,
+        title: true,
+        url: true,
+      })
+      expect(query.select).not.toHaveProperty("aiSummaries")
+      expect(query.select).not.toHaveProperty("contentHtml")
+      expect(query.select).not.toHaveProperty("contentText")
+      expect(query.select).not.toHaveProperty("states")
+      expect(JSON.stringify(query.where)).toContain('"userId":"user-1"')
+    }
   })
 })
 

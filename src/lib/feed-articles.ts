@@ -82,7 +82,8 @@ function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | nu
   }
 
   const title = boundedTitle(textValue(record.title)) ?? "Untitled"
-  const url = normalizeOptionalUrl(textValue(record.link), feedUrl)
+  const links = [...toArray(record.link), ...toArray(record["atom:link"])]
+  const url = normalizeOptionalUrl(findArticleLink(links), feedUrl)
 
   if (!url) {
     return null
@@ -104,6 +105,7 @@ function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | nu
       textValue(record["dc:date"]) ??
       textValue(record.updated)
   )
+  const canonicalUrl = normalizeOptionalUrl(findCanonicalLink(links), feedUrl)
 
   const externalId =
     textValue(record.guid) ??
@@ -119,6 +121,7 @@ function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | nu
       textValue(record["dc:creator"]) ?? textValue(record.creator) ?? textValue(record.author),
       ingestionLimits.maxAuthorCharacters
     ),
+    ...(canonicalUrl ? { canonicalUrl } : {}),
     contentHtml,
     contentText,
     externalId,
@@ -157,6 +160,7 @@ function parseAtomArticle(entry: unknown, feedUrl: string): ParsedFeedArticle | 
   const publishedAt = parseOptionalDate(
     textValue(record.published) ?? textValue(record.updated)
   )
+  const canonicalUrl = normalizeOptionalUrl(findCanonicalLink(record.link), feedUrl)
 
   const externalId = textValue(record.id) ?? url ?? stableTitleFallback(title, publishedAt)
   if (!isWithinUtf8ByteLimit(externalId, ingestionLimits.maxExternalIdBytes)) {
@@ -165,6 +169,7 @@ function parseAtomArticle(entry: unknown, feedUrl: string): ParsedFeedArticle | 
 
   return {
     author: truncateCharacters(atomAuthor(record.author), ingestionLimits.maxAuthorCharacters),
+    ...(canonicalUrl ? { canonicalUrl } : {}),
     contentHtml,
     contentText,
     externalId,
@@ -355,18 +360,39 @@ function imageFromHtml(value: string | undefined, feedUrl: string) {
 }
 
 function findAtomAlternateLink(value: unknown) {
+  return findArticleLink(value)
+}
+
+function findArticleLink(value: unknown) {
   const links = toArray(value)
-  const fallback = links.find((link) => toRecord(link)?.["@href"])
-
-  const alternate =
+  const preferred =
     links.find((link) => {
-      const record = toRecord(link)
-      const rel = textValue(record?.["@rel"])
+      const relations = linkRelations(link)
 
-      return record?.["@href"] && (!rel || rel === "alternate")
-    }) ?? fallback
+      return !relations.length || relations.includes("alternate")
+    }) ?? links.find((link) => Boolean(linkHref(link)))
 
-  return textValue(toRecord(alternate)?.["@href"])
+  return preferred ? linkHref(preferred) : undefined
+}
+
+function findCanonicalLink(value: unknown) {
+  return toArray(value)
+    .filter((link) => linkRelations(link).includes("canonical"))
+    .map(linkHref)
+    .find((href): href is string => Boolean(href))
+}
+
+function linkHref(value: unknown) {
+  const record = toRecord(value)
+
+  return textValue(record?.["@href"]) ?? textValue(value)
+}
+
+function linkRelations(value: unknown) {
+  return textValue(toRecord(value)?.["@rel"])
+    ?.toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean) ?? []
 }
 
 function atomAuthor(value: unknown) {

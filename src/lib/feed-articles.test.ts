@@ -72,6 +72,7 @@ describe("feed article parsing", () => {
           <id>tag:example.com,2026:atom-1</id>
           <title>Atom Entry</title>
           <link rel="alternate" href="/posts/atom-entry" />
+          <link rel="canonical" href="https://publisher.example/posts/atom-entry" />
           <author><name>Atom Author</name></author>
           <summary>Atom summary</summary>
           <content type="html"><![CDATA[<p>Atom full text.</p>]]></content>
@@ -84,6 +85,7 @@ describe("feed article parsing", () => {
     expect(articles).toEqual([
       expect.objectContaining({
         author: "Atom Author",
+        canonicalUrl: "https://publisher.example/posts/atom-entry",
         contentText: "Atom full text.",
         externalId: "tag:example.com,2026:atom-1",
         publishedAt: new Date("2026-06-22T11:00:00.000Z"),
@@ -147,6 +149,47 @@ describe("feed article parsing", () => {
     )
 
     expect(article.externalId).toBe("https://example.com/no-guid")
+  })
+
+  it("keeps only explicit, safely normalized entry canonical URLs", () => {
+    const articles = parseFeedArticles(
+      `<?xml version="1.0"?>
+      <rss version="2.0">
+        <channel>
+          <item>
+            <guid>safe-canonical</guid><title>Safe canonical</title>
+            <link>https://reader.example/safe</link>
+            <link rel="canonical" href="https://publisher.example/safe?utm_source=feed" />
+          </item>
+          <item>
+            <guid>private-canonical</guid><title>Private canonical</title>
+            <link>https://reader.example/private</link>
+            <link rel="canonical" href="http://127.0.0.1/private" />
+          </item>
+          <item>
+            <guid>credentialed-canonical</guid><title>Credentialed canonical</title>
+            <link>https://reader.example/credentialed</link>
+            <link rel="canonical" href="https://reader:secret@publisher.example/credentialed" />
+          </item>
+          <item>
+            <guid>non-http-canonical</guid><title>Non HTTP canonical</title>
+            <link>https://reader.example/non-http</link>
+            <link rel="canonical" href="mailto:editor@publisher.example" />
+          </item>
+        </channel>
+      </rss>`,
+      "https://reader.example/rss.xml"
+    )
+
+    expect(articles[0]?.canonicalUrl).toBe(
+      "https://publisher.example/safe?utm_source=feed"
+    )
+    expect(articles.slice(1)).toEqual(
+      expect.arrayContaining([
+        expect.not.objectContaining({ canonicalUrl: expect.anything() }),
+      ])
+    )
+    expect(articles.slice(1).every((article) => article.canonicalUrl === undefined)).toBe(true)
   })
 
   it("keeps ordinary entities literal-safe and rejects repeated doctypes", () => {

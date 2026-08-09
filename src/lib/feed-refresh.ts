@@ -445,6 +445,7 @@ async function hydrateLinkedArticleContent({
 
             hydratedArticles[candidate.index] = {
               ...candidate.article,
+              canonicalUrl: extracted.canonicalUrl ?? response.url.href,
               contentHtml: extracted.contentHtml,
               contentText: extracted.contentText,
               imageUrl: candidate.article.imageUrl ?? extracted.imageUrl,

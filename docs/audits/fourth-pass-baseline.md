@@ -274,3 +274,22 @@ application path.
 No production database role or password was created, changed, read, or
 printed. No production container, OVH host, push, migration, or deployment was
 changed.
+
+## Phase 8A local story-signal evidence (2026-08-08)
+
+Related-coverage evaluation now reads an authorized `StorySignalArticle`
+projection containing only article ID, title, URL, canonical URL, and
+publication time. The selected-article check and the capped candidate window
+retain the existing subscription and archive constraints, but no longer load
+article HTML/text, AI summaries, collection lists, reader-state fields, or
+sanitizer inputs.
+
+Canonical values are retained only from explicit, safely normalized feed or
+Atom canonical links, or from an already-approved linked-page enrichment:
+HTML `rel=canonical`, then `og:url`, then the safe final HTTP URL. No new page
+fetch is performed to obtain canonical metadata. Query-shape, canonical
+normalization/equality, unsafe-canonical, misleading-domain, and no-body-read
+tests cover the boundary.
+
+No production data, source fetch, credential, migration, container, OVH host,
+push, or deployment was changed.

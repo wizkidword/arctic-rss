@@ -9,6 +9,7 @@ import {
   readerArticleInclude,
   readerArticleListSelect,
   storyClusterArticleSelect,
+  storySignalArticleSelect,
   type PublicReaderArticleListStore,
   type ReaderArticle,
   type ReaderArticleListItem,
@@ -17,7 +18,9 @@ import {
   type ReaderArticleStore,
   type StoryClusterArticleProjection,
   type StoryClusterArticleStore,
+  type StorySignalArticleStore,
 } from "./articles/reader-projections"
+import type { StorySignalArticle } from "./story-signals"
 import {
   afterTimeCursorWhere,
   decodeTimeCursor,
@@ -567,6 +570,84 @@ export async function getReaderArticleForUser({
   })
 
   return article ? mapReaderArticle(article) : null
+}
+
+/**
+ * Loads the small, reader-authorized projection used exclusively to decide
+ * related coverage. Keeping this distinct from the reader-detail loader makes
+ * it impossible for deterministic story matching to pull article bodies, AI
+ * summaries, reader state, or sanitizer inputs into memory.
+ */
+export async function getStorySignalArticleForUser({
+  articleId,
+  userId,
+}: {
+  articleId: string
+  userId: string
+}): Promise<StorySignalArticle | null> {
+  return getStorySignalArticleForUserWithClient({
+    articleId,
+    store: getPrisma() as unknown as StorySignalArticleStore,
+    userId,
+  })
+}
+
+export async function getStorySignalArticleForUserWithClient({
+  articleId,
+  store,
+  userId,
+}: {
+  articleId: string
+  store: StorySignalArticleStore
+  userId: string
+}): Promise<StorySignalArticle | null> {
+  return store.article.findFirst({
+    select: storySignalArticleSelect(),
+    where: {
+      AND: [
+        subscribedArticleWhere(userId),
+        { id: articleId },
+        notArchivedArticleWhere(userId),
+      ],
+    },
+  })
+}
+
+export async function listStorySignalArticlesForUser({
+  limit,
+  userId,
+}: {
+  limit: number
+  userId: string
+}): Promise<StorySignalArticle[]> {
+  return listStorySignalArticlesForUserWithClient({
+    limit,
+    store: getPrisma() as unknown as StorySignalArticleStore,
+    userId,
+  })
+}
+
+export async function listStorySignalArticlesForUserWithClient({
+  limit,
+  store,
+  userId,
+}: {
+  limit: number
+  store: StorySignalArticleStore
+  userId: string
+}): Promise<StorySignalArticle[]> {
+  return store.article.findMany({
+    orderBy: [
+      { publishedAt: { nulls: "last", sort: "desc" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ],
+    select: storySignalArticleSelect(),
+    take: pageSize(limit),
+    where: {
+      AND: [subscribedArticleWhere(userId), notArchivedArticleWhere(userId)],
+    },
+  })
 }
 
 export async function getReaderCounts(userId: string) {

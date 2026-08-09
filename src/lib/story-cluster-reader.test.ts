@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
-import {
-  type ReaderArticle,
-  type StoryClusterArticleProjection,
-} from "./articles"
+import { type StoryClusterArticleProjection } from "./articles"
+import type { StorySignalArticle } from "./story-signals"
 import {
   evaluateStoryClustersForArticleUserWithDependencies,
   listStoryClustersForArticleUserWithClient,
@@ -13,7 +11,7 @@ import {
 
 describe("story cluster reader evaluation", () => {
   it("persists only the selected article's candidate from a capped reader window", async () => {
-    const selectedArticle = createReaderArticle(
+    const selectedArticle = createStorySignalArticle(
       "article-1",
       "Shared story",
       "story"
@@ -26,12 +24,12 @@ describe("story cluster reader evaluation", () => {
     const result = await evaluateStoryClustersForArticleUserWithDependencies({
       articleId: selectedArticle.id,
       dependencies: {
-        getReaderArticle: vi.fn().mockResolvedValue(selectedArticle),
-        listReaderArticles: vi
+        getStorySignalArticle: vi.fn().mockResolvedValue(selectedArticle),
+        listStorySignalArticles: vi
           .fn()
           .mockResolvedValue([
-            createReaderArticle("article-2", "Shared story", "story"),
-            createReaderArticle("article-3", "Unrelated", "unrelated")
+            createStorySignalArticle("article-2", "Shared story", "story"),
+            createStorySignalArticle("article-3", "Unrelated", "unrelated")
           ]),
         persistCandidate
       },
@@ -48,7 +46,7 @@ describe("story cluster reader evaluation", () => {
   })
 
   it("does not reach beyond the declared reader window", async () => {
-    const selectedArticle = createReaderArticle(
+    const selectedArticle = createStorySignalArticle(
       "article-1",
       "Shared story",
       "story"
@@ -57,7 +55,7 @@ describe("story cluster reader evaluation", () => {
     const readerArticles = Array.from(
       { length: STORY_CLUSTER_READER_WINDOW_SIZE },
       (_, index) =>
-        createReaderArticle(
+        createStorySignalArticle(
           `article-${index + 2}`,
           index === STORY_CLUSTER_READER_WINDOW_SIZE - 1
             ? "Shared story"
@@ -71,8 +69,8 @@ describe("story cluster reader evaluation", () => {
     const result = await evaluateStoryClustersForArticleUserWithDependencies({
       articleId: selectedArticle.id,
       dependencies: {
-        getReaderArticle: vi.fn().mockResolvedValue(selectedArticle),
-        listReaderArticles: vi.fn().mockResolvedValue(readerArticles),
+        getStorySignalArticle: vi.fn().mockResolvedValue(selectedArticle),
+        listStorySignalArticles: vi.fn().mockResolvedValue(readerArticles),
         persistCandidate
       },
       userId: "user-1"
@@ -80,6 +78,38 @@ describe("story cluster reader evaluation", () => {
 
     expect(result).toEqual({ created: false, dismissed: false, matched: false })
     expect(persistCandidate).not.toHaveBeenCalled()
+  })
+
+  it("evaluates only signal fields and never touches an article body or sanitizer input", async () => {
+    const selectedArticle = createStorySignalArticle(
+      "article-1",
+      "Shared story",
+      "story"
+    )
+    Object.defineProperty(selectedArticle, "contentHtml", {
+      get() {
+        throw new Error("Story evaluation must not read article HTML.")
+      },
+    })
+
+    await expect(
+      evaluateStoryClustersForArticleUserWithDependencies({
+        articleId: selectedArticle.id,
+        dependencies: {
+          getStorySignalArticle: vi.fn().mockResolvedValue(selectedArticle),
+          listStorySignalArticles: vi
+            .fn()
+            .mockResolvedValue([
+              createStorySignalArticle("article-2", "Shared story", "story"),
+            ]),
+          persistCandidate: vi.fn().mockResolvedValue({
+            created: false,
+            dismissed: false,
+          }),
+        },
+        userId: "user-1",
+      })
+    ).resolves.toEqual({ created: false, dismissed: false, matched: true })
   })
 })
 
@@ -303,27 +333,15 @@ describe("story cluster reader presentation", () => {
   })
 })
 
-function createReaderArticle(
+function createStorySignalArticle(
   id: string,
   title: string,
   path: string
-): ReaderArticle {
+): StorySignalArticle {
   return {
-    aiSummary: null,
-    author: null,
-    contentText: null,
-    feedFaviconUrl: null,
-    feedId: "feed-1",
-    feedTitle: "Example Feed",
+    canonicalUrl: null,
     id,
-    imageUrl: null,
-    isRead: false,
-    isStarred: false,
     publishedAt: new Date("2026-07-28T12:00:00.000Z"),
-    readAt: null,
-    sanitizedContentHtml: null,
-    starredAt: null,
-    summary: null,
     title,
     url: `https://example.com/${path}`
   }

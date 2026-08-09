@@ -275,6 +275,7 @@ describe("feed refresh", () => {
       text: `<!doctype html>
         <html>
           <head>
+            <link rel="canonical" href="/canonical-useful-thing" />
             <meta name="description" content="A useful thing for careful readers." />
             <meta property="og:image" content="/preview.jpg" />
           </head>
@@ -305,6 +306,7 @@ describe("feed refresh", () => {
       expect.objectContaining({
         data: [
           expect.objectContaining({
+            canonicalUrl: "https://example.com/canonical-useful-thing",
             contentText:
               "Useful Thing This is the full article body that Hacker News did not include in its RSS item. It has enough readable text to be worth showing inside Arctic RSS.",
             imageUrl: "https://example.com/preview.jpg",

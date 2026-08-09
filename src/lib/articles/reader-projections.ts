@@ -114,6 +114,14 @@ type StoryClusterArticleRecord = {
   url: string
 }
 
+type StorySignalArticleRecord = {
+  canonicalUrl: string | null
+  id: string
+  publishedAt: Date | null
+  title: string
+  url: string
+}
+
 export type PublicReaderArticleListStore = {
   article: {
     findMany(args: {
@@ -155,6 +163,25 @@ export type StoryClusterArticleStore = {
       select: Prisma.ArticleSelect
       where: Prisma.ArticleWhereInput
     }): Promise<StoryClusterArticleRecord[]>
+  }
+}
+
+export type StorySignalArticleStore = {
+  article: {
+    findFirst(args: {
+      select: Prisma.ArticleSelect
+      where: Prisma.ArticleWhereInput
+    }): Promise<StorySignalArticleRecord | null>
+    findMany(args: {
+      orderBy: Array<
+        | { publishedAt: { nulls: "last"; sort: "desc" } }
+        | { createdAt: "desc" }
+        | { id: "desc" }
+      >
+      select: Prisma.ArticleSelect
+      take: number
+      where: Prisma.ArticleWhereInput
+    }): Promise<StorySignalArticleRecord[]>
   }
 }
 
@@ -204,6 +231,16 @@ export function storyClusterArticleSelect() {
         title: true,
       },
     },
+    id: true,
+    publishedAt: true,
+    title: true,
+    url: true,
+  } satisfies Prisma.ArticleSelect
+}
+
+export function storySignalArticleSelect() {
+  return {
+    canonicalUrl: true,
     id: true,
     publishedAt: true,
     title: true,
