@@ -410,3 +410,29 @@ fresh sanitized deep diagnostic at `/api/internal/health`.
 
 No production data, credential, migration, container, OVH host, push, or
 deployment was changed.
+
+## Phase 12 local source-completion evidence (2026-08-09)
+
+The final local gate used Node `v24.14.0`, matching the repository's required
+major version. It ran in this isolated checkout only. The Node 20 executable
+that happens to be first in the Windows PATH was not used for the locked
+install, Prisma, TypeScript, test, lint, build, or integration commands.
+
+| Verification | Result |
+| --- | --- |
+| Locked install, Prisma generate/format/validate | Passed; `npm ci --legacy-peer-deps` installed the locked dependency set and all Prisma checks passed without rewriting source. |
+| Full regression | Passed: 283 files passed, 4 skipped; 1,383 tests passed, 6 skipped. |
+| Chat release regression | Passed: 18 files and 113 tests. |
+| Static topology and boundaries | Passed: every supported topology plus service environment, dependency, Redis-network, Redis ACL, legacy-compatibility, and database-connection-budget checks. |
+| Database integration | Passed: a script-owned disposable PostgreSQL container proved the restricted chat role's allowed and denied SQL paths and the OPML partial unique index across separate clients and terminal transitions. |
+| Real Redis integration | Passed: a disposable loopback Redis container proved feed/podcast terminal-job removal, re-enqueue, active-job deduplication, and durable control-plane recovery after restart. The source-lifecycle test timeout is now explicitly 15 seconds so its outer Vitest budget exceeds its existing 10-second event wait. |
+| Authenticated browser fixture | Passed: a fresh disposable PostgreSQL and two Redis services applied all 42 committed migrations, then ran 10 browser journeys against the production server. The account-export journey checks the attachment name, schema envelope, subscription shape, and absence of body fields. |
+| Production image builds | Passed locally without running containers. Current image sizes are web `85,667,262`, worker `256,462,706`, chat gateway `256,147,435`, and migrate `117,295,893` bytes. No comparable current-branch baseline was available, so these are recorded values, not an improvement claim. |
+| Dependency advisory gate | Passed for 448 production packages. |
+
+The temporary database, Redis containers, and Phase 12 image tags were removed
+after their checks. The Windows Docker engine does not provide the checked-in
+`journald` logging driver, so the production Compose profiles were not started
+locally. Container vulnerability scans and SBOM artifact generation remain
+required exact-commit GitHub CI checks. No production connection, mutation,
+backup, image transfer, deployment, or release preflight occurred.
