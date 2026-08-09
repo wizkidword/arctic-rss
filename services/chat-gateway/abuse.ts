@@ -91,6 +91,10 @@ export function createChatSocketAbuseControls({
         action: "chat_malformed_event",
         ip: clientIp,
         userId: identity.userId,
+      }).catch(() => {
+        logger.warn("limiter_accounting_failed", {
+          action: "chat_malformed_event",
+        })
       })
 
       logger.warn("malformed_event", {
