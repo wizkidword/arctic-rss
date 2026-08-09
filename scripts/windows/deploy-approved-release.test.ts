@@ -65,6 +65,8 @@ describe("approved release command", () => {
 
     expect(script).toContain('migration_status="verified"')
     expect(script).toContain("printf 'MIGRATION_STATUS=%s\\n' \"$migration_status\"")
+    expect(script).toContain("printf 'CHAT_DATABASE_ROLE=%s\\n' \"$chat_database_role\"")
+    expect(script).toContain('chatDatabaseRole = $chatDatabaseRole')
     expect(script).toContain('docker inspect -f \'{{.Image}}\' app-web-1')
     expect(script).toContain("worker_image_entries+=(\"$service=$service_image\")")
     expect(script).toContain('chat_gateway_image="$(sudo -n docker inspect')
@@ -78,6 +80,25 @@ describe("approved release command", () => {
     expect(script).toContain('localImageArchiveSha256 = $offHostImages.ArchiveHash')
     expect(script).toContain('topology = $deployedTopology')
     expect(script).toContain('topologyHealth = $topologyHealth')
+  })
+
+  it("bootstraps the restricted chat database role after migrations and before the live swap", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain('chat_database_role="not-selected"')
+    expect(script).toContain("all-in-one-with-chat|split-with-chat)")
+    expect(script).toContain('CHAT_DATABASE_URL must use arctic_chat')
+    expect(script).toContain('ops/postgres/bootstrap-chat-runtime-role.sql')
+    expect(script).toContain('chat_password_b64')
+    expect(script).toContain('base64 -d')
+    expect(script).toContain('PGPASSWORD="$chat_password" psql')
+    expect(script).toContain('chat_database_role="verified"')
+    expect(script.indexOf('migration_status="verified"')).toBeLessThan(
+      script.indexOf('ops/postgres/bootstrap-chat-runtime-role.sql'),
+    )
+    expect(script.indexOf('ops/postgres/bootstrap-chat-runtime-role.sql')).toBeLessThan(
+      script.indexOf('sudo -n mv "$live" "$previous"'),
+    )
   })
 
   it("uses the dedicated local build root and checks OVH disk headroom before backup", async () => {
