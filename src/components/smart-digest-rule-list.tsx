@@ -86,7 +86,7 @@ export function SmartDigestRuleList({
                     latestDigest.id
                   )}`}
                 >
-                  Latest digest
+                  Review latest briefing
                 </Link>
               ) : (
                 <Badge className="self-start" variant="outline">

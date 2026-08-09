@@ -149,7 +149,7 @@ function ArticleSearchForm({
             className="inline-flex h-9 items-center rounded-md border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted"
             href={savedSearchCreateHref(filters)}
           >
-            Save search
+            Save view
           </Link>
         )}
       </div>

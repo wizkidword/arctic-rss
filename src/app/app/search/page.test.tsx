@@ -138,6 +138,7 @@ describe("SearchPage", () => {
     expect(markup).toContain("Climate")
     expect(markup).toContain("Research")
     expect(markup).not.toContain("Paused source")
+    expect(markup).toContain("Save view")
   })
 
   it("redirects anonymous visitors before loading reader data", async () => {

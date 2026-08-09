@@ -15,6 +15,11 @@ import {
 } from "@/lib/saved-searches"
 import { cn } from "@/lib/utils"
 
+const monitorDateFormatter = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+  timeStyle: "short",
+})
+
 export function SavedSearchList({
   savedSearches,
 }: {
@@ -64,22 +69,44 @@ export function SavedSearchList({
               <p className="mt-2 text-xs text-muted-foreground">
                 {savedSearch.query}
               </p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Preview this saved view before monitoring. Monitors start from
+                now, process new matches in bounded batches, and never delete
+                articles.
+              </p>
               {savedSearch.monitorEnabled && (
-                <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                  <BellRingIcon aria-hidden="true" className="size-3" />
-                  Monitoring new incoming coverage
-                  {savedSearch.monitorAction === "star" && (
-                    <span>· starring new matches</span>
-                  )}
-                  {savedSearch.monitorNewMatchCount > 0 && (
-                    <span className="font-medium text-foreground">
-                      · {savedSearch.monitorNewMatchCount} new
-                    </span>
-                  )}
-                </p>
+                <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+                  <p className="flex items-center gap-1">
+                    <BellRingIcon aria-hidden="true" className="size-3" />
+                    Monitoring new incoming coverage
+                    {savedSearch.monitorAction === "star" && (
+                      <span>· starring new matches</span>
+                    )}
+                  </p>
+                  <p>
+                    Latest monitor activity: {savedSearch.monitorLastRunAt
+                      ? `checked ${monitorDateFormatter.format(savedSearch.monitorLastRunAt)}`
+                      : "waiting for its first check"}
+                    {savedSearch.monitorNextRunAt
+                      ? ` · next ${monitorDateFormatter.format(savedSearch.monitorNextRunAt)}`
+                      : ""}
+                    {savedSearch.monitorFailureCount > 0
+                      ? ` · ${savedSearch.monitorFailureCount} recent ${savedSearch.monitorFailureCount === 1 ? "retry" : "retries"}`
+                      : ""}
+                    {savedSearch.monitorNewMatchCount > 0
+                      ? ` · ${savedSearch.monitorNewMatchCount} awaiting review`
+                      : ""}
+                  </p>
+                </div>
               )}
             </div>
             <div className="flex flex-wrap gap-2 self-start">
+              <Link
+                className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+                href={savedSearchHref(savedSearch)}
+              >
+                Preview matches
+              </Link>
               <form action={setSavedSearchMonitorActionAction}>
                 <input name="savedSearchId" type="hidden" value={savedSearch.id} />
                 <label className="sr-only" htmlFor={`saved-search-monitor-action-${savedSearch.id}`}>
