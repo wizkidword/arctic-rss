@@ -166,4 +166,15 @@ describe("approved release command", () => {
     expect(script).toContain("previousImageTags = @($previousImages -split ' '")
     expect(script).toContain('[[ "$previous_commit" =~ ^[a-f0-9]{40}$ ]]')
   })
+
+  it("recognizes only the explicit pre-worker-health chat topology as a rollback predecessor", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain("$legacyTopologyCatalog = @(")
+    expect(script).toContain(
+      '"all-in-one-with-chat|chat-gateway,edge-proxy,web,worker"',
+    )
+    expect(script).toContain(") + $legacyTopologyCatalog")
+    expect(script).toContain("$topologyCatalog.Count -ne 5")
+  })
 })
