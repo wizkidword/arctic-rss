@@ -514,6 +514,9 @@ async function enqueueDueSmartDigests(lease?: MaintenanceLease) {
       nextRunAt: {
         lte: now,
       },
+      user: {
+        disabledAt: null,
+      },
     },
   })
 
@@ -1019,6 +1022,11 @@ async function enqueuePendingSmartDigestEmails(lease?: MaintenanceLease) {
     take: schedulerBatchSize,
     where: {
       emailStatus: "PENDING",
+      rule: {
+        user: {
+          disabledAt: null,
+        },
+      },
     },
   })
 

@@ -1,5 +1,9 @@
 import type { Prisma } from "../generated/prisma/client"
 
+import {
+  getBackgroundEligibility,
+  type BackgroundEligibilityStore,
+} from "./background-eligibility"
 import { getPrisma } from "./db"
 import { enqueueSmartDigestEmail } from "./smart-digest-email-queue"
 import {
@@ -195,7 +199,7 @@ export type SmartDigestProcessingStore = {
     ): Promise<SmartDigestRuleForProcessing | null>
     update(args: SmartDigestRuleUpdateArgs): Promise<SmartDigestRuleForProcessing | null>
   }
-}
+} & BackgroundEligibilityStore
 
 export type SmartDigestProcessingResult = {
   articleCount: number
@@ -238,6 +242,32 @@ export async function processSmartDigestRuleWithClient({
 }): Promise<SmartDigestProcessingResult> {
   if (Number.isNaN(scheduledFor.getTime())) {
     throw new SmartDigestError("Smart Digest run has an invalid scheduled time.")
+  }
+
+  const rule = await store.smartDigestRule.findUnique({
+    include: {
+      folders: true,
+      subscriptions: true,
+      user: {
+        select: {
+          email: true,
+          id: true,
+        },
+      },
+    },
+    where: { id: ruleId },
+  })
+
+  if (!rule?.user || !rule.isEnabled) {
+    return skippedResult()
+  }
+
+  const eligibility = await getBackgroundEligibility({
+    store,
+    userId: rule.userId,
+  })
+  if (!eligibility.active || !eligibility.aiAllowed) {
+    return skippedResult()
   }
 
   const run = await store.digestRun.upsert({
@@ -305,29 +335,6 @@ export async function processSmartDigestRuleWithClient({
     return skippedRunResult(claimedRun)
   }
 
-  const rule = await store.smartDigestRule.findUnique({
-    include: {
-      folders: true,
-      subscriptions: true,
-      user: {
-        select: {
-          email: true,
-          id: true,
-        },
-      },
-    },
-    where: { id: ruleId },
-  })
-
-  if (!rule?.user || !rule.isEnabled) {
-    await failDigestRun({
-      message: "Smart Digest rule not found or disabled.",
-      runId: claimedRun.id,
-      store,
-    })
-    throw new SmartDigestError("Smart Digest rule not found.")
-  }
-
   const watermarkFrom = digestWatermarkFrom(rule, now)
   const nextRunAt = scheduleNextSmartDigestRun({
     from: now,
@@ -360,6 +367,19 @@ export async function processSmartDigestRuleWithClient({
       : "COMPLETED_NO_MATCHES"
     const emailStatus: SmartDigestEmailStatusForProcessing =
       rule.emailEnabled && items.length ? "PENDING" : "NOT_REQUESTED"
+
+    const currentEligibility = await getBackgroundEligibility({
+      store,
+      userId: rule.userId,
+    })
+    if (!currentEligibility.active || !currentEligibility.aiAllowed) {
+      await failDigestRun({
+        message: "Smart Digest owner is no longer eligible for background work.",
+        runId: claimedRun.id,
+        store,
+      })
+      return skippedRunResult(claimedRun)
+    }
 
     const digest = await store.$transaction(async (transaction) => {
       const createdDigest = await transaction.smartDigest.create({
@@ -584,6 +604,14 @@ function skippedRunResult(run: DigestRunRecord): SmartDigestProcessingResult {
   return {
     articleCount: 0,
     digestId: run.digestId,
+    status: "SKIPPED",
+  }
+}
+
+function skippedResult(): SmartDigestProcessingResult {
+  return {
+    articleCount: 0,
+    digestId: null,
     status: "SKIPPED",
   }
 }

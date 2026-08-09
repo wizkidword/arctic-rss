@@ -1,3 +1,7 @@
+import {
+  getBackgroundEligibility,
+  type BackgroundEligibilityStore,
+} from "./background-eligibility"
 import { getPrisma } from "./db"
 import {
   sendSmartDigestEmail,
@@ -15,6 +19,7 @@ type SmartDigestDeliveryRun = {
   rule: {
     user: {
       email: string
+      id: string
     } | null
   } | null
 }
@@ -46,6 +51,7 @@ export type SmartDigestDeliveryStore = {
             user: {
               select: {
                 email: true
+                id: true
               }
             }
           }
@@ -68,7 +74,7 @@ export type SmartDigestDeliveryStore = {
       where: { id: string }
     }): Promise<unknown>
   }
-}
+} & BackgroundEligibilityStore
 
 export type SmartDigestDeliveryResult = {
   status: "SENT" | "SKIPPED"
@@ -115,6 +121,7 @@ export async function processSmartDigestEmailDeliveryWithClient({
           user: {
             select: {
               email: true,
+              id: true,
             },
           },
         },
@@ -128,6 +135,15 @@ export async function processSmartDigestEmailDeliveryWithClient({
     !run.rule?.user ||
     (run.emailStatus !== "PENDING" && run.emailStatus !== "FAILED")
   ) {
+    return { status: "SKIPPED" }
+  }
+
+  const eligibility = await getBackgroundEligibility({
+    store,
+    userId: run.rule.user.id,
+  })
+  if (!eligibility.emailAllowed) {
+    await recordIneligibleDelivery({ run, store })
     return { status: "SKIPPED" }
   }
 
@@ -206,6 +222,33 @@ export async function processSmartDigestEmailDeliveryWithClient({
   })
 
   return { status: "SENT" }
+}
+
+async function recordIneligibleDelivery({
+  run,
+  store,
+}: {
+  run: SmartDigestDeliveryRun
+  store: SmartDigestDeliveryStore
+}) {
+  await store.$transaction(async (transaction) => {
+    await transaction.smartDigest.update({
+      data: {
+        emailErrorMessage:
+          "Account is no longer eligible for Smart Digest email delivery.",
+        emailStatus: "NOT_REQUESTED",
+      },
+      where: { id: run.digest!.id },
+    })
+    await transaction.digestRun.update({
+      data: {
+        emailErrorMessage:
+          "Account is no longer eligible for Smart Digest email delivery.",
+        emailStatus: "NOT_REQUESTED",
+      },
+      where: { id: run.id },
+    })
+  })
 }
 
 export function smartDigestDeliveryMessageId(runId: string) {

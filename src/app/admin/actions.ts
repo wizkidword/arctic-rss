@@ -383,6 +383,29 @@ export async function disableUserAction(
         },
       })
 
+      await Promise.all([
+        transaction.savedSearch.updateMany({
+          data: {
+            monitorEnabled: false,
+            monitorNextRunAt: null,
+          },
+          where: {
+            monitorEnabled: true,
+            userId: user.id,
+          },
+        }),
+        transaction.smartDigestRule.updateMany({
+          data: {
+            isEnabled: false,
+            nextRunAt: null,
+          },
+          where: {
+            isEnabled: true,
+            userId: user.id,
+          },
+        }),
+      ])
+
       await transaction.adminAuditLog.create({
         data: {
           action: "USER_DISABLED",
@@ -408,7 +431,7 @@ export async function disableUserAction(
     refresh()
 
     return {
-      message: `Disabled ${target.email} and revoked all active sessions.`,
+      message: `Disabled ${target.email}, revoked active sessions, and paused background automations.`,
       status: "success",
     }
   } catch (error) {

@@ -371,6 +371,12 @@ describe("disableUserAction", () => {
       adminAuditLog: {
         create: vi.fn().mockResolvedValue({}),
       },
+      savedSearch: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      smartDigestRule: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       user: {
         findUnique: vi.fn().mockResolvedValue({
           disabledAt: null,
@@ -405,6 +411,26 @@ describe("disableUserAction", () => {
       select: { authVersion: true, email: true, id: true },
       where: { id: "user-1" },
     })
+    expect(transaction.savedSearch.updateMany).toHaveBeenCalledWith({
+      data: {
+        monitorEnabled: false,
+        monitorNextRunAt: null,
+      },
+      where: {
+        monitorEnabled: true,
+        userId: "user-1",
+      },
+    })
+    expect(transaction.smartDigestRule.updateMany).toHaveBeenCalledWith({
+      data: {
+        isEnabled: false,
+        nextRunAt: null,
+      },
+      where: {
+        isEnabled: true,
+        userId: "user-1",
+      },
+    })
     expect(transaction.adminAuditLog.create).toHaveBeenCalledWith({
       data: {
         action: "USER_DISABLED",
@@ -420,7 +446,8 @@ describe("disableUserAction", () => {
       userId: "user-1",
     })
     expect(result).toEqual({
-      message: "Disabled reader@example.com and revoked all active sessions.",
+      message:
+        "Disabled reader@example.com, revoked active sessions, and paused background automations.",
       status: "success",
     })
   })

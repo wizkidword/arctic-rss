@@ -38,9 +38,11 @@ function monitor(overrides: Partial<Record<string, unknown>> = {}) {
 function createStore({
   due = [monitor()],
   updateCounts = [1, 1],
+  user = activeUser(),
 }: {
   due?: ReturnType<typeof monitor>[]
   updateCounts?: number[]
+  user?: ReturnType<typeof activeUser> | null
 } = {}) {
   return {
     articleState: {
@@ -53,6 +55,23 @@ function createStore({
         count: updateCounts.shift() ?? 1,
       })),
     },
+    user: {
+      findUnique: vi.fn().mockResolvedValue(user),
+    },
+  }
+}
+
+function activeUser(): {
+  disabledAt: Date | null
+  emailVerified: Date | null
+  id: string
+  plan: "FREE"
+} {
+  return {
+    disabledAt: null,
+    emailVerified: new Date("2026-07-01T00:00:00.000Z"),
+    id: "user-1",
+    plan: "FREE" as const,
   }
 }
 
@@ -180,6 +199,67 @@ describe("saved monitors", () => {
       processDueSavedMonitors({ findMatches, now, settings, store })
     ).resolves.toMatchObject({ claimed: 0, skipped: 1 })
     expect(findMatches).not.toHaveBeenCalled()
+  })
+
+  it("pauses a due monitor when its account was disabled after scheduling", async () => {
+    const store = createStore({
+      user: { ...activeUser(), disabledAt: new Date("2026-07-29T11:59:00.000Z") },
+    })
+    const findMatches = vi.fn()
+
+    await expect(
+      processDueSavedMonitors({ findMatches, now, settings, store })
+    ).resolves.toMatchObject({ claimed: 0, skipped: 1 })
+
+    expect(findMatches).not.toHaveBeenCalled()
+    expect(store.savedSearch.updateMany).toHaveBeenCalledWith({
+      data: {
+        monitorEnabled: false,
+        monitorNextRunAt: null,
+      },
+      where: {
+        id: "saved-search-1",
+        monitorEnabled: true,
+        userId: "user-1",
+      },
+    })
+  })
+
+  it("stops a claimed monitor before applying matches when the account is disabled mid-run", async () => {
+    const store = createStore()
+    store.user.findUnique
+      .mockResolvedValueOnce(activeUser())
+      .mockResolvedValueOnce({
+        ...activeUser(),
+        disabledAt: new Date("2026-07-29T12:00:00.000Z"),
+      })
+
+    await expect(
+      processDueSavedMonitors({
+        findMatches: vi
+          .fn()
+          .mockResolvedValue([
+            { articleId: "article-1", createdAt: new Date("2026-07-29T11:05:00.000Z") },
+          ]),
+        now,
+        settings,
+        store,
+      })
+    ).resolves.toMatchObject({ claimed: 1, newMatches: 0, skipped: 1 })
+
+    expect(store.articleState.createMany).not.toHaveBeenCalled()
+    expect(store.savedSearch.updateMany).toHaveBeenLastCalledWith({
+      data: {
+        monitorEnabled: false,
+        monitorNextRunAt: null,
+      },
+      where: {
+        id: "saved-search-1",
+        monitorEnabled: true,
+        monitorNextRunAt: new Date("2026-07-29T12:10:00.000Z"),
+        userId: "user-1",
+      },
+    })
   })
 
   it("initializes a legacy saved search without counting its old matches", async () => {

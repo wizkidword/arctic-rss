@@ -92,6 +92,37 @@ describe("smart digest email delivery", () => {
     expect(sendDigestEmail).not.toHaveBeenCalled()
   })
 
+  it("suppresses email when the current account is disabled", async () => {
+    const { mocks, store } = createStore({
+      user: {
+        disabledAt: new Date("2026-07-13T08:30:00.000Z"),
+        emailVerified: new Date("2026-07-01T00:00:00.000Z"),
+        id: "user-1",
+        plan: "FREE",
+      },
+    })
+    const sendDigestEmail = vi.fn()
+
+    await expect(
+      processSmartDigestEmailDeliveryWithClient({
+        now,
+        runId: "run-1",
+        sendDigestEmail,
+        store,
+      })
+    ).resolves.toEqual({ status: "SKIPPED" })
+
+    expect(sendDigestEmail).not.toHaveBeenCalled()
+    expect(mocks.digestRunUpdate).toHaveBeenCalledWith({
+      data: {
+        emailErrorMessage:
+          "Account is no longer eligible for Smart Digest email delivery.",
+        emailStatus: "NOT_REQUESTED",
+      },
+      where: { id: "run-1" },
+    })
+  })
+
   it("uses a stable RFC-style message identifier", () => {
     expect(smartDigestDeliveryMessageId("run/1")).toBe(
       "<smart-digest-run-1@arcticrss.com>"
@@ -99,7 +130,13 @@ describe("smart digest email delivery", () => {
   })
 })
 
-function createStore({ emailStatus = "PENDING" }: { emailStatus?: string } = {}) {
+function createStore({
+  emailStatus = "PENDING",
+  user = activeUser(),
+}: {
+  emailStatus?: string
+  user?: ReturnType<typeof activeUser> | null
+} = {}) {
   const state = {
     run: {
       digest: {
@@ -126,6 +163,7 @@ function createStore({ emailStatus = "PENDING" }: { emailStatus?: string } = {})
       rule: {
         user: {
           email: "reader@example.test",
+          id: "user-1",
         },
       },
     },
@@ -136,6 +174,7 @@ function createStore({ emailStatus = "PENDING" }: { emailStatus?: string } = {})
       return Promise.resolve(undefined)
     }),
     smartDigestUpdate: vi.fn().mockResolvedValue(undefined),
+    userFindUnique: vi.fn().mockResolvedValue(user),
   }
   const store = {
     $transaction: async (callback: (transaction: unknown) => Promise<unknown>) =>
@@ -159,12 +198,29 @@ function createStore({ emailStatus = "PENDING" }: { emailStatus?: string } = {})
     smartDigest: {
       update: mocks.smartDigestUpdate,
     },
+    user: {
+      findUnique: mocks.userFindUnique,
+    },
   }
 
   return {
     mocks,
     state,
     store: store as unknown as SmartDigestDeliveryStore,
+  }
+}
+
+function activeUser(): {
+  disabledAt: Date | null
+  emailVerified: Date | null
+  id: string
+  plan: "FREE"
+} {
+  return {
+    disabledAt: null,
+    emailVerified: new Date("2026-07-01T00:00:00.000Z"),
+    id: "user-1",
+    plan: "FREE" as const,
   }
 }
 

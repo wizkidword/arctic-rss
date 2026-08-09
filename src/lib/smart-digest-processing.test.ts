@@ -130,6 +130,70 @@ describe("smart digest processing", () => {
     )
   })
 
+  it("does not create a run or digest for an account disabled after scheduling", async () => {
+    const { mocks, store } = createStore({
+      user: {
+        disabledAt: new Date("2026-07-13T08:30:00.000Z"),
+        emailVerified: new Date("2026-07-01T00:00:00.000Z"),
+        id: "user-1",
+        plan: "FREE",
+      },
+    })
+
+    await expect(
+      processSmartDigestRuleWithClient({
+        enqueueEmail: vi.fn(),
+        now,
+        ruleId: "rule-1",
+        scheduledFor,
+        store,
+      })
+    ).resolves.toEqual({
+      articleCount: 0,
+      digestId: null,
+      status: "SKIPPED",
+    })
+
+    expect(mocks.digestRunUpsert).not.toHaveBeenCalled()
+    expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
+  })
+
+  it("does not persist a digest when the account is disabled during processing", async () => {
+    const { mocks, store } = createStore({
+      articles: [article({ id: "article-1", title: "Arctic climate report" })],
+    })
+    mocks.userFindUnique
+      .mockResolvedValueOnce(activeUser())
+      .mockResolvedValueOnce({
+        ...activeUser(),
+        disabledAt: new Date("2026-07-13T08:45:00.000Z"),
+      })
+
+    await expect(
+      processSmartDigestRuleWithClient({
+        enqueueEmail: vi.fn(),
+        now,
+        ruleId: "rule-1",
+        scheduledFor,
+        store,
+      })
+    ).resolves.toEqual({
+      articleCount: 0,
+      digestId: null,
+      status: "SKIPPED",
+    })
+
+    expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
+    expect(mocks.digestRunUpdate).toHaveBeenCalledWith({
+      data: {
+        errorMessage: "Smart Digest owner is no longer eligible for background work.",
+        processingStartedAt: null,
+        status: "FAILED",
+      },
+      where: { id: "run-1" },
+    })
+  })
+
   it("uses a late-arrival lookback and never selects an already included article", () => {
     expect(
       smartDigestWindowWhere({
@@ -243,10 +307,12 @@ function createStore({
   articles = [],
   rule = baseRule(),
   run = null,
+  user = activeUser(),
 }: {
   articles?: ReturnType<typeof article>[]
   rule?: SmartDigestRuleForProcessing
   run?: DigestRunRecord | null
+  user?: ReturnType<typeof activeUser> | null
 } = {}) {
   let currentRun = run
   const events: string[] = []
@@ -293,6 +359,7 @@ function createStore({
       })
     }),
     smartDigestRuleUpdate: vi.fn().mockResolvedValue(rule),
+    userFindUnique: vi.fn().mockResolvedValue(user),
   }
 
   const store = {
@@ -314,6 +381,9 @@ function createStore({
       findUnique: vi.fn().mockResolvedValue(rule),
       update: mocks.smartDigestRuleUpdate,
     },
+    user: {
+      findUnique: mocks.userFindUnique,
+    },
   }
 
   return {
@@ -322,5 +392,19 @@ function createStore({
       events,
     },
     store: store as unknown as SmartDigestProcessingStore,
+  }
+}
+
+function activeUser(): {
+  disabledAt: Date | null
+  emailVerified: Date | null
+  id: string
+  plan: "FREE"
+} {
+  return {
+    disabledAt: null,
+    emailVerified: new Date("2026-07-01T00:00:00.000Z"),
+    id: "user-1",
+    plan: "FREE" as const,
   }
 }
