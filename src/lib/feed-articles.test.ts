@@ -21,6 +21,25 @@ describe("feed article parsing", () => {
     ])
   })
 
+  it("drops anomalous publication dates without failing the source", () => {
+    const result = parseFeedArticlesWithMetrics(
+      `<rss><channel>
+        <item><guid>invalid</guid><title>Invalid</title><link>https://example.com/invalid</link><pubDate>not a date</pubDate></item>
+        <item><guid>old</guid><title>Old</title><link>https://example.com/old</link><pubDate>1969-12-31T23:59:59Z</pubDate></item>
+        <item><guid>future</guid><title>Future</title><link>https://example.com/future</link><pubDate>3020-01-01T00:00:00Z</pubDate></item>
+      </channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(result.articles).toHaveLength(3)
+    expect(result.articles.every((article) => article.publishedAt === undefined)).toBe(true)
+    expect(result.stats.publicationDateDiagnostics).toEqual({
+      "future-skew": 1,
+      invalid: 1,
+      "out-of-range": 1,
+    })
+  })
+
   it("normalizes RSS items into article records", () => {
     const articles = parseFeedArticles(
       `<?xml version="1.0"?>

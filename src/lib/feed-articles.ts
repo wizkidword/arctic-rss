@@ -14,6 +14,11 @@ import {
   normalizePublisherExternalIdentity,
   normalizePublisherText,
 } from "./publisher-text"
+import {
+  createPublisherPublicationDateDiagnostics,
+  parsePublisherPublicationDate,
+  type PublisherPublicationDateDiagnostics,
+} from "./publisher-publication-date"
 import { normalizeHttpUrl } from "./url-safety"
 
 const xmlParser = new XMLParser({
@@ -45,9 +50,10 @@ export function parseFeedArticlesWithMetrics(xml: string, feedUrl: string) {
   const channel = firstRecord(rss?.channel ?? rdf?.channel)
   const rssItems = [...toArray(channel?.item), ...toArray(rdf?.item)]
   const atomItems = toArray(toRecord(parsed.feed)?.entry)
+  const publicationDateDiagnostics = createPublisherPublicationDateDiagnostics()
   const candidates = [
-    ...rssItems.map((item) => () => parseRssArticle(item, feedUrl)),
-    ...atomItems.map((item) => () => parseAtomArticle(item, feedUrl)),
+    ...rssItems.map((item) => () => parseRssArticle(item, feedUrl, publicationDateDiagnostics)),
+    ...atomItems.map((item) => () => parseAtomArticle(item, feedUrl, publicationDateDiagnostics)),
   ]
   const boundedCandidates = candidates.slice(0, ingestionLimits.maxFeedItems)
   const articles: ParsedFeedArticle[] = []
@@ -73,12 +79,17 @@ export function parseFeedArticlesWithMetrics(xml: string, feedUrl: string) {
       contentBytes: ingestionLimits.maxAggregateContentBytes - remainingContentBytes,
       fieldsTruncated,
       parsedCount: candidates.length,
+      publicationDateDiagnostics,
       truncatedCount: candidates.length - boundedCandidates.length,
     } satisfies IngestionParseStats,
   }
 }
 
-function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | null {
+function parseRssArticle(
+  item: unknown,
+  feedUrl: string,
+  publicationDateDiagnostics: PublisherPublicationDateDiagnostics
+): ParsedFeedArticle | null {
   const record = toRecord(item)
 
   if (!record) {
@@ -107,7 +118,8 @@ function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | nu
     textValue(record.pubDate) ??
       textValue(record.published) ??
       textValue(record["dc:date"]) ??
-      textValue(record.updated)
+      textValue(record.updated),
+    publicationDateDiagnostics
   )
   const canonicalUrl = normalizeOptionalUrl(findCanonicalLink(links), feedUrl)
 
@@ -137,7 +149,11 @@ function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | nu
   }
 }
 
-function parseAtomArticle(entry: unknown, feedUrl: string): ParsedFeedArticle | null {
+function parseAtomArticle(
+  entry: unknown,
+  feedUrl: string,
+  publicationDateDiagnostics: PublisherPublicationDateDiagnostics
+): ParsedFeedArticle | null {
   const record = toRecord(entry)
 
   if (!record) {
@@ -162,7 +178,8 @@ function parseAtomArticle(entry: unknown, feedUrl: string): ParsedFeedArticle | 
   )
   const contentText = boundedContent(plainText(contentHtml))
   const publishedAt = parseOptionalDate(
-    textValue(record.published) ?? textValue(record.updated)
+    textValue(record.published) ?? textValue(record.updated),
+    publicationDateDiagnostics
   )
   const canonicalUrl = normalizeOptionalUrl(findCanonicalLink(record.link), feedUrl)
 
@@ -318,14 +335,17 @@ function normalizeOptionalUrl(value: string | undefined, baseUrl: string) {
   }
 }
 
-function parseOptionalDate(value: string | undefined) {
-  if (!value) {
-    return undefined
+function parseOptionalDate(
+  value: string | undefined,
+  diagnostics: PublisherPublicationDateDiagnostics
+) {
+  const result = parsePublisherPublicationDate(value)
+
+  if (result.diagnostic) {
+    diagnostics[result.diagnostic] += 1
   }
 
-  const date = new Date(value)
-
-  return Number.isNaN(date.valueOf()) ? undefined : date
+  return result.date
 }
 
 function imageFromMediaContent(value: unknown, feedUrl: string) {

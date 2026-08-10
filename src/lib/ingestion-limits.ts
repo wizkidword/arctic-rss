@@ -1,3 +1,5 @@
+import type { PublisherPublicationDateDiagnostics } from "./publisher-publication-date"
+
 export type IngestionLimits = {
   maxAggregateContentBytes: number
   maxAuthorCharacters: number
@@ -17,6 +19,7 @@ export type IngestionParseStats = {
   contentBytes: number
   fieldsTruncated: number
   parsedCount: number
+  publicationDateDiagnostics: PublisherPublicationDateDiagnostics
   truncatedCount: number
 }
 

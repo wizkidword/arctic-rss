@@ -6,6 +6,23 @@ import {
 } from "./publisher-text"
 
 describe("publisher text normalization", () => {
+  it("removes every XML 1.0-disallowed C0 control", () => {
+    const disallowedControls = [
+      ...Array.from({ length: 9 }, (_, index) => String.fromCharCode(index)),
+      "\u000B",
+      "\u000C",
+      ...Array.from({ length: 18 }, (_, index) => String.fromCharCode(index + 14)),
+    ].join("")
+
+    expect(normalizePublisherText(`safe${disallowedControls}text`)).toMatchObject({
+      diagnostics: {
+        invalidXmlControlCharactersRemoved: 28,
+        nullCharactersRemoved: 1,
+      },
+      value: "safetext",
+    })
+  })
+
   it("removes unsafe XML controls and preserves ordinary Unicode", () => {
     expect(normalizePublisherText("Hello\u0000\u0001\tworld\n🙂")).toEqual({
       diagnostics: {

@@ -267,12 +267,18 @@ function recordFeedParseMetrics(
     contentBytes,
     fieldsTruncated,
     parsedCount,
+    publicationDateDiagnostics,
     truncatedCount,
   }: {
     acceptedCount: number
     contentBytes: number
     fieldsTruncated: number
     parsedCount: number
+    publicationDateDiagnostics: {
+      "future-skew": number
+      invalid: number
+      "out-of-range": number
+    }
     truncatedCount: number
   }
 ) {
@@ -286,6 +292,9 @@ function recordFeedParseMetrics(
       source_parse_items_accepted: acceptedCount,
       source_parse_items_total: parsedCount,
       source_parse_items_truncated: truncatedCount,
+      source_parse_publication_dates_future_skew: publicationDateDiagnostics["future-skew"],
+      source_parse_publication_dates_invalid: publicationDateDiagnostics.invalid,
+      source_parse_publication_dates_out_of_range: publicationDateDiagnostics["out-of-range"],
     })
   )
 }

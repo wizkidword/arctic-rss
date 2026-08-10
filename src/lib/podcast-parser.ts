@@ -13,6 +13,11 @@ import {
   normalizePublisherExternalIdentity,
   normalizePublisherText,
 } from "./publisher-text"
+import {
+  createPublisherPublicationDateDiagnostics,
+  parsePublisherPublicationDate,
+  type PublisherPublicationDateDiagnostics,
+} from "./publisher-publication-date"
 import { normalizeHttpUrl } from "./url-safety"
 
 const xmlParser = new XMLParser({
@@ -81,7 +86,10 @@ export function parsePodcastFeed(xml: string, feedUrl: string): ParsedPodcastFee
 
 export function parsePodcastFeedWithMetrics(xml: string, feedUrl: string) {
   const parsed = parseXml(xml)
-  const candidate = parseRssPodcast(parsed, feedUrl) ?? parseAtomPodcast(parsed, feedUrl)
+  const publicationDateDiagnostics = createPublisherPublicationDateDiagnostics()
+  const candidate =
+    parseRssPodcast(parsed, feedUrl, publicationDateDiagnostics) ??
+    parseAtomPodcast(parsed, feedUrl, publicationDateDiagnostics)
 
   if (!candidate) {
     throw new PodcastParseError("Podcast RSS channel was not found.")
@@ -99,6 +107,7 @@ export function parsePodcastFeedWithMetrics(xml: string, feedUrl: string) {
       contentBytes: normalized.contentBytes,
       fieldsTruncated: candidate.fieldsTruncated + normalized.fieldsTruncated,
       parsedCount: candidate.parsedCount,
+      publicationDateDiagnostics,
       truncatedCount: candidate.truncatedCount,
     } satisfies IngestionParseStats,
   }
@@ -114,7 +123,8 @@ function parseXml(xml: string) {
 
 function parseRssPodcast(
   parsed: Record<string, unknown>,
-  feedUrl: string
+  feedUrl: string,
+  publicationDateDiagnostics: PublisherPublicationDateDiagnostics
 ): ParsedPodcastCandidate | null {
   const rss = toRecord(parsed.rss)
   const rdf = toRecord(parsed["rdf:RDF"])
@@ -133,7 +143,7 @@ function parseRssPodcast(
   const sourceEpisodes = [...toArray(channel.item), ...toArray(rdf?.item)]
   const selectedEpisodes = sourceEpisodes.slice(0, ingestionLimits.maxPodcastEpisodes)
   const episodes = selectedEpisodes
-    .map((item) => parseRssEpisode(item, feedUrl, language))
+    .map((item) => parseRssEpisode(item, feedUrl, language, publicationDateDiagnostics))
     .filter((episode) => episode !== null)
 
   return {
@@ -159,7 +169,8 @@ function parseRssPodcast(
 function parseRssEpisode(
   item: unknown,
   feedUrl: string,
-  feedLanguage: string | undefined
+  feedLanguage: string | undefined,
+  publicationDateDiagnostics: PublisherPublicationDateDiagnostics
 ): ParsedPodcastEpisode | null {
   const record = toRecord(item)
 
@@ -185,7 +196,8 @@ function parseRssEpisode(
     textValue(record.pubDate) ??
       textValue(record.published) ??
       textValue(record["dc:date"]) ??
-      textValue(record.updated)
+      textValue(record.updated),
+    publicationDateDiagnostics
   )
 
   const externalId =
@@ -223,7 +235,8 @@ function parseRssEpisode(
 
 function parseAtomPodcast(
   parsed: Record<string, unknown>,
-  feedUrl: string
+  feedUrl: string,
+  publicationDateDiagnostics: PublisherPublicationDateDiagnostics
 ): ParsedPodcastCandidate | null {
   const feed = toRecord(parsed.feed)
 
@@ -236,7 +249,7 @@ function parseAtomPodcast(
   const sourceEpisodes = toArray(feed.entry)
   const selectedEpisodes = sourceEpisodes.slice(0, ingestionLimits.maxPodcastEpisodes)
   const episodes = selectedEpisodes
-    .map((entry) => parseAtomEpisode(entry, feedUrl, language))
+    .map((entry) => parseAtomEpisode(entry, feedUrl, language, publicationDateDiagnostics))
     .filter((episode) => episode !== null)
 
   return {
@@ -267,7 +280,8 @@ function parseAtomPodcast(
 function parseAtomEpisode(
   entry: unknown,
   feedUrl: string,
-  feedLanguage: string | undefined
+  feedLanguage: string | undefined,
+  publicationDateDiagnostics: PublisherPublicationDateDiagnostics
 ): ParsedPodcastEpisode | null {
   const record = toRecord(entry)
 
@@ -287,7 +301,8 @@ function parseAtomEpisode(
   const contentHtml = truncateUtf8Bytes(textValue(record.content), ingestionLimits.maxContentBytesPerField)
   const transcript = preferredTranscript(record["podcast:transcript"], feedUrl)
   const publishedAt = parseOptionalDate(
-    textValue(record.published) ?? textValue(record.updated)
+    textValue(record.published) ?? textValue(record.updated),
+    publicationDateDiagnostics
   )
 
   const externalId =
@@ -446,14 +461,17 @@ function parseOptionalBigInt(value: string | undefined) {
   }
 }
 
-function parseOptionalDate(value: string | undefined) {
-  if (!value) {
-    return undefined
+function parseOptionalDate(
+  value: string | undefined,
+  diagnostics: PublisherPublicationDateDiagnostics
+) {
+  const result = parsePublisherPublicationDate(value)
+
+  if (result.diagnostic) {
+    diagnostics[result.diagnostic] += 1
   }
 
-  const date = new Date(value)
-
-  return Number.isNaN(date.valueOf()) ? undefined : date
+  return result.date
 }
 
 function isAudioEnclosure(url: string, type: string | undefined) {
