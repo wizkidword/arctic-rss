@@ -351,7 +351,10 @@ export function parseApiV1Identifier(value: string, field: string) {
 }
 
 export function apiV1NotFoundError(
-  code: Extract<ApiV1ErrorCode, "ARTICLE_NOT_FOUND" | "PODCAST_EPISODE_NOT_FOUND">,
+  code: Extract<
+    ApiV1ErrorCode,
+    "ARTICLE_NOT_FOUND" | "BRIEFING_NOT_FOUND" | "PODCAST_EPISODE_NOT_FOUND"
+  >,
   message: string
 ) {
   return new ApiV1RouteError({

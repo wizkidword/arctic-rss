@@ -2,6 +2,7 @@ import type {
   ArticleDetail,
   ArticleListItem,
   Briefing,
+  BriefingDetail,
   Collection,
   Feed,
   Me,
@@ -32,7 +33,7 @@ import {
   type PodcastHomeEpisode,
 } from "@/lib/podcasts"
 import { listSavedSearchPageForUser } from "@/lib/saved-searches"
-import { listSmartDigestPageForUser } from "@/lib/smart-digests"
+import { getSmartDigestForUser, listSmartDigestPageForUser } from "@/lib/smart-digests"
 
 import { apiV1NotFoundError } from "./route"
 
@@ -268,6 +269,49 @@ export async function listApiV1Briefings({
   }
 }
 
+export async function getApiV1Briefing({
+  briefingId,
+  userId,
+}: {
+  briefingId: string
+  userId: string
+}): Promise<BriefingDetail> {
+  const briefing = await getSmartDigestForUser({ digestId: briefingId, userId })
+
+  if (!briefing) {
+    throw apiV1NotFoundError("BRIEFING_NOT_FOUND", "That briefing is unavailable.")
+  }
+
+  return {
+    articleCount: briefing.articleCount,
+    completedAt: timestamp(briefing.completedAt),
+    createdAt: briefing.createdAt.toISOString(),
+    emailErrorMessage: boundedText(briefing.emailErrorMessage, 2_000),
+    emailStatus: briefing.emailStatus,
+    errorMessage: boundedText(briefing.errorMessage, 2_000),
+    id: briefing.id,
+    items: briefing.items.slice(0, 200).map((item) => ({
+      articleId: item.articleId,
+      articleTitle: boundedText(item.articleTitle, 2_000) ?? "Untitled article",
+      articleUrl: item.articleUrl,
+      feedTitle: boundedText(item.feedTitle, 500) ?? "Unknown feed",
+      id: item.id,
+      matchedTerms: item.matchedTerms.slice(0, 50).map((term) => boundedText(term, 500) ?? ""),
+      position: item.position,
+      publishedAt: timestamp(item.publishedAt),
+      reason: boundedText(item.reason, 2_000) ?? "",
+      summary: boundedText(item.summary, 20_000) ?? "",
+    })),
+    rule: {
+      id: briefing.rule.id,
+      name: boundedText(briefing.rule.name, 500) ?? "Smart Digest",
+    },
+    status: briefing.status,
+    title: boundedText(briefing.title, 500) ?? "Smart Digest",
+    topicPrompt: boundedText(briefing.topicPrompt, 10_000) ?? "",
+  }
+}
+
 function toApiV1ArticleListItem(article: ReaderArticleListItem): ArticleListItem {
   return {
     feed: {
@@ -316,6 +360,13 @@ function toApiV1PodcastEpisode(episode: PodcastHomeEpisode): PodcastEpisode {
     title: episode.title,
     url: episode.url,
   }
+}
+
+function boundedText(value: string | null, maximum: number) {
+  if (value === null) {
+    return null
+  }
+  return value.length <= maximum ? value : `${value.slice(0, maximum - 1)}…`
 }
 
 function toApiV1PodcastEpisodeDetail(

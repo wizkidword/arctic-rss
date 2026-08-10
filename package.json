@@ -2,6 +2,10 @@
   "name": "arctic-rss",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.0.0"
@@ -35,6 +39,12 @@
     "redis:boundaries:verify": "node scripts/ci/verify-redis-boundaries.mjs",
     "start": "next start",
     "lint": "eslint",
+    "mobile:android": "npm --workspace @arctic-rss/mobile run android",
+    "mobile:doctor": "npm --workspace @arctic-rss/mobile run doctor",
+    "mobile:export:android": "npm --workspace @arctic-rss/mobile run export:android",
+    "mobile:lint": "npm --workspace @arctic-rss/mobile run lint",
+    "mobile:start": "npm --workspace @arctic-rss/mobile run start",
+    "mobile:typecheck": "npm --workspace @arctic-rss/mobile run typecheck",
     "migration:risk": "tsx scripts/check-migration-risk.ts",
     "migration:fifth-pass:verify": "node scripts/ci/verify-fifth-pass-migration-evidence.mjs",
     "audit:verify-fifth-pass-ledger": "node scripts/ci/assert-fifth-pass-capability-ledger.mjs",

@@ -49,8 +49,9 @@ views, and briefings. The mobile client must consume those same domain rules.
   mutations, HTTPS deep-link fallback, and notification preferences. Its
   stable link map is `/articles/:id`, `/podcast-episodes/:id`,
   `/collections/:id`, `/saved-views/:id`, and `/briefings/:id`. Android App
-  Link certificate verification remains a Phase 13 obligation because no
-  Android signing identity exists yet.
+  Link filters are now declared in the Phase 13 Android workspace. Certificate
+  verification remains incomplete because no Android signing identity exists
+  yet.
 - Advanced source management, OPML, bulk source actions, administration, chat,
   provider controls, and account-export generation remain web-only in mobile
   v1.

@@ -59,3 +59,6 @@ export const deviceInstallationResultSchema = z
 export const deviceInstallationResponseSchema = apiV1SuccessSchema(
   deviceInstallationResultSchema
 )
+
+export type NotificationChannel = z.infer<typeof notificationChannelSchema>
+export type NotificationTopic = z.infer<typeof notificationTopicSchema>

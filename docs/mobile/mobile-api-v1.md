@@ -77,6 +77,7 @@ Responses never include stack traces or cross-account resource IDs.
 | `GET /api/v1/podcasts` | Subscribed podcasts and recent episodes | `cursor`, `limit` (max 50) |
 | `GET /api/v1/podcast-episodes/:id` | One authorized podcast episode | none |
 | `GET /api/v1/briefings` | Smart Digest briefing summaries | `cursor`, `limit` (max 50) |
+| `GET /api/v1/briefings/:id` | One authorized Smart Digest briefing with bounded item details | none |
 
 ## Device authorization endpoints
 

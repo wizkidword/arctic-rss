@@ -2,7 +2,7 @@ import { z } from "zod"
 
 import { meResponseSchema, mobileTokenResponseSchema } from "./account"
 import { articleDetailResponseSchema, readerPageResponseSchema } from "./articles"
-import { briefingsResponseSchema } from "./briefings"
+import { briefingDetailResponseSchema, briefingsResponseSchema } from "./briefings"
 import { collectionsResponseSchema } from "./collections"
 import { apiV1ErrorEnvelopeSchema } from "./errors"
 import { feedsResponseSchema } from "./feeds"
@@ -40,6 +40,9 @@ const schemas = {
     target: "draft-2020-12",
   }),
   BriefingsResponse: z.toJSONSchema(briefingsResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  BriefingDetailResponse: z.toJSONSchema(briefingDetailResponseSchema, {
     target: "draft-2020-12",
   }),
   CollectionsResponse: z.toJSONSchema(collectionsResponseSchema, {
@@ -165,6 +168,13 @@ export const mobileApiV1OpenApiDocument = {
         operationId: "listBriefings",
         responses: { "200": jsonResponse("BriefingsResponse"), ...defaultErrors },
         summary: "List generated Smart Digest briefings.",
+      },
+    },
+    "/api/v1/briefings/{briefingId}": {
+      get: {
+        operationId: "getBriefing",
+        responses: { "200": jsonResponse("BriefingDetailResponse"), "404": jsonResponse("ApiV1Error"), ...defaultErrors },
+        summary: "Get one authorized Smart Digest briefing with its bounded item details.",
       },
     },
     "/api/v1/collections": {

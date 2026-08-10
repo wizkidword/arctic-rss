@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Arctic RSS",
+    "slug": "arctic-rss",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "arcticrss",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.arcticrss.reader",
+      "versionCode": 1,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/articles" },
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/podcast-episodes" },
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/collections" },
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/saved-views" },
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/briefings" }
+          ]
+        }
+      ]
+    }
+  }
+}

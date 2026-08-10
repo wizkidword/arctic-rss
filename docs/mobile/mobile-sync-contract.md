@@ -81,7 +81,7 @@ Stable HTTPS fallback paths are:
 Unauthenticated browser visits go through the existing same-origin login
 callback path. After authentication, the destination's normal ownership check
 decides access; deleted or unauthorized podcast episodes and saved views return
-a safe not-found response. The Android App Links signing identity does not yet
-exist because the Expo/Android workspace is explicitly deferred to Phase 13;
-that phase must publish and verify the required `assetlinks.json` statement
-before claiming Android App Link verification.
+a safe not-found response. The Phase 13 Expo workspace declares the matching
+Android App Link filters, but no Android signing identity or
+`assetlinks.json` statement exists yet. App Link verification remains pending
+until the signed-build handoff is completed.
