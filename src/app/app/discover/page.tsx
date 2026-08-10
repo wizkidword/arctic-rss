@@ -82,7 +82,7 @@ import {
 import {
   isDirectoryFeedSubscribed,
 } from "@/lib/feed-directory"
-import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
+import { listUserFeedSubscriptionUrls } from "@/lib/feed-subscriptions"
 import { listUserFolders } from "@/lib/folders"
 import { cn } from "@/lib/utils"
 
@@ -225,7 +225,7 @@ export default async function DiscoverPage({
 
   const [folders, subscriptions, directory] = await Promise.all([
     listUserFolders(session.user.id),
-    listUserFeedSubscriptions(session.user.id),
+    listUserFeedSubscriptionUrls(session.user.id),
     getDiscoverDirectory(),
   ])
   const categoryGroups = directory.categories.map((category) => ({
@@ -252,9 +252,7 @@ export default async function DiscoverPage({
   const selectedInterest = interestGroups.find(
     (interest) => interest.id === selectedInterestId
   )
-  const subscriptionUrls = subscriptions.map(
-    (subscription) => subscription.feedUrl
-  )
+  const subscriptionUrls = subscriptions
   const isFirstRun = subscriptions.length === 0
   const pickerFolders = folders.map(({ id, name }) => ({ id, name }))
   const interestFeeds = selectedInterest

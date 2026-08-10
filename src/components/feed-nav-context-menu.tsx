@@ -13,10 +13,7 @@ import {
 import { createPortal } from "react-dom"
 import Link from "next/link"
 import {
-  AlertCircleIcon,
   CheckCheckIcon,
-  ExternalLinkIcon,
-  GlobeIcon,
   PauseIcon,
   PlayIcon,
   RefreshCwIcon,
@@ -44,9 +41,7 @@ export type FeedNavContextMenuSubscription = {
   feedId: string
   id: string
   isPaused: boolean
-  lastError: string | null
-  lastSuccessfulFetchAt: Date | null
-  siteUrl: string | null
+  needsAttention: boolean
   title: string
   unreadCount: number
 }
@@ -220,7 +215,6 @@ function FeedNavActionMenu({
   const feedHref = `/app/feed/${subscription.id}`
   const menuId = useId()
   const [unsubscribeOpen, setUnsubscribeOpen] = useState(false)
-  const [showFeedError, setShowFeedError] = useState(false)
   const [, startTransition] = useTransition()
   const [unsubscribeState, unsubscribeAction, unsubscribePending] =
     useActionState(unsubscribeFeedAction, unsubscribeInitialState)
@@ -264,7 +258,6 @@ function FeedNavActionMenu({
   }
 
   function openUnsubscribeDialog() {
-    setShowFeedError(false)
     onHideMenu()
     setUnsubscribeOpen(true)
   }
@@ -333,24 +326,6 @@ function FeedNavActionMenu({
                 <RssIcon />
                 Go to feed
               </Link>
-              {subscription.siteUrl ? (
-                <a
-                  className={menuItemClass}
-                  href={subscription.siteUrl}
-                  onClick={() => onDismiss({ restoreFocus: true })}
-                  rel="noreferrer"
-                  role="menuitem"
-                  target="_blank"
-                >
-                  <ExternalLinkIcon />
-                  Open original site
-                </a>
-              ) : (
-                <button className={menuItemClass} disabled role="menuitem" type="button">
-                  <GlobeIcon />
-                  Open original site
-                </button>
-              )}
               <div className="-mx-1 my-1 h-px bg-border" role="separator" />
               <button
                 className={menuItemClass}
@@ -361,24 +336,6 @@ function FeedNavActionMenu({
                 <CheckCheckIcon />
                 Mark all as read
               </button>
-              {subscription.lastError ? (
-                <>
-                  <button
-                    className={cn(menuItemClass, "text-destructive")}
-                    onClick={() => setShowFeedError((value) => !value)}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <AlertCircleIcon />
-                    View refresh guidance
-                  </button>
-                  {showFeedError && (
-                    <p className="px-2 pb-1 text-xs leading-5 text-destructive">
-                      Arctic RSS could not refresh this feed recently. Try reloading it, or pause it while you decide what to do.
-                    </p>
-                  )}
-                </>
-              ) : null}
               <div className="-mx-1 my-1 h-px bg-border" role="separator" />
               <button
                 className={cn(menuItemClass, "text-destructive")}
@@ -421,18 +378,11 @@ function feedHealthSummary(subscription: FeedNavContextMenuSubscription) {
     return "Paused. New articles will not be fetched until you resume this feed."
   }
 
-  if (subscription.lastError) {
-    return "Needs attention. A recent refresh did not finish."
+  if (subscription.needsAttention) {
+    return "Needs attention. Open this feed to review its current source status."
   }
 
-  if (subscription.lastSuccessfulFetchAt) {
-    return `Last refreshed ${new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(subscription.lastSuccessfulFetchAt)}.`
-  }
-
-  return "Waiting for the first successful refresh."
+  return "Active source."
 }
 
 function clampMenuToViewport(x: number, y: number) {

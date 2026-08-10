@@ -32,7 +32,7 @@ vi.mock("@/lib/discover-directory", () => ({
   getCategoryCountryCode: () => null,
   getDiscoverDirectory: directoryMock,
 }))
-vi.mock("@/lib/feed-subscriptions", () => ({ listUserFeedSubscriptions: subscriptionsMock }))
+vi.mock("@/lib/feed-subscriptions", () => ({ listUserFeedSubscriptionUrls: subscriptionsMock }))
 
 import IrcDiscoverPage from "./page"
 
@@ -86,7 +86,7 @@ describe("IrcDiscoverPage", () => {
       callback({ user: { id: "user-1" } })
     )
     eligibleUserMock.mockResolvedValue({ id: "user-1" })
-    subscriptionsMock.mockResolvedValue([{ feedUrl: "https://private.example.test/feed.xml" }])
+    subscriptionsMock.mockResolvedValue(["https://private.example.test/feed.xml"])
 
     const markup = renderToStaticMarkup(await IrcDiscoverPage({ searchParams: Promise.resolve({}) }))
 

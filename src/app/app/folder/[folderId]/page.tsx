@@ -12,8 +12,8 @@ import {
   readerArticlePageLimit,
 } from "@/lib/articles"
 import {
-  listUserFeedSubscriptions,
-  type FeedSubscriptionNavItem,
+  listUserFeedNavigation,
+  type FeedNavigationItem,
 } from "@/lib/feed-subscriptions"
 import { getUserFolder } from "@/lib/folders"
 import { normalizeDefaultView } from "@/lib/preferences"
@@ -44,7 +44,7 @@ export default async function FolderPage({
     getUserFolder(session.user.id, folderId),
     getOrCreateUserSettings(session.user.id),
     listArticleCollectionsForUser(session.user.id),
-    listUserFeedSubscriptions(session.user.id),
+    listUserFeedNavigation(session.user.id),
   ])
 
   if (!folder) {
@@ -111,7 +111,7 @@ function FolderFeedBrowser({
   folderId,
   folderName,
 }: {
-  feeds: FeedSubscriptionNavItem[]
+  feeds: FeedNavigationItem[]
   folderId: string
   folderName: string
 }) {

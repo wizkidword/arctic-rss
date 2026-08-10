@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
       url: string
     }>,
   },
-  listUserFeedSubscriptions: vi.fn(),
+  listUserFeedSubscriptionUrls: vi.fn(),
   listUserFolders: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
@@ -153,7 +153,7 @@ vi.mock("@/auth", () => ({
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
-  listUserFeedSubscriptions: mocks.listUserFeedSubscriptions,
+  listUserFeedSubscriptionUrls: mocks.listUserFeedSubscriptionUrls,
 }))
 
 vi.mock("@/lib/folders", () => ({
@@ -222,20 +222,8 @@ describe("DiscoverPage", () => {
         unreadCount: 0,
       },
     ])
-    mocks.listUserFeedSubscriptions.mockResolvedValue([
-      {
-        faviconUrl: null,
-        feedId: "feed-1",
-        feedUrl: "https://feeds.example.com/subscribed.xml",
-        folderId: null,
-        folderName: null,
-        id: "subscription-1",
-        isPaused: false,
-        lastError: null,
-        siteUrl: "https://example.com",
-        title: "Subscribed Wire",
-        unreadCount: 0,
-      },
+    mocks.listUserFeedSubscriptionUrls.mockResolvedValue([
+      "https://feeds.example.com/subscribed.xml",
     ])
   })
 
@@ -267,7 +255,7 @@ describe("DiscoverPage", () => {
   })
 
   it("gives first-run readers an OPML or starter-source path", async () => {
-    mocks.listUserFeedSubscriptions.mockResolvedValue([])
+    mocks.listUserFeedSubscriptionUrls.mockResolvedValue([])
 
     const markup = renderToStaticMarkup(
       await DiscoverPage({
@@ -499,6 +487,6 @@ describe("DiscoverPage", () => {
 
     expect(mocks.redirect).toHaveBeenCalledWith("/login")
     expect(mocks.listUserFolders).not.toHaveBeenCalled()
-    expect(mocks.listUserFeedSubscriptions).not.toHaveBeenCalled()
+    expect(mocks.listUserFeedSubscriptionUrls).not.toHaveBeenCalled()
   })
 })

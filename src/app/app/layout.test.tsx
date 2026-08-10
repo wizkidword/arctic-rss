@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   getReaderCounts: vi.fn(),
   listArticleCollectionsForUser: vi.fn(),
   listDiscoverInterestNavigation: vi.fn(),
-  listUserFeedSubscriptions: vi.fn(),
+  listUserFeedNavigation: vi.fn(),
   listUserFolders: vi.fn(),
   requireFreshUser: vi.fn(),
   withAuthenticatedRequestScope: vi.fn(),
@@ -32,6 +32,7 @@ vi.mock("@/components/app-shell", () => ({
     children,
     discoverInterests,
     displayMode,
+    feedSubscriptions,
     showEmailVerificationReminder,
     articleCollections,
     themePreference,
@@ -39,6 +40,7 @@ vi.mock("@/components/app-shell", () => ({
     articleCollections: Array<{ name: string }>
     discoverInterests: Array<{ label: string }>
     displayMode: string
+    feedSubscriptions: Array<Record<string, unknown>>
     showEmailVerificationReminder?: boolean
     themePreference: string
   }>) => (
@@ -50,6 +52,9 @@ vi.mock("@/components/app-shell", () => ({
         .map((interest) => interest.label)
         .join(",")}
       data-display-mode={displayMode}
+      data-feed-subscription-keys={Object.keys(feedSubscriptions[0] ?? {})
+        .sort()
+        .join(",")}
       data-show-email-verification-reminder={showEmailVerificationReminder}
       data-theme-preference={themePreference}
     >
@@ -75,7 +80,7 @@ vi.mock("@/lib/db", () => ({
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
-  listUserFeedSubscriptions: mocks.listUserFeedSubscriptions,
+  listUserFeedNavigation: mocks.listUserFeedNavigation,
 }))
 
 vi.mock("@/lib/discover-interests", () => ({
@@ -110,7 +115,19 @@ describe("AuthenticatedAppLayout", () => {
       unreadCount: 0,
     })
     mocks.getCurrentBulkReadJobForUser.mockResolvedValue(null)
-    mocks.listUserFeedSubscriptions.mockResolvedValue([])
+    mocks.listUserFeedNavigation.mockResolvedValue([
+      {
+        faviconUrl: null,
+        feedId: "feed-1",
+        folderId: null,
+        id: "subscription-1",
+        isPaused: false,
+        lastError: "must not reach the shell",
+        needsAttention: true,
+        title: "Example Feed",
+        unreadCount: 3,
+      },
+    ])
     mocks.listUserFolders.mockResolvedValue([])
     mocks.listArticleCollectionsForUser.mockResolvedValue([
       {
@@ -143,6 +160,8 @@ describe("AuthenticatedAppLayout", () => {
     expect(mocks.listDiscoverInterestNavigation).toHaveBeenCalled()
     expect(markup).toContain('data-theme-preference="DARK"')
     expect(markup).toContain('data-display-mode="MINIMAL"')
+    expect(markup).toContain('data-feed-subscription-keys="faviconUrl,feedId,folderId,id,isPaused,needsAttention,title,unreadCount"')
+    expect(markup).not.toContain("lastError")
     expect(markup).toContain(
       'data-show-email-verification-reminder="false"'
     )

@@ -8,7 +8,7 @@ import {
   withAuthenticatedRequestScope,
 } from "@/lib/authorization"
 import { getDiscoverDirectory } from "@/lib/discover-directory"
-import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
+import { listUserFeedSubscriptionUrls } from "@/lib/feed-subscriptions"
 import { ChatAccessError, requireChatEligibleUser } from "@/lib/chat/access"
 import { listExternalIrcChannelRecommendations } from "@/lib/chat/external-channel-directory"
 import { getChatFeatureFlags } from "@/lib/chat/feature-flags"
@@ -49,13 +49,13 @@ export default async function IrcDiscoverPage({
   ])
   const search = firstSearchValue(q)
   const personalizedDiscoveryEnabled = profile?.personalizedDiscovery ?? true
-  const subscriptions = eligibleUser && personalizedDiscoveryEnabled
-    ? await listUserFeedSubscriptions(eligibleUser.id)
+  const subscriptionUrls = eligibleUser && personalizedDiscoveryEnabled
+    ? await listUserFeedSubscriptionUrls(eligibleUser.id)
     : []
   const interestIds = eligibleUser
     ? getSubscriptionInterestIds({
         directory,
-        feedUrls: subscriptions.map((subscription) => subscription.feedUrl),
+        feedUrls: subscriptionUrls,
       })
     : undefined
   const rankedRooms = rankChatDirectoryRooms({ interestIds, rooms, search })

@@ -102,7 +102,9 @@ vi.mock("./feed-discovery", () => ({
 import {
   FeedSubscriptionError,
   hasUserFeedSubscriptions,
-  listUserFeedSubscriptions,
+  listUserFeedNavigation,
+  listUserFeedSourceHygiene,
+  listUserFeedSubscriptionUrls,
   markFeedSubscriptionAttentionReviewed,
   replaceFeedSubscription,
   setFeedSubscriptionPaused,
@@ -181,12 +183,13 @@ describe("feed subscriptions", () => {
     )
   })
 
-  it("creates the reader loader through React cache", () => {
-    expect(reactCache).toHaveBeenCalledTimes(1)
-    expect(reactCache).toHaveBeenCalledWith(expect.any(Function))
-    expect(reactCache.mock.calls[0]?.[0].name).toBe(
-      "listUserFeedSubscriptions"
-    )
+  it("creates separate cached projections for navigation, source hygiene, and URLs", () => {
+    expect(reactCache).toHaveBeenCalledTimes(3)
+    expect(reactCache.mock.calls.map(([loader]) => loader.name)).toEqual([
+      "listUserFeedSourceHygiene",
+      "listUserFeedNavigation",
+      "listUserFeedSubscriptionUrls",
+    ])
   })
 
   it("checks whether a reader has any subscriptions without loading nav rows", async () => {
@@ -200,7 +203,7 @@ describe("feed subscriptions", () => {
     })
   })
 
-  it("includes folder metadata for reader navigation", async () => {
+  it("loads rich source observations only for Source Hygiene", async () => {
     findMany.mockResolvedValue([
       {
         customTitle: null,
@@ -233,7 +236,7 @@ describe("feed subscriptions", () => {
       },
     ])
 
-    const subscriptions = await listUserFeedSubscriptions("user-1")
+    const subscriptions = await listUserFeedSourceHygiene("user-1")
 
     expect(findMany).toHaveBeenCalledWith({
       select: {
@@ -306,7 +309,7 @@ describe("feed subscriptions", () => {
     ])
   })
 
-  it("loads a large navigation with one grouped unread-count lookup", async () => {
+  it("loads a large navigation with one grouped unread-count lookup and no source details", async () => {
     const subscriptions = Array.from({ length: 200 }, (_, index) => ({
       customTitle: null,
       feed: {
@@ -338,7 +341,7 @@ describe("feed subscriptions", () => {
       new Map(subscriptions.map((subscription) => [subscription.feedId, 1]))
     )
 
-    const result = await listUserFeedSubscriptions("user-1")
+    const result = await listUserFeedNavigation("user-1")
 
     expect(result).toHaveLength(200)
     expect(result.every((subscription) => subscription.unreadCount === 1)).toBe(true)
@@ -347,6 +350,53 @@ describe("feed subscriptions", () => {
       "user-1",
       subscriptions.map((subscription) => subscription.feedId)
     )
+    expect(result[0]).toEqual({
+      faviconUrl: null,
+      feedId: "feed-0",
+      folderId: null,
+      id: "subscription-0",
+      isPaused: false,
+      needsAttention: false,
+      title: "Feed 0",
+      unreadCount: 1,
+    })
+    expect(findMany).toHaveBeenCalledWith({
+      orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
+      select: {
+        customTitle: true,
+        feed: {
+          select: {
+            faviconUrl: true,
+            lastError: true,
+            lastRecoveredAt: true,
+            title: true,
+          },
+        },
+        feedId: true,
+        folderId: true,
+        id: true,
+        isPaused: true,
+        lastSourceAttentionReviewedAt: true,
+      },
+      where: { userId: "user-1" },
+    })
+  })
+
+  it("loads subscription URLs without shell or Source Hygiene fields", async () => {
+    findMany.mockResolvedValue([
+      { feed: { feedUrl: "https://example.com/first.xml" } },
+      { feed: { feedUrl: "https://example.com/second.xml" } },
+    ])
+
+    await expect(listUserFeedSubscriptionUrls("user-1")).resolves.toEqual([
+      "https://example.com/first.xml",
+      "https://example.com/second.xml",
+    ])
+
+    expect(findMany).toHaveBeenCalledWith({
+      select: { feed: { select: { feedUrl: true } } },
+      where: { userId: "user-1" },
+    })
   })
 
   it("pauses only the current user's selected feed subscription", async () => {

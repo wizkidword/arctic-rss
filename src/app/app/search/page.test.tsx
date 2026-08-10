@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   listArticleCollectionsForUser: vi.fn(),
   listReaderArticleSearchPage: vi.fn(),
   loadReaderArticleView: vi.fn(),
-  listUserFeedSubscriptions: vi.fn(),
+  listUserFeedNavigation: vi.fn(),
   listUserFolders: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
@@ -55,7 +55,7 @@ vi.mock("@/lib/article-search", async (importOriginal) => ({
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
-  listUserFeedSubscriptions: mocks.listUserFeedSubscriptions,
+  listUserFeedNavigation: mocks.listUserFeedNavigation,
 }))
 
 vi.mock("@/lib/folders", () => ({
@@ -90,7 +90,7 @@ describe("SearchPage", () => {
       riverArticles: [],
       selectedArticle: null,
     })
-    mocks.listUserFeedSubscriptions.mockResolvedValue([
+    mocks.listUserFeedNavigation.mockResolvedValue([
       {
         id: "source-1",
         isPaused: false,
