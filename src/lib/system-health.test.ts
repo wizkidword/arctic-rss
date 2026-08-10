@@ -21,21 +21,52 @@ function healthyClients() {
     queueReadiness: {
       checkConnection: vi.fn().mockResolvedValue(undefined),
     },
-    workerHeartbeats: {
-      readMaintenanceTick: vi.fn().mockResolvedValue({
-        instanceId: "maintenance-1",
-        mode: "maintenance",
-        timestamp: now(),
-        version: "test",
+    sourceReliability: {
+      inspect: vi.fn().mockResolvedValue({
+        affectedHosts: [],
+        available: true,
+        errorCategories: {},
+        failureCount: 0,
+        failurePercentage: null,
+        feedFailureCount: 0,
+        podcastFailureCount: 0,
+        platformImpact: "none",
+        recentAttemptCount: 0,
+        recurringFailureHosts: [],
+        status: "ok",
       }),
-      readWorkerHeartbeats: vi.fn().mockImplementation(async (modes: readonly string[]) =>
-        Object.fromEntries(
-          modes.map((mode) => [
-            mode,
-            { instanceId: `${mode}-1`, mode, timestamp: now(), version: "test" },
-          ])
-        )
-      ),
+    },
+    workerHeartbeats: {
+      readMaintenanceTicks: vi
+        .fn()
+        .mockImplementation(async (responsibilities: readonly string[]) =>
+          Object.fromEntries(
+            responsibilities.map((responsibility) => [
+              responsibility,
+              {
+                instanceId: "maintenance-1",
+                mode: responsibility,
+                timestamp: now(),
+                version: "test",
+              },
+            ])
+          )
+        ),
+      readWorkerHeartbeats: vi
+        .fn()
+        .mockImplementation(async (modes: readonly string[]) =>
+          Object.fromEntries(
+            modes.map((mode) => [
+              mode,
+              {
+                instanceId: `${mode}-1`,
+                mode,
+                timestamp: now(),
+                version: "test",
+              },
+            ])
+          )
+        ),
     },
   }
 }
@@ -53,12 +84,32 @@ describe("system health", () => {
         durableRedis: "ok",
         ephemeralRedis: "ok",
         maintenance: "ok",
+        maintenanceResponsibilities: {
+          "feed-scheduling": "ok",
+          "podcast-scheduling": "ok",
+        },
         queues: "ok",
         workers: { all: "ok", health: "ok" },
       },
+      sourceReliability: {
+        affectedHosts: [],
+        available: true,
+        errorCategories: {},
+        failureCount: 0,
+        failurePercentage: null,
+        feedFailureCount: 0,
+        podcastFailureCount: 0,
+        platformImpact: "none",
+        recentAttemptCount: 0,
+        recurringFailureHosts: [],
+        status: "ok",
+      },
       status: "ok",
     })
-    expect(clients.workerHeartbeats.readWorkerHeartbeats).toHaveBeenCalledWith(["all", "health"])
+    expect(clients.workerHeartbeats.readWorkerHeartbeats).toHaveBeenCalledWith([
+      "all",
+      "health",
+    ])
     expect(clients.chatGateway.checkConnection).not.toHaveBeenCalled()
   })
 
@@ -108,7 +159,54 @@ describe("system health", () => {
 
     const result = await checkSystemHealthWithClients({ ...clients, now })
 
-    expect(result).toMatchObject({ checks: { queues: "failed" }, status: "degraded" })
+    expect(result).toMatchObject({
+      checks: { queues: "failed" },
+      status: "degraded",
+    })
+  })
+
+  it("keeps publisher-only reliability failures separate from platform readiness", async () => {
+    const clients = healthyClients()
+    clients.sourceReliability.inspect.mockResolvedValue({
+      affectedHosts: ["publisher.example"],
+      available: true,
+      errorCategories: { http_5xx: 1 },
+      failureCount: 1,
+      failurePercentage: 100,
+      feedFailureCount: 1,
+      podcastFailureCount: 0,
+      platformImpact: "none",
+      recentAttemptCount: 1,
+      recurringFailureHosts: [],
+      status: "degraded",
+    })
+
+    const result = await checkSystemHealthWithClients({ ...clients, now })
+
+    expect(result.status).toBe("ok")
+    expect(result.sourceReliability.status).toBe("degraded")
+  })
+
+  it("degrades when the source classifier identifies a shared internal failure", async () => {
+    const clients = healthyClients()
+    clients.sourceReliability.inspect.mockResolvedValue({
+      affectedHosts: ["one.example", "two.example"],
+      available: true,
+      errorCategories: { database: 2 },
+      failureCount: 2,
+      failurePercentage: 100,
+      feedFailureCount: 2,
+      podcastFailureCount: 0,
+      platformImpact: "degraded",
+      recentAttemptCount: 2,
+      recurringFailureHosts: [],
+      status: "degraded",
+    })
+
+    const result = await checkSystemHealthWithClients({ ...clients, now })
+
+    expect(result.status).toBe("degraded")
+    expect(result.sourceReliability.platformImpact).toBe("degraded")
   })
 
   it("reports degraded when a required worker heartbeat is missing", async () => {
@@ -121,7 +219,13 @@ describe("system health", () => {
       topology: {
         chatEnabled: false,
         name: "split",
-        workerModes: ["ingestion", "ai-mail", "imports", "maintenance", "health"],
+        workerModes: [
+          "ingestion",
+          "ai-mail",
+          "imports",
+          "maintenance",
+          "health",
+        ],
       },
     })
 
@@ -152,26 +256,45 @@ describe("system health", () => {
 
     const result = await checkSystemHealthWithClients({ ...clients, now })
 
-    expect(result).toMatchObject({ checks: { workers: { all: "failed" } }, status: "degraded" })
+    expect(result).toMatchObject({
+      checks: { workers: { all: "failed" } },
+      status: "degraded",
+    })
   })
 
-  it("reports degraded when the last successful maintenance tick is stale", async () => {
+  it("reports degraded when an essential scheduler responsibility is stale", async () => {
     const clients = healthyClients()
-    clients.workerHeartbeats.readMaintenanceTick.mockResolvedValue({
-      instanceId: "worker-1",
-      mode: "maintenance",
-      timestamp: now() - 180_000,
-      version: "test",
+    clients.workerHeartbeats.readMaintenanceTicks.mockResolvedValue({
+      "feed-scheduling": {
+        instanceId: "worker-1",
+        mode: "feed-scheduling",
+        timestamp: now() - 180_000,
+        version: "test",
+      },
+      "podcast-scheduling": {
+        instanceId: "worker-1",
+        mode: "podcast-scheduling",
+        timestamp: now(),
+        version: "test",
+      },
     })
 
     const result = await checkSystemHealthWithClients({ ...clients, now })
 
-    expect(result).toMatchObject({ checks: { maintenance: "failed" }, status: "degraded" })
+    expect(result).toMatchObject({
+      checks: {
+        maintenance: "failed",
+        maintenanceResponsibilities: { "feed-scheduling": "failed" },
+      },
+      status: "degraded",
+    })
   })
 
   it("checks the chat gateway only for a chat-enabled topology", async () => {
     const clients = healthyClients()
-    clients.chatGateway.checkConnection.mockRejectedValue(new Error("gateway unavailable"))
+    clients.chatGateway.checkConnection.mockRejectedValue(
+      new Error("gateway unavailable")
+    )
 
     const result = await checkSystemHealthWithClients({
       ...clients,
@@ -183,7 +306,10 @@ describe("system health", () => {
       },
     })
 
-    expect(result).toMatchObject({ checks: { chatGateway: "failed" }, status: "degraded" })
+    expect(result).toMatchObject({
+      checks: { chatGateway: "failed" },
+      status: "degraded",
+    })
     expect(clients.chatGateway.checkConnection).toHaveBeenCalledOnce()
   })
 
@@ -199,6 +325,9 @@ describe("system health", () => {
       timeoutMs: 1,
     })
 
-    expect(result).toMatchObject({ checks: { database: "failed" }, status: "degraded" })
+    expect(result).toMatchObject({
+      checks: { database: "failed" },
+      status: "degraded",
+    })
   })
 })

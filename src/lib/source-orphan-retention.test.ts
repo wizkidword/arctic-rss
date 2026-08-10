@@ -2,10 +2,45 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   reportSourceOrphanRetention,
+  SOURCE_ORPHAN_REPORT_STATEMENT_TIMEOUT_MS,
+  SOURCE_ORPHAN_REPORT_MAX_CANDIDATE_SOURCES,
   SOURCE_ORPHAN_GRACE_PERIOD_DAYS,
   SOURCE_ORPHAN_REPORT_VERSION,
   type SourceOrphanRetentionStore,
 } from "./source-orphan-retention"
+
+function feedRow() {
+  return {
+    activeChatLegalHolds: BigInt(0),
+    aiDigestItems: BigInt(0),
+    articleAiSummaries: BigInt(0),
+    articleCount: BigInt(0),
+    articleStates: BigInt(0),
+    auditLogReferences: BigInt(0),
+    chatBotDeliveries: BigInt(0),
+    chatMessageReferences: BigInt(0),
+    chatRoomFeeds: BigInt(0),
+    collectionItems: BigInt(0),
+    dynamicDirectoryEntries: BigInt(0),
+    estimatedStoredBytes: BigInt(0),
+    oldestOrphanSourceCreatedAt: null,
+    orphanSourceCount: BigInt(0),
+    smartDigestItems: BigInt(0),
+    staticDirectoryEntries: BigInt(0),
+    storyClusterMembers: BigInt(0),
+  }
+}
+
+function podcastRow() {
+  return {
+    collectionItems: BigInt(0),
+    episodeCount: BigInt(0),
+    episodeStates: BigInt(0),
+    estimatedStoredBytes: BigInt(0),
+    oldestOrphanSourceCreatedAt: null,
+    orphanSourceCount: BigInt(0),
+  }
+}
 
 describe("source orphan retention report", () => {
   it("reports protected orphan-source exposure without mutating any records", async () => {
@@ -48,6 +83,7 @@ describe("source orphan retention report", () => {
     })
 
     expect(report).toEqual({
+      candidateLimit: SOURCE_ORPHAN_REPORT_MAX_CANDIDATE_SOURCES,
       dryRun: true,
       feeds: {
         estimatedStoredBytes: "12345",
@@ -84,8 +120,34 @@ describe("source orphan retention report", () => {
         purgeRequiresSeparateOwnerApproval: true,
       },
       schemaVersion: SOURCE_ORPHAN_REPORT_VERSION,
+      storageEstimate: "approximate",
     })
     expect(queryRaw).toHaveBeenCalledTimes(2)
+  })
+
+  it("uses a local database statement timeout when transactions are available", async () => {
+    const queryRaw = vi
+      .fn()
+      .mockResolvedValueOnce([feedRow()])
+      .mockResolvedValueOnce([podcastRow()])
+    const executeRaw = vi.fn().mockResolvedValue(1)
+    const transaction = { $executeRaw: executeRaw, $queryRaw: queryRaw }
+    const store = {
+      $queryRaw: queryRaw,
+      $transaction: vi
+        .fn()
+        .mockImplementation(async (operation) => operation(transaction)),
+    }
+
+    await reportSourceOrphanRetention({
+      store: store as unknown as SourceOrphanRetentionStore,
+    })
+
+    expect(store.$transaction).toHaveBeenCalledOnce()
+    expect(executeRaw).toHaveBeenCalledOnce()
+    expect(executeRaw.mock.calls[0][0]).toMatchObject({
+      values: [String(SOURCE_ORPHAN_REPORT_STATEMENT_TIMEOUT_MS)],
+    })
   })
 
   it("rejects malformed aggregate results instead of reporting unsafe data", async () => {

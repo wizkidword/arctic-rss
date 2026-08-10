@@ -5,20 +5,25 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   clearWorkerHeartbeat,
+  durableResponsibilityTickKey,
   DURABLE_WORKER_HEARTBEAT_TTL_MS,
   isFreshDurableWorkerHeartbeat,
   readDurableWorkerHeartbeats,
   readDurableMaintenanceTick,
+  readDurableResponsibilityTicks,
   MAINTENANCE_TICK_KEY,
   maintenanceTickMaxAgeMs,
   writeDurableMaintenanceTick,
+  writeDurableResponsibilityTick,
   writeDurableWorkerHeartbeat,
   writeWorkerHeartbeat,
 } from "./worker-health"
 
 describe("worker health", () => {
   it("writes and clears a worker heartbeat without failing when it is already gone", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "arctic-rss-worker-health-"))
+    const directory = await mkdtemp(
+      path.join(tmpdir(), "arctic-rss-worker-health-")
+    )
     const heartbeatPath = path.join(directory, "heartbeat")
 
     try {
@@ -36,7 +41,9 @@ describe("worker health", () => {
         code: "ENOENT",
       })
 
-      await expect(clearWorkerHeartbeat({ path: heartbeatPath })).resolves.toBeUndefined()
+      await expect(
+        clearWorkerHeartbeat({ path: heartbeatPath })
+      ).resolves.toBeUndefined()
     } finally {
       await rm(directory, { force: true, recursive: true })
     }
@@ -155,7 +162,9 @@ describe("worker health", () => {
       set: vi.fn().mockResolvedValue("OK"),
     }
 
-    await expect(writeDurableMaintenanceTick({ client, ...tick })).resolves.toEqual(tick)
+    await expect(
+      writeDurableMaintenanceTick({ client, ...tick })
+    ).resolves.toEqual(tick)
     expect(client.set).toHaveBeenCalledWith(
       MAINTENANCE_TICK_KEY,
       JSON.stringify(tick),
@@ -165,5 +174,58 @@ describe("worker health", () => {
     await expect(
       readDurableMaintenanceTick({ client, mode: "all" })
     ).resolves.toEqual(tick)
+  })
+
+  it("keeps each scheduler responsibility fresh independently", async () => {
+    const tick = {
+      instanceId: "container-a",
+      responsibility: "feed-scheduling" as const,
+      timestamp: 1_752_428_800_000,
+      version: "7915d2f",
+    }
+    const client = {
+      mget: vi
+        .fn()
+        .mockResolvedValue([
+          JSON.stringify({ ...tick, mode: tick.responsibility }),
+          null,
+        ]),
+      set: vi.fn().mockResolvedValue("OK"),
+    }
+
+    await expect(
+      writeDurableResponsibilityTick({ client, ...tick })
+    ).resolves.toEqual({
+      instanceId: "container-a",
+      mode: "feed-scheduling",
+      timestamp: tick.timestamp,
+      version: "7915d2f",
+    })
+    expect(client.set).toHaveBeenCalledWith(
+      durableResponsibilityTickKey("feed-scheduling"),
+      JSON.stringify({
+        instanceId: "container-a",
+        mode: "feed-scheduling",
+        timestamp: tick.timestamp,
+        version: "7915d2f",
+      }),
+      "PX",
+      maintenanceTickMaxAgeMs()
+    )
+
+    await expect(
+      readDurableResponsibilityTicks({
+        client,
+        responsibilities: ["feed-scheduling", "podcast-scheduling"],
+      })
+    ).resolves.toEqual({
+      "feed-scheduling": {
+        instanceId: "container-a",
+        mode: "feed-scheduling",
+        timestamp: tick.timestamp,
+        version: "7915d2f",
+      },
+      "podcast-scheduling": undefined,
+    })
   })
 })

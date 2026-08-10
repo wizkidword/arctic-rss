@@ -22,7 +22,11 @@ describe("source refresh failure evidence", () => {
 
     expect(client.lpush).toHaveBeenCalledWith(
       SOURCE_REFRESH_FAILURE_REDIS_KEY,
-      JSON.stringify({ kind: "feed", timestamp: 1_752_428_800_123 })
+      JSON.stringify({
+        kind: "feed",
+        outcome: "failed",
+        timestamp: 1_752_428_800_123,
+      })
     )
     expect(client.ltrim).toHaveBeenCalledWith(
       SOURCE_REFRESH_FAILURE_REDIS_KEY,
@@ -33,12 +37,14 @@ describe("source refresh failure evidence", () => {
 
   it("counts only valid events inside the readiness window", async () => {
     const client = {
-      lrange: vi.fn().mockResolvedValue([
-        JSON.stringify({ kind: "feed", timestamp: 10_000 }),
-        JSON.stringify({ kind: "podcast", timestamp: 4_999 }),
-        JSON.stringify({ kind: "other", timestamp: 10_000 }),
-        "not-json",
-      ]),
+      lrange: vi
+        .fn()
+        .mockResolvedValue([
+          JSON.stringify({ kind: "feed", timestamp: 10_000 }),
+          JSON.stringify({ kind: "podcast", timestamp: 4_999 }),
+          JSON.stringify({ kind: "other", timestamp: 10_000 }),
+          "not-json",
+        ]),
     }
 
     await expect(

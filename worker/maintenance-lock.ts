@@ -5,9 +5,11 @@ import {
   type WorkerControlPlaneState,
 } from "./control-plane-redis"
 
-const MAINTENANCE_LOCK_KEY = "arctic-rss:worker:maintenance-lock:v1"
+export const MAINTENANCE_LOCK_KEY = "arctic-rss:worker:maintenance-lock:v1"
 const MAINTENANCE_LOCK_TTL_MS = 5 * 60_000
-const MAINTENANCE_LOCK_RENEW_INTERVAL_MS = Math.floor(MAINTENANCE_LOCK_TTL_MS / 3)
+const MAINTENANCE_LOCK_RENEW_INTERVAL_MS = Math.floor(
+  MAINTENANCE_LOCK_TTL_MS / 3
+)
 const RENEW_LOCK_IF_OWNED = `
 if redis.call("get", KEYS[1]) == ARGV[1] then
   return redis.call("pexpire", KEYS[1], ARGV[2])
@@ -23,7 +25,12 @@ return 0
 
 type MaintenanceLockClient = {
   disconnect(): void
-  eval(script: string, keyCount: number, key: string, ...arguments_: string[]): Promise<unknown>
+  eval(
+    script: string,
+    keyCount: number,
+    key: string,
+    ...arguments_: string[]
+  ): Promise<unknown>
   quit(): Promise<unknown>
   set(
     key: string,
@@ -33,11 +40,15 @@ type MaintenanceLockClient = {
     condition: "NX"
   ): Promise<"OK" | null>
 }
-type LeaseLostReason = "connection_lost" | "ownership_lost" | "renewal_error" | "shutdown"
+type LeaseLostReason =
+  "connection_lost" | "ownership_lost" | "renewal_error" | "shutdown"
 type MaintenanceLeaseEvent = Record<string, boolean | number | string>
 type MaintenanceLeaseTimer = {
   clearInterval(interval: ReturnType<typeof setInterval>): void
-  setInterval(callback: () => void, delayMs: number): ReturnType<typeof setInterval>
+  setInterval(
+    callback: () => void,
+    delayMs: number
+  ): ReturnType<typeof setInterval>
 }
 
 export type MaintenanceLease = {
@@ -66,7 +77,9 @@ type ActiveLease = {
 export function createMaintenanceLock({
   client: suppliedClient,
   isReady: suppliedIsReady,
+  key = MAINTENANCE_LOCK_KEY,
   log = defaultLog,
+  name = "maintenance",
   now = Date.now,
   onStateChange: suppliedOnStateChange,
   onRecoveryGraceExpired,
@@ -77,7 +90,9 @@ export function createMaintenanceLock({
 }: {
   client?: MaintenanceLockClient
   isReady?: () => boolean
+  key?: string
   log?: (event: MaintenanceLeaseEvent) => void
+  name?: string
   now?: () => number
   onRecoveryGraceExpired?: () => void
   onStateChange?: (
@@ -91,19 +106,24 @@ export function createMaintenanceLock({
   const controlPlane = suppliedClient
     ? undefined
     : createWorkerControlPlaneRedis({
-        name: "maintenance-lease",
+        name: `${name}-lease`,
         onGraceExpired: onRecoveryGraceExpired,
       })
-  const client = suppliedClient ?? (controlPlane?.client as unknown as MaintenanceLockClient)
+  const client =
+    suppliedClient ?? (controlPlane?.client as unknown as MaintenanceLockClient)
   const isReady = suppliedIsReady ?? controlPlane?.isReady ?? (() => true)
   let activeLease: ActiveLease | undefined
   let closed = false
 
   const record = (event: MaintenanceLeaseEvent) => {
-    log({ event: "worker_maintenance_lease", ...event })
+    log({ event: `worker_${name}_lease`, ...event })
   }
 
-  const loseLease = (lease: ActiveLease, reason: LeaseLostReason, extra = {}) => {
+  const loseLease = (
+    lease: ActiveLease,
+    reason: LeaseLostReason,
+    extra = {}
+  ) => {
     if (lease.lostReason) {
       return
     }
@@ -129,7 +149,7 @@ export function createMaintenanceLock({
       const renewed = await client.eval(
         RENEW_LOCK_IF_OWNED,
         1,
-        MAINTENANCE_LOCK_KEY,
+        key,
         lease.token,
         String(ttlMs)
       )
@@ -179,7 +199,7 @@ export function createMaintenanceLock({
         const released = await client.eval(
           RELEASE_LOCK_IF_OWNED,
           1,
-          MAINTENANCE_LOCK_KEY,
+          key,
           lease.token
         )
         record({
@@ -188,7 +208,11 @@ export function createMaintenanceLock({
           overrun: leaseDurationMs > ttlMs,
         })
       } catch {
-        record({ leaseDurationMs, outcome: "release_failed", overrun: leaseDurationMs > ttlMs })
+        record({
+          leaseDurationMs,
+          outcome: "release_failed",
+          overrun: leaseDurationMs > ttlMs,
+        })
       } finally {
         if (activeLease === lease) {
           activeLease = undefined
@@ -243,7 +267,11 @@ export function createMaintenanceLock({
       if (closed || activeLease || !isReady()) {
         record({
           outcome: "skipped",
-          reason: closed ? "closed" : activeLease ? "already_running" : "redis_unavailable",
+          reason: closed
+            ? "closed"
+            : activeLease
+              ? "already_running"
+              : "redis_unavailable",
         })
         return { acquired: false as const }
       }
@@ -251,13 +279,7 @@ export function createMaintenanceLock({
       const token = tokenFactory()
       let acquired: "OK" | null
       try {
-        acquired = await client.set(
-          MAINTENANCE_LOCK_KEY,
-          token,
-          "PX",
-          ttlMs,
-          "NX"
-        )
+        acquired = await client.set(key, token, "PX", ttlMs, "NX")
       } catch {
         record({ outcome: "skipped", reason: "redis_unavailable" })
         return { acquired: false as const }
@@ -295,7 +317,11 @@ export function createMaintenanceLock({
         const value = await operation(leaseView(lease))
         leaseView(lease).assertHeld()
         const durationMs = Math.max(0, now() - operationStartedAt)
-        record({ durationMs, outcome: "completed", overrun: durationMs > ttlMs })
+        record({
+          durationMs,
+          outcome: "completed",
+          overrun: durationMs > ttlMs,
+        })
         return { acquired: true as const, value }
       } finally {
         await release(lease)

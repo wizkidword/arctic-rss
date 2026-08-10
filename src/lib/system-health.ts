@@ -7,15 +7,19 @@ import {
 } from "./redis-config"
 import { inspectQueueReadiness } from "./queue-readiness"
 import {
-  getRuntimeTopology,
-  type RuntimeTopology,
-} from "./runtime-topology"
+  inspectSourceRefreshReliabilityWithStore,
+  unavailableSourceRefreshReliability,
+  type SourceRefreshReliabilityReport,
+} from "./source-refresh-reliability"
+import { getRuntimeTopology, type RuntimeTopology } from "./runtime-topology"
 import {
+  ESSENTIAL_SCHEDULED_RESPONSIBILITIES,
   isFreshDurableWorkerHeartbeat,
   maintenanceTickMaxAgeMs,
-  readDurableMaintenanceTick,
+  readDurableResponsibilityTicks,
   readDurableWorkerHeartbeats,
   type DurableWorkerHeartbeat,
+  type ScheduledResponsibility,
 } from "./worker-health"
 import type { WorkerMode } from "../../worker/mode"
 
@@ -31,9 +35,13 @@ export type SystemHealthResult = {
     durableRedis: HealthCheckState
     ephemeralRedis: HealthCheckState
     maintenance: HealthCheckState
+    maintenanceResponsibilities: Partial<
+      Record<ScheduledResponsibility, HealthCheckState>
+    >
     queues: HealthCheckState
     workers: Partial<Record<WorkerMode, HealthCheckState>>
   }
+  sourceReliability: SourceRefreshReliabilityReport
   status: "degraded" | "ok"
 }
 
@@ -42,10 +50,16 @@ type HealthConnection = {
 }
 
 type WorkerHeartbeatReader = {
-  readMaintenanceTick(mode: WorkerMode): Promise<DurableWorkerHeartbeat | undefined>
+  readMaintenanceTicks(
+    responsibilities: readonly ScheduledResponsibility[]
+  ): Promise<Partial<Record<ScheduledResponsibility, DurableWorkerHeartbeat>>>
   readWorkerHeartbeats(
     modes: readonly WorkerMode[]
   ): Promise<Record<string, DurableWorkerHeartbeat | undefined>>
+}
+
+type SourceReliabilityReader = {
+  inspect(): Promise<SourceRefreshReliabilityReport>
 }
 
 type SystemHealthClients = {
@@ -54,13 +68,16 @@ type SystemHealthClients = {
   durableRedis: HealthConnection
   ephemeralRedis: HealthConnection
   queueReadiness: HealthConnection
+  sourceReliability: SourceReliabilityReader
   workerHeartbeats: WorkerHeartbeatReader
 }
 
 export async function checkSystemHealth(): Promise<SystemHealthResult> {
   const topology = getRuntimeTopology()
   const durableRedis = createHealthRedis(durableRedisConnectionOptions().url)
-  const ephemeralRedis = createHealthRedis(ephemeralRedisConnectionOptions().url)
+  const ephemeralRedis = createHealthRedis(
+    ephemeralRedisConnectionOptions().url
+  )
 
   try {
     return await checkSystemHealthWithClients({
@@ -91,9 +108,16 @@ export async function checkSystemHealth(): Promise<SystemHealthResult> {
           }
         },
       },
+      sourceReliability: {
+        inspect: () =>
+          inspectSourceRefreshReliabilityWithStore({ store: durableRedis }),
+      },
       workerHeartbeats: {
-        readMaintenanceTick: (mode) =>
-          readDurableMaintenanceTick({ client: durableRedis, mode }),
+        readMaintenanceTicks: (responsibilities) =>
+          readDurableResponsibilityTicks({
+            client: durableRedis,
+            responsibilities,
+          }),
         readWorkerHeartbeats: (modes) =>
           readDurableWorkerHeartbeats({ client: durableRedis, modes }),
       },
@@ -112,6 +136,7 @@ export async function checkSystemHealthWithClients({
   ephemeralRedis,
   now = Date.now,
   queueReadiness,
+  sourceReliability: sourceReliabilityReader,
   timeoutMs = HEALTH_CHECK_TIMEOUT_MS,
   topology = getRuntimeTopology(),
   workerHeartbeats,
@@ -121,29 +146,35 @@ export async function checkSystemHealthWithClients({
   topology?: RuntimeTopology
 }): Promise<SystemHealthResult> {
   const boundedTimeoutMs = Math.max(1, Math.round(timeoutMs))
-  const maintenanceMode: WorkerMode = topology.workerModes.some(
-    (mode) => mode === "all"
-  )
-    ? "all"
-    : "maintenance"
-  const [databaseResult, durableRedisResult, ephemeralRedisResult, queueReadinessResult, heartbeatsResult, maintenanceResult, chatGatewayResult] =
-    await Promise.allSettled([
-      checkWithDeadline(database.checkConnection, boundedTimeoutMs),
-      checkWithDeadline(durableRedis.checkConnection, boundedTimeoutMs),
-      checkWithDeadline(ephemeralRedis.checkConnection, boundedTimeoutMs),
-      checkWithDeadline(queueReadiness.checkConnection, boundedTimeoutMs),
-      checkWithDeadline(
-        () => workerHeartbeats.readWorkerHeartbeats(topology.workerModes),
-        boundedTimeoutMs
-      ),
-      checkWithDeadline(
-        () => workerHeartbeats.readMaintenanceTick(maintenanceMode),
-        boundedTimeoutMs
-      ),
-      topology.chatEnabled
-        ? checkWithDeadline(chatGateway.checkConnection, boundedTimeoutMs)
-        : Promise.resolve(),
-    ])
+  const essentialResponsibilities =
+    ESSENTIAL_SCHEDULED_RESPONSIBILITIES[topology.name]
+  const [
+    databaseResult,
+    durableRedisResult,
+    ephemeralRedisResult,
+    queueReadinessResult,
+    sourceReliabilityResult,
+    heartbeatsResult,
+    maintenanceTicksResult,
+    chatGatewayResult,
+  ] = await Promise.allSettled([
+    checkWithDeadline(database.checkConnection, boundedTimeoutMs),
+    checkWithDeadline(durableRedis.checkConnection, boundedTimeoutMs),
+    checkWithDeadline(ephemeralRedis.checkConnection, boundedTimeoutMs),
+    checkWithDeadline(queueReadiness.checkConnection, boundedTimeoutMs),
+    checkWithDeadline(sourceReliabilityReader.inspect, boundedTimeoutMs),
+    checkWithDeadline(
+      () => workerHeartbeats.readWorkerHeartbeats(topology.workerModes),
+      boundedTimeoutMs
+    ),
+    checkWithDeadline(
+      () => workerHeartbeats.readMaintenanceTicks(essentialResponsibilities),
+      boundedTimeoutMs
+    ),
+    topology.chatEnabled
+      ? checkWithDeadline(chatGateway.checkConnection, boundedTimeoutMs)
+      : Promise.resolve(),
+  ])
 
   const workers = Object.fromEntries(
     topology.workerModes.map((mode) => [
@@ -154,6 +185,21 @@ export async function checkSystemHealthWithClients({
         : "failed",
     ])
   ) as Partial<Record<WorkerMode, HealthCheckState>>
+  const maintenanceResponsibilities = Object.fromEntries(
+    essentialResponsibilities.map((responsibility) => [
+      responsibility,
+      maintenanceTicksResult.status === "fulfilled" &&
+      isFreshDurableWorkerHeartbeat(
+        maintenanceTicksResult.value[responsibility],
+        {
+          maximumAgeMs: maintenanceTickMaxAgeMs(),
+          now,
+        }
+      )
+        ? "ok"
+        : "failed",
+    ])
+  ) as Partial<Record<ScheduledResponsibility, HealthCheckState>>
   const checks = {
     chatGateway: topology.chatEnabled
       ? chatGatewayResult.status === "fulfilled"
@@ -163,20 +209,23 @@ export async function checkSystemHealthWithClients({
     database: toHealthCheckState(databaseResult),
     durableRedis: toHealthCheckState(durableRedisResult),
     ephemeralRedis: toHealthCheckState(ephemeralRedisResult),
-    maintenance:
-      maintenanceResult.status === "fulfilled" &&
-      isFreshDurableWorkerHeartbeat(maintenanceResult.value, {
-        maximumAgeMs: maintenanceTickMaxAgeMs(),
-        now,
-      })
-        ? ("ok" as const)
-        : ("failed" as const),
+    maintenance: Object.values(maintenanceResponsibilities).every(
+      (check) => check === "ok"
+    )
+      ? ("ok" as const)
+      : ("failed" as const),
+    maintenanceResponsibilities,
     queues: toHealthCheckState(queueReadinessResult),
     workers,
   }
+  const sourceReliability =
+    sourceReliabilityResult.status === "fulfilled"
+      ? sourceReliabilityResult.value
+      : unavailableSourceRefreshReliability()
 
   return {
     checks,
+    sourceReliability,
     status:
       checks.database === "ok" &&
       checks.durableRedis === "ok" &&
@@ -184,6 +233,7 @@ export async function checkSystemHealthWithClients({
       checks.maintenance === "ok" &&
       checks.queues === "ok" &&
       checks.chatGateway !== "failed" &&
+      sourceReliability.platformImpact !== "degraded" &&
       Object.values(checks.workers).every((check) => check === "ok")
         ? "ok"
         : "degraded",
@@ -223,14 +273,13 @@ async function checkChatGatewayReadiness() {
   }
 }
 
-function toHealthCheckState(result: PromiseSettledResult<unknown>): HealthCheckState {
+function toHealthCheckState(
+  result: PromiseSettledResult<unknown>
+): HealthCheckState {
   return result.status === "fulfilled" ? "ok" : "failed"
 }
 
-function checkWithDeadline<T>(
-  operation: () => Promise<T>,
-  timeoutMs: number
-) {
+function checkWithDeadline<T>(operation: () => Promise<T>, timeoutMs: number) {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error("Health check timed out."))

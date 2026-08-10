@@ -3,10 +3,7 @@ import "dotenv/config"
 import { Worker } from "bullmq"
 
 import { cleanupExpiredAuthTokens } from "../src/lib/auth-token-maintenance"
-import {
-  failBulkReadJob,
-  processBulkReadJob,
-} from "../src/lib/bulk-read-jobs"
+import { failBulkReadJob, processBulkReadJob } from "../src/lib/bulk-read-jobs"
 import {
   BULK_READ_QUEUE_NAME,
   type BulkReadJobData,
@@ -63,7 +60,12 @@ import {
   PODCAST_REFRESH_QUEUE_NAME,
   type PodcastRefreshJobData,
 } from "../src/lib/podcast-refresh-queue"
-import { recordSourceRefreshFailure } from "../src/lib/source-refresh-failures"
+import {
+  recordSourceRefreshFailure,
+  recordSourceRefreshSuccess,
+  sourceHostFromUrl,
+  sourceRefreshErrorCategory,
+} from "../src/lib/source-refresh-failures"
 import {
   enqueueDueFeedRefreshes,
   enqueueDuePodcastRefreshes,
@@ -92,11 +94,17 @@ import {
   type SmartDigestJobData,
 } from "../src/lib/smart-digest-queue"
 import { processSmartDigestRule } from "../src/lib/smart-digest-processing"
-import { checkSystemHealth, type SystemHealthResult } from "../src/lib/system-health"
+import {
+  checkSystemHealth,
+  type SystemHealthResult,
+} from "../src/lib/system-health"
+import { unavailableSourceRefreshReliability } from "../src/lib/source-refresh-reliability"
 import {
   clearWorkerHeartbeat,
   maintenanceTickMaxAgeMs,
   writeDurableMaintenanceTick,
+  writeDurableResponsibilityTick,
+  type ScheduledResponsibility,
 } from "../src/lib/worker-health"
 import {
   getWorkerShutdownTimeoutMs,
@@ -108,7 +116,10 @@ import {
   runsWorkerResponsibility,
   workerHeartbeatPath,
 } from "./mode"
-import { createMaintenanceLock, type MaintenanceLease } from "./maintenance-lock"
+import {
+  createMaintenanceLock,
+  type MaintenanceLease,
+} from "./maintenance-lock"
 import { MaintenanceSchedule } from "./maintenance-schedule"
 import { createWorkerControlPlaneRedis } from "./control-plane-redis"
 import { logWorkerMemory } from "./memory-log"
@@ -118,7 +129,8 @@ import { createManagedWorkerTargets } from "./managed-workers"
 const workerMode = getWorkerMode()
 assertSecureProductionConfiguration(process.env, `worker-${workerMode}`)
 const heartbeatPath = workerHeartbeatPath(workerMode)
-const heartbeatInstanceId = process.env.HOSTNAME?.trim() || `worker-${process.pid}`
+const heartbeatInstanceId =
+  process.env.HOSTNAME?.trim() || `worker-${process.pid}`
 const heartbeatVersion = process.env.ARCTIC_RSS_BUILD_SHA?.trim() || "unknown"
 const runsHealthSnapshotProducer = workerMode === "health"
 let controlPlaneRestartRequested = false
@@ -137,7 +149,9 @@ function requestControlPlaneRestart() {
   )
   void shutdown()
     .catch((error) => {
-      console.error(`[worker] control-plane shutdown failed: ${schedulerErrorMessage(error)}`)
+      console.error(
+        `[worker] control-plane shutdown failed: ${schedulerErrorMessage(error)}`
+      )
     })
     .finally(() => process.exit(1))
 }
@@ -147,9 +161,24 @@ const durableHeartbeatControl = createWorkerControlPlaneRedis({
   onGraceExpired: requestControlPlaneRestart,
 })
 const durableHeartbeatStore = durableHeartbeatControl.client
-const maintenanceLock =
-  runsWorkerResponsibility(workerMode, "maintenance") || runsHealthSnapshotProducer
-  ? createMaintenanceLock({ onRecoveryGraceExpired: requestControlPlaneRestart })
+const maintenanceLock = runsWorkerResponsibility(workerMode, "maintenance")
+  ? createMaintenanceLock({
+      onRecoveryGraceExpired: requestControlPlaneRestart,
+    })
+  : undefined
+const healthSnapshotLock = runsHealthSnapshotProducer
+  ? createMaintenanceLock({
+      key: "arctic-rss:worker:health-snapshot-lock:v1",
+      name: "health_snapshot",
+      onRecoveryGraceExpired: requestControlPlaneRestart,
+    })
+  : undefined
+const orphanReportingLock = runsWorkerResponsibility(workerMode, "maintenance")
+  ? createMaintenanceLock({
+      key: "arctic-rss:worker:orphan-reporting-lock:v1",
+      name: "orphan_reporting",
+      onRecoveryGraceExpired: requestControlPlaneRestart,
+    })
   : undefined
 
 const {
@@ -180,6 +209,7 @@ const WORKER_MEMORY_LOG_INTERVAL_MS = 5 * 60_000
 const HEALTH_SNAPSHOT_INTERVAL_MS = 20_000
 const HEALTH_SNAPSHOT_INITIAL_DELAY_MS = 5_000
 const SOURCE_ORPHAN_REPORT_INTERVAL_MS = 24 * 60 * 60_000
+const SOURCE_ORPHAN_REPORT_POLL_INTERVAL_MS = 60_000
 const authTokenMaintenanceSchedule = new MaintenanceSchedule({
   normalIntervalMs: authTokenMaintenanceIntervalMs,
 })
@@ -210,162 +240,165 @@ logWorkerMemory({ trigger: "startup" })
 
 const worker = runsWorkerResponsibility(workerMode, "ingestion")
   ? new Worker<FeedRefreshJobData>(
-  FEED_REFRESH_QUEUE_NAME,
-  async (job) => {
-    return runTrackedRefresh({
-      kind: "feed",
-      refresh: () => refreshFeedAndQueueChatIntegration(job.data.feedId),
-      sourceId: job.data.feedId,
-      trigger: job.data.trigger ?? "scheduler",
-    })
-  },
-  {
-    connection: durableRedisConnectionOptions(),
-    concurrency: feedRefreshConcurrency,
-  }
-  )
+      FEED_REFRESH_QUEUE_NAME,
+      async (job) => {
+        return runTrackedRefresh({
+          kind: "feed",
+          refresh: () => refreshFeedAndQueueChatIntegration(job.data.feedId),
+          sourceId: job.data.feedId,
+          trigger: job.data.trigger ?? "scheduler",
+        })
+      },
+      {
+        connection: durableRedisConnectionOptions(),
+        concurrency: feedRefreshConcurrency,
+      }
+    )
   : undefined
 
 const aiDigestWorker = runsWorkerResponsibility(workerMode, "ai-mail")
   ? new Worker<AiDigestJobData>(
-  AI_DIGEST_QUEUE_NAME,
-  async (job) => {
-    const result = await processAiDigest({
-      digestId: job.data.digestId,
-    })
-    console.log(
-      `[worker] generated digest ${result.digestId} with ${result.articleCount} articles`
-    )
+      AI_DIGEST_QUEUE_NAME,
+      async (job) => {
+        const result = await processAiDigest({
+          digestId: job.data.digestId,
+        })
+        console.log(
+          `[worker] generated digest ${result.digestId} with ${result.articleCount} articles`
+        )
 
-    return result
-  },
-  {
-    connection: durableRedisConnectionOptions(),
-    concurrency: aiDigestConcurrency,
-  }
-  )
+        return result
+      },
+      {
+        connection: durableRedisConnectionOptions(),
+        concurrency: aiDigestConcurrency,
+      }
+    )
   : undefined
 
 const smartDigestWorker = runsWorkerResponsibility(workerMode, "ai-mail")
   ? new Worker<SmartDigestJobData>(
-  SMART_DIGEST_QUEUE_NAME,
-  async (job) => {
-    const result = await processSmartDigestRule({
-      ruleId: job.data.ruleId,
-      scheduledFor: job.data.scheduledFor,
-    })
-    console.log(
-      `[worker] processed smart digest ${result.digestId ?? "pending"} with ${result.articleCount} articles`
-    )
+      SMART_DIGEST_QUEUE_NAME,
+      async (job) => {
+        const result = await processSmartDigestRule({
+          ruleId: job.data.ruleId,
+          scheduledFor: job.data.scheduledFor,
+        })
+        console.log(
+          `[worker] processed smart digest ${result.digestId ?? "pending"} with ${result.articleCount} articles`
+        )
 
-    return result
-  },
-  {
-    connection: durableRedisConnectionOptions(),
-    concurrency: smartDigestConcurrency,
-  }
-  )
+        return result
+      },
+      {
+        connection: durableRedisConnectionOptions(),
+        concurrency: smartDigestConcurrency,
+      }
+    )
   : undefined
 
-const chatArticleIntegrationWorker = runsWorkerResponsibility(workerMode, "chat-events")
+const chatArticleIntegrationWorker = runsWorkerResponsibility(
+  workerMode,
+  "chat-events"
+)
   ? new Worker<ChatArticleIntegrationJobData>(
-  CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
-  async (job) => {
-    return processChatArticleIntegration({
-      articleId: job.data.articleId,
-    })
-  },
-  {
-    connection: durableRedisConnectionOptions(),
-    concurrency: 1,
-  }
-  )
+      CHAT_ARTICLE_INTEGRATION_QUEUE_NAME,
+      async (job) => {
+        return processChatArticleIntegration({
+          articleId: job.data.articleId,
+        })
+      },
+      {
+        connection: durableRedisConnectionOptions(),
+        concurrency: 1,
+      }
+    )
   : undefined
 
 const bulkReadWorker = runsWorkerResponsibility(workerMode, "imports")
   ? new Worker<BulkReadJobData>(
-  BULK_READ_QUEUE_NAME,
-  async (job) => {
-    return processBulkReadJob({
-      jobId: job.data.jobId,
-      onProgress: (progress) => job.updateProgress(progress),
-    })
-  },
-  {
-    connection: durableRedisConnectionOptions(),
-    concurrency: 1,
-  }
-  )
+      BULK_READ_QUEUE_NAME,
+      async (job) => {
+        return processBulkReadJob({
+          jobId: job.data.jobId,
+          onProgress: (progress) => job.updateProgress(progress),
+        })
+      },
+      {
+        connection: durableRedisConnectionOptions(),
+        concurrency: 1,
+      }
+    )
   : undefined
 
 const opmlImportWorker = runsWorkerResponsibility(workerMode, "imports")
   ? new Worker<OpmlImportQueueData>(
-  OPML_IMPORT_QUEUE_NAME,
-  async (job) => {
-    const result = await processOpmlImportJob({ jobId: job.data.jobId })
+      OPML_IMPORT_QUEUE_NAME,
+      async (job) => {
+        const result = await processOpmlImportJob({ jobId: job.data.jobId })
 
-    if (result.status === "PROCESSING") {
-      await enqueueOpmlImportJob(job.data.jobId, job.data.run + 1)
-    }
+        if (result.status === "PROCESSING") {
+          await enqueueOpmlImportJob(job.data.jobId, job.data.run + 1)
+        }
 
-    console.log(
-      JSON.stringify({
-        event: "opml_import",
-        jobId: job.data.jobId,
-        outcome: result.status.toLowerCase(),
-      })
+        console.log(
+          JSON.stringify({
+            event: "opml_import",
+            jobId: job.data.jobId,
+            outcome: result.status.toLowerCase(),
+          })
+        )
+        logWorkerMemory({
+          jobId: job.data.jobId,
+          outcome: result.status.toLowerCase(),
+          trigger: "opml_import",
+        })
+
+        return result
+      },
+      {
+        connection: durableRedisConnectionOptions(),
+        concurrency: 1,
+      }
     )
-    logWorkerMemory({
-      jobId: job.data.jobId,
-      outcome: result.status.toLowerCase(),
-      trigger: "opml_import",
-    })
-
-    return result
-  },
-  {
-    connection: durableRedisConnectionOptions(),
-    concurrency: 1,
-  }
-  )
   : undefined
 
 const smartDigestEmailWorker = runsWorkerResponsibility(workerMode, "ai-mail")
   ? new Worker<SmartDigestEmailJobData>(
-  SMART_DIGEST_EMAIL_QUEUE_NAME,
-  async (job) => {
-    const result = await processSmartDigestEmailDelivery({
-      runId: job.data.runId,
-    })
-    console.log(
-      `[worker] smart digest email ${job.data.runId} ${result.status.toLowerCase()}`
-    )
+      SMART_DIGEST_EMAIL_QUEUE_NAME,
+      async (job) => {
+        const result = await processSmartDigestEmailDelivery({
+          runId: job.data.runId,
+        })
+        console.log(
+          `[worker] smart digest email ${job.data.runId} ${result.status.toLowerCase()}`
+        )
 
-    return result
-  },
-  {
-    connection: durableRedisConnectionOptions(),
-    concurrency: smartDigestEmailConcurrency,
-  }
-  )
+        return result
+      },
+      {
+        connection: durableRedisConnectionOptions(),
+        concurrency: smartDigestEmailConcurrency,
+      }
+    )
   : undefined
 
 const podcastWorker = runsWorkerResponsibility(workerMode, "ingestion")
   ? new Worker<PodcastRefreshJobData>(
-  PODCAST_REFRESH_QUEUE_NAME,
-  async (job) => {
-    return runTrackedRefresh({
-      kind: "podcast",
-      refresh: () => refreshPodcast(job.data.podcastId),
-      sourceId: job.data.podcastId,
-      trigger: job.data.trigger ?? "scheduler",
-    })
-  },
-  {
-    connection: durableRedisConnectionOptions(),
-    concurrency: podcastRefreshConcurrency,
-  }
-  )
+      PODCAST_REFRESH_QUEUE_NAME,
+      async (job) => {
+        return runTrackedRefresh({
+          kind: "podcast",
+          refresh: () => refreshPodcast(job.data.podcastId),
+          sourceId: job.data.podcastId,
+          trigger: job.data.trigger ?? "scheduler",
+        })
+      },
+      {
+        connection: durableRedisConnectionOptions(),
+        concurrency: podcastRefreshConcurrency,
+      }
+    )
   : undefined
 
 const managedWorkers = createManagedWorkerTargets([
@@ -383,7 +416,11 @@ worker?.on("failed", (job, error) => {
   console.error(
     `[worker] refresh failed for ${job?.data.feedId ?? "unknown feed"}: ${error.message}`
   )
-  recordTerminalSourceRefreshFailure("feed", job)
+  void recordTerminalSourceRefreshFailure("feed", job, error)
+})
+
+worker?.on("completed", () => {
+  recordTerminalSourceRefreshSuccess("feed")
 })
 
 aiDigestWorker?.on("failed", (job, error) => {
@@ -448,7 +485,11 @@ podcastWorker?.on("failed", (job, error) => {
   console.error(
     `[worker] podcast refresh failed for ${job?.data.podcastId ?? "unknown podcast"}: ${error.message}`
   )
-  recordTerminalSourceRefreshFailure("podcast", job)
+  void recordTerminalSourceRefreshFailure("podcast", job, error)
+})
+
+podcastWorker?.on("completed", () => {
+  recordTerminalSourceRefreshSuccess("podcast")
 })
 
 async function enqueueDueFeeds(lease?: MaintenanceLease) {
@@ -456,7 +497,9 @@ async function enqueueDueFeeds(lease?: MaintenanceLease) {
     assertLeaseHeld: lease?.assertHeld,
     batchSize: schedulerBatchSize,
     enqueue: enqueueFeedRefresh,
-    store: prisma as unknown as Parameters<typeof enqueueDueFeedRefreshes>[0]["store"],
+    store: prisma as unknown as Parameters<
+      typeof enqueueDueFeedRefreshes
+    >[0]["store"],
   })
 }
 
@@ -468,7 +511,9 @@ async function refreshFeedAndQueueChatIntegration(feedId: string) {
   }
 
   const queued = await Promise.allSettled(
-    result.newArticleIds.map((articleId) => enqueueChatArticleIntegration(articleId))
+    result.newArticleIds.map((articleId) =>
+      enqueueChatArticleIntegration(articleId)
+    )
   )
   const failed = queued.filter((entry) => entry.status === "rejected").length
   if (failed) {
@@ -496,7 +541,9 @@ async function enqueueDuePodcasts(lease?: MaintenanceLease) {
     assertLeaseHeld: lease?.assertHeld,
     batchSize: schedulerBatchSize,
     enqueue: enqueuePodcastRefresh,
-    store: prisma as unknown as Parameters<typeof enqueueDuePodcastRefreshes>[0]["store"],
+    store: prisma as unknown as Parameters<
+      typeof enqueueDuePodcastRefreshes
+    >[0]["store"],
   })
 }
 
@@ -535,11 +582,14 @@ async function enqueueDueSmartDigests(lease?: MaintenanceLease) {
   if (rules.length) {
     console.log(`[worker] enqueued ${rules.length} due smart digests`)
   }
+
+  return { enqueued: rules.length }
 }
 
 let schedulerRunning = false
 let schedulerTickPromise: Promise<void> | undefined
 let healthSnapshotPromise: Promise<void> | undefined
+let orphanReportingPromise: Promise<void> | undefined
 let chatRetentionContinuation: ChatRetentionContinuation | undefined
 
 function schedulerErrorMessage(reason: unknown) {
@@ -556,16 +606,74 @@ function maintenanceScheduleMetrics(schedule: MaintenanceSchedule) {
   }
 }
 
-function recordTerminalSourceRefreshFailure(
+async function publishSuccessfulResponsibilityTicks(
+  results: Array<[ScheduledResponsibility, PromiseSettledResult<unknown>]>
+) {
+  const timestamp = Date.now()
+  const ttlMs = maintenanceTickMaxAgeMs({
+    FEED_SCHEDULER_INTERVAL_MS: String(schedulerIntervalMs),
+  })
+
+  await Promise.all(
+    results.map(async ([responsibility, result]) => {
+      if (result.status !== "fulfilled" || result.value === undefined) {
+        return
+      }
+
+      await writeDurableResponsibilityTick({
+        client: durableHeartbeatStore,
+        instanceId: heartbeatInstanceId,
+        responsibility,
+        timestamp,
+        ttlMs,
+        version: heartbeatVersion,
+      })
+    })
+  )
+}
+
+async function recordTerminalSourceRefreshFailure(
   kind: "feed" | "podcast",
-  job: { attemptsMade: number; opts: { attempts?: number } } | undefined
+  job:
+    | {
+        attemptsMade: number
+        data: { feedId?: string; podcastId?: string }
+        opts: { attempts?: number }
+      }
+    | undefined,
+  error: unknown
 ) {
   if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) {
     return
   }
 
-  recordSourceRefreshFailure({ client: durableHeartbeatStore, kind }).catch(() => {
-    console.error(`[worker] could not record ${kind} refresh failure evidence`)
+  const sourceId = kind === "feed" ? job.data.feedId : job.data.podcastId
+  const source = sourceId
+    ? kind === "feed"
+      ? await prisma.feed.findUnique({
+          select: { feedUrl: true },
+          where: { id: sourceId },
+        })
+      : await prisma.podcast.findUnique({
+          select: { feedUrl: true },
+          where: { id: sourceId },
+        })
+    : null
+
+  await recordSourceRefreshFailure({
+    client: durableHeartbeatStore,
+    errorCategory: sourceRefreshErrorCategory(error),
+    host: sourceHostFromUrl(source?.feedUrl),
+    kind,
+  })
+}
+
+function recordTerminalSourceRefreshSuccess(kind: "feed" | "podcast") {
+  void recordSourceRefreshSuccess({
+    client: durableHeartbeatStore,
+    kind,
+  }).catch(() => {
+    console.error(`[worker] could not record ${kind} refresh success evidence`)
   })
 }
 
@@ -650,19 +758,35 @@ async function schedulerTick(lease?: MaintenanceLease) {
       securityEventMaintenanceResult,
       aiOperationReconciliationResult,
       savedMonitorResult,
-      sourceOrphanReportResult,
     ] = await Promise.allSettled([
       runLeaseAwareMaintenance(lease, () => enqueueDueFeeds(lease)),
       runLeaseAwareMaintenance(lease, () => enqueueDuePodcasts(lease)),
       runLeaseAwareMaintenance(lease, () => enqueueDueSmartDigests(lease)),
-      runLeaseAwareMaintenance(lease, () => enqueuePendingSmartDigestEmails(lease)),
-      runLeaseAwareMaintenance(lease, () => processPendingChatBotMessages(lease)),
+      runLeaseAwareMaintenance(lease, () =>
+        enqueuePendingSmartDigestEmails(lease)
+      ),
+      runLeaseAwareMaintenance(lease, () =>
+        processPendingChatBotMessages(lease)
+      ),
       runLeaseAwareMaintenance(lease, () => runChatRetention(lease)),
       runLeaseAwareMaintenance(lease, runAuthTokenMaintenance),
       runLeaseAwareMaintenance(lease, runSecurityEventMaintenance),
-      runLeaseAwareMaintenance(lease, () => runAiOperationReconciliation(lease)),
+      runLeaseAwareMaintenance(lease, () =>
+        runAiOperationReconciliation(lease)
+      ),
       runLeaseAwareMaintenance(lease, () => runSavedMonitors(lease)),
-      runLeaseAwareMaintenance(lease, () => runSourceOrphanReporting(lease)),
+    ])
+
+    await publishSuccessfulResponsibilityTicks([
+      ["feed-scheduling", feedResult],
+      ["podcast-scheduling", podcastResult],
+      ["smart-digest-scheduling", smartDigestResult],
+      ["smart-digest-email-scheduling", smartDigestEmailResult],
+      ["chat-retention", chatRetentionResult],
+      ["auth-token-cleanup", maintenanceResult],
+      ["security-event-cleanup", securityEventMaintenanceResult],
+      ["ai-operation-reconciliation", aiOperationReconciliationResult],
+      ["saved-monitors", savedMonitorResult],
     ])
 
     if (feedResult.status === "fulfilled") {
@@ -718,9 +842,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
 
     if (smartDigestResult.status === "rejected") {
       console.error(
-        `[worker] smart digest scheduler failed: ${schedulerErrorMessage(
-          smartDigestResult.reason
-        )}`
+        `[worker] smart digest scheduler failed: ${schedulerErrorMessage(smartDigestResult.reason)}`
       )
     }
 
@@ -793,17 +915,6 @@ async function schedulerTick(lease?: MaintenanceLease) {
       )
     }
 
-    if (sourceOrphanReportResult.status === "rejected") {
-      console.error(
-        JSON.stringify({
-          event: "source_orphan_retention_report",
-          ...maintenanceScheduleMetrics(sourceOrphanReportSchedule),
-          outcome: "failure",
-          reason: schedulerErrorMessage(sourceOrphanReportResult.reason),
-        })
-      )
-    }
-
     return [
       feedResult,
       podcastResult,
@@ -815,7 +926,6 @@ async function schedulerTick(lease?: MaintenanceLease) {
       securityEventMaintenanceResult,
       aiOperationReconciliationResult,
       savedMonitorResult,
-      sourceOrphanReportResult,
     ].every((result) => result.status === "fulfilled")
   } finally {
     schedulerRunning = false
@@ -827,52 +937,60 @@ function runSchedulerTick() {
     return schedulerTickPromise
   }
 
-  schedulerTickPromise = (maintenanceLock
-    ? maintenanceLock.run((lease) => schedulerTick(lease)).then(async (result) => {
-        if (!result.acquired) {
-          console.warn(
-            JSON.stringify({
-              event: "worker_maintenance_lock",
-              outcome: "skipped",
+  schedulerTickPromise = (
+    maintenanceLock
+      ? maintenanceLock
+          .run((lease) => schedulerTick(lease))
+          .then(async (result) => {
+            if (!result.acquired) {
+              console.warn(
+                JSON.stringify({
+                  event: "worker_maintenance_lock",
+                  outcome: "skipped",
+                })
+              )
+              return
+            }
+
+            if (!result.value) {
+              console.error(
+                "[worker] maintenance tick completed with failed operations"
+              )
+              return
+            }
+
+            await writeDurableMaintenanceTick({
+              client: durableHeartbeatStore,
+              instanceId: heartbeatInstanceId,
+              mode: workerMode,
+              timestamp: Date.now(),
+              ttlMs: maintenanceTickMaxAgeMs({
+                FEED_SCHEDULER_INTERVAL_MS: String(schedulerIntervalMs),
+              }),
+              version: heartbeatVersion,
             })
-          )
-          return
-        }
+          })
+      : schedulerTick().then(async (succeeded) => {
+          if (!succeeded) {
+            return
+          }
 
-        if (!result.value) {
-          console.error("[worker] maintenance tick completed with failed operations")
-          return
-        }
-
-        await writeDurableMaintenanceTick({
-          client: durableHeartbeatStore,
-          instanceId: heartbeatInstanceId,
-          mode: workerMode,
-          timestamp: Date.now(),
-          ttlMs: maintenanceTickMaxAgeMs({
-            FEED_SCHEDULER_INTERVAL_MS: String(schedulerIntervalMs),
-          }),
-          version: heartbeatVersion,
+          await writeDurableMaintenanceTick({
+            client: durableHeartbeatStore,
+            instanceId: heartbeatInstanceId,
+            mode: workerMode,
+            timestamp: Date.now(),
+            ttlMs: maintenanceTickMaxAgeMs({
+              FEED_SCHEDULER_INTERVAL_MS: String(schedulerIntervalMs),
+            }),
+            version: heartbeatVersion,
+          })
         })
-      })
-    : schedulerTick().then(async (succeeded) => {
-        if (!succeeded) {
-          return
-        }
-
-        await writeDurableMaintenanceTick({
-          client: durableHeartbeatStore,
-          instanceId: heartbeatInstanceId,
-          mode: workerMode,
-          timestamp: Date.now(),
-          ttlMs: maintenanceTickMaxAgeMs({
-            FEED_SCHEDULER_INTERVAL_MS: String(schedulerIntervalMs),
-          }),
-          version: heartbeatVersion,
-        })
-      }))
+  )
     .catch((error) => {
-      console.error(`[worker] scheduler tick failed: ${schedulerErrorMessage(error)}`)
+      console.error(
+        `[worker] scheduler tick failed: ${schedulerErrorMessage(error)}`
+      )
     })
     .finally(() => {
       schedulerTickPromise = undefined
@@ -891,11 +1009,16 @@ function failedSystemHealthResult(): SystemHealthResult {
       durableRedis: "failed",
       ephemeralRedis: "failed",
       maintenance: "failed",
+      maintenanceResponsibilities: {
+        "feed-scheduling": "failed",
+        "podcast-scheduling": "failed",
+      },
       queues: "failed",
       workers: Object.fromEntries(
         topology.workerModes.map((mode) => [mode, "failed" as const])
       ),
     },
+    sourceReliability: unavailableSourceRefreshReliability(),
     status: "degraded",
   }
 }
@@ -903,14 +1026,14 @@ function failedSystemHealthResult(): SystemHealthResult {
 function runHealthSnapshot() {
   if (
     healthSnapshotPromise ||
-    !maintenanceLock ||
+    !healthSnapshotLock ||
     !healthSnapshotSchedule.isDue(Date.now())
   ) {
     return healthSnapshotPromise
   }
 
   const topology = getRuntimeTopology()
-  healthSnapshotPromise = maintenanceLock
+  healthSnapshotPromise = healthSnapshotLock
     .run(async (lease) => {
       const startedAt = Date.now()
       let checkFailed = false
@@ -925,6 +1048,17 @@ function runHealthSnapshot() {
         result,
         store: durableHeartbeatStore,
         topology: topology.name,
+      })
+      lease.assertHeld()
+      await writeDurableResponsibilityTick({
+        client: durableHeartbeatStore,
+        instanceId: heartbeatInstanceId,
+        responsibility: "health-snapshot",
+        timestamp: Date.now(),
+        ttlMs: maintenanceTickMaxAgeMs({
+          FEED_SCHEDULER_INTERVAL_MS: String(HEALTH_SNAPSHOT_INTERVAL_MS),
+        }),
+        version: heartbeatVersion,
       })
       lease.assertHeld()
 
@@ -948,7 +1082,12 @@ function runHealthSnapshot() {
     })
     .then((leaseResult) => {
       if (!leaseResult.acquired) {
-        console.warn(JSON.stringify({ event: "health_snapshot", outcome: "lease_unavailable" }))
+        console.warn(
+          JSON.stringify({
+            event: "health_snapshot",
+            outcome: "lease_unavailable",
+          })
+        )
       }
     })
     .catch((error) => {
@@ -971,12 +1110,12 @@ function runHealthSnapshot() {
 
 async function runChatRetention(lease?: MaintenanceLease) {
   if (!chatRetentionMaintenanceSchedule.isDue(Date.now())) {
-    return { disabled: true }
+    return
   }
 
   try {
     if (!getChatFeatureFlags().enabled) {
-      return { disabled: true }
+      return
     }
 
     const result = await purgeExpiredChatRecords({
@@ -1056,7 +1195,8 @@ async function runAuthTokenMaintenance() {
     authTokenMaintenanceSchedule.recordSuccess(Date.now())
     console.log(
       JSON.stringify({
-        accountDeletionConfirmationTokensDeleted: result.accountDeletionConfirmationTokensDeleted,
+        accountDeletionConfirmationTokensDeleted:
+          result.accountDeletionConfirmationTokensDeleted,
         emailVerificationTokensDeleted: result.emailVerificationTokensDeleted,
         event: "auth_token_maintenance",
         outcome: "success",
@@ -1065,6 +1205,8 @@ async function runAuthTokenMaintenance() {
         ...maintenanceScheduleMetrics(authTokenMaintenanceSchedule),
       })
     )
+
+    return result
   } catch (error) {
     authTokenMaintenanceSchedule.recordFailure(Date.now())
     throw error
@@ -1090,6 +1232,8 @@ async function runSecurityEventMaintenance() {
         ...maintenanceScheduleMetrics(securityEventMaintenanceSchedule),
       })
     )
+
+    return result
   } catch (error) {
     securityEventMaintenanceSchedule.recordFailure(Date.now())
     throw error
@@ -1105,7 +1249,9 @@ async function runAiOperationReconciliation(lease?: MaintenanceLease) {
     const result = await reconcileExpiredAiUsageOperations({
       assertLeaseHeld: lease?.assertHeld,
       batchSize: schedulerBatchSize,
-      store: prisma as unknown as Parameters<typeof reconcileExpiredAiUsageOperations>[0]["store"],
+      store: prisma as unknown as Parameters<
+        typeof reconcileExpiredAiUsageOperations
+      >[0]["store"],
     })
     aiOperationReconciliationSchedule.recordSuccess(Date.now())
     console.log(
@@ -1116,6 +1262,8 @@ async function runAiOperationReconciliation(lease?: MaintenanceLease) {
         ...maintenanceScheduleMetrics(aiOperationReconciliationSchedule),
       })
     )
+
+    return result
   } catch (error) {
     aiOperationReconciliationSchedule.recordFailure(Date.now())
     throw error
@@ -1131,7 +1279,9 @@ async function runSavedMonitors(lease?: MaintenanceLease) {
     const result = await processDueSavedMonitors({
       assertLeaseHeld: lease?.assertHeld,
       settings: savedMonitorSchedulerSettings,
-      store: prisma as unknown as Parameters<typeof processDueSavedMonitors>[0]["store"],
+      store: prisma as unknown as Parameters<
+        typeof processDueSavedMonitors
+      >[0]["store"],
     })
     if (result.failed) {
       savedMonitorMaintenanceSchedule.recordFailure(Date.now())
@@ -1154,6 +1304,8 @@ async function runSavedMonitors(lease?: MaintenanceLease) {
         })
       )
     }
+
+    return result
   } catch (error) {
     savedMonitorMaintenanceSchedule.recordFailure(Date.now())
     throw error
@@ -1178,10 +1330,66 @@ async function runSourceOrphanReporting(lease?: MaintenanceLease) {
         ...maintenanceScheduleMetrics(sourceOrphanReportSchedule),
       })
     )
+
+    return report
   } catch (error) {
     sourceOrphanReportSchedule.recordFailure(Date.now())
     throw error
   }
+}
+
+function runOrphanReportingTick() {
+  if (
+    orphanReportingPromise ||
+    !orphanReportingLock ||
+    !sourceOrphanReportSchedule.isDue(Date.now())
+  ) {
+    return orphanReportingPromise
+  }
+
+  orphanReportingPromise = orphanReportingLock
+    .run((lease) => runSourceOrphanReporting(lease))
+    .then(async (result) => {
+      if (!result.acquired) {
+        console.warn(
+          JSON.stringify({
+            event: "source_orphan_retention_report",
+            outcome: "lease_unavailable",
+          })
+        )
+        return
+      }
+
+      if (result.value === undefined) {
+        return
+      }
+
+      await writeDurableResponsibilityTick({
+        client: durableHeartbeatStore,
+        instanceId: heartbeatInstanceId,
+        responsibility: "orphan-reporting",
+        timestamp: Date.now(),
+        ttlMs: maintenanceTickMaxAgeMs({
+          FEED_SCHEDULER_INTERVAL_MS: String(SOURCE_ORPHAN_REPORT_INTERVAL_MS),
+        }),
+        version: heartbeatVersion,
+      })
+    })
+    .catch((error) => {
+      console.error(
+        JSON.stringify({
+          event: "source_orphan_retention_report",
+          ...maintenanceScheduleMetrics(sourceOrphanReportSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(error),
+        })
+      )
+    })
+    .finally(() => {
+      orphanReportingPromise = undefined
+    })
+
+  return orphanReportingPromise
 }
 
 let chatOutboxPublishPromise: Promise<void> | undefined
@@ -1222,6 +1430,14 @@ const scheduler = runsWorkerResponsibility(workerMode, "maintenance")
       void runSchedulerTick()
     }, schedulerIntervalMs)
   : undefined
+const orphanReportingPublisher = runsWorkerResponsibility(
+  workerMode,
+  "maintenance"
+)
+  ? setInterval(() => {
+      void runOrphanReportingTick()
+    }, SOURCE_ORPHAN_REPORT_POLL_INTERVAL_MS)
+  : undefined
 const chatOutboxPublisher = runsWorkerResponsibility(workerMode, "chat-events")
   ? setInterval(() => {
       void publishPendingChatEvents()
@@ -1258,6 +1474,11 @@ if (healthSnapshotPublisher) {
     void runHealthSnapshot()
   }, HEALTH_SNAPSHOT_INITIAL_DELAY_MS)
 }
+if (orphanReportingPublisher) {
+  setTimeout(() => {
+    void runOrphanReportingTick()
+  }, HEALTH_SNAPSHOT_INITIAL_DELAY_MS)
+}
 
 let shutdownPromise: ReturnType<typeof shutdownWorkerRuntime> | undefined
 
@@ -1274,6 +1495,8 @@ function shutdown() {
           closeChatArticleIntegrationQueue(),
           closeChatRoomEventPublisher(),
           maintenanceLock?.close() ?? Promise.resolve(),
+          healthSnapshotLock?.close() ?? Promise.resolve(),
+          orphanReportingLock?.close() ?? Promise.resolve(),
           durableHeartbeatControl.close(),
         ])
         await clearWorkerHeartbeat({ path: heartbeatPath }).catch((error) => {
@@ -1284,9 +1507,12 @@ function shutdown() {
       },
       disconnectDatabase: () => prisma.$disconnect(),
       getPendingWork: () =>
-        [schedulerTickPromise, chatOutboxPublishPromise, healthSnapshotPromise].filter(
-          (work): work is Promise<void> => Boolean(work)
-        ),
+        [
+          schedulerTickPromise,
+          chatOutboxPublishPromise,
+          healthSnapshotPromise,
+          orphanReportingPromise,
+        ].filter((work): work is Promise<void> => Boolean(work)),
       stopScheduling: () => {
         if (scheduler) {
           clearInterval(scheduler)
@@ -1296,6 +1522,9 @@ function shutdown() {
         }
         if (healthSnapshotPublisher) {
           clearInterval(healthSnapshotPublisher)
+        }
+        if (orphanReportingPublisher) {
+          clearInterval(orphanReportingPublisher)
         }
         heartbeat.stop()
         clearInterval(memoryTelemetry)
