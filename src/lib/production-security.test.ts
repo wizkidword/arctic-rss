@@ -387,6 +387,21 @@ describe("production security configuration", () => {
       })
     ).toThrow("MIGRATE_DATABASE_URL must not be present for the web service.")
   })
+
+  it("requires distinct Redis ACL credentials for the dual-workload chat-events worker", () => {
+    const environment = validProductionEnvironmentForRole("worker-chat-events")
+    const durableRedisUrl = webProductionEnvironment.DURABLE_REDIS_URL
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...environment,
+          EPHEMERAL_REDIS_URL: durableRedisUrl,
+        },
+        "worker-chat-events"
+      )
+    ).toThrow("must not target the same Redis endpoint")
+  })
 })
 
 function validProductionEnvironmentForRole(

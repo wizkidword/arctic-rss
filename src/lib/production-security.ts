@@ -387,7 +387,11 @@ function assertWorkerConfiguration(
     assertRuntimeTopology(environment)
   }
 
-  if (role === "worker-all" || role === "worker-health") {
+  if (
+    role === "worker-all" ||
+    role === "worker-chat-events" ||
+    role === "worker-health"
+  ) {
     assertRedisWorkloadSeparation(environment)
   }
 }
