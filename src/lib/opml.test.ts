@@ -11,6 +11,21 @@ import {
 } from "./opml"
 
 describe("OPML parsing", () => {
+  it("normalizes publisher attributes before import", () => {
+    const entries = parseOpmlSubscriptions(
+      `<opml><body><outline text="Cafe&#x301;&#1;" xmlUrl="https://example.com/feed&#0;.xml" /></body></opml>`
+    )
+
+    expect(entries).toEqual([
+      {
+        folderName: null,
+        htmlUrl: undefined,
+        title: "Café",
+        xmlUrl: "https://example.com/feed.xml",
+      },
+    ])
+  })
+
   it("extracts feeds and preserves folder names from Google Reader-style outlines", () => {
     const entries = parseOpmlSubscriptions(`
       <?xml version="1.0" encoding="UTF-8"?>

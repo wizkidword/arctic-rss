@@ -90,6 +90,15 @@ describe("parsePodcastTranscript", () => {
       { endSeconds: 4, startSeconds: 3, text: "Unclosed script" },
     ])
   })
+
+  it("normalizes unsafe control characters and display Unicode in cues", () => {
+    expect(
+      parsePodcastTranscript(
+        "00:00:01.000 --> 00:00:02.000\nCafe\u0301\u0000\u0001",
+        "text/vtt"
+      )
+    ).toEqual([{ endSeconds: 2, startSeconds: 1, text: "Café" }])
+  })
 })
 
 describe("getPodcastEpisodeTranscriptForUser", () => {

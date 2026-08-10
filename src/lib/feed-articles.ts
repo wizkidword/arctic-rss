@@ -10,6 +10,10 @@ import {
   truncateUtf8Bytes,
   type IngestionParseStats,
 } from "./ingestion-limits"
+import {
+  normalizePublisherExternalIdentity,
+  normalizePublisherText,
+} from "./publisher-text"
 import { normalizeHttpUrl } from "./url-safety"
 
 const xmlParser = new XMLParser({
@@ -108,8 +112,8 @@ function parseRssArticle(item: unknown, feedUrl: string): ParsedFeedArticle | nu
   const canonicalUrl = normalizeOptionalUrl(findCanonicalLink(links), feedUrl)
 
   const externalId =
-    textValue(record.guid) ??
-    textValue(record.id) ??
+    externalIdentityValue(record.guid) ??
+    externalIdentityValue(record.id) ??
     url ??
     stableTitleFallback(title, publishedAt)
   if (!isWithinUtf8ByteLimit(externalId, ingestionLimits.maxExternalIdBytes)) {
@@ -162,7 +166,7 @@ function parseAtomArticle(entry: unknown, feedUrl: string): ParsedFeedArticle | 
   )
   const canonicalUrl = normalizeOptionalUrl(findCanonicalLink(record.link), feedUrl)
 
-  const externalId = textValue(record.id) ?? url ?? stableTitleFallback(title, publishedAt)
+  const externalId = externalIdentityValue(record.id) ?? url ?? stableTitleFallback(title, publishedAt)
   if (!isWithinUtf8ByteLimit(externalId, ingestionLimits.maxExternalIdBytes)) {
     return null
   }
@@ -212,7 +216,7 @@ function firstRecord(value: unknown): Record<string, unknown> | null {
 
 function textValue(value: unknown): string | undefined {
   if (typeof value === "string" || typeof value === "number") {
-    return decodeStandardXmlEntities(String(value)).trim() || undefined
+    return normalizePublisherText(decodeStandardXmlEntities(String(value))).value.trim() || undefined
   }
 
   if (Array.isArray(value)) {
@@ -223,6 +227,26 @@ function textValue(value: unknown): string | undefined {
 
   if (record) {
     return textValue(record["#text"])
+  }
+
+  return undefined
+}
+
+function externalIdentityValue(value: unknown): string | undefined {
+  if (typeof value === "string" || typeof value === "number") {
+    return normalizePublisherExternalIdentity(
+      decodeStandardXmlEntities(String(value))
+    ).value.trim() || undefined
+  }
+
+  if (Array.isArray(value)) {
+    return externalIdentityValue(value[0])
+  }
+
+  const record = toRecord(value)
+
+  if (record) {
+    return externalIdentityValue(record["#text"])
   }
 
   return undefined

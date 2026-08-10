@@ -24,6 +24,24 @@ const podcastXml = `<?xml version="1.0"?>
 </rss>`
 
 describe("parsePodcastFeed", () => {
+  it("normalizes publisher text and keeps external identifier Unicode stable", () => {
+    const podcast = parsePodcastFeed(
+      `<rss><channel><title>Podcast</title><item>
+        <guid>episode-Cafe&#x301;&#0;</guid>
+        <title>Cafe&#x301;&#1;</title>
+        <enclosure type="audio/mpeg" url="https://example.com/episode.mp3" />
+      </item></channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(podcast.episodes).toEqual([
+      expect.objectContaining({
+        externalId: "episode-Cafe\u0301",
+        title: "Café",
+      }),
+    ])
+  })
+
   it("parses podcast metadata and audio episodes", () => {
     const podcast = parsePodcastFeed(podcastXml, "https://example.com/feed.xml")
 

@@ -7,6 +7,7 @@ import {
   safeXmlParserOptions,
   truncateCharacters,
 } from "./ingestion-limits"
+import { normalizePublisherText } from "./publisher-text"
 import { normalizeHttpUrl, safeFetchText, type SafeFetchTextOptions } from "./url-safety"
 import {
   extractYouTubeChannelIdFromHtml,
@@ -351,7 +352,7 @@ function firstRecord(value: unknown): Record<string, unknown> | null {
 
 function textValue(value: unknown): string | undefined {
   if (typeof value === "string" || typeof value === "number") {
-    return decodeStandardXmlEntities(String(value)).trim() || undefined
+    return normalizePublisherText(decodeStandardXmlEntities(String(value))).value.trim() || undefined
   }
 
   if (Array.isArray(value)) {

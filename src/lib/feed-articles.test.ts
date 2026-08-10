@@ -3,6 +3,24 @@ import { describe, expect, it } from "vitest"
 import { parseFeedArticles, parseFeedArticlesWithMetrics } from "./feed-articles"
 
 describe("feed article parsing", () => {
+  it("normalizes publisher display text without changing external identifier Unicode", () => {
+    const articles = parseFeedArticles(
+      `<rss><channel><item>
+        <guid>item-Cafe&#x301;&#0;</guid>
+        <title>Cafe&#x301;&#1;</title>
+        <link>https://example.com/article</link>
+      </item></channel></rss>`,
+      "https://example.com/feed.xml"
+    )
+
+    expect(articles).toEqual([
+      expect.objectContaining({
+        externalId: "item-Cafe\u0301",
+        title: "Café",
+      }),
+    ])
+  })
+
   it("normalizes RSS items into article records", () => {
     const articles = parseFeedArticles(
       `<?xml version="1.0"?>
