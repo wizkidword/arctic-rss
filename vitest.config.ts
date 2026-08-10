@@ -5,6 +5,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@arctic-rss/api-contract": fileURLToPath(
+        new URL("./packages/api-contract/src/index.ts", import.meta.url)
+      ),
     },
   },
   test: {

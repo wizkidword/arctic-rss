@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@arctic-rss/api-contract": ["./packages/api-contract/src/index.ts"]
     }
   },
   "include": [

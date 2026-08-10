@@ -26,6 +26,10 @@ export type PodcastHome = {
   subscriptions: PodcastHomeSubscription[]
 }
 
+export type PodcastEpisodeDetail = PodcastHomeEpisode & {
+  contentText: string | null
+}
+
 export async function listCollectionPodcastEpisodesForUser({
   collectionId,
   limit = 50,
@@ -228,6 +232,39 @@ export async function getPodcastShowForUser({
       url: podcast.siteUrl,
     },
   }
+}
+
+export async function getPodcastEpisodeForUser({
+  episodeId,
+  userId,
+}: {
+  episodeId: string
+  userId: string
+}): Promise<PodcastEpisodeDetail | null> {
+  const episode = await getPrisma().podcastEpisode.findFirst({
+    include: {
+      podcast: true,
+      states: {
+        take: 1,
+        where: { userId },
+      },
+    },
+    where: {
+      id: episodeId,
+      podcast: {
+        subscriptions: {
+          some: { userId },
+        },
+      },
+    },
+  })
+
+  return episode
+    ? {
+        ...mapEpisode(episode),
+        contentText: episode.contentText,
+      }
+    : null
 }
 
 function mapEpisode(

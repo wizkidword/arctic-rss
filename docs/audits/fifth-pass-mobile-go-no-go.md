@@ -2,18 +2,23 @@
 
 **Backend integrity gate:** PASS (source, disposable-fixture, and release evidence)
 **Production evidence gate:** PASS — website release `c7be850` independently verified on 2026-08-10
-**Mobile platform ADR may begin:** NO
+**Mobile platform ADR/API v1:** SOURCE COMPLETE — NOT DEPLOYED
+**Native client:** NOT STARTED
 
 The web/backend changes now have local, disposable-database, boundary, and
-release-level production evidence. No Expo application or mobile API
-implementation has been created. The remaining gate is the product and
-security decision captured by the mobile platform ADR.
+release-level production evidence. The owner recorded the required approval and
+Phase 10 now provides the accepted mobile platform ADR, private first-party
+read-only `/api/v1` contracts, generated OpenAPI document, fresh authorization,
+private-read rate limits, and request-level contract coverage. No Expo
+application, device-session authentication, sync write, Android build, or
+deployment has been created.
 
-Phase 10 may begin only after the owner records the exact approval:
+The recorded Phase 10 approval was:
 
 ```text
 APPROVE MOBILE PLATFORM ADR
 ```
 
-That approval permits ADR and API-contract work only.  It is not a deployment
-or publication approval.
+That approval permitted ADR and API-contract work only. It did not authorize a
+deployment or publication. Phase 11 device-session implementation is the next
+source phase; Phase 13 still requires `APPROVE ANDROID INTERNAL ALPHA`.

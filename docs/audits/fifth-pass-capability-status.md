@@ -16,8 +16,23 @@ verification confirmed all 51 migrations, the eight required
 The per-finding production and operator columns below are the preserved
 pre-release implementation snapshot. Their `Not deployed` and `No` entries are
 superseded by this release-level evidence; they do not claim that each product
-flow was exercised with a real production account. The mobile platform ADR
-remains owner-gated.
+flow was exercised with a real production account.
+
+## Phase 10 mobile platform addendum
+
+After the owner recorded `APPROVE MOBILE PLATFORM ADR`, Phase 10 established
+the accepted first-party mobile platform ADR, a shared Zod/TypeScript contract
+package, generated OpenAPI 3.1 artifact, and private read-only `/api/v1`
+surface. Its ten endpoints use existing fresh-user authorization and
+user-owned domain queries, `private, no-store` responses, bounded cursor pages
+where list cardinality is not product-limited, request IDs, rate-limit
+fail-closed behavior, and low-cardinality telemetry.
+List DTOs exclude article bodies; the selected article detail is sanitized.
+
+This is source complete and not deployed. No native client, PKCE exchange,
+device session, sync mutation, push installation, or Android build exists yet.
+Phase 11 is the next source implementation phase; Phase 13 remains separately
+gated by `APPROVE ANDROID INTERNAL ALPHA`.
 
 | Finding ID | Source implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Unit/integration coverage                                                                                                                                                                                                                                                                                                                                                        | Browser evidence                      | Redis/PostgreSQL/Compose evidence                                                                                                                                                                                                                                    | Migration required                                                                               | Production release status | Operator verification | Mobile dependency                            | Remaining owner gate                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------- | --------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |

@@ -51,6 +51,7 @@ export type RateLimitAction =
   | "feedback"
   | "image_proxy"
   | "login"
+  | "mobile_api_read"
   | "opml_import"
   | "podcast_transcript"
   | "password_reset_complete"
@@ -229,6 +230,10 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
       subject: combinedSubject("account", "ip"),
       windowMs: 15 * 60_000,
     },
+  ],
+  mobile_api_read: [
+    { limit: 600, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+    { limit: 900, scope: "ip", subject: inputSubject("ip"), windowMs: 60_000 },
   ],
   opml_import: [
     { limit: 6, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },

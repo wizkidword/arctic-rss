@@ -7,6 +7,7 @@ import {
   type ArticleSearchState,
 } from "./article-search"
 import { getPrisma } from "./db"
+import { decodeTimeCursor, encodeTimeCursor, pageSize } from "./time-cursor"
 
 const MAX_SAVED_SEARCH_DESCRIPTION_LENGTH = 500
 const MAX_SAVED_SEARCH_NAME_LENGTH = 80
@@ -98,6 +99,13 @@ export type SavedSearchInput = {
   name: string
 }
 
+export type SavedSearchPage = {
+  nextCursor: string | null
+  savedSearches: Array<
+    Omit<SavedSearchRecord, "monitorAction"> & { monitorAction: string }
+  >
+}
+
 export class SavedSearchError extends Error {
   constructor(message: string) {
     super(message)
@@ -125,6 +133,55 @@ export async function listSavedSearchesForUserWithClient({
     orderBy: [{ updatedAt: "desc" }],
     where: { userId },
   })
+}
+
+export async function listSavedSearchPageForUser({
+  after,
+  limit = 50,
+  userId,
+}: {
+  after?: string
+  limit?: number
+  userId: string
+}): Promise<SavedSearchPage> {
+  const boundedLimit = pageSize(limit, 50)
+  const cursor = decodeTimeCursor(after)
+  const updatedAt = cursor?.publishedAt
+  const savedSearches = await getPrisma().savedSearch.findMany({
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: boundedLimit + 1,
+    where: updatedAt
+      ? {
+          AND: [
+            { userId },
+            {
+              OR: [
+                { updatedAt: { lt: updatedAt } },
+                {
+                  AND: [
+                    { updatedAt },
+                    { id: { lt: cursor!.id } },
+                  ],
+                },
+              ],
+            },
+          ],
+        }
+      : { userId },
+  })
+  const visibleSavedSearches = savedSearches.slice(0, boundedLimit)
+
+  return {
+    nextCursor:
+      savedSearches.length > boundedLimit && visibleSavedSearches.length
+        ? encodeTimeCursor({
+            createdAt: visibleSavedSearches.at(-1)!.updatedAt,
+            id: visibleSavedSearches.at(-1)!.id,
+            publishedAt: visibleSavedSearches.at(-1)!.updatedAt,
+          })
+        : null,
+    savedSearches: visibleSavedSearches,
+  }
 }
 
 export async function createSavedSearchForUser({

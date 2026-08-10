@@ -1,0 +1,7 @@
+{
+  "name": "@arctic-rss/api-contract",
+  "version": "0.1.0",
+  "private": true,
+  "sideEffects": false,
+  "types": "./src/index.ts"
+}

@@ -2,6 +2,12 @@ import type { Prisma } from "../generated/prisma/client"
 import type { Plan } from "../generated/prisma/enums"
 
 import { getPrisma } from "./db"
+import {
+  afterTimeCursorWhere,
+  decodeTimeCursor,
+  encodeTimeCursor,
+  pageSize,
+} from "./time-cursor"
 import { isSupportedTimeZone, type SupportedTimeZone } from "./settings"
 import {
   isDatabaseSmartDigestLimitError,
@@ -236,6 +242,20 @@ export type SmartDigestSourceOptions = {
     id: string
     title: string
   }>
+}
+
+export type SmartDigestPageItem = {
+  articleCount: number
+  completedAt: Date | null
+  createdAt: Date
+  id: string
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "COMPLETED_NO_MATCHES" | "FAILED"
+  title: string
+}
+
+export type SmartDigestPage = {
+  digests: SmartDigestPageItem[]
+  nextCursor: string | null
 }
 
 export type SmartDigestStore = {
@@ -607,6 +627,51 @@ export async function getSmartDigestForUser({
       userId,
     },
   })
+}
+
+export async function listSmartDigestPageForUser({
+  after,
+  limit = 50,
+  userId,
+}: {
+  after?: string
+  limit?: number
+  userId: string
+}): Promise<SmartDigestPage> {
+  const boundedLimit = pageSize(limit, 50)
+  const cursor = decodeTimeCursor(after)
+  const digests = await getPrisma().smartDigest.findMany({
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      articleCount: true,
+      completedAt: true,
+      createdAt: true,
+      id: true,
+      status: true,
+      title: true,
+    },
+    take: boundedLimit + 1,
+    where: cursor
+      ? {
+          AND: [
+            { userId },
+            afterTimeCursorWhere(cursor, "createdAt"),
+          ],
+        }
+      : { userId },
+  })
+  const visibleDigests = digests.slice(0, boundedLimit)
+
+  return {
+    digests: visibleDigests,
+    nextCursor:
+      digests.length > boundedLimit && visibleDigests.length
+        ? encodeTimeCursor({
+            ...visibleDigests.at(-1)!,
+            publishedAt: visibleDigests.at(-1)!.createdAt,
+          })
+        : null,
+  }
 }
 
 export async function listSmartDigestSourceOptionsWithClient({
