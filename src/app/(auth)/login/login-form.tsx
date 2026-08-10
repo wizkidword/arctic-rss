@@ -44,6 +44,7 @@ export function LoginForm({
   const verified = searchParams.get("verified") === "1"
   const verifyError = searchParams.get("verifyError") === "1"
   const oauthError = searchParams.get("error")
+  const callbackUrl = getSafeCallbackPath(searchParams.get("callbackUrl"))
   const oauthAccessDenied = oauthError === "AccessDenied"
   const oauthRetryableError =
     oauthError === "Configuration" ||
@@ -62,7 +63,7 @@ export function LoginForm({
   function onGoogleSignIn() {
     setError("")
     setPending(true)
-    void signIn("google", { redirectTo: "/app" })
+    void signIn("google", { redirectTo: callbackUrl })
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -102,7 +103,7 @@ export function LoginForm({
       return
     }
 
-    router.push("/app")
+    router.push(callbackUrl)
     router.refresh()
   }
 
@@ -228,4 +229,13 @@ export function LoginForm({
       </form>
     </Card>
   )
+}
+
+function getSafeCallbackPath(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
+    return "/app"
+  }
+
+  const url = new URL(value, "https://arcticrss.invalid")
+  return `${url.pathname}${url.search}${url.hash}`
 }

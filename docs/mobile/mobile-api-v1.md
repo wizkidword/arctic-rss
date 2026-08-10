@@ -15,11 +15,19 @@ webhooks, or third-party compatibility guarantees.
 
 ## Authentication and transport
 
-All endpoints require an authenticated, fresh Arctic RSS account. Phase 10
-uses the existing web-session authorization boundary so disabled accounts and
-`authVersion` changes are enforced immediately. Device authorization, PKCE,
-rotating refresh tokens, reuse detection, and device revocation are Phase 11
-work; a native client must not treat a server cookie as a permanent credential.
+All endpoints require an authenticated, fresh Arctic RSS account. Browser
+sessions remain valid only for browser-mediated authorization. Native clients
+must start at `GET /api/mobile/authorize` with the fixed first-party redirect
+URI, `state`, nonce, and a PKCE S256 challenge, then exchange the returned
+single-use code at `POST /api/v1/device-authorizations/exchange`. The exchange
+and `POST /api/v1/device-sessions/refresh` return a 15-minute bearer access
+token and a rotating refresh token. Native clients send access tokens as
+`Authorization: Bearer <token>`; they never use a permanent server cookie.
+
+Authorization codes and refresh tokens are stored only as hashes. The server
+checks `disabledAt` and `authVersion` at code issue, exchange, access use, and
+refresh. Refresh-token reuse revokes the whole device token family. Users can
+revoke a device or every mobile device from `/app/settings/devices`.
 
 User data responses set `Cache-Control: private, no-store, max-age=0`, include
 an `X-Request-Id` header, and carry the same ID in their JSON envelope. Private
@@ -70,6 +78,19 @@ Responses never include stack traces or cross-account resource IDs.
 | `GET /api/v1/podcast-episodes/:id` | One authorized podcast episode | none |
 | `GET /api/v1/briefings` | Smart Digest briefing summaries | `cursor`, `limit` (max 50) |
 
+## Device authorization endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/mobile/authorize` | System-browser authorization endpoint; redirects to the registered mobile URI with `code` and the supplied `state` after fresh web login |
+| `POST /api/v1/device-authorizations/exchange` | Exchanges `code`, `codeVerifier`, nonce, and the exact `redirectUri` for an access token and rotating refresh token |
+| `POST /api/v1/device-sessions/refresh` | Replaces a refresh token with a new access/refresh-token pair; a previous-token reuse invalidates its family |
+
+The registered redirect URI is currently `arcticrss://auth/callback`; requests
+must use PKCE `S256`. Access and refresh token strings are response secrets:
+clients must use platform secure storage and must never put them in telemetry,
+URLs, screenshots, or diagnostics.
+
 `/reader` accepts optional `feedId`, `folderId`, `collectionId`, and
 `state=all|unread|starred`. `/search` accepts `q` (maximum 200 characters),
 the corresponding source/folder/collection filters, `state`, and optional
@@ -81,7 +102,7 @@ full body.
 
 ## Deferred writes
 
-API v1 is read-only in Phase 10. Phase 12 will add state, collection, podcast
-progress, session logout, and sync writes only with device-session
-authentication and idempotency receipts. Advanced source management remains
-web-only for mobile v1.
+API v1 content operations remain read-only in Phase 11. Phase 12 will add
+state, collection, podcast progress, device logout, and sync writes only with
+device-session authentication and idempotency receipts. Advanced source
+management remains web-only for mobile v1.

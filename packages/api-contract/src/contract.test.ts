@@ -40,6 +40,8 @@ describe("first-party API v1 contract", () => {
       "/api/v1/articles/{articleId}",
       "/api/v1/briefings",
       "/api/v1/collections",
+      "/api/v1/device-authorizations/exchange",
+      "/api/v1/device-sessions/refresh",
       "/api/v1/feeds",
       "/api/v1/me",
       "/api/v1/podcast-episodes/{episodeId}",

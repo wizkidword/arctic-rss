@@ -1,7 +1,7 @@
 # Mobile authentication threat model
 
-**Status:** design accepted for Phase 11 implementation; no device authorization
-or device-session endpoint exists in Phase 10.
+**Status:** Phase 11 source implementation is complete locally and is not
+deployed. No native application or Android release is created by this work.
 
 ## Assets and trust boundaries
 
@@ -40,10 +40,15 @@ or device-session endpoint exists in Phase 10.
 | Threat | Required control |
 | --- | --- |
 | Intercepted authorization code | PKCE S256, short TTL, hash at rest, one-time use, exact redirect URI |
+| Malicious custom-scheme interception or deep-link spoof | Fixed first-party redirect URI, returned client state, nonce bound to the code exchange, and PKCE verification before token issue |
 | Malicious app redirect registration | Server-side fixed allowlist and exact URI comparison |
 | Lost or copied refresh token | Hashed storage, rotation, family reuse detection, device revocation |
+| Lost phone | Device-management page can revoke one token family or all mobile-device sessions without revealing token material |
 | Stale login after disablement or security change | Fresh `disabledAt` and `authVersion` checks at code issue, exchange, access validation, and refresh |
+| Compromised application build | Native clients are public clients with no provider, database, Redis, or server signing secret; PKCE and short-lived access tokens limit captured credentials |
 | Native client credential extraction | No embedded provider secret, database credential, Redis credential, or permanent server cookie |
+| Brute-force token or code exchange | Per-IP and per-secret-hash rate limits, high-entropy random values, uniform invalid-grant responses, and no credential logging |
+| Clock skew | The server remains authoritative for code expiry, access expiry, and refresh expiry; clients receive the access-token lifetime and must refresh conservatively |
 | Token disclosure through diagnostics | Never log authorization codes, verifiers, access tokens, refresh tokens, or authorization headers |
 | Device-session exhaustion | Per-user device-session cap, explicit eviction policy, and security audit event |
 | Cross-account resource discovery | Fresh user scope plus user-owned domain queries and uniform not-found responses |
@@ -57,3 +62,6 @@ or device-session endpoint exists in Phase 10.
 - Device revoke and revoke-all behavior.
 - Disablement and `authVersion` changes during refresh.
 - Device-session cap enforcement and privacy-safe device-management display.
+- Browser authorization redirect, token exchange, refresh rotation, and bearer
+  API access use `private, no-store` responses and do not rely on a durable
+  browser cookie.

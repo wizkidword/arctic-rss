@@ -1,4 +1,5 @@
 import { MonitorCogIcon } from "lucide-react"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
@@ -78,6 +79,18 @@ export default async function SettingsPage() {
           </p>
         </div>
         <DateTimePreferenceControls preferences={dateTimePreferences} />
+      </section>
+
+      <section className="rounded-lg border bg-card p-4">
+        <div className="mb-3 flex min-w-0 flex-col gap-1">
+          <h2 className="font-heading text-base font-medium">Mobile devices</h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Review or revoke mobile-device access without exposing any token values.
+          </p>
+        </div>
+        <Link className="text-sm font-medium text-primary underline-offset-4 hover:underline" href="/app/settings/devices">
+          Manage mobile devices
+        </Link>
       </section>
 
       <AccountDeletionControl hasLocalPassword={Boolean(account?.passwordHash)} />

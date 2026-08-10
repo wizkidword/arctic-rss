@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { meResponseSchema } from "./account"
+import { meResponseSchema, mobileTokenResponseSchema } from "./account"
 import { articleDetailResponseSchema, readerPageResponseSchema } from "./articles"
 import { briefingsResponseSchema } from "./briefings"
 import { collectionsResponseSchema } from "./collections"
@@ -22,6 +22,9 @@ const schemas = {
   }),
   FeedsResponse: z.toJSONSchema(feedsResponseSchema, { target: "draft-2020-12" }),
   MeResponse: z.toJSONSchema(meResponseSchema, { target: "draft-2020-12" }),
+  MobileTokenResponse: z.toJSONSchema(mobileTokenResponseSchema, {
+    target: "draft-2020-12",
+  }),
   PodcastEpisodeResponse: z.toJSONSchema(podcastEpisodeResponseSchema, {
     target: "draft-2020-12",
   }),
@@ -83,6 +86,29 @@ export const mobileApiV1OpenApiDocument = {
         operationId: "listCollections",
         responses: { "200": jsonResponse("CollectionsResponse"), ...defaultErrors },
         summary: "List the authenticated user's collections.",
+      },
+    },
+    "/api/v1/device-authorizations/exchange": {
+      post: {
+        operationId: "exchangeDeviceAuthorizationCode",
+        responses: {
+          "200": jsonResponse("MobileTokenResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Exchange a browser-issued PKCE authorization code for rotating device tokens.",
+      },
+    },
+    "/api/v1/device-sessions/refresh": {
+      post: {
+        operationId: "refreshDeviceSession",
+        responses: {
+          "200": jsonResponse("MobileTokenResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Rotate a first-party device refresh token.",
       },
     },
     "/api/v1/feeds": {

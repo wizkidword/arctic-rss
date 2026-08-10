@@ -8,10 +8,15 @@ import {
   requireFreshUser,
   withAuthenticatedRequestScope,
 } from "@/lib/authorization"
+import {
+  authenticateMobileAccessToken,
+  MobileAuthError,
+} from "@/lib/mobile-auth"
 import { enforceRateLimit, getTrustedClientIp } from "@/lib/rate-limit"
 
 import {
   recordApiV1Request,
+  type ApiV1AuthMode,
   type ApiV1Endpoint,
   type ApiV1RateLimitResult,
 } from "./telemetry"
@@ -69,18 +74,19 @@ export async function handleApiV1Read<T>({
   const startedAt = performance.now()
   let pageSize: number | null = null
   let rateLimitResult: ApiV1RateLimitResult = "not_checked"
+  let authMode: ApiV1AuthMode = "web-session"
   let response: Response
 
   try {
-    response = await withAuthenticatedRequestScope(async (session) => {
-      const user = await requireFreshUser(session)
+    response = await withApiV1Authentication(request, async (authentication) => {
+      authMode = authentication.authMode
       let rateLimit
 
       try {
         rateLimit = await enforceRateLimit({
           action: "mobile_api_read",
           ip: getTrustedClientIp(request.headers),
-          userId: user.id,
+          userId: authentication.userId,
         })
       } catch {
         rateLimitResult = "unavailable"
@@ -114,7 +120,7 @@ export async function handleApiV1Read<T>({
       }
 
       rateLimitResult = "allowed"
-      const payload = await run({ userId: user.id })
+      const payload = await run({ userId: authentication.userId })
       pageSize = payload.pageSize ?? null
 
       return apiV1SuccessResponse({
@@ -131,6 +137,20 @@ export async function handleApiV1Read<T>({
         requestId,
         retryable: false,
         status: 401,
+      })
+    } else if (error instanceof MobileAuthError) {
+      response = apiV1ErrorResponse({
+        code:
+          error.code === "configuration"
+            ? "MOBILE_AUTHENTICATION_UNAVAILABLE"
+            : "AUTHENTICATION_REQUIRED",
+        message:
+          error.code === "configuration"
+            ? "Mobile authentication is temporarily unavailable."
+            : "Authentication is required.",
+        requestId,
+        retryable: error.code === "configuration",
+        status: error.code === "configuration" ? 503 : 401,
       })
     } else if (error instanceof ApiV1RouteError) {
       response = apiV1ErrorResponse({
@@ -160,6 +180,7 @@ export async function handleApiV1Read<T>({
   }
 
   recordApiV1Request({
+    authMode,
     durationMs: Math.round(performance.now() - startedAt),
     endpoint,
     pageSize,
@@ -223,7 +244,7 @@ function validationError(issues: ApiV1ValidationIssue[]) {
   })
 }
 
-function apiV1SuccessResponse<T>({
+export function apiV1SuccessResponse<T>({
   data,
   nextCursor,
   requestId,
@@ -244,7 +265,7 @@ function apiV1SuccessResponse<T>({
   )
 }
 
-function apiV1ErrorResponse({
+export function apiV1ErrorResponse({
   code,
   issues,
   message,
@@ -280,4 +301,25 @@ function apiV1ErrorResponse({
       status,
     }
   )
+}
+
+async function withApiV1Authentication<T>(
+  request: Request,
+  callback: (authentication: { authMode: ApiV1AuthMode; userId: string }) => Promise<T>
+) {
+  const authorization = request.headers.get("authorization")?.trim()
+
+  if (authorization) {
+    const match = /^Bearer ([^\s]+)$/i.exec(authorization)
+    if (!match) {
+      throw new AuthorizationError("Authentication is required.")
+    }
+    const principal = await authenticateMobileAccessToken({ accessToken: match[1] })
+    return callback({ authMode: "device-session", userId: principal.userId })
+  }
+
+  return withAuthenticatedRequestScope(async (session) => {
+    const user = await requireFreshUser(session)
+    return callback({ authMode: "web-session", userId: user.id })
+  })
 }

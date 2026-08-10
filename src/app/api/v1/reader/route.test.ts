@@ -2,12 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => {
   class AuthorizationError extends Error {}
+  class MobileAuthError extends Error {}
 
   return {
     AuthorizationError,
+    authenticateMobileAccessToken: vi.fn(),
     enforceRateLimit: vi.fn(),
     getTrustedClientIp: vi.fn(),
     listApiV1Reader: vi.fn(),
+    MobileAuthError,
     requireFreshUser: vi.fn(),
     withAuthenticatedRequestScope: vi.fn(),
   }
@@ -22,6 +25,11 @@ vi.mock("@/lib/authorization", () => ({
 vi.mock("@/lib/rate-limit", () => ({
   enforceRateLimit: mocks.enforceRateLimit,
   getTrustedClientIp: mocks.getTrustedClientIp,
+}))
+
+vi.mock("@/lib/mobile-auth", () => ({
+  authenticateMobileAccessToken: mocks.authenticateMobileAccessToken,
+  MobileAuthError: mocks.MobileAuthError,
 }))
 
 vi.mock("@/lib/api-v1/read-service", () => ({
@@ -39,6 +47,11 @@ describe("GET /api/v1/reader", () => {
       callback({ user: { id: "user-1" } })
     )
     mocks.requireFreshUser.mockResolvedValue({ id: "user-1" })
+    mocks.authenticateMobileAccessToken.mockResolvedValue({
+      authVersion: 2,
+      deviceSessionId: "device-session-1",
+      userId: "user-2",
+    })
     mocks.getTrustedClientIp.mockReturnValue("198.51.100.24")
     mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
     mocks.listApiV1Reader.mockResolvedValue({
@@ -123,6 +136,19 @@ describe("GET /api/v1/reader", () => {
     expect(mocks.listApiV1Reader.mock.calls[0][0]).not.toHaveProperty("contentHtml")
   })
 
+  it("accepts a fresh device-session bearer token without falling back to browser cookies", async () => {
+    const response = await GET(readerRequest("", { authorization: "Bearer device-access-token" }))
+
+    expect(response.status).toBe(200)
+    expect(mocks.authenticateMobileAccessToken).toHaveBeenCalledWith({
+      accessToken: "device-access-token",
+    })
+    expect(mocks.withAuthenticatedRequestScope).not.toHaveBeenCalled()
+    expect(mocks.listApiV1Reader).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-2" })
+    )
+  })
+
   it("rejects duplicate query parameters with bounded validation details", async () => {
     const response = await GET(readerRequest("?limit=1&limit=2"))
 
@@ -139,8 +165,8 @@ describe("GET /api/v1/reader", () => {
   })
 })
 
-function readerRequest(query = "") {
+function readerRequest(query = "", headers: Record<string, string> = {}) {
   return new Request(`https://arcticrss.com/api/v1/reader${query}`, {
-    headers: { "cf-connecting-ip": "198.51.100.24" },
+    headers: { "cf-connecting-ip": "198.51.100.24", ...headers },
   })
 }

@@ -62,3 +62,8 @@ evidence does not authorize a production release, and a release cannot be
 reported as operator-verified without fresh owner evidence.  Run
 `npm run audit:verify-fifth-pass-ledger` to check the IDs, source-evidence
 column, and separate production/operator fields.
+## Phase 11 mobile authentication addendum (2026-08-10)
+
+| Capability | Source status | Production status | Next gate |
+| --- | --- | --- | --- |
+| Browser PKCE device authorization, rotating device sessions, revocation, and web device management | Implemented locally with additive migration-risk evidence; no native app or sync writes | Not deployed and no migration has run | Focused/full validation, source review, then an exact future `DEPLOY <short-sha>` approval before any production release |

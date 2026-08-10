@@ -13,7 +13,11 @@
                 "enum": [
                   "ARTICLE_NOT_FOUND",
                   "AUTHENTICATION_REQUIRED",
+                  "DEVICE_AUTHORIZATION_INVALID",
+                  "DEVICE_SESSION_LIMIT_REACHED",
                   "INTERNAL_ERROR",
+                  "MOBILE_AUTHENTICATION_UNAVAILABLE",
+                  "MOBILE_REFRESH_INVALID",
                   "PODCAST_EPISODE_NOT_FOUND",
                   "RATE_LIMITED",
                   "RATE_LIMIT_UNAVAILABLE",
@@ -596,6 +600,69 @@
               "id",
               "name",
               "plan"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "MobileTokenResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "accessToken": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "accessTokenExpiresIn": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 3600
+              },
+              "refreshToken": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            },
+            "required": [
+              "accessToken",
+              "accessTokenExpiresIn",
+              "refreshToken"
             ],
             "additionalProperties": false
           },
@@ -1582,6 +1649,152 @@
           }
         },
         "summary": "List the authenticated user's collections."
+      }
+    },
+    "/api/v1/device-authorizations/exchange": {
+      "post": {
+        "operationId": "exchangeDeviceAuthorizationCode",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileTokenResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Exchange a browser-issued PKCE authorization code for rotating device tokens."
+      }
+    },
+    "/api/v1/device-sessions/refresh": {
+      "post": {
+        "operationId": "refreshDeviceSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileTokenResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Rotate a first-party device refresh token."
       }
     },
     "/api/v1/feeds": {

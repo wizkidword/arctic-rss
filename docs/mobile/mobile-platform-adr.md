@@ -1,9 +1,10 @@
 # Mobile platform ADR
 
 **Status:** accepted by owner approval `APPROVE MOBILE PLATFORM ADR` on 2026-08-10.
-**Scope:** Phase 10 architecture and private API v1 only. No native application,
-device-session implementation, Android build, deployment, or Google Play action
-is authorized by this decision.
+**Scope:** The owner approval covers the Phase 10 architecture. Phase 11 now
+implements the approved browser-mediated device-authentication boundary locally;
+no native application, Android build, deployment, or Google Play action is
+authorized by this ADR.
 
 ## Context
 

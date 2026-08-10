@@ -10,6 +10,8 @@ export type ApiV1Endpoint =
   | "saved-views"
   | "search"
 
+export type ApiV1AuthMode = "device-session" | "web-session"
+
 export type ApiV1RateLimitResult =
   | "allowed"
   | "not_checked"
@@ -17,6 +19,7 @@ export type ApiV1RateLimitResult =
   | "unavailable"
 
 export function recordApiV1Request({
+  authMode,
   durationMs,
   endpoint,
   pageSize,
@@ -24,6 +27,7 @@ export function recordApiV1Request({
   requestId,
   statusCode,
 }: {
+  authMode: ApiV1AuthMode
   durationMs: number
   endpoint: ApiV1Endpoint
   pageSize: number | null
@@ -36,7 +40,7 @@ export function recordApiV1Request({
   // application headers here.
   console.info(
     JSON.stringify({
-      authMode: "web-session",
+      authMode,
       durationMs,
       endpoint,
       event: "mobile_api_v1_request",
