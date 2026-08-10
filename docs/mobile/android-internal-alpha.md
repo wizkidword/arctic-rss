@@ -4,7 +4,7 @@
 
 - App workspace: `apps/mobile`
 - Package name: `com.arcticrss.reader` (provisional; confirm ownership before signing)
-- Version: `0.1.0-alpha` source configuration, Android `versionCode` 1
+- Version: `0.1.0` source configuration, Android `versionCode` 1
 - Build profiles: `development` (internal APK/dev client) and `preview` (internal AAB)
 - Public Play release: not configured and not authorized
 
@@ -59,6 +59,9 @@ track or tester access.
 This workstation does not currently have Android SDK tooling configured, and no
 EAS build, signing identity, Play Console project, tester group, or submission
 has been created by this phase.
+
+See [Google Play readiness](./google-play-readiness.md) for the separate
+submission checklist, current target-SDK evidence, and the owner-only actions.
 
 ## Workspace note
 

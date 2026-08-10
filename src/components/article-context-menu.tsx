@@ -695,6 +695,7 @@ function ArticleCollectionActionForm({
   )
 }
 
+
 function ArticleCollectionDialogContent({
   action,
   articleId,

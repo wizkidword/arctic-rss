@@ -12,6 +12,7 @@ import type {
 } from "@arctic-rss/api-contract"
 
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
+import { listCollectionArticleRetentionForUser } from "@/lib/collection-retention"
 import {
   getReaderArticleForUser,
   listReaderArticlePage,
@@ -83,8 +84,22 @@ export async function listApiV1Reader({
     userId,
   })
 
+  const retentionByArticleId = collectionId
+    ? await listCollectionArticleRetentionForUser({
+        articleIds: page.articles.map((article) => article.id),
+        collectionId,
+        userId,
+      })
+    : new Map()
+
   return {
-    articles: page.articles.map(toApiV1ArticleListItem),
+    articles: page.articles.map((article) => {
+      const collectionRetention = retentionByArticleId.get(article.id)
+
+      return toApiV1ArticleListItem(
+        collectionRetention ? { ...article, collectionRetention } : article
+      )
+    }),
     nextCursor: page.nextCursor,
   }
 }
@@ -314,6 +329,14 @@ export async function getApiV1Briefing({
 
 function toApiV1ArticleListItem(article: ReaderArticleListItem): ArticleListItem {
   return {
+    ...(article.collectionRetention
+      ? {
+          collectionRetention: {
+            savedAt: article.collectionRetention.savedAt.toISOString(),
+            sourceIsFollowed: article.collectionRetention.sourceIsFollowed,
+          },
+        }
+      : {}),
     feed: {
       faviconUrl: mediaUrl(article.feedFaviconUrl),
       id: article.feedId,

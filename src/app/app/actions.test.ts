@@ -92,6 +92,9 @@ const mocks = vi.hoisted(() => {
     isAiDigestPeriod: vi.fn(
       (value: unknown) => value === "DAILY" || value === "WEEKLY",
     ),
+    isFirstArticleOpenedForUser: vi.fn().mockResolvedValue(false),
+    isFirstArticleStarredForUser: vi.fn().mockResolvedValue(false),
+    isFirstCollectionSaveForUser: vi.fn().mockResolvedValue(false),
     mergeStoryClustersForUser: vi.fn(),
     markFeedSubscriptionAttentionReviewed: vi.fn(),
     MockAiDigestError,
@@ -106,6 +109,7 @@ const mocks = vi.hoisted(() => {
     MockStoryClusterControlError,
     moveSubscriptionToFolder: vi.fn(),
     pauseFeedSubscriptionsAtomically: vi.fn(),
+    queueProductMilestone: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
     }),
@@ -120,6 +124,7 @@ const mocks = vi.hoisted(() => {
     enforceRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
     revalidatePath: vi.fn(),
     setArticleReadState: vi.fn(),
+    setArticleStarredState: vi.fn(),
     setFeedSubscriptionPaused: vi.fn(),
     splitStoryClusterMemberForUser: vi.fn(),
     subscribeToFeed: vi.fn(),
@@ -192,7 +197,7 @@ vi.mock("@/lib/articles", () => ({
   deleteArticleForUser: mocks.deleteArticleForUser,
   markArticlesRead: vi.fn(),
   setArticleReadState: mocks.setArticleReadState,
-  setArticleStarredState: vi.fn(),
+  setArticleStarredState: mocks.setArticleStarredState,
 }))
 
 vi.mock("@/lib/db", () => ({
@@ -252,6 +257,13 @@ vi.mock("@/lib/preferences", () => ({
   isDefaultView: vi.fn(),
 }))
 
+vi.mock("@/lib/product-milestones", () => ({
+  isFirstArticleOpenedForUser: mocks.isFirstArticleOpenedForUser,
+  isFirstArticleStarredForUser: mocks.isFirstArticleStarredForUser,
+  isFirstCollectionSaveForUser: mocks.isFirstCollectionSaveForUser,
+  queueProductMilestone: mocks.queueProductMilestone,
+}))
+
 vi.mock("@/lib/rate-limit", () => ({
   enforceRateLimit: mocks.enforceRateLimit,
   getRateLimitErrorMessage: () => "Too many requests. Please wait a few minutes and try again.",
@@ -300,6 +312,7 @@ import {
   replaceFeedSubscriptionAction,
   reviewFeedAttentionAction,
   setFeedPausedAction,
+  setArticleStarredAction,
   subscribeDirectoryFeedAction,
   resendEmailVerificationAction,
   submitBugReportAction,
@@ -565,6 +578,9 @@ describe("addArticleToCollectionAction", () => {
     mocks.auth.mockReset()
     mocks.refresh.mockReset()
     mocks.revalidatePath.mockReset()
+    mocks.isFirstCollectionSaveForUser.mockReset()
+    mocks.isFirstCollectionSaveForUser.mockResolvedValue(false)
+    mocks.queueProductMilestone.mockReset()
   })
 
   it("requires authentication before saving an article", async () => {
@@ -650,6 +666,21 @@ describe("addArticleToCollectionAction", () => {
       collectionName: "Deep Reads",
       userId: "user-1",
     })
+  })
+
+  it("queues the first collection milestone without article data", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.addArticleToCollection.mockResolvedValue({ collectionId: "collection-1" })
+    mocks.isFirstCollectionSaveForUser.mockResolvedValue(true)
+    const formData = new FormData()
+    formData.set("articleId", "article-1")
+    formData.set("collectionId", "collection-1")
+
+    await addArticleToCollectionAction({ message: "", status: "idle" }, formData)
+
+    expect(mocks.queueProductMilestone).toHaveBeenCalledWith(
+      "first_collection_saved"
+    )
   })
 
   it("returns readable collection errors without refreshing", async () => {
@@ -3020,6 +3051,9 @@ describe("markArticleReadOnOpen", () => {
     mocks.refresh.mockReset()
     mocks.revalidatePath.mockReset()
     mocks.setArticleReadState.mockReset()
+    mocks.isFirstArticleOpenedForUser.mockReset()
+    mocks.isFirstArticleOpenedForUser.mockResolvedValue(false)
+    mocks.queueProductMilestone.mockReset()
   })
 
   it("persists the read state without refreshing the current unread view", async () => {
@@ -3038,6 +3072,46 @@ describe("markArticleReadOnOpen", () => {
     })
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
     expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+
+  it("queues the first-open milestone after a successful read state update", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.isFirstArticleOpenedForUser.mockResolvedValue(true)
+
+    await markArticleReadOnOpen("article-2")
+
+    expect(mocks.queueProductMilestone).toHaveBeenCalledWith(
+      "first_article_opened"
+    )
+  })
+})
+
+describe("setArticleStarredAction", () => {
+  beforeEach(() => {
+    mocks.auth.mockReset()
+    mocks.isFirstArticleStarredForUser.mockReset()
+    mocks.isFirstArticleStarredForUser.mockResolvedValue(false)
+    mocks.queueProductMilestone.mockReset()
+    mocks.setArticleStarredState.mockReset()
+  })
+
+  it("queues the first-star milestone after a successful star", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "user-1" } })
+    mocks.isFirstArticleStarredForUser.mockResolvedValue(true)
+    const formData = new FormData()
+    formData.set("articleId", "article-2")
+    formData.set("isStarred", "true")
+
+    await setArticleStarredAction(formData)
+
+    expect(mocks.setArticleStarredState).toHaveBeenCalledWith({
+      articleId: "article-2",
+      isStarred: true,
+      userId: "user-1",
+    })
+    expect(mocks.queueProductMilestone).toHaveBeenCalledWith(
+      "first_article_starred"
+    )
   })
 })
 

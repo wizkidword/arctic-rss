@@ -3,6 +3,7 @@ import * as SQLite from "expo-sqlite"
 import {
   assertPendingMobileMutation,
   assertQueuedMutation,
+  type MobileProductMilestone,
   selectMobileCacheEvictions,
   type PendingMobileMutation,
 } from "@arctic-rss/mobile-client"
@@ -134,9 +135,30 @@ export class MobileOfflineStore {
     )
   }
 
+  async hasProductMilestone(milestone: MobileProductMilestone) {
+    const database = await this.database()
+    return Boolean(
+      await database.getFirstAsync<{ value: string }>(
+        "SELECT value FROM mobile_sync_state WHERE key = ?",
+        productMilestoneKey(milestone)
+      )
+    )
+  }
+
+  async markProductMilestone(milestone: MobileProductMilestone) {
+    const database = await this.database()
+    await database.runAsync(
+      "INSERT OR REPLACE INTO mobile_sync_state (key, value) VALUES (?, ?)",
+      productMilestoneKey(milestone),
+      "recorded"
+    )
+  }
+
   async clearDownloadedData() {
     const database = await this.database()
-    await database.execAsync("DELETE FROM mobile_cache; DELETE FROM mobile_sync_state;")
+    await database.execAsync(
+      "DELETE FROM mobile_cache; DELETE FROM mobile_sync_state WHERE key = 'cursor';"
+    )
   }
 
   async purgeForLogout() {
@@ -172,4 +194,8 @@ export class MobileOfflineStore {
     `)
     return database
   }
+}
+
+function productMilestoneKey(milestone: MobileProductMilestone) {
+  return `product-milestone:${milestone}`
 }

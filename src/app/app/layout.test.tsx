@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  cookies: vi.fn(),
   getCurrentBulkReadJobForUser: vi.fn(),
   getOrCreateUserSettings: vi.fn(),
   getPrisma: vi.fn(),
@@ -15,6 +16,10 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
   }),
+}))
+
+vi.mock("next/headers", () => ({
+  cookies: mocks.cookies,
 }))
 
 vi.mock("next/navigation", () => ({
@@ -100,6 +105,7 @@ import AuthenticatedAppLayout from "./layout"
 describe("AuthenticatedAppLayout", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.cookies.mockResolvedValue({ get: vi.fn() })
     mocks.withAuthenticatedRequestScope.mockImplementation((callback) =>
       callback({ user: { id: "user-1" } })
     )

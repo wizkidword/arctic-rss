@@ -41,6 +41,25 @@ describe("mobile client safeguards", () => {
     expect(headers.get("authorization")).toBe("Bearer access-token-should-not-appear-in-errors")
   })
 
+  it("sends a fixed Android milestone header only with a mobile sync request", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("not json", { status: 502 }))
+    const client = new MobileApiClient({
+      fetch,
+      getAccessToken: async () => "device-token",
+      origin: "https://arcticrss.example",
+    })
+
+    await expect(client.sync(undefined, "first_mobile_sync")).rejects.toBeInstanceOf(
+      MobileApiError
+    )
+
+    const headers = fetch.mock.calls[0][1].headers as Headers
+    expect(headers.get("x-arctic-rss-client-platform")).toBe("android")
+    expect(headers.get("x-arctic-rss-product-milestone")).toBe(
+      "first_mobile_sync"
+    )
+  })
+
   it("makes deterministic URL-safe PKCE material with a SHA-256 challenge", async () => {
     const pkce = await createPkceAuthorization({
       randomBytes: (size) => Uint8Array.from({ length: size }, (_, index) => index),

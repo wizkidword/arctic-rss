@@ -2,16 +2,19 @@
 
 **Last source review:** 2026-08-10
 **Baseline:** `686cd18b7e7f6196865af34c93496c3bddf16a69`  
-**Production status:** `c7be850` was deployed and independently verified on
-2026-08-10 through the approved OVH release controller.
+**Last independently verified production revision:** `bb5c28f` on 2026-08-10
+through the approved OVH release controller. Phase 14 completion work is a
+committed local source candidate and is not deployed. This record does not
+assert a fresh live-production check after that release.
 
 ## Release addendum
 
-The release controller passed the exact-commit CI and local gates, fresh backup
-gate, migration ownership preflight, migration status, selected-service health,
-loopback health/liveness, public health/login, and monitor checks. Independent
-verification confirmed all 51 migrations, the eight required
-`all-in-one-with-chat` services, and the private release record.
+The approved release controller passed its exact-commit CI and local gates,
+fresh backup gate, migration ownership preflight, migration status,
+selected-service health, loopback health/liveness, public health/login, and
+monitor checks. Independent verification confirmed the deployed revision, its
+migration status, the required `all-in-one-with-chat` services, and the private
+release record. Phase 15 has not run a production release or live check.
 
 The per-finding production and operator columns below are the preserved
 pre-release implementation snapshot. Their `Not deployed` and `No` entries are
@@ -29,10 +32,11 @@ where list cardinality is not product-limited, request IDs, rate-limit
 fail-closed behavior, and low-cardinality telemetry.
 List DTOs exclude article bodies; the selected article detail is sanitized.
 
-This is source complete and not deployed. No native client, PKCE exchange,
-device session, sync mutation, push installation, or Android build exists yet.
-Phase 11 is the next source implementation phase; Phase 13 remains separately
-gated by `APPROVE ANDROID INTERNAL ALPHA`.
+The Phase 10 contract is now deployed as part of the last verified production
+revision. Subsequent phases added a local Android client, PKCE device sessions,
+sync mutations, protected device-installation references, and an unsigned
+Android JavaScript export. No signed Android artifact, Play track, push-provider
+delivery, or new Phase 14 source change is deployed.
 
 | Finding ID | Source implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Unit/integration coverage                                                                                                                                                                                                                                                                                                                                                        | Browser evidence                      | Redis/PostgreSQL/Compose evidence                                                                                                                                                                                                                                    | Migration required                                                                               | Production release status | Operator verification | Mobile dependency                            | Remaining owner gate                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------- | --------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -66,10 +70,16 @@ column, and separate production/operator fields.
 
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
-| Browser PKCE device authorization, rotating device sessions, revocation, and web device management | Implemented locally with additive migration-risk evidence; no native app or sync writes | Not deployed and no migration has run | Focused/full validation, source review, then an exact future `DEPLOY <short-sha>` approval before any production release |
+| Browser PKCE device authorization, rotating device sessions, revocation, and web device management | Implemented with additive migration evidence and exercised by local contract/real-database suites; consumed by the local Android client | Included in last verified website release `bb5c28f`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for any later website release; signed Android distribution remains owner-gated |
 
 ## Phase 12 mobile sync and notification addendum (2026-08-10)
 
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
-| Transactional user sync events/tombstones, cursor-floor full-resync handling, session-bound idempotent mobile writes, HTTPS web deep-link fallback, centralized notification preferences, and protected Android installation references | Implemented locally with additive migration-risk evidence; Android App Link signing verification and push-provider delivery are intentionally deferred | Not deployed and no migration has run | Disposable PostgreSQL trigger/concurrency evidence, full local verification, source review, then an exact future `DEPLOY <short-sha>` approval before any production release; `APPROVE ANDROID INTERNAL ALPHA` remains required before Phase 13 |
+| Transactional user sync events/tombstones, cursor-floor full-resync handling, session-bound idempotent mobile writes, HTTPS web deep-link fallback, centralized notification preferences, and protected Android installation references | Implemented with additive migration evidence, private contract coverage, and a local Android client; App Link signing verification and push-provider delivery remain deferred | Included in last verified website release `bb5c28f`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for later website releases. A signing identity, App Link verification, and the separate Play owner approval are required for Android distribution |
+
+## Phase 14 reader coherence and safe activation evidence addendum (2026-08-10)
+
+| Capability | Source status | Production status | Next gate |
+| --- | --- | --- | --- |
+| Retained collection provenance and removal, bounded mobile offline indicators, consent-gated first-success milestone events, and fixed Android first-sync/return telemetry | Complete in the current committed source candidate with unit, contract, full-suite, typecheck, lint, web-build, and Android export evidence | Not deployed; `bb5c28f` is the last independently verified production revision | Exact-commit CI, then a fresh `DEPLOY <short-sha>` approval before a website release. Play distribution remains separately owner-gated |

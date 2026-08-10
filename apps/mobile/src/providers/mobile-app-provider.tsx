@@ -103,7 +103,7 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
       appState.current = nextState
       if (becameActive && session.isSignedIn()) {
         void flushPendingMutations(api, offline)
-          .then(() => synchronizeMobileState(api, offline))
+          .then(() => synchronizeMobileState(api, offline, { returnSession: true }))
           .catch(async (error) => {
             if (isTerminalMobileSessionFailure(error) || !session.isSignedIn()) {
               await clearInvalidSession()

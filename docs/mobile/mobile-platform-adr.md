@@ -1,10 +1,11 @@
 # Mobile platform ADR
 
 **Status:** accepted by owner approval `APPROVE MOBILE PLATFORM ADR` on 2026-08-10.
-**Scope:** The owner approval covers the Phase 10 architecture. Phases 11–12
-implement the approved browser-mediated device-authentication, bounded sync,
-and notification foundations locally; no native application, Android build,
-deployment, or Google Play action is authorized by this ADR.
+**Scope:** The owner approval covers the Phase 10 architecture. Phases 11–14
+implemented the approved browser-mediated device authentication, bounded sync,
+notification foundations, and Android source client. This ADR does not
+authorize a signed Android build, Play Console action, or a future website
+deployment.
 
 ## Context
 
@@ -16,8 +17,9 @@ views, and briefings. The mobile client must consume those same domain rules.
 
 ## Decision
 
-- The proposed native stack is Expo, React Native, and Expo Router. No Expo
-  workspace or native screen is created in this phase.
+- The native stack is Expo, React Native, and Expo Router in `apps/mobile`.
+  It remains a first-party Android alpha source workspace, not a public app
+  distribution or a replacement backend.
 - Arctic RSS keeps one backend: the existing Next.js, Prisma, PostgreSQL,
   Redis, BullMQ, and Auth.js platform. Native clients never access the database,
   Redis, server actions, or service credentials directly.
@@ -69,9 +71,11 @@ commitment.
 ## Consequences
 
 Phase 11 built device authorization on an already bounded API surface. Phase
-12 makes writes and sync safe without changing response envelopes. Phase 13
-may begin only after the Phase 10–12 security and integration gates pass and
-the owner supplies `APPROVE ANDROID INTERNAL ALPHA`.
+12 added writes and sync without changing response envelopes. Phase 13 produced
+the Android alpha source after the owner supplied `APPROVE ANDROID INTERNAL
+ALPHA`; Phase 14 added bounded offline/reengagement evidence. A signing
+identity, App Link verification, signed-device smoke test, and explicit Play
+owner approval remain separate gates.
 
 ## Rejected alternatives
 

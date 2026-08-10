@@ -403,8 +403,7 @@ function ArticleListItem({
               : ""}
           </span>
         </Link>
-        {article.collectionRetention &&
-        !article.collectionRetention.sourceIsFollowed ? (
+        {article.collectionRetention ? (
           <CollectionRetentionNotice
             articleId={article.id}
             collectionId={currentCollection?.id}
@@ -413,6 +412,7 @@ function ArticleListItem({
               article.collectionRetention.savedAt,
               dateTimePreferences
             )}
+            sourceIsFollowed={article.collectionRetention.sourceIsFollowed}
           />
         ) : null}
       </div>
@@ -664,8 +664,7 @@ function ArticleReaderCard({
           </div>
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4 overflow-hidden text-sm leading-6 text-muted-foreground">
-          {article.collectionRetention &&
-          !article.collectionRetention.sourceIsFollowed ? (
+          {article.collectionRetention ? (
             <CollectionRetentionNotice
               articleId={article.id}
               collectionId={currentCollection?.id}
@@ -674,6 +673,7 @@ function ArticleReaderCard({
                 article.collectionRetention.savedAt,
                 dateTimePreferences
               )}
+              sourceIsFollowed={article.collectionRetention.sourceIsFollowed}
             />
           ) : null}
           <ArticleAiSummaryPanel

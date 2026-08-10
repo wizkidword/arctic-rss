@@ -75,8 +75,7 @@ export function ArticleCardGrid({
                   : ""}
               </p>
             </Link>
-            {article.collectionRetention &&
-            !article.collectionRetention.sourceIsFollowed ? (
+            {article.collectionRetention ? (
               <CollectionRetentionNotice
                 articleId={article.id}
                 collectionId={currentCollection?.id}
@@ -85,6 +84,7 @@ export function ArticleCardGrid({
                   article.collectionRetention.savedAt,
                   dateTimePreferences
                 )}
+                sourceIsFollowed={article.collectionRetention.sourceIsFollowed}
               />
             ) : null}
             {article.summary && (

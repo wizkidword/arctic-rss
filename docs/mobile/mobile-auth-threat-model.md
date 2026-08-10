@@ -1,7 +1,8 @@
 # Mobile authentication threat model
 
-**Status:** Phase 11 source implementation is complete locally and is not
-deployed. No native application or Android release is created by this work.
+**Status:** The Phase 11 design is implemented and included in the last
+verified website release `bb5c28f`. A local Android alpha consumes it, but no
+signed Android artifact or Play distribution has been created.
 
 ## Assets and trust boundaries
 

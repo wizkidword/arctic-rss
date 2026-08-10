@@ -8,6 +8,7 @@ export function useMobileQuery<T>(cacheKey: string, load: () => Promise<T>) {
   const { offline, signOut } = useMobileApp()
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hasOfflineCopy, setHasOfflineCopy] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -20,6 +21,7 @@ export function useMobileQuery<T>(cacheKey: string, load: () => Promise<T>) {
         const cached = await offline.cached<T>(cacheKey)
         if (active && cached !== null) {
           setData(cached)
+          setHasOfflineCopy(true)
         }
       } catch {
         // A damaged local cache must not prevent a fresh authorized request.
@@ -28,6 +30,9 @@ export function useMobileQuery<T>(cacheKey: string, load: () => Promise<T>) {
         const fresh = await load()
         try {
           await offline.cache(cacheKey, fresh)
+          if (active) {
+            setHasOfflineCopy(true)
+          }
         } catch {
           // Rendering fresh data is still safe when local cache maintenance fails.
         }
@@ -57,6 +62,7 @@ export function useMobileQuery<T>(cacheKey: string, load: () => Promise<T>) {
   return {
     data,
     error,
+    hasOfflineCopy,
     isRefreshing,
     refresh: useCallback(() => setRefreshKey((value) => value + 1), []),
   }

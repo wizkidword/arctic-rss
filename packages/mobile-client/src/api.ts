@@ -67,6 +67,10 @@ export type IdempotentRequest = {
   path: string
 }
 
+export type MobileProductMilestone =
+  | "first_mobile_sync"
+  | "first_return_session"
+
 export class MobileApiClient {
   private readonly fetchImplementation: FetchImplementation
   private readonly getAccessToken: (() => Promise<string>) | undefined
@@ -239,8 +243,14 @@ export class MobileApiClient {
     })
   }
 
-  sync(cursor?: string) {
+  sync(cursor?: string, productMilestone?: MobileProductMilestone) {
     return this.request("/api/v1/sync", syncResponseSchema, {
+      headers: productMilestone
+        ? {
+            "X-Arctic-RSS-Client-Platform": "android",
+            "X-Arctic-RSS-Product-Milestone": productMilestone,
+          }
+        : undefined,
       query: { cursor, limit: 100 },
     })
   }
@@ -266,6 +276,7 @@ export class MobileApiClient {
     options: {
       auth?: boolean
       body?: unknown
+      headers?: Record<string, string>
       idempotencyKey?: string
       method?: "DELETE" | "GET" | "PATCH" | "POST" | "PUT"
       query?: Record<string, string | number | undefined>
@@ -273,6 +284,9 @@ export class MobileApiClient {
   ): Promise<T> {
     const method = options.method ?? "GET"
     const headers = new Headers({ Accept: "application/json" })
+    Object.entries(options.headers ?? {}).forEach(([name, value]) => {
+      headers.set(name, value)
+    })
     if (options.body !== undefined) {
       headers.set("Content-Type", "application/json")
     }

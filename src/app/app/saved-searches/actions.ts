@@ -13,6 +13,10 @@ import {
   SavedSearchError,
 } from "@/lib/saved-searches"
 import { parseArticleSearchFilters, type ArticleSearchParams } from "@/lib/article-search"
+import {
+  isFirstSavedViewForUser,
+  queueProductMilestone,
+} from "@/lib/product-milestones"
 
 export type SavedSearchActionState = {
   message: string
@@ -31,6 +35,8 @@ export async function createSavedSearchAction(
       status: "error",
     }
   }
+
+  const firstSavedView = await isFirstSavedViewForUser(session.user.id)
 
   try {
     await createSavedSearchForUser({
@@ -53,6 +59,9 @@ export async function createSavedSearchAction(
   }
 
   revalidatePath("/app/saved-searches")
+  if (firstSavedView) {
+    await queueProductMilestone("first_saved_view")
+  }
   redirect("/app/saved-searches")
 }
 

@@ -24,7 +24,7 @@ export default function ArticleScreen() {
     }
     return api.article(articleId)
   }, [api, articleId])
-  const { data, error, isRefreshing, refresh } = useMobileQuery(`article:${articleId ?? "missing"}`, load)
+  const { data, error, hasOfflineCopy, isRefreshing, refresh } = useMobileQuery(`article:${articleId ?? "missing"}`, load)
 
   const updateState = useCallback(
     async (input: { isArchived?: boolean; isRead?: boolean; isStarred?: boolean }) => {
@@ -88,6 +88,11 @@ export default function ArticleScreen() {
           </Section>
           <Section title="Reader view">
             <Text selectable style={mobileStyles.body}>{data.data.contentText ?? data.data.summary ?? "No reader text is available for this article."}</Text>
+            <Text style={mobileStyles.muted}>
+              {hasOfflineCopy
+                ? "Reader copy saved on this device for offline reading."
+                : "Reader copy will be saved on this device when available."}
+            </Text>
           </Section>
           <Section title="Article actions">
             <ActionButton onPress={() => void updateState({ isRead: !data.data.isRead })} tone="secondary">Mark as {data.data.isRead ? "unread" : "read"}</ActionButton>

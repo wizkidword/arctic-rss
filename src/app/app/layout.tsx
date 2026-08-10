@@ -1,6 +1,8 @@
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { AppShell } from "@/components/app-shell"
+import { ProductMilestoneTracker } from "@/components/product-milestone-tracker"
 import { listArticleCollectionsForUser } from "@/lib/article-collections"
 import { getReaderCounts } from "@/lib/articles"
 import { getCurrentBulkReadJobForUser } from "@/lib/bulk-read-jobs"
@@ -15,6 +17,10 @@ import {
 } from "@/lib/authorization"
 import { normalizeDisplayMode, normalizeThemePreference } from "@/lib/settings"
 import { getOrCreateUserSettings } from "@/lib/user-settings"
+import {
+  parseProductMilestones,
+  PRODUCT_MILESTONE_COOKIE,
+} from "@/lib/product-milestone-events"
 
 export default async function AuthenticatedAppLayout({
   children,
@@ -31,6 +37,7 @@ export default async function AuthenticatedAppLayout({
       settings,
       discoverInterests,
       bulkReadJob,
+      milestoneCookie,
     ] = await Promise.all([
       listArticleCollectionsForUser(session.user.id),
       listUserFeedNavigation(session.user.id),
@@ -39,6 +46,7 @@ export default async function AuthenticatedAppLayout({
       getOrCreateUserSettings(session.user.id),
       listDiscoverInterestNavigation(),
       getCurrentBulkReadJobForUser(session.user.id),
+      cookies(),
     ])
 
     return (
@@ -64,6 +72,11 @@ export default async function AuthenticatedAppLayout({
         themePreference={normalizeThemePreference(settings.theme)}
         user={session.user}
       >
+        <ProductMilestoneTracker
+          milestones={parseProductMilestones(
+            milestoneCookie.get(PRODUCT_MILESTONE_COOKIE)?.value
+          )}
+        />
         {children}
       </AppShell>
     )

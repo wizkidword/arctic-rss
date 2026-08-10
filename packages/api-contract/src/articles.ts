@@ -8,6 +8,13 @@ import {
 
 export const articleListItemSchema = z
   .object({
+    collectionRetention: z
+      .object({
+        savedAt: apiV1TimestampSchema,
+        sourceIsFollowed: z.boolean(),
+      })
+      .strict()
+      .optional(),
     feed: z
       .object({
         faviconUrl: z.string().url().nullable(),

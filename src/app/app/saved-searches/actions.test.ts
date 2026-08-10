@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => {
     createSavedSearchForUser: vi.fn(),
     deleteSavedSearchForUser: vi.fn(),
     MockSavedSearchError,
+    isFirstSavedViewForUser: vi.fn().mockResolvedValue(false),
+    queueProductMilestone: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`)
     }),
@@ -42,6 +44,11 @@ vi.mock("@/lib/saved-searches", () => ({
   SavedSearchError: mocks.MockSavedSearchError,
   setSavedSearchMonitorActionForUser: mocks.setSavedSearchMonitorActionForUser,
   setSavedSearchMonitorEnabledForUser: mocks.setSavedSearchMonitorEnabledForUser,
+}))
+
+vi.mock("@/lib/product-milestones", () => ({
+  isFirstSavedViewForUser: mocks.isFirstSavedViewForUser,
+  queueProductMilestone: mocks.queueProductMilestone,
 }))
 
 import {
@@ -101,6 +108,21 @@ describe("saved search actions", () => {
       userId: "user-1",
     })
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/saved-searches")
+  })
+
+  it("queues the first saved-view milestone before redirecting", async () => {
+    mocks.isFirstSavedViewForUser.mockResolvedValue(true)
+    const formData = new FormData()
+    formData.set("name", "Sea ice")
+    formData.set("q", "sea ice")
+
+    await expect(
+      createSavedSearchAction({ message: "", status: "idle" }, formData)
+    ).rejects.toThrow("REDIRECT:/app/saved-searches")
+
+    expect(mocks.queueProductMilestone).toHaveBeenCalledWith(
+      "first_saved_view"
+    )
   })
 
   it("does not reveal missing saved searches through the delete action", async () => {

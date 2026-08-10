@@ -24,6 +24,10 @@ export type ApiV1RateLimitResult =
   | "rate_limited"
   | "unavailable"
 
+export type MobileProductMilestone =
+  | "first_mobile_sync"
+  | "first_return_session"
+
 export function recordApiV1Request({
   authMode,
   durationMs,
@@ -54,6 +58,32 @@ export function recordApiV1Request({
       rateLimitResult,
       requestId,
       statusCode,
+    })
+  )
+}
+
+export function parseMobileProductMilestone(headers: Headers) {
+  const milestone = headers.get("x-arctic-rss-product-milestone")
+  const platform = headers.get("x-arctic-rss-client-platform")
+
+  if (
+    platform !== "android" ||
+    (milestone !== "first_mobile_sync" && milestone !== "first_return_session")
+  ) {
+    return undefined
+  }
+
+  return milestone
+}
+
+export function recordMobileProductMilestone(milestone: MobileProductMilestone) {
+  // This is an aggregate product counter only. Do not add account IDs,
+  // device IDs, request IDs, article data, source data, or free-form values.
+  console.info(
+    JSON.stringify({
+      event: "mobile_product_milestone",
+      milestone,
+      platform: "android",
     })
   )
 }

@@ -18,6 +18,12 @@ import {
   type ArticleReadScope,
 } from "@/lib/articles"
 import { cancelBulkReadJob, startBulkRead } from "@/lib/bulk-read-jobs"
+import {
+  isFirstArticleOpenedForUser,
+  isFirstArticleStarredForUser,
+  isFirstCollectionSaveForUser,
+  queueProductMilestone,
+} from "@/lib/product-milestones"
 
 import {
   revalidateArticleListPaths,
@@ -73,12 +79,18 @@ export async function setArticleStarredAction(formData: FormData) {
     throw new Error("Article is required.")
   }
 
+  const firstArticleStarred =
+    isStarred && (await isFirstArticleStarredForUser(session.user.id))
+
   await setArticleStarredState({
     articleId,
     isStarred,
     userId: session.user.id,
   })
 
+  if (firstArticleStarred) {
+    await queueProductMilestone("first_article_starred")
+  }
   revalidateArticleListPaths()
   refresh()
 }
@@ -189,6 +201,9 @@ export async function addArticleToCollectionAction(
   const collectionName = formData.has("collectionName")
     ? String(formData.get("collectionName") ?? "")
     : undefined
+  const firstCollectionSaved = await isFirstCollectionSaveForUser(
+    session.user.id
+  )
 
   try {
     const result = await addArticleToCollection({
@@ -212,6 +227,9 @@ export async function addArticleToCollectionAction(
     }
   }
 
+  if (firstCollectionSaved) {
+    await queueProductMilestone("first_collection_saved")
+  }
   revalidateArticleListPaths()
   refresh()
 
@@ -261,6 +279,9 @@ export async function addPodcastEpisodeToCollectionAction(
   const collectionName = formData.has("collectionName")
     ? String(formData.get("collectionName") ?? "")
     : undefined
+  const firstCollectionSaved = await isFirstCollectionSaveForUser(
+    session.user.id
+  )
 
   try {
     const result = await addPodcastEpisodeToCollection({
@@ -284,6 +305,9 @@ export async function addPodcastEpisodeToCollectionAction(
     }
   }
 
+  if (firstCollectionSaved) {
+    await queueProductMilestone("first_collection_saved")
+  }
   revalidatePodcastPaths()
   refresh()
 
@@ -323,6 +347,8 @@ export async function markArticleReadOnOpen(articleId: string) {
     throw new Error("Unauthorized")
   }
 
+  const firstArticleOpened = await isFirstArticleOpenedForUser(session.user.id)
+
   try {
     await setArticleReadState({
       articleId,
@@ -336,4 +362,6 @@ export async function markArticleReadOnOpen(articleId: string) {
 
     throw error
   }
+
+  if (firstArticleOpened) await queueProductMilestone("first_article_opened")
 }

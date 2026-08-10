@@ -19,7 +19,7 @@ export function ReaderScreen({
     () => api.reader({ collectionId, limit: 30, state }),
     [api, collectionId, state]
   )
-  const { data, error, isRefreshing, refresh } = useMobileQuery(
+  const { data, error, hasOfflineCopy, isRefreshing, refresh } = useMobileQuery(
     `reader:${collectionId ?? "all"}:${state}`,
     load
   )
@@ -35,7 +35,7 @@ export function ReaderScreen({
       ) : null}
       {error ? <Notice>{error}</Notice> : null}
       <Section>
-        {data ? data.data.articles.length ? <ArticleList articles={data.data.articles} collectionId={collectionId} /> : <Text style={mobileStyles.muted}>No articles match this view.</Text> : <Loading />}
+        {data ? data.data.articles.length ? <ArticleList articles={data.data.articles} collectionId={collectionId} hasOfflineCopy={hasOfflineCopy} /> : <Text style={mobileStyles.muted}>No articles match this view.</Text> : <Loading />}
       </Section>
     </Screen>
   )
