@@ -1018,7 +1018,7 @@ describe("bulkFeedAttentionAction", () => {
       .mockResolvedValueOnce({ feedId: "feed-2", id: "subscription-2", isPaused: false })
     mocks.enqueueFeedRefresh
       .mockResolvedValueOnce({ jobId: "feed-feed-1", outcome: "queued" })
-      .mockResolvedValueOnce({ jobId: "feed-feed-2", outcome: "already-queued" })
+      .mockResolvedValueOnce({ jobId: "feed-feed-2", outcome: "already-active" })
     const formData = new FormData()
     formData.set("operation", "retry")
     formData.append("subscriptionIds", "subscription-1")
@@ -1374,7 +1374,7 @@ describe("refreshFeedAction", () => {
     })
     mocks.enqueueFeedRefresh.mockResolvedValueOnce({
       jobId: "feed-feed-1",
-      outcome: "already-queued",
+      outcome: "already-active",
     })
     const formData = new FormData()
     formData.set("subscriptionId", "subscription-1")

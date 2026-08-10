@@ -15,6 +15,17 @@ export type FeedRefreshJobData = {
 
 let feedRefreshQueue: Queue<FeedRefreshJobData> | undefined
 
+const SOURCE_REFRESH_REQUEST_MARKER = "arcticSourceRefreshRequestId"
+
+type FeedRefreshEnqueueOptions = {
+  priority?: number
+  trigger?: SourceRefreshTrigger
+}
+
+type FeedRefreshJobOptions = JobsOptions & {
+  [SOURCE_REFRESH_REQUEST_MARKER]: string
+}
+
 export function getFeedRefreshQueue() {
   if (!feedRefreshQueue) {
     feedRefreshQueue = new Queue<FeedRefreshJobData>(FEED_REFRESH_QUEUE_NAME, {
@@ -33,32 +44,46 @@ export async function closeFeedRefreshQueue() {
 
 export async function enqueueFeedRefresh(
   feedId: string,
-  { trigger = "scheduler", ...options }: JobsOptions & { trigger?: SourceRefreshTrigger } = {}
+  { priority, trigger = "scheduler" }: FeedRefreshEnqueueOptions = {}
 ): Promise<SourceRefreshEnqueueResult> {
   const queue = getFeedRefreshQueue()
-  const jobId = options.jobId ?? feedRefreshJobId(feedId)
+  const jobId = feedRefreshJobId(feedId)
+  const requestMarker = crypto.randomUUID()
 
-  if (await queue.getJob(jobId)) {
-    return { jobId, outcome: "already-queued" }
-  }
-
-  await queue.add(
-    "refresh-feed",
-    { feedId, trigger },
-    {
+  try {
+    const options: FeedRefreshJobOptions = {
       attempts: 3,
       backoff: {
         delay: 10_000,
         type: "exponential",
       },
       jobId,
+      ...(priority === undefined ? {} : { priority }),
       removeOnComplete: true,
       removeOnFail: true,
-      ...options,
+      [SOURCE_REFRESH_REQUEST_MARKER]: requestMarker,
     }
-  )
+    await queue.add(
+      "refresh-feed",
+      { feedId, trigger },
+      options,
+    )
 
-  return { jobId, outcome: "queued" }
+    const stored = await queue.getJob(jobId)
+    if (!stored) {
+      return { jobId, outcome: "unavailable" }
+    }
+
+    return {
+      jobId,
+      outcome:
+        (stored.opts as FeedRefreshJobOptions)[SOURCE_REFRESH_REQUEST_MARKER] === requestMarker
+          ? "queued"
+          : "already-active",
+    }
+  } catch {
+    return { jobId, outcome: "unavailable" }
+  }
 }
 
 export function feedRefreshJobId(feedId: string) {

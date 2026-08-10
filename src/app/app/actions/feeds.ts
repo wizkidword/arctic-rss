@@ -129,6 +129,9 @@ export async function refreshFeedAction(
       priority: 1,
       trigger: "manual",
     })
+    if (result.outcome === "unavailable") {
+      return { message: "Arctic RSS could not confirm that feed refresh was queued.", status: "error" }
+    }
     revalidatePath("/app")
     revalidatePath(`/app/feed/${subscription.id}`)
     refresh()
@@ -276,7 +279,7 @@ export async function bulkFeedAttentionAction(
     (result) => result.status === "fulfilled" && result.value.outcome === "queued"
   ).length
   const alreadyQueued = enqueued.filter(
-    (result) => result.status === "fulfilled" && result.value.outcome === "already-queued"
+    (result) => result.status === "fulfilled" && result.value.outcome === "already-active"
   ).length
   revalidatePath("/app")
   refresh()
@@ -396,7 +399,9 @@ export async function replaceFeedSubscriptionAction(
       message:
         queued.outcome === "queued"
           ? `${replacement.title} now follows the verified replacement. Its refresh is queued.`
-          : `${replacement.title} now follows the verified replacement. Its refresh is already queued.`,
+          : queued.outcome === "already-active"
+            ? `${replacement.title} now follows the verified replacement. Its refresh is already queued.`
+            : `${replacement.title} now follows the verified replacement, but Arctic RSS could not confirm its refresh queue.`,
       status: "success",
     }
   } catch (error) {
@@ -435,7 +440,11 @@ async function initialRefreshMessage(subscription: {
       priority: 1,
       trigger: "subscription-initial-retry",
     })
-    return result.outcome === "queued" ? "Article refresh queued." : "Article refresh already queued."
+    return result.outcome === "queued"
+      ? "Article refresh queued."
+      : result.outcome === "already-active"
+        ? "Article refresh already queued."
+        : "Article refresh will retry."
   } catch {
     return "Article refresh will retry."
   }

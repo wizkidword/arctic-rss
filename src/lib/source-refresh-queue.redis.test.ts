@@ -8,7 +8,13 @@ type SourceKind = "feed" | "podcast"
 
 type SourceQueueSubject = {
   close(): Promise<void>
-  enqueue(sourceId: string, options?: Record<string, unknown>): Promise<{ jobId: string }>
+  enqueue(
+    sourceId: string,
+    options?: { priority?: number; trigger?: "scheduler" | "manual" | "source-attention" },
+  ): Promise<{
+    jobId: string
+    outcome: "already-active" | "queued" | "unavailable"
+  }>
   name: string
   sourceKey: "feedId" | "podcastId"
 }
@@ -45,7 +51,8 @@ redisDescribe("source refresh queues with real Redis", () => {
         await inspector.obliterate({ force: true })
         const failingWorker = new Worker<Record<string, string>, void>(
           subject.name,
-          async (): Promise<void> => {
+          async (job): Promise<void> => {
+            job.discard()
             throw new Error("expected terminal source refresh failure")
           },
           { connection }
@@ -53,10 +60,7 @@ redisDescribe("source refresh queues with real Redis", () => {
         failureWorker = failingWorker
         await failingWorker.waitUntilReady()
 
-        const failed = await subject.enqueue(failedSourceId, {
-          attempts: 1,
-          backoff: { delay: 1, type: "fixed" },
-        })
+        const failed = await subject.enqueue(failedSourceId)
         const failedJobId = failed.jobId
         await waitForWorkerEvent(failingWorker, "failed", failedJobId)
 
@@ -98,10 +102,14 @@ redisDescribe("source refresh queues with real Redis", () => {
         expect(await inspector.getJob(failedJobId)).toBeUndefined()
 
         const [firstConcurrentJob, secondConcurrentJob] = await Promise.all([
-          subject.enqueue(concurrentSourceId),
-          subject.enqueue(concurrentSourceId),
+          subject.enqueue(concurrentSourceId, { trigger: "manual" }),
+          subject.enqueue(concurrentSourceId, { trigger: "manual" }),
         ])
         expect(firstConcurrentJob.jobId).toBe(secondConcurrentJob.jobId)
+        expect([firstConcurrentJob.outcome, secondConcurrentJob.outcome].sort()).toEqual([
+          "already-active",
+          "queued",
+        ])
         await concurrentActive
         const counts = await inspector.getJobCounts("active", "waiting")
         expect((counts.active ?? 0) + (counts.waiting ?? 0)).toBe(1)

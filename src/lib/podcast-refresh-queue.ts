@@ -15,6 +15,17 @@ export type PodcastRefreshJobData = {
 
 let podcastRefreshQueue: Queue<PodcastRefreshJobData> | undefined
 
+const SOURCE_REFRESH_REQUEST_MARKER = "arcticSourceRefreshRequestId"
+
+type PodcastRefreshEnqueueOptions = {
+  priority?: number
+  trigger?: SourceRefreshTrigger
+}
+
+type PodcastRefreshJobOptions = JobsOptions & {
+  [SOURCE_REFRESH_REQUEST_MARKER]: string
+}
+
 export function getPodcastRefreshQueue() {
   if (!podcastRefreshQueue) {
     podcastRefreshQueue = new Queue<PodcastRefreshJobData>(
@@ -36,32 +47,46 @@ export async function closePodcastRefreshQueue() {
 
 export async function enqueuePodcastRefresh(
   podcastId: string,
-  { trigger = "scheduler", ...options }: JobsOptions & { trigger?: SourceRefreshTrigger } = {}
+  { priority, trigger = "scheduler" }: PodcastRefreshEnqueueOptions = {}
 ): Promise<SourceRefreshEnqueueResult> {
   const queue = getPodcastRefreshQueue()
-  const jobId = options.jobId ?? podcastRefreshJobId(podcastId)
+  const jobId = podcastRefreshJobId(podcastId)
+  const requestMarker = crypto.randomUUID()
 
-  if (await queue.getJob(jobId)) {
-    return { jobId, outcome: "already-queued" }
-  }
-
-  await queue.add(
-    "refresh-podcast",
-    { podcastId, trigger },
-    {
+  try {
+    const options: PodcastRefreshJobOptions = {
       attempts: 3,
       backoff: {
         delay: 30_000,
         type: "exponential",
       },
       jobId,
+      ...(priority === undefined ? {} : { priority }),
       removeOnComplete: true,
       removeOnFail: true,
-      ...options,
+      [SOURCE_REFRESH_REQUEST_MARKER]: requestMarker,
     }
-  )
+    await queue.add(
+      "refresh-podcast",
+      { podcastId, trigger },
+      options,
+    )
 
-  return { jobId, outcome: "queued" }
+    const stored = await queue.getJob(jobId)
+    if (!stored) {
+      return { jobId, outcome: "unavailable" }
+    }
+
+    return {
+      jobId,
+      outcome:
+        (stored.opts as PodcastRefreshJobOptions)[SOURCE_REFRESH_REQUEST_MARKER] === requestMarker
+          ? "queued"
+          : "already-active",
+    }
+  } catch {
+    return { jobId, outcome: "unavailable" }
+  }
 }
 
 export function podcastRefreshJobId(podcastId: string) {

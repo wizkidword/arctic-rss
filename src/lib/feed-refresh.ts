@@ -12,6 +12,15 @@ import { nextFetchAt } from "./refresh-schedule"
 import { writeRefreshItems, type RefreshWriteStats } from "./refresh-write-batch"
 import { articleIngestionFingerprint } from "./ingestion-fingerprint"
 import { externalIdentityHash } from "./external-identity"
+import {
+  claimSourceRefreshLease,
+  releaseSourceRefreshLease,
+  renewSourceRefreshLease,
+  runWithSourceRefreshLeaseHeartbeat,
+  sourceRefreshLeaseWhere,
+  type SourceRefreshLease,
+  type SourceRefreshLeaseStore,
+} from "./source-refresh-leases"
 
 export const MAX_LINKED_ARTICLE_FETCHES = 12
 export const MAX_LINKED_ARTICLE_FETCH_CONCURRENCY = 3
@@ -26,6 +35,9 @@ type RefreshableFeed = {
   lastFeedSelfUrl: string | null
   lastModified: string | null
   lastResolvedFeedUrl: string | null
+  refreshGeneration: number
+  refreshLeaseExpiresAt: Date | null
+  refreshOwner: string | null
   refreshIntervalMinutes: number
 }
 
@@ -37,7 +49,12 @@ type FeedRefreshStore = {
       skipDuplicates: boolean
     }): Promise<{ count: number }>
     findMany(args: {
-      select: { externalId: true; id?: true; ingestionFingerprint?: true }
+      select: {
+        externalId: true
+        id?: true
+        ingestionFingerprint?: true
+        sourceGeneration?: true
+      }
       where: {
         externalId: { in: string[] }
         feedId: string
@@ -46,16 +63,12 @@ type FeedRefreshStore = {
       externalId: string
       id?: string
       ingestionFingerprint?: string | null
+      sourceGeneration?: number | null
     }>>
-    update(args: {
+    updateMany(args: {
       data: Record<string, unknown>
-      where: {
-        feedId_externalId: {
-          externalId: string
-          feedId: string
-        }
-      }
-    }): Promise<unknown>
+      where: Record<string, unknown>
+    }): Promise<{ count: number }>
   }
   feed: {
     findUnique(args: {
@@ -68,18 +81,19 @@ type FeedRefreshStore = {
         lastFeedSelfUrl: true
         lastModified: true
         lastResolvedFeedUrl: true
+        refreshGeneration: true
+        refreshLeaseExpiresAt: true
+        refreshOwner: true
         refreshIntervalMinutes: true
       }
       where: {
         id: string
       }
     }): Promise<RefreshableFeed | null>
-    update(args: {
+    updateMany(args: {
       data: Record<string, unknown>
-      where: {
-        id: string
-      }
-    }): Promise<unknown>
+      where: Record<string, unknown>
+    }): Promise<{ count: number }>
   }
 }
 
@@ -90,6 +104,8 @@ type RefreshFeedOptions = {
     url: URL,
     options?: SafeFetchTextOptions
   ) => Promise<SafeFetchTextResult>
+  leaseDurationMs?: number
+  leaseOwner?: string
   now?: () => Date
   random?: () => number
   store?: FeedRefreshStore
@@ -113,6 +129,7 @@ export type RefreshFeedResult = {
   feedId: string
   metrics?: RefreshMetrics
   newArticleIds?: string[]
+  skipped?: true
 }
 
 export class FeedRefreshError extends Error {
@@ -133,10 +150,45 @@ export async function refreshFeedWithClient({
   feedId,
   fetchArticleContent = safeFetchText,
   fetchText = safeFetchText,
+  leaseDurationMs,
+  leaseOwner,
   now = () => new Date(),
   random = Math.random,
   store = getFeedRefreshStore(),
 }: RefreshFeedOptions): Promise<RefreshFeedResult> {
+  const lease = await claimSourceRefreshLease({
+    ...(leaseDurationMs === undefined ? {} : { leaseDurationMs }),
+    ...(leaseOwner === undefined ? {} : { owner: leaseOwner }),
+    now: now(),
+    sourceId: feedId,
+    store: feedRefreshLeaseStore(store, feedId),
+  })
+
+  if (!lease) {
+    const source = await store.feed.findUnique({
+      select: {
+        consecutiveFailures: true,
+        etag: true,
+        feedUrl: true,
+        id: true,
+        lastError: true,
+        lastFeedSelfUrl: true,
+        lastModified: true,
+        lastResolvedFeedUrl: true,
+        refreshGeneration: true,
+        refreshLeaseExpiresAt: true,
+        refreshOwner: true,
+        refreshIntervalMinutes: true,
+      },
+      where: { id: feedId },
+    })
+    if (!source) {
+      throw new FeedRefreshError("Feed not found.")
+    }
+
+    return { articleCount: 0, feedId, skipped: true }
+  }
+
   const feed = await store.feed.findUnique({
     select: {
       consecutiveFailures: true,
@@ -147,12 +199,20 @@ export async function refreshFeedWithClient({
       lastFeedSelfUrl: true,
       lastModified: true,
       lastResolvedFeedUrl: true,
+      refreshGeneration: true,
+      refreshLeaseExpiresAt: true,
+      refreshOwner: true,
       refreshIntervalMinutes: true,
     },
     where: { id: feedId },
   })
 
   if (!feed) {
+    await releaseSourceRefreshLease({
+      lease,
+      now: now(),
+      store: feedRefreshLeaseStore(store, feedId),
+    })
     throw new FeedRefreshError("Feed not found.")
   }
 
@@ -160,11 +220,19 @@ export async function refreshFeedWithClient({
   const startedAt = performance.now()
 
   try {
-    const response = await fetchText(normalizeHttpUrl(feed.feedUrl), {
-      allowNotModified: true,
-      ifModifiedSince: feed.lastModified ?? undefined,
-      ifNoneMatch: feed.etag ?? undefined,
+    const fetched = await runWithSourceRefreshLeaseHeartbeat({
+      lease,
+      now,
+      store: feedRefreshLeaseStore(store, feed.id),
+      work: () =>
+        fetchText(normalizeHttpUrl(feed.feedUrl), {
+          allowNotModified: true,
+          ifModifiedSince: feed.lastModified ?? undefined,
+          ifNoneMatch: feed.etag ?? undefined,
+        }),
     })
+    ensureLeaseHeld(fetched.leaseHeld)
+    const response = fetched.result
     const baseMetrics = {
       bytes: responseBytes(response),
       conditionalHit: Boolean(response.notModified),
@@ -178,6 +246,7 @@ export async function refreshFeedWithClient({
       await recordSuccessfulFeedFetch({
         feed,
         fetchedAt,
+        lease,
         random,
         response,
         store,
@@ -200,21 +269,38 @@ export async function refreshFeedWithClient({
     const parsed = parseFeedArticlesWithMetrics(response.text, response.url.href)
     const metadata = safeFeedMetadata(response.text, response.url.href)
     recordFeedParseMetrics(feed.id, parsed.stats)
-    const hydrated = await hydrateLinkedArticleContent({
-      articles: parsed.articles,
-      feedUrl: feed.feedUrl,
-      fetchArticleContent,
-      responseUrl: response.url.href,
+    const hydration = await runWithSourceRefreshLeaseHeartbeat({
+      lease,
+      now,
+      store: feedRefreshLeaseStore(store, feed.id),
+      work: () =>
+        hydrateLinkedArticleContent({
+          articles: parsed.articles,
+          feedUrl: feed.feedUrl,
+          fetchArticleContent,
+          responseUrl: response.url.href,
+        }),
     })
+    ensureLeaseHeld(hydration.leaseHeld)
+    const hydrated = hydration.result
+    await renewOrThrow({ lease, now, store: feedRefreshLeaseStore(store, feed.id) })
     const writes = await writeFeedArticles({
       articles: hydrated.articles,
+      beforeWriteBatch: () =>
+        renewOrThrow({
+          lease,
+          now,
+          store: feedRefreshLeaseStore(store, feed.id),
+        }),
       feedId: feed.id,
+      sourceGeneration: lease.generation,
       store,
     })
 
     await recordSuccessfulFeedFetch({
       feed,
       fetchedAt,
+      lease,
       metadata,
       random,
       response,
@@ -239,9 +325,13 @@ export async function refreshFeedWithClient({
       ...(writes.newArticleIds.length ? { newArticleIds: writes.newArticleIds } : {}),
     }
   } catch (error) {
+    if (error instanceof SourceRefreshLeaseLostError) {
+      return { articleCount: 0, feedId: feed.id, skipped: true }
+    }
+
     const consecutiveFailures = feed.consecutiveFailures + 1
 
-    await store.feed.update({
+    await store.feed.updateMany({
       data: {
         consecutiveFailures,
         lastError: errorMessage(error),
@@ -254,10 +344,16 @@ export async function refreshFeedWithClient({
           refreshIntervalMinutes: feed.refreshIntervalMinutes,
         }),
       },
-      where: { id: feed.id },
+      where: sourceRefreshLeaseWhere(lease, now()),
     })
 
     throw error
+  } finally {
+    await releaseSourceRefreshLease({
+      lease,
+      now: now(),
+      store: feedRefreshLeaseStore(store, feed.id),
+    })
   }
 }
 
@@ -303,6 +399,7 @@ function recordFeedParseMetrics(
 async function recordSuccessfulFeedFetch({
   feed,
   fetchedAt,
+  lease,
   metadata,
   random,
   response,
@@ -310,12 +407,13 @@ async function recordSuccessfulFeedFetch({
 }: {
   feed: RefreshableFeed
   fetchedAt: Date
+  lease: SourceRefreshLease
   metadata?: ParsedFeedMetadata
   random: () => number
   response: SafeFetchTextResult
   store: FeedRefreshStore
 }) {
-  await store.feed.update({
+  const updated = await store.feed.updateMany({
     data: {
       ...responseValidators(response),
       ...feedUrlObservation({ feed, fetchedAt, metadata, response }),
@@ -332,21 +430,27 @@ async function recordSuccessfulFeedFetch({
         refreshIntervalMinutes: feed.refreshIntervalMinutes,
       }),
     },
-    where: { id: feed.id },
+    where: sourceRefreshLeaseWhere(lease),
   })
+
+  ensureLeaseHeld(updated.count === 1)
 }
 
 async function writeFeedArticles({
   articles,
+  beforeWriteBatch,
   feedId,
+  sourceGeneration,
   store,
 }: {
   articles: ParsedFeedArticle[]
+  beforeWriteBatch: () => Promise<void>
   feedId: string
+  sourceGeneration: number
   store: FeedRefreshStore
 }) {
   const existing = await store.article.findMany({
-    select: { externalId: true, ingestionFingerprint: true },
+    select: { externalId: true, ingestionFingerprint: true, sourceGeneration: true },
     where: {
       externalId: { in: articles.map((article) => article.externalId) },
       feedId,
@@ -360,6 +464,7 @@ async function writeFeedArticles({
     ...new Set(articles.map((article) => article.externalId)),
   ].filter((externalId) => !existingExternalIds.has(externalId))
   const writes = await writeRefreshItems({
+    beforeWriteBatch,
     createMany: (items) =>
       store.article.createMany({
         data: items.map((article) => articleCreateData(feedId, article)),
@@ -373,22 +478,31 @@ async function writeFeedArticles({
             externalId,
             ingestionFingerprint:
               existingByExternalId.get(externalId)?.ingestionFingerprint ?? null,
+            sourceGeneration:
+              existingByExternalId.get(externalId)?.sourceGeneration ?? null,
           }
         }),
     items: articles.map((article) => ({
       ...article,
       externalIdHash: externalIdentityHash(article.externalId),
       ingestionFingerprint: articleIngestionFingerprint(article),
+      sourceGeneration,
     })),
     runUpdateBatch: (operations) => store.$transaction(operations),
+    shouldUpdateExisting: (existing, article) =>
+      existing.sourceGeneration === null ||
+      existing.sourceGeneration === undefined ||
+      existing.sourceGeneration < article.sourceGeneration,
     update: (article) =>
-      store.article.update({
+      store.article.updateMany({
         data: articleUpdateData(article),
         where: {
-          feedId_externalId: {
-            externalId: article.externalId,
-            feedId,
-          },
+          externalId: article.externalId,
+          feedId,
+          OR: [
+            { sourceGeneration: null },
+            { sourceGeneration: { lt: article.sourceGeneration } },
+          ],
         },
       }),
   })
@@ -526,7 +640,11 @@ function excerpt(value: string) {
 
 function articleCreateData(
   feedId: string,
-  article: ParsedFeedArticle & { externalIdHash: string; ingestionFingerprint: string }
+  article: ParsedFeedArticle & {
+    externalIdHash: string
+    ingestionFingerprint: string
+    sourceGeneration: number
+  },
 ) {
   return withoutUndefined({
     ...article,
@@ -535,7 +653,11 @@ function articleCreateData(
 }
 
 function articleUpdateData(
-  article: ParsedFeedArticle & { externalIdHash: string; ingestionFingerprint: string }
+  article: ParsedFeedArticle & {
+    externalIdHash: string
+    ingestionFingerprint: string
+    sourceGeneration: number
+  },
 ) {
   return {
     author: article.author ?? null,
@@ -546,6 +668,7 @@ function articleUpdateData(
     imageUrl: article.imageUrl ?? null,
     ingestionFingerprint: article.ingestionFingerprint,
     publishedAt: article.publishedAt ?? null,
+    sourceGeneration: article.sourceGeneration,
     summary: article.summary ?? null,
     title: article.title,
     url: article.url,
@@ -628,6 +751,58 @@ function errorMessage(error: unknown) {
   }
 
   return "Feed refresh failed."
+}
+
+class SourceRefreshLeaseLostError extends Error {
+  constructor() {
+    super("Source refresh lease was lost.")
+    this.name = "SourceRefreshLeaseLostError"
+  }
+}
+
+function ensureLeaseHeld(leaseHeld: boolean) {
+  if (!leaseHeld) {
+    throw new SourceRefreshLeaseLostError()
+  }
+}
+
+async function renewOrThrow({
+  lease,
+  now,
+  store,
+}: {
+  lease: SourceRefreshLease
+  now: () => Date
+  store: SourceRefreshLeaseStore
+}) {
+  ensureLeaseHeld(await renewSourceRefreshLease({ lease, now: now(), store }))
+}
+
+function feedRefreshLeaseStore(
+  store: FeedRefreshStore,
+  feedId: string,
+): SourceRefreshLeaseStore {
+  return {
+    findCurrent: () =>
+      store.feed.findUnique({
+        select: {
+          consecutiveFailures: true,
+          etag: true,
+          feedUrl: true,
+          id: true,
+          lastError: true,
+          lastFeedSelfUrl: true,
+          lastModified: true,
+          lastResolvedFeedUrl: true,
+          refreshGeneration: true,
+          refreshLeaseExpiresAt: true,
+          refreshOwner: true,
+          refreshIntervalMinutes: true,
+        },
+        where: { id: feedId },
+      }),
+    updateMany: (args) => store.feed.updateMany(args),
+  }
 }
 
 function getFeedRefreshStore() {

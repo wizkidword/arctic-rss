@@ -5,6 +5,7 @@ const {
   articleCreateMany,
   articleFindMany,
   articleUpdate,
+  articleUpdateMany,
   articleStateDeleteMany,
   getUnreadArticleCountsByFeed,
   deleteMany,
@@ -15,6 +16,7 @@ const {
   feedDelete,
   feedFindUnique,
   feedUpdate,
+  feedUpdateMany,
   feedUpsert,
   findFirst,
   findMany,
@@ -27,6 +29,7 @@ const {
   articleCreateMany: vi.fn(),
   articleFindMany: vi.fn(),
   articleUpdate: vi.fn(),
+  articleUpdateMany: vi.fn(),
   articleStateDeleteMany: vi.fn(),
   getUnreadArticleCountsByFeed: vi.fn(),
   deleteMany: vi.fn(),
@@ -37,6 +40,7 @@ const {
   feedDelete: vi.fn(),
   feedFindUnique: vi.fn(),
   feedUpdate: vi.fn(),
+  feedUpdateMany: vi.fn(),
   feedUpsert: vi.fn(),
   findFirst: vi.fn(),
   findMany: vi.fn(),
@@ -57,6 +61,7 @@ vi.mock("./db", () => ({
       deleteMany: articleDeleteMany,
       findMany: articleFindMany,
       update: articleUpdate,
+      updateMany: articleUpdateMany,
     },
     articleState: {
       deleteMany: articleStateDeleteMany,
@@ -65,6 +70,7 @@ vi.mock("./db", () => ({
       delete: feedDelete,
       findUnique: feedFindUnique,
       update: feedUpdate,
+      updateMany: feedUpdateMany,
       upsert: feedUpsert,
     },
     feedSubscription: {
@@ -110,6 +116,7 @@ describe("feed subscriptions", () => {
     articleCreateMany.mockReset()
     articleFindMany.mockReset()
     articleUpdate.mockReset()
+    articleUpdateMany.mockReset()
     articleStateDeleteMany.mockReset()
     getUnreadArticleCountsByFeed.mockReset()
     deleteMany.mockReset()
@@ -120,6 +127,7 @@ describe("feed subscriptions", () => {
     feedDelete.mockReset()
     feedFindUnique.mockReset()
     feedUpdate.mockReset()
+    feedUpdateMany.mockReset()
     feedUpsert.mockReset()
     findFirst.mockReset()
     findMany.mockReset()
@@ -128,9 +136,29 @@ describe("feed subscriptions", () => {
     userFindUnique.mockReset()
     getUnreadArticleCountsByFeed.mockResolvedValue(new Map([["feed-1", 3]]))
     feedUpdate.mockResolvedValue({})
+    feedUpdateMany.mockImplementation(async ({ data }) => {
+      const feed = await feedFindUnique({})
+      if (!feed) {
+        return { count: 0 }
+      }
+
+      const generation = data.refreshGeneration as { increment?: number } | undefined
+      if (generation?.increment) {
+        feed.refreshGeneration = (feed.refreshGeneration ?? 0) + generation.increment
+      }
+      if (data.refreshLeaseExpiresAt instanceof Date) {
+        feed.refreshLeaseExpiresAt = data.refreshLeaseExpiresAt
+      }
+      if ("refreshOwner" in data) {
+        feed.refreshOwner = data.refreshOwner
+      }
+
+      return { count: 1 }
+    })
     articleCreateMany.mockResolvedValue({ count: 1 })
     articleFindMany.mockResolvedValue([])
     articleUpdate.mockResolvedValue({})
+    articleUpdateMany.mockResolvedValue({ count: 1 })
     userFindUnique.mockResolvedValue({
       _count: {
         podcastSubscriptions: 0,

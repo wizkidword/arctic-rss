@@ -10,6 +10,15 @@ import { nextFetchAt } from "./refresh-schedule"
 import { writeRefreshItems, type RefreshWriteStats } from "./refresh-write-batch"
 import { podcastEpisodeIngestionFingerprint } from "./ingestion-fingerprint"
 import { externalIdentityHash } from "./external-identity"
+import {
+  claimSourceRefreshLease,
+  releaseSourceRefreshLease,
+  renewSourceRefreshLease,
+  runWithSourceRefreshLeaseHeartbeat,
+  sourceRefreshLeaseWhere,
+  type SourceRefreshLease,
+  type SourceRefreshLeaseStore,
+} from "./source-refresh-leases"
 
 type RefreshablePodcast = {
   consecutiveFailures: number
@@ -17,6 +26,9 @@ type RefreshablePodcast = {
   feedUrl: string
   id: string
   lastModified: string | null
+  refreshGeneration: number
+  refreshLeaseExpiresAt: Date | null
+  refreshOwner: string | null
   refreshIntervalMinutes: number
 }
 
@@ -30,18 +42,19 @@ type PodcastRefreshStore = {
         feedUrl: true
         id: true
         lastModified: true
+        refreshGeneration: true
+        refreshLeaseExpiresAt: true
+        refreshOwner: true
         refreshIntervalMinutes: true
       }
       where: {
         id: string
       }
     }): Promise<RefreshablePodcast | null>
-    update(args: {
+    updateMany(args: {
       data: Record<string, unknown>
-      where: {
-        id: string
-      }
-    }): Promise<unknown>
+      where: Record<string, unknown>
+    }): Promise<{ count: number }>
   }
   podcastEpisode: {
     createMany(args: {
@@ -49,21 +62,22 @@ type PodcastRefreshStore = {
       skipDuplicates: boolean
     }): Promise<{ count: number }>
     findMany(args: {
-      select: { externalId: true; ingestionFingerprint: true }
+      select: { externalId: true; ingestionFingerprint: true; sourceGeneration?: true }
       where: {
         externalId: { in: string[] }
         podcastId: string
       }
-    }): Promise<Array<{ externalId: string; ingestionFingerprint: string | null }>>
-    update(args: {
+    }): Promise<
+      Array<{
+        externalId: string
+        ingestionFingerprint: string | null
+        sourceGeneration?: number | null
+      }>
+    >
+    updateMany(args: {
       data: Record<string, unknown>
-      where: {
-        podcastId_externalId: {
-          externalId: string
-          podcastId: string
-        }
-      }
-    }): Promise<unknown>
+      where: Record<string, unknown>
+    }): Promise<{ count: number }>
   }
 }
 
@@ -72,6 +86,8 @@ type RefreshPodcastOptions = {
     url: URL,
     options?: SafeFetchTextOptions
   ) => Promise<SafeFetchTextResult>
+  leaseDurationMs?: number
+  leaseOwner?: string
   now?: () => Date
   podcastId: string
   random?: () => number
@@ -94,6 +110,7 @@ export type PodcastRefreshResult = {
   episodeCount: number
   metrics?: PodcastRefreshMetrics
   podcastId: string
+  skipped?: true
 }
 
 export class PodcastRefreshError extends Error {
@@ -112,11 +129,43 @@ export async function refreshPodcast(podcastId: string) {
 
 export async function refreshPodcastWithClient({
   fetchText = fetchPodcastFeedText,
+  leaseDurationMs,
+  leaseOwner,
   now = () => new Date(),
   podcastId,
   random = Math.random,
   store = getPodcastRefreshStore(),
 }: RefreshPodcastOptions): Promise<PodcastRefreshResult> {
+  const lease = await claimSourceRefreshLease({
+    ...(leaseDurationMs === undefined ? {} : { leaseDurationMs }),
+    ...(leaseOwner === undefined ? {} : { owner: leaseOwner }),
+    now: now(),
+    sourceId: podcastId,
+    store: podcastRefreshLeaseStore(store, podcastId),
+  })
+
+  if (!lease) {
+    const source = await store.podcast.findUnique({
+      select: {
+        consecutiveFailures: true,
+        etag: true,
+        feedUrl: true,
+        id: true,
+        lastModified: true,
+        refreshGeneration: true,
+        refreshLeaseExpiresAt: true,
+        refreshOwner: true,
+        refreshIntervalMinutes: true,
+      },
+      where: { id: podcastId },
+    })
+    if (!source) {
+      throw new PodcastRefreshError("Podcast not found.")
+    }
+
+    return { episodeCount: 0, podcastId, skipped: true }
+  }
+
   const podcast = await store.podcast.findUnique({
     select: {
       consecutiveFailures: true,
@@ -124,12 +173,20 @@ export async function refreshPodcastWithClient({
       feedUrl: true,
       id: true,
       lastModified: true,
+      refreshGeneration: true,
+      refreshLeaseExpiresAt: true,
+      refreshOwner: true,
       refreshIntervalMinutes: true,
     },
     where: { id: podcastId },
   })
 
   if (!podcast) {
+    await releaseSourceRefreshLease({
+      lease,
+      now: now(),
+      store: podcastRefreshLeaseStore(store, podcastId),
+    })
     throw new PodcastRefreshError("Podcast not found.")
   }
 
@@ -137,11 +194,19 @@ export async function refreshPodcastWithClient({
   const startedAt = performance.now()
 
   try {
-    const response = await fetchText(normalizeHttpUrl(podcast.feedUrl), {
-      allowNotModified: true,
-      ifModifiedSince: podcast.lastModified ?? undefined,
-      ifNoneMatch: podcast.etag ?? undefined,
+    const fetched = await runWithSourceRefreshLeaseHeartbeat({
+      lease,
+      now,
+      store: podcastRefreshLeaseStore(store, podcast.id),
+      work: () =>
+        fetchText(normalizeHttpUrl(podcast.feedUrl), {
+          allowNotModified: true,
+          ifModifiedSince: podcast.lastModified ?? undefined,
+          ifNoneMatch: podcast.etag ?? undefined,
+        }),
     })
+    ensureLeaseHeld(fetched.leaseHeld)
+    const response = fetched.result
     const baseMetrics = {
       bytes: responseBytes(response),
       conditionalHit: Boolean(response.notModified),
@@ -153,6 +218,7 @@ export async function refreshPodcastWithClient({
     if (response.notModified) {
       await recordSuccessfulPodcastFetch({
         fetchedAt,
+        lease,
         podcast,
         random,
         response,
@@ -177,8 +243,15 @@ export async function refreshPodcastWithClient({
     const parsedPodcast = parsed.podcast
     recordPodcastParseMetrics(podcast.id, parsed.stats)
     const writes = await writePodcastEpisodes({
+      beforeWriteBatch: () =>
+        renewOrThrow({
+          lease,
+          now,
+          store: podcastRefreshLeaseStore(store, podcast.id),
+        }),
       episodes: parsedPodcast.episodes,
       podcastId: podcast.id,
+      sourceGeneration: lease.generation,
       store,
     })
 
@@ -196,6 +269,7 @@ export async function refreshPodcastWithClient({
       random,
       response,
       store,
+      lease,
     })
 
     return {
@@ -213,9 +287,13 @@ export async function refreshPodcastWithClient({
       podcastId: podcast.id,
     }
   } catch (error) {
+    if (error instanceof SourceRefreshLeaseLostError) {
+      return { episodeCount: 0, podcastId: podcast.id, skipped: true }
+    }
+
     const consecutiveFailures = podcast.consecutiveFailures + 1
 
-    await store.podcast.update({
+    await store.podcast.updateMany({
       data: {
         consecutiveFailures,
         lastError: errorMessage(error),
@@ -228,10 +306,16 @@ export async function refreshPodcastWithClient({
           refreshIntervalMinutes: podcast.refreshIntervalMinutes,
         }),
       },
-      where: { id: podcast.id },
+      where: sourceRefreshLeaseWhere(lease, now()),
     })
 
     throw error
+  } finally {
+    await releaseSourceRefreshLease({
+      lease,
+      now: now(),
+      store: podcastRefreshLeaseStore(store, podcast.id),
+    })
   }
 }
 
@@ -276,6 +360,7 @@ function recordPodcastParseMetrics(
 
 async function recordSuccessfulPodcastFetch({
   fetchedAt,
+  lease,
   metadata,
   podcast,
   random,
@@ -283,13 +368,14 @@ async function recordSuccessfulPodcastFetch({
   store,
 }: {
   fetchedAt: Date
+  lease: SourceRefreshLease
   metadata?: Record<string, unknown>
   podcast: RefreshablePodcast
   random: () => number
   response: SafeFetchTextResult
   store: PodcastRefreshStore
 }) {
-  await store.podcast.update({
+  const updated = await store.podcast.updateMany({
     data: withoutUndefined({
       ...metadata,
       ...responseValidators(response),
@@ -305,20 +391,27 @@ async function recordSuccessfulPodcastFetch({
         refreshIntervalMinutes: podcast.refreshIntervalMinutes,
       }),
     }),
-    where: { id: podcast.id },
+    where: sourceRefreshLeaseWhere(lease),
   })
+
+  ensureLeaseHeld(updated.count === 1)
 }
 
 async function writePodcastEpisodes({
+  beforeWriteBatch,
   episodes,
   podcastId,
+  sourceGeneration,
   store,
 }: {
+  beforeWriteBatch: () => Promise<void>
   episodes: ParsedPodcastEpisode[]
   podcastId: string
+  sourceGeneration: number
   store: PodcastRefreshStore
 }) {
   return writeRefreshItems({
+    beforeWriteBatch,
     createMany: (items) =>
       store.podcastEpisode.createMany({
         data: items.map((episode) => episodeCreateData(podcastId, episode)),
@@ -326,7 +419,7 @@ async function writePodcastEpisodes({
       }),
     findExistingItems: (externalIds) =>
       store.podcastEpisode.findMany({
-        select: { externalId: true, ingestionFingerprint: true },
+        select: { externalId: true, ingestionFingerprint: true, sourceGeneration: true },
         where: {
           externalId: { in: externalIds },
           podcastId,
@@ -336,16 +429,23 @@ async function writePodcastEpisodes({
       ...episode,
       externalIdHash: externalIdentityHash(episode.externalId),
       ingestionFingerprint: podcastEpisodeIngestionFingerprint(episode),
+      sourceGeneration,
     })),
     runUpdateBatch: (operations) => store.$transaction(operations),
+    shouldUpdateExisting: (existing, episode) =>
+      existing.sourceGeneration === null ||
+      existing.sourceGeneration === undefined ||
+      existing.sourceGeneration < episode.sourceGeneration,
     update: (episode) =>
-      store.podcastEpisode.update({
+      store.podcastEpisode.updateMany({
         data: episodeUpdateData(episode),
         where: {
-          podcastId_externalId: {
-            externalId: episode.externalId,
-            podcastId,
-          },
+          externalId: episode.externalId,
+          podcastId,
+          OR: [
+            { sourceGeneration: null },
+            { sourceGeneration: { lt: episode.sourceGeneration } },
+          ],
         },
       }),
   })
@@ -353,7 +453,11 @@ async function writePodcastEpisodes({
 
 function episodeCreateData(
   podcastId: string,
-  episode: ParsedPodcastEpisode & { externalIdHash: string; ingestionFingerprint: string }
+  episode: ParsedPodcastEpisode & {
+    externalIdHash: string
+    ingestionFingerprint: string
+    sourceGeneration: number
+  },
 ) {
   return withoutUndefined({
     ...episode,
@@ -362,7 +466,11 @@ function episodeCreateData(
 }
 
 function episodeUpdateData(
-  episode: ParsedPodcastEpisode & { externalIdHash: string; ingestionFingerprint: string }
+  episode: ParsedPodcastEpisode & {
+    externalIdHash: string
+    ingestionFingerprint: string
+    sourceGeneration: number
+  },
 ) {
   return {
     audioLengthBytes: episode.audioLengthBytes ?? null,
@@ -376,6 +484,7 @@ function episodeUpdateData(
     imageUrl: episode.imageUrl ?? null,
     ingestionFingerprint: episode.ingestionFingerprint,
     publishedAt: episode.publishedAt ?? null,
+    sourceGeneration: episode.sourceGeneration,
     title: episode.title,
     transcriptLanguage: episode.transcriptLanguage ?? null,
     transcriptRel: episode.transcriptRel ?? null,
@@ -412,6 +521,55 @@ function errorMessage(error: unknown) {
   }
 
   return "Podcast refresh failed."
+}
+
+class SourceRefreshLeaseLostError extends Error {
+  constructor() {
+    super("Source refresh lease was lost.")
+    this.name = "SourceRefreshLeaseLostError"
+  }
+}
+
+function ensureLeaseHeld(leaseHeld: boolean) {
+  if (!leaseHeld) {
+    throw new SourceRefreshLeaseLostError()
+  }
+}
+
+async function renewOrThrow({
+  lease,
+  now,
+  store,
+}: {
+  lease: SourceRefreshLease
+  now: () => Date
+  store: SourceRefreshLeaseStore
+}) {
+  ensureLeaseHeld(await renewSourceRefreshLease({ lease, now: now(), store }))
+}
+
+function podcastRefreshLeaseStore(
+  store: PodcastRefreshStore,
+  podcastId: string,
+): SourceRefreshLeaseStore {
+  return {
+    findCurrent: () =>
+      store.podcast.findUnique({
+        select: {
+          consecutiveFailures: true,
+          etag: true,
+          feedUrl: true,
+          id: true,
+          lastModified: true,
+          refreshGeneration: true,
+          refreshLeaseExpiresAt: true,
+          refreshOwner: true,
+          refreshIntervalMinutes: true,
+        },
+        where: { id: podcastId },
+      }),
+    updateMany: (args) => store.podcast.updateMany(args),
+  }
 }
 
 function getPodcastRefreshStore() {
