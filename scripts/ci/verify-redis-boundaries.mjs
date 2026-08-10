@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { randomBytes } from "node:crypto"
 import { spawnSync } from "node:child_process"
+import { Queue, Worker } from "bullmq"
+import Redis from "ioredis"
 
 const redisImage =
   "redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
@@ -27,6 +29,8 @@ try {
       durableContainer,
       "--network",
       durableNetwork,
+      "-p",
+      "127.0.0.1::6379",
       "--network-alias",
       "durable-redis",
       redisImage,
@@ -44,6 +48,7 @@ try {
       "+@all",
       "-@admin",
       "-@dangerous",
+      "+info",
       "--user",
       "default",
       "off",
@@ -59,6 +64,8 @@ try {
       ephemeralContainer,
       "--network",
       ephemeralNetwork,
+      "-p",
+      "127.0.0.1::6379",
       "--network-alias",
       "ephemeral-redis",
       redisImage,
@@ -76,6 +83,7 @@ try {
       "+@all",
       "-@admin",
       "-@dangerous",
+      "+info",
       "--user",
       "default",
       "off",
@@ -96,6 +104,12 @@ try {
     durableUsername,
     durablePassword,
     "Durable Redis credentials must fail against ephemeral Redis."
+  )
+  await verifyDurableQueueFlow(durableContainer, durableUsername, durablePassword)
+  await verifyEphemeralPubSubAndLuaFlow(
+    ephemeralContainer,
+    ephemeralUsername,
+    ephemeralPassword
   )
   assertDefaultUserDisabled(durableContainer)
   assertDefaultUserDisabled(ephemeralContainer)
@@ -237,4 +251,74 @@ function assertCannotConnect(network, hostname, message) {
   ])
 
   assert.notEqual(result.status, 0, message)
+}
+
+async function verifyDurableQueueFlow(container, username, password) {
+  const connection = { url: redisUrl(container, username, password) }
+  const queueName = `acl-flow-${suffix}`
+  const queue = new Queue(queueName, { connection })
+  let worker
+
+  try {
+    const completed = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("BullMQ ACL flow timed out.")), 10_000)
+      worker = new Worker(
+        queueName,
+        async (job) => job.data.value,
+        { connection }
+      )
+      worker.once("completed", (_job, value) => {
+        clearTimeout(timeout)
+        resolve(value)
+      })
+      worker.once("failed", (_job, error) => {
+        clearTimeout(timeout)
+        reject(error)
+      })
+    })
+
+    await queue.add("acl-flow-job", { value: "ok" })
+    assert.equal(await completed, "ok", "Restricted durable Redis must run BullMQ jobs.")
+  } finally {
+    await worker?.close()
+    await queue.close()
+  }
+}
+
+async function verifyEphemeralPubSubAndLuaFlow(container, username, password) {
+  const url = redisUrl(container, username, password)
+  const publisher = new Redis(url)
+  const subscriber = new Redis(url)
+  const channel = `acl-flow-${suffix}`
+
+  try {
+    const received = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Redis pub/sub ACL flow timed out.")), 10_000)
+      subscriber.once("message", (receivedChannel, payload) => {
+        clearTimeout(timeout)
+        resolve({ payload, receivedChannel })
+      })
+    })
+    await subscriber.subscribe(channel)
+    await publisher.publish(channel, "ok")
+    assert.deepEqual(await received, { payload: "ok", receivedChannel: channel })
+    assert.equal(
+      await publisher.eval("return redis.call('INCR', KEYS[1])", 1, `acl-rate-${suffix}`),
+      1,
+      "Restricted ephemeral Redis must permit the rate-limit Lua path."
+    )
+  } finally {
+    await Promise.all([publisher.quit(), subscriber.quit()])
+  }
+}
+
+function redisUrl(container, username, password) {
+  const port = run(["port", container, "6379/tcp"], "reading the Redis fixture port")
+    .match(/:(\d+)$/)?.[1]
+
+  if (!port) {
+    throw new Error("Could not resolve the Redis fixture port.")
+  }
+
+  return `redis://${username}:${password}@127.0.0.1:${port}/0`
 }
