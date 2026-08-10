@@ -4,6 +4,7 @@ import {
   listStoryClusterArticlesByIdsForUser,
   type StoryClusterArticleProjection,
 } from "./articles"
+import { Prisma } from "../generated/prisma/client"
 import {
   STORY_CLUSTER_SIGNALS,
   type StoryClusterSignal
@@ -101,6 +102,7 @@ type StoryClusterVersionRecord = StoryClusterCurrentVersionRecord & {
 }
 
 export type StoryClusterReaderStore = {
+  $queryRaw<Result>(query: Prisma.Sql): Promise<Result>
   storyCluster: {
     findMany(
       args: Record<string, unknown>
@@ -310,10 +312,20 @@ export async function listStoryClustersForArticlesUserWithClient({
     return []
   }
 
-  const articleIdFilter =
+  const lookupLimit =
     normalizedArticleIds.length === 1
-      ? normalizedArticleIds[0]
-      : { in: normalizedArticleIds }
+      ? STORY_CLUSTER_VERSION_LOOKUP_LIMIT
+      : MAX_VISIBLE_STORY_CLUSTERS_PER_PAGE
+  const currentClusterIds = await listCurrentClusterIdsForArticles({
+    articleIds: normalizedArticleIds,
+    limit: lookupLimit,
+    store,
+    userId: normalizedUserId,
+  })
+
+  if (currentClusterIds.length === 0) {
+    return []
+  }
 
   const clusters = await store.storyCluster.findMany({
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -379,22 +391,11 @@ export async function listStoryClustersForArticlesUserWithClient({
         take: 1
       }
     },
-    take:
-      normalizedArticleIds.length === 1
-        ? STORY_CLUSTER_VERSION_LOOKUP_LIMIT
-        : MAX_VISIBLE_STORY_CLUSTERS_PER_PAGE,
+    take: lookupLimit,
     where: {
       status: "ACTIVE",
       userId: normalizedUserId,
-      versions: {
-        some: {
-          members: {
-            some: {
-              articleId: articleIdFilter
-            }
-          }
-        }
-      }
+      id: { in: currentClusterIds },
     }
   })
   const currentVersions = clusters
@@ -426,6 +427,36 @@ export async function listStoryClustersForArticlesUserWithClient({
 
     return presentation ? [presentation] : []
   })
+}
+
+async function listCurrentClusterIdsForArticles({
+  articleIds,
+  limit,
+  store,
+  userId,
+}: {
+  articleIds: string[]
+  limit: number
+  store: StoryClusterReaderStore
+  userId: string
+}) {
+  const rows = await store.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "cluster"."id"
+    FROM "StoryCluster" AS "cluster"
+    INNER JOIN "StoryClusterVersion" AS "currentVersion"
+      ON "currentVersion"."clusterId" = "cluster"."id"
+      AND "currentVersion"."version" = "cluster"."currentVersionNumber"
+    INNER JOIN "StoryClusterMember" AS "currentMember"
+      ON "currentMember"."clusterVersionId" = "currentVersion"."id"
+    WHERE "cluster"."status" = 'ACTIVE'
+      AND "cluster"."userId" = ${userId}
+      AND "currentMember"."articleId" IN (${Prisma.join(articleIds)})
+    GROUP BY "cluster"."id", "cluster"."updatedAt"
+    ORDER BY "cluster"."updatedAt" DESC, "cluster"."id" DESC
+    LIMIT ${Math.max(1, Math.floor(limit))}
+  `)
+
+  return [...new Set(rows.map((row) => row.id).filter(Boolean))]
 }
 
 function currentVersionFromCluster(cluster: StoryClusterRecord) {
