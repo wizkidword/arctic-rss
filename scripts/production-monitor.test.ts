@@ -24,6 +24,10 @@ describe("production monitor", () => {
     expect(script).toContain("mem_fragmentation_bytes")
     expect(script).toContain("REDIS_FRAGMENTATION_MIN_BYTES")
     expect(script).toContain("actual_ratio > maximum_ratio && actual_bytes > minimum_bytes")
+    expect(script).toContain('REDIS_ENV_FILE="${REDIS_ENV_FILE:-$APP_DIR/.env}"')
+    expect(script).toContain('docker exec --env-file "$REDIS_ENV_FILE"')
+    expect(script).toContain("redis_start_option")
+    expect(script).not.toContain("CONFIG GET")
   })
 
   it("checks each enabled split worker independently", async () => {

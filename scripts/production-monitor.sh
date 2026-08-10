@@ -33,6 +33,17 @@ set +a
 : "${OPS_PUBLIC_HEALTH_URL:?OPS_PUBLIC_HEALTH_URL is required}"
 : "${OPS_PUBLIC_HOST:?OPS_PUBLIC_HOST is required}"
 
+# Stateful Redis containers are intentionally not recreated by application
+# releases. Their running environment can therefore predate the current
+# Compose definition. Use the root-owned live environment only for each
+# short-lived diagnostic exec, rather than weakening Redis ACLs or assuming
+# the container still exposes its credentials.
+REDIS_ENV_FILE="${REDIS_ENV_FILE:-$APP_DIR/.env}"
+if [[ ! -r "$REDIS_ENV_FILE" ]]; then
+  echo "Required Redis environment file is not readable." >&2
+  exit 1
+fi
+
 if ! [[ "$DISK_THRESHOLD_PERCENT" =~ ^[1-9][0-9]?$|^100$ ]]; then
   echo "DISK_THRESHOLD_PERCENT must be between 1 and 100." >&2
   exit 1
@@ -216,10 +227,10 @@ redis_cli() {
 
   case "$container_name" in
     app-redis-1)
-      docker exec "$container_name" sh -c 'redis-cli --no-auth-warning --user "$DURABLE_REDIS_USERNAME" -a "$DURABLE_REDIS_PASSWORD" "$@"' sh "$@"
+      docker exec --env-file "$REDIS_ENV_FILE" "$container_name" sh -c 'redis-cli --no-auth-warning --user "$DURABLE_REDIS_USERNAME" -a "$DURABLE_REDIS_PASSWORD" "$@"' sh "$@"
       ;;
     app-redis-ephemeral-1)
-      docker exec "$container_name" sh -c 'redis-cli --no-auth-warning --user "$EPHEMERAL_REDIS_USERNAME" -a "$EPHEMERAL_REDIS_PASSWORD" "$@"' sh "$@"
+      docker exec --env-file "$REDIS_ENV_FILE" "$container_name" sh -c 'redis-cli --no-auth-warning --user "$EPHEMERAL_REDIS_USERNAME" -a "$EPHEMERAL_REDIS_PASSWORD" "$@"' sh "$@"
       ;;
     *)
       return 64
@@ -227,13 +238,26 @@ redis_cli() {
   esac
 }
 
-redis_config_value() {
+redis_start_option() {
   local container_name="$1"
   local setting="$2"
 
-  redis_cli "$container_name" CONFIG GET "$setting" \
-    | tr -d '\r' \
-    | sed -n '2p'
+  # Redis correctly withholds CONFIG from the application ACL. The Compose
+  # command is immutable container metadata, so inspect the launch arguments
+  # instead of granting an administrative command merely for monitoring.
+  docker inspect "$container_name" | python3 -c '
+import json
+import sys
+
+setting = "--" + sys.argv[1]
+arguments = json.load(sys.stdin)[0].get("Config", {}).get("Cmd") or []
+for index, value in enumerate(arguments):
+    if value == setting and index + 1 < len(arguments):
+        print(arguments[index + 1])
+        break
+else:
+    raise SystemExit(1)
+' "$setting"
 }
 
 redis_info_value() {
@@ -271,16 +295,16 @@ record_redis_counter() {
   fi
 }
 
-if [[ "$(redis_config_value app-redis-1 appendonly || true)" != yes ]]; then
+if [[ "$(redis_start_option app-redis-1 appendonly || true)" != yes ]]; then
   failures+=("redis_durable_persistence_configuration")
 fi
-if [[ "$(redis_config_value app-redis-1 maxmemory-policy || true)" != noeviction ]]; then
+if [[ "$(redis_start_option app-redis-1 maxmemory-policy || true)" != noeviction ]]; then
   failures+=("redis_durable_memory_policy")
 fi
-if [[ "$(redis_config_value app-redis-ephemeral-1 appendonly || true)" != no ]]; then
+if [[ "$(redis_start_option app-redis-ephemeral-1 appendonly || true)" != no ]]; then
   failures+=("redis_ephemeral_persistence_configuration")
 fi
-if [[ "$(redis_config_value app-redis-ephemeral-1 maxmemory-policy || true)" != volatile-ttl ]]; then
+if [[ "$(redis_start_option app-redis-ephemeral-1 maxmemory-policy || true)" != volatile-ttl ]]; then
   failures+=("redis_ephemeral_memory_policy")
 fi
 
