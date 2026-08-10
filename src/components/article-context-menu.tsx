@@ -14,6 +14,7 @@ import {
   useTransition,
 } from "react"
 import { createPortal } from "react-dom"
+import { useRouter } from "next/navigation"
 import {
   ArchiveXIcon,
   CheckCheckIcon,
@@ -110,6 +111,7 @@ export function ArticleContextMenu({
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false)
   const [collectionOpenSession, setCollectionOpenSession] = useState(0)
   const [, startTransition] = useTransition()
+  const router = useRouter()
   const menuOpen = menuPosition !== null
   const Wrapper = as
   const closeCollectionDialog = useCallback(
@@ -170,11 +172,12 @@ export function ArticleContextMenu({
     }
 
     setMenuPosition(null)
-    startTransition(() => {
+    startTransition(async () => {
       const formData = new FormData()
       formData.set("articleId", article.id)
       formData.set("isRead", article.isRead ? "false" : "true")
-      void setArticleReadAction(formData)
+      await setArticleReadAction(formData)
+      router.refresh()
     })
   }
 
@@ -184,11 +187,12 @@ export function ArticleContextMenu({
     }
 
     setMenuPosition(null)
-    startTransition(() => {
+    startTransition(async () => {
       const formData = new FormData()
       formData.set("articleId", article.id)
       formData.set("isStarred", article.isStarred ? "false" : "true")
-      void setArticleStarredAction(formData)
+      await setArticleStarredAction(formData)
+      router.refresh()
     })
   }
 
@@ -440,6 +444,7 @@ export function ArticleActionToolbar({
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false)
   const [collectionOpenSession, setCollectionOpenSession] = useState(0)
   const [, startTransition] = useTransition()
+  const router = useRouter()
   const isHoverToolbar = variant === "hover"
   const closeCollectionDialog = useCallback(
     () => setCollectionDialogOpen(false),
@@ -451,11 +456,12 @@ export function ArticleActionToolbar({
       return
     }
 
-    startTransition(() => {
+    startTransition(async () => {
       const formData = new FormData()
       formData.set("articleId", article.id)
       formData.set("isRead", article.isRead ? "false" : "true")
-      void setArticleReadAction(formData)
+      await setArticleReadAction(formData)
+      router.refresh()
     })
   }
 
@@ -464,11 +470,12 @@ export function ArticleActionToolbar({
       return
     }
 
-    startTransition(() => {
+    startTransition(async () => {
       const formData = new FormData()
       formData.set("articleId", article.id)
       formData.set("isStarred", article.isStarred ? "false" : "true")
-      void setArticleStarredAction(formData)
+      await setArticleStarredAction(formData)
+      router.refresh()
     })
   }
 

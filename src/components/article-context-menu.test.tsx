@@ -28,6 +28,7 @@ const {
   setArticleReadAction: vi.fn(),
   setArticleStarredAction: vi.fn(),
 }))
+const { routerRefresh } = vi.hoisted(() => ({ routerRefresh: vi.fn() }))
 
 vi.mock("@/app/app/actions", () => ({
   addArticleToCollectionAction,
@@ -37,6 +38,9 @@ vi.mock("@/app/app/actions", () => ({
   removeArticleFromCollectionAction,
   setArticleReadAction,
   setArticleStarredAction,
+}))
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: routerRefresh }),
 }))
 
 import { ArticleContextMenu } from "@/components/article-context-menu"
@@ -70,6 +74,7 @@ beforeEach(() => {
   })
   setArticleReadAction.mockReset()
   setArticleStarredAction.mockReset()
+  routerRefresh.mockReset()
 })
 
 describe("ArticleContextMenu", () => {

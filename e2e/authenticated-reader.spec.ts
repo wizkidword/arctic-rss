@@ -48,13 +48,27 @@ test.describe("authenticated reader journeys", () => {
     const toolbar = page.getByRole("toolbar", {
       name: "E2E Reader Article One actions",
     })
+    await expect(toolbar.getByRole("button", { name: "Mark as unread" })).toBeVisible()
     await setArticleRead(page, toolbar, true)
     await expect(toolbar.getByRole("button", { name: "Mark as unread" })).toBeVisible()
+    const readerRefresh = page.waitForResponse((candidate) => {
+      const request = candidate.request()
+      const headers = request.headers()
+
+      return (
+        request.method() === "GET" &&
+        new URL(request.url()).pathname === "/app" &&
+        Boolean(headers.rsc) &&
+        !headers["next-router-prefetch"]
+      )
+    })
     await setArticleStarred(page, toolbar, true)
+    await readerRefresh
     await expect(toolbar.getByRole("button", { name: "Unstar post" })).toBeVisible()
     await expect(page.getByRole("link", { name: "Starred 1" })).toBeVisible()
 
-    await page.goto("/app/starred")
+    await page.getByRole("link", { name: "Starred 1" }).click()
+    await expect(page).toHaveURL(/\/app\/starred/)
     const persistedArticleLink = page.getByRole("link", {
       name: "E2E Reader Article One",
     })
@@ -109,7 +123,10 @@ test.describe("authenticated reader journeys", () => {
     const unsubscribeDialog = page.getByRole("dialog", {
       name: "Unsubscribe from E2E Collection Feed?",
     })
-    await unsubscribeDialog.getByRole("button", { name: "Unsubscribe" }).click()
+    await clickServerAction(
+      page,
+      unsubscribeDialog.getByRole("button", { name: "Unsubscribe" })
+    )
     await expect(
       page.getByRole("button", { name: "Unsubscribe from E2E Collection Feed" })
     ).not.toBeVisible()
@@ -346,8 +363,7 @@ test.describe("authenticated reader journeys", () => {
 })
 
 async function clickArticleAction(page: Page, button: Locator) {
-  await button.click()
-  await page.waitForLoadState("networkidle")
+  await clickServerAction(page, button)
 }
 
 async function clickServerAction(page: Page, button: Locator) {
