@@ -42,6 +42,8 @@ try {
       "~*",
       "&*",
       "+@all",
+      "-@admin",
+      "-@dangerous",
       "--user",
       "default",
       "off",
@@ -72,6 +74,8 @@ try {
       "~*",
       "&*",
       "+@all",
+      "-@admin",
+      "-@dangerous",
       "--user",
       "default",
       "off",
@@ -93,6 +97,10 @@ try {
     durablePassword,
     "Durable Redis credentials must fail against ephemeral Redis."
   )
+  assertDefaultUserDisabled(durableContainer)
+  assertDefaultUserDisabled(ephemeralContainer)
+  assertAdministrativeCommandsFail(durableContainer, durableUsername, durablePassword)
+  assertAdministrativeCommandsFail(ephemeralContainer, ephemeralUsername, ephemeralPassword)
   assertAuthenticationFails(
     durableContainer,
     ephemeralUsername,
@@ -177,6 +185,40 @@ function assertAuthenticationFails(container, username, password, message) {
   const output = `${result.stdout}\n${result.stderr}`
 
   assert.match(output, /(?:WRONGPASS|NOAUTH)/, message)
+}
+
+function assertDefaultUserDisabled(container) {
+  const result = tryRun(["exec", container, "redis-cli", "--no-auth-warning", "PING"])
+  const output = `${result.stdout}\n${result.stderr}`
+
+  assert.match(output, /NOAUTH/, "The default Redis user must remain disabled.")
+}
+
+function assertAdministrativeCommandsFail(container, username, password) {
+  for (const command of [
+    ["ACL", "LIST"],
+    ["CONFIG", "GET", "*"],
+    ["FLUSHALL"],
+    ["FLUSHDB"],
+    ["MODULE", "LIST"],
+    ["REPLICAOF", "NO", "ONE"],
+    ["SHUTDOWN"],
+  ]) {
+    const result = tryRun([
+      "exec",
+      container,
+      "redis-cli",
+      "--no-auth-warning",
+      "--user",
+      username,
+      "-a",
+      password,
+      ...command,
+    ])
+    const output = `${result.stdout}\n${result.stderr}`
+
+    assert.match(output, /NOPERM/, `${command.join(" ")} must be denied to application users.`)
+  }
 }
 
 function assertCannotConnect(network, hostname, message) {
