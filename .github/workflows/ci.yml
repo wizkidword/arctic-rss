@@ -191,14 +191,26 @@ jobs:
             -e 's/CHANGE_ME_GENERATE_A_SEPARATE_32_BYTE_SECRET/ci-chat-token-secret-that-is-at-least-32-bytes/g' \
             -e 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
             -e 's#^MIGRATE_DATABASE_URL=.*#MIGRATE_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
-            -e 's#^CHAT_DATABASE_URL=.*#CHAT_DATABASE_URL=postgresql://postgres:ci-postgres-password@postgres:5432/arctic_rss?schema=public#' \
+            -e 's#^CHAT_DATABASE_URL=.*#CHAT_DATABASE_URL=postgresql://arctic_chat:ci-chat-runtime-password@postgres:5432/arctic_rss?schema=public#' \
             -e 's#APP_ORIGIN=http://localhost:3000#APP_ORIGIN=https://arcticrss.test#' \
             -e 's#AUTH_URL=http://localhost:3000#AUTH_URL=https://arcticrss.test#' \
             -e 's/ARCTIC_IRC_ENABLED=false/ARCTIC_IRC_ENABLED=true/' \
             .env
       - name: Validate selected topology and Compose services
         run: npm run topology:validate -- --topology ${{ matrix.topology }}
-      - name: Start the selected web, worker, Redis, database, and chat topology
+      - name: Start migrations and Redis before provisioning the chat runtime role
+        run: >-
+          node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} --
+          up --build --detach --wait --wait-timeout 300 postgres redis redis-ephemeral migrate
+      - name: Bootstrap restricted chat runtime role after migrations
+        run: |
+          for attempt in 1 2; do
+            node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} -- \
+              exec -T postgres psql -X -v ON_ERROR_STOP=1 -v chat_role=arctic_chat \
+              -v chat_password=ci-chat-runtime-password -U postgres -d arctic_rss \
+              < ops/postgres/bootstrap-chat-runtime-role.sql
+          done
+      - name: Start the selected web, worker, and restricted chat topology
         run: >-
           node scripts/ci/compose-topology.mjs --topology ${{ matrix.topology }} --
           up --build --detach --wait --wait-timeout 300
