@@ -34,6 +34,9 @@ service environments. A process that receives them still needs the explicit
 migration flag and must pass the existing Redis validation; there is no silent
 fallback. Retire these aliases according to
 [legacy-redis-compatibility-retirement.md](legacy-redis-compatibility-retirement.md).
+The chat gateway is intentionally excluded: it always requires its explicit
+ephemeral Redis ACL URL, so a one-Redis compatibility alias is not a legitimate
+runtime input for that role.
 
 ## Operator checks
 
