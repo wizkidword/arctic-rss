@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   processSmartDigestEmailDeliveryWithClient,
+  SMART_DIGEST_DELIVERY_UNKNOWN_MESSAGE,
   smartDigestDeliveryMessageId,
   type SmartDigestDeliveryStore,
 } from "./smart-digest-delivery"
@@ -22,14 +23,14 @@ describe("smart digest email delivery", () => {
         runId: "run-1",
         sendDigestEmail,
         store,
-      })
+      }),
     ).resolves.toEqual({ status: "SENT" })
 
     expect(sendDigestEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         messageId: smartDigestDeliveryMessageId("run-1"),
         to: "reader@example.test",
-      })
+      }),
     )
     expect(mocks.smartDigestUpdate).toHaveBeenCalledWith({
       data: {
@@ -58,7 +59,7 @@ describe("smart digest email delivery", () => {
         runId: "run-1",
         sendDigestEmail: unavailable,
         store,
-      })
+      }),
     ).rejects.toThrow("SMTP unavailable")
     expect(state.run.emailStatus).toBe("FAILED")
 
@@ -69,7 +70,7 @@ describe("smart digest email delivery", () => {
         runId: "run-1",
         sendDigestEmail: recovered,
         store,
-      })
+      }),
     ).resolves.toEqual({ status: "SENT" })
     expect(recovered).toHaveBeenCalledTimes(1)
   })
@@ -86,10 +87,43 @@ describe("smart digest email delivery", () => {
         runId: "run-1",
         sendDigestEmail,
         store,
-      })
+      }),
     ).resolves.toEqual({ status: "SKIPPED" })
 
     expect(sendDigestEmail).not.toHaveBeenCalled()
+  })
+
+  it("marks SMTP-accepted acknowledgement failures as delivery unknown without resending", async () => {
+    const { state, store } = createStore({ failAcknowledgementOnce: true })
+    const sendDigestEmail = vi.fn().mockResolvedValue({
+      providerMessageId: "<provider-id@example.test>",
+      status: "sent",
+    })
+
+    await expect(
+      processSmartDigestEmailDeliveryWithClient({
+        now,
+        runId: "run-1",
+        sendDigestEmail,
+        store,
+      }),
+    ).resolves.toEqual({ status: "SKIPPED" })
+
+    expect(state.run.emailStatus).toBe("DELIVERY_UNKNOWN")
+    expect(state.run.emailErrorMessage).toBe(
+      SMART_DIGEST_DELIVERY_UNKNOWN_MESSAGE,
+    )
+    expect(state.run.providerMessageId).toBe("<provider-id@example.test>")
+
+    await expect(
+      processSmartDigestEmailDeliveryWithClient({
+        now: new Date("2026-07-13T09:01:00.000Z"),
+        runId: "run-1",
+        sendDigestEmail,
+        store,
+      }),
+    ).resolves.toEqual({ status: "SKIPPED" })
+    expect(sendDigestEmail).toHaveBeenCalledTimes(1)
   })
 
   it("suppresses email when the current account is disabled", async () => {
@@ -109,7 +143,7 @@ describe("smart digest email delivery", () => {
         runId: "run-1",
         sendDigestEmail,
         store,
-      })
+      }),
     ).resolves.toEqual({ status: "SKIPPED" })
 
     expect(sendDigestEmail).not.toHaveBeenCalled()
@@ -125,16 +159,18 @@ describe("smart digest email delivery", () => {
 
   it("uses a stable RFC-style message identifier", () => {
     expect(smartDigestDeliveryMessageId("run/1")).toBe(
-      "<smart-digest-run-1@arcticrss.com>"
+      "<smart-digest-run-1@arcticrss.com>",
     )
   })
 })
 
 function createStore({
   emailStatus = "PENDING",
+  failAcknowledgementOnce = false,
   user = activeUser(),
 }: {
   emailStatus?: string
+  failAcknowledgementOnce?: boolean
   user?: ReturnType<typeof activeUser> | null
 } = {}) {
   const state = {
@@ -158,8 +194,10 @@ function createStore({
         topicPrompt: "Climate news",
       },
       emailAttempts: 0,
+      emailErrorMessage: null as string | null,
       emailStatus,
       id: "run-1",
+      providerMessageId: null as string | null,
       rule: {
         user: {
           email: "reader@example.test",
@@ -176,9 +214,17 @@ function createStore({
     smartDigestUpdate: vi.fn().mockResolvedValue(undefined),
     userFindUnique: vi.fn().mockResolvedValue(user),
   }
+  let transactionCount = 0
   const store = {
-    $transaction: async (callback: (transaction: unknown) => Promise<unknown>) =>
-      callback(store),
+    $transaction: async (
+      callback: (transaction: unknown) => Promise<unknown>,
+    ) => {
+      transactionCount += 1
+      if (failAcknowledgementOnce && transactionCount === 1) {
+        throw new Error("database acknowledgement failed")
+      }
+      return callback(store)
+    },
     digestRun: {
       findUnique: vi.fn().mockImplementation(() => Promise.resolve(state.run)),
       update: mocks.digestRunUpdate,
@@ -234,6 +280,6 @@ function flattenUpdate(data: Record<string, unknown>) {
       typeof value.increment === "number"
         ? value.increment
         : value,
-    ])
+    ]),
   )
 }

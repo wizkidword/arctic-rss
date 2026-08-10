@@ -147,6 +147,7 @@ enum SmartDigestStatus {
 enum SmartDigestEmailStatus {
   NOT_REQUESTED
   PENDING
+  DELIVERY_UNKNOWN
   SENT
   FAILED
 }

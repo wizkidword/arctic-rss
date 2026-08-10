@@ -3,13 +3,12 @@ import {
   type BackgroundEligibilityStore,
 } from "./background-eligibility"
 import { getPrisma } from "./db"
-import {
-  sendSmartDigestEmail,
-  type SmartDigestMailResult,
-} from "./mail"
+import { sendSmartDigestEmail, type SmartDigestMailResult } from "./mail"
 import type { SmartDigestForEmail } from "./smart-digest-processing"
 
 export const SMART_DIGEST_EMAIL_MAX_ATTEMPTS = 3
+export const SMART_DIGEST_DELIVERY_UNKNOWN_MESSAGE =
+  "SMTP accepted the Smart Digest email, but its database acknowledgement was not recorded. Operator reconciliation is required before any retry."
 
 type SmartDigestDeliveryRun = {
   digest: SmartDigestForEmail | null
@@ -36,7 +35,7 @@ export type SendSmartDigestDelivery = ({
 
 export type SmartDigestDeliveryStore = {
   $transaction<T>(
-    callback: (transaction: SmartDigestDeliveryStore) => Promise<T>
+    callback: (transaction: SmartDigestDeliveryStore) => Promise<T>,
   ): Promise<T>
   digestRun: {
     findUnique(args: {
@@ -198,28 +197,42 @@ export async function processSmartDigestEmailDeliveryWithClient({
     throw error
   }
 
-  // Do not put this acknowledgement in the send try/catch. If SMTP accepted
-  // the message but the database acknowledgement fails, the run remains
-  // PROCESSING and future retries skip it instead of sending another email.
-  await store.$transaction(async (transaction) => {
-    await transaction.smartDigest.update({
-      data: {
-        emailErrorMessage: null,
-        emailedAt: now,
-        emailStatus: "SENT",
-      },
-      where: { id: run.digest!.id },
+  try {
+    await store.$transaction(async (transaction) => {
+      await transaction.smartDigest.update({
+        data: {
+          emailErrorMessage: null,
+          emailedAt: now,
+          emailStatus: "SENT",
+        },
+        where: { id: run.digest!.id },
+      })
+      await transaction.digestRun.update({
+        data: {
+          emailDeliveredAt: now,
+          emailErrorMessage: null,
+          emailStatus: "SENT",
+          providerMessageId: providerResult.providerMessageId || messageId,
+        },
+        where: { id: run.id },
+      })
     })
-    await transaction.digestRun.update({
-      data: {
-        emailDeliveredAt: now,
-        emailErrorMessage: null,
-        emailStatus: "SENT",
+  } catch {
+    // SMTP may already have accepted the message. Do not throw and let BullMQ
+    // retry the send; make the uncertainty visible when the database is back.
+    try {
+      await recordUnknownDelivery({
         providerMessageId: providerResult.providerMessageId || messageId,
-      },
-      where: { id: run.id },
-    })
-  })
+        run,
+        store,
+      })
+    } catch {
+      // A database outage can prevent even the status marker. The existing
+      // PROCESSING row remains conservative and the worker still does not resend.
+    }
+
+    return { status: "SKIPPED" }
+  }
 
   return { status: "SENT" }
 }
@@ -258,10 +271,14 @@ export function smartDigestDeliveryMessageId(runId: string) {
   return `<smart-digest-${localPart}@${domain}>`
 }
 
-function orderedDigestForEmail(digest: SmartDigestForEmail): SmartDigestForEmail {
+function orderedDigestForEmail(
+  digest: SmartDigestForEmail,
+): SmartDigestForEmail {
   return {
     ...digest,
-    items: [...digest.items].sort((first, second) => first.position - second.position),
+    items: [...digest.items].sort(
+      (first, second) => first.position - second.position,
+    ),
   }
 }
 
@@ -275,7 +292,9 @@ async function recordFailedDelivery({
   store: SmartDigestDeliveryStore
 }) {
   const message =
-    error instanceof Error ? error.message : "Smart Digest email delivery failed."
+    error instanceof Error
+      ? error.message
+      : "Smart Digest email delivery failed."
 
   await store.$transaction(async (transaction) => {
     await transaction.smartDigest.update({
@@ -291,6 +310,34 @@ async function recordFailedDelivery({
         emailStatus: "FAILED",
         errorMessage: null,
         processingStartedAt: null,
+      },
+      where: { id: run.id },
+    })
+  })
+}
+
+async function recordUnknownDelivery({
+  providerMessageId,
+  run,
+  store,
+}: {
+  providerMessageId: string
+  run: SmartDigestDeliveryRun
+  store: SmartDigestDeliveryStore
+}) {
+  await store.$transaction(async (transaction) => {
+    await transaction.smartDigest.update({
+      data: {
+        emailErrorMessage: SMART_DIGEST_DELIVERY_UNKNOWN_MESSAGE,
+        emailStatus: "DELIVERY_UNKNOWN",
+      },
+      where: { id: run.digest!.id },
+    })
+    await transaction.digestRun.update({
+      data: {
+        emailErrorMessage: SMART_DIGEST_DELIVERY_UNKNOWN_MESSAGE,
+        emailStatus: "DELIVERY_UNKNOWN",
+        providerMessageId,
       },
       where: { id: run.id },
     })
