@@ -48,7 +48,9 @@ describe("ImportExportSettingsPage", () => {
 
     expect(markup).toContain('href="/api/account/export"')
     expect(markup).toContain("Export account data")
-    expect(markup).toContain("This one-time download is not retained")
+    expect(markup).toContain("It is not retained")
+    expect(markup).toContain("not a restorable backup")
+    expect(markup).toContain("cannot be imported into Arctic RSS or another reader")
     expect(markup).toContain("full publisher article bodies")
   })
 
