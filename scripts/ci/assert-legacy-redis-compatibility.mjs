@@ -14,6 +14,7 @@ const expectedFiles = [
   "docs/audits/second-pass-phase-4a-redis-separation.md",
   "docs/audits/second-pass-revalidation.md",
   "docs/audits/third-pass-implementation-baseline.md",
+  "docs/audits/fifth-pass-phase-8-boundaries.md",
   "docs/operations/current-production-inventory.md",
   "docs/operations/deployment-rollback-runbook.md",
   "docs/operations/legacy-redis-compatibility-retirement.md",

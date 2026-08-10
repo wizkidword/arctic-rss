@@ -355,6 +355,9 @@ async function verifyDurableOperationalFlow(container, username, password) {
   const redis = new Redis(redisUrl(container, username, password))
   const healthSnapshotKey = "arctic-rss:health-snapshot:v1"
   const sourceEvidenceKey = "arctic-rss:source-refresh-failures:v1"
+  const heartbeatKey = `arctic-rss:worker-heartbeat:v1:acl-flow-${suffix}`
+  const maintenanceLockKey = `arctic-rss:worker:maintenance-lock:v1:${suffix}`
+  const maintenanceToken = `owner-${suffix}`
   const healthSnapshot = JSON.stringify({
     checkedAt: new Date().toISOString(),
     checks: {
@@ -385,6 +388,53 @@ async function verifyDurableOperationalFlow(container, username, password) {
       await redis.get(healthSnapshotKey),
       healthSnapshot,
       "Restricted durable Redis must publish and read the health snapshot."
+    )
+    await redis.set(
+      heartbeatKey,
+      JSON.stringify({ instanceId: `instance-${suffix}`, mode: "acl-flow", timestamp: Date.now(), version: "test" }),
+      "PX",
+      90_000
+    )
+    assert.equal(
+      (await redis.mget(heartbeatKey))[0]?.includes(`instance-${suffix}`),
+      true,
+      "Restricted durable Redis must publish and read worker heartbeats."
+    )
+    assert.equal(
+      await redis.set(maintenanceLockKey, maintenanceToken, "PX", 60_000, "NX"),
+      "OK",
+      "Restricted durable Redis must acquire the maintenance lease."
+    )
+    assert.equal(
+      await redis.eval(
+        `
+          if redis.call("get", KEYS[1]) == ARGV[1] then
+            return redis.call("pexpire", KEYS[1], ARGV[2])
+          end
+          return 0
+        `,
+        1,
+        maintenanceLockKey,
+        maintenanceToken,
+        60_000
+      ),
+      1,
+      "Restricted durable Redis must renew an owned maintenance lease."
+    )
+    assert.equal(
+      await redis.eval(
+        `
+          if redis.call("get", KEYS[1]) == ARGV[1] then
+            return redis.call("del", KEYS[1])
+          end
+          return 0
+        `,
+        1,
+        maintenanceLockKey,
+        maintenanceToken
+      ),
+      1,
+      "Restricted durable Redis must release an owned maintenance lease."
     )
     await redis.lpush(sourceEvidenceKey, sourceEvidence)
     await redis.ltrim(sourceEvidenceKey, 0, 99)
