@@ -233,6 +233,18 @@ describe("approved release command", () => {
     expect(script).toContain("Post-release image retention was not completed")
   })
 
+  it("installs storage helpers from the verified release before running the monitor", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain("production-backup.sh:arctic-rss-backup")
+    expect(script).toContain("production-monitor.sh:arctic-rss-monitor")
+    expect(script).toContain("production-register-backup-archive.sh:arctic-rss-register-backup-archive")
+    expect(script).toContain('sudo -n install -m 700 "$live/scripts/$helper_source" "/usr/local/sbin/$helper_target"')
+    expect(script.indexOf("production-register-backup-archive.sh:arctic-rss-register-backup-archive")).toBeLessThan(
+      script.indexOf("systemctl start --wait arctic-rss-monitor.service"),
+    )
+  })
+
   it("recognizes only the explicit pre-worker-health chat topology as a rollback predecessor", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 

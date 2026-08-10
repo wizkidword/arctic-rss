@@ -1374,6 +1374,20 @@ wait_for_local_endpoint health '{"status":"ok"}' -H "Host: $canonical_host" http
 wait_for_local_endpoint live '{"status":"ok"}' http://127.0.0.1:3000/api/live
 local_health='{"status":"ok"}'
 local_live='{"status":"ok"}'
+# These root-owned helpers are part of the approved operational release
+# surface, not ad-hoc host drift. Install them from the now-live exact archive
+# only after application health has passed; the monitor is immediately run
+# below so a malformed helper cannot silently wait for the next timer tick.
+for helper_spec in \
+  'production-backup.sh:arctic-rss-backup' \
+  'production-monitor.sh:arctic-rss-monitor' \
+  'production-register-backup-archive.sh:arctic-rss-register-backup-archive'; do
+  helper_source="${helper_spec%%:*}"
+  helper_target="${helper_spec#*:}"
+  test -f "$live/scripts/$helper_source"
+  sudo -n install -m 700 "$live/scripts/$helper_source" "/usr/local/sbin/$helper_target"
+done
+sudo -n systemctl start --wait arctic-rss-monitor.service
 monitor_timer="$(sudo -n systemctl is-active arctic-rss-monitor.timer)"
 monitor_result="$(sudo -n systemctl show arctic-rss-monitor.service -p Result --value)"
 monitor_status="$(sudo -n systemctl show arctic-rss-monitor.service -p ExecMainStatus --value)"
