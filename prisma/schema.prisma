@@ -653,13 +653,13 @@ model PodcastEpisode {
 }
 
 model ExternalIdentityHashBackfillProgress {
-  scope                   String   @id
+  scope                   String    @id
   cursorId                String?
-  processedCount          Int      @default(0)
-  collisionCandidateCount Int      @default(0)
+  processedCount          Int       @default(0)
+  collisionCandidateCount Int       @default(0)
   completedAt             DateTime?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 }
 
 model PodcastEpisodeState {
