@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { randomBytes } from "node:crypto"
 import { spawnSync } from "node:child_process"
+import { createAdapter } from "@socket.io/redis-adapter"
 import { Queue, Worker } from "bullmq"
 import Redis from "ioredis"
+import { Server } from "socket.io"
 
 const redisImage =
   "redis:7.4.9-alpine3.21@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
@@ -106,6 +108,7 @@ try {
     "Durable Redis credentials must fail against ephemeral Redis."
   )
   await verifyDurableQueueFlow(durableContainer, durableUsername, durablePassword)
+  await verifyDurableOperationalFlow(durableContainer, durableUsername, durablePassword)
   await verifyEphemeralPubSubAndLuaFlow(
     ephemeralContainer,
     ephemeralUsername,
@@ -289,7 +292,12 @@ async function verifyEphemeralPubSubAndLuaFlow(container, username, password) {
   const url = redisUrl(container, username, password)
   const publisher = new Redis(url)
   const subscriber = new Redis(url)
-  const channel = `acl-flow-${suffix}`
+  const adapterPublisher = new Redis(url)
+  const adapterSubscriber = new Redis(url)
+  const channel = "arctic-rss:chat:room-events:v1"
+  const presenceKey = `arctic-rss:chat:presence:v1:room-${suffix}:user-${suffix}:connection-${suffix}`
+  const rateLimitKey = `arctic-rss:rate-limit:v1:login:ip:${suffix}`
+  const io = new Server()
 
   try {
     const received = new Promise((resolve, reject) => {
@@ -302,14 +310,106 @@ async function verifyEphemeralPubSubAndLuaFlow(container, username, password) {
     await subscriber.subscribe(channel)
     await publisher.publish(channel, "ok")
     assert.deepEqual(await received, { payload: "ok", receivedChannel: channel })
+    await publisher.set(presenceKey, "1", "EX", 75)
     assert.equal(
-      await publisher.eval("return redis.call('INCR', KEYS[1])", 1, `acl-rate-${suffix}`),
+      await publisher.get(presenceKey),
+      "1",
+      "Restricted ephemeral Redis must persist chat-presence heartbeats."
+    )
+    assert.equal(await publisher.del(presenceKey), 1)
+    const rateLimitResult = await publisher.eval(
+      `
+        local current = redis.call("INCR", KEYS[1])
+        if current == 1 then
+          redis.call("PEXPIRE", KEYS[1], ARGV[1])
+        end
+        return { current, redis.call("PTTL", KEYS[1]) }
+      `,
       1,
+      rateLimitKey,
+      60_000
+    )
+    assert.ok(Array.isArray(rateLimitResult), "Rate-limit Lua must return a counter and TTL.")
+    assert.equal(Number(rateLimitResult[0]), 1)
+    assert.ok(
+      Number(rateLimitResult[1]) > 0,
       "Restricted ephemeral Redis must permit the rate-limit Lua path."
     )
+    io.adapter(createAdapter(adapterPublisher, adapterSubscriber))
+    await waitForCondition(
+      async () => Number(await io.of("/").adapter.serverCount()) >= 1,
+      "Socket.IO Redis adapter subscriptions"
+    )
   } finally {
-    await Promise.all([publisher.quit(), subscriber.quit()])
+    io.of("/").adapter.close()
+    await Promise.all([
+      publisher.quit(),
+      subscriber.quit(),
+      adapterPublisher.quit(),
+      adapterSubscriber.quit(),
+    ])
   }
+}
+
+async function verifyDurableOperationalFlow(container, username, password) {
+  const redis = new Redis(redisUrl(container, username, password))
+  const healthSnapshotKey = "arctic-rss:health-snapshot:v1"
+  const sourceEvidenceKey = "arctic-rss:source-refresh-failures:v1"
+  const healthSnapshot = JSON.stringify({
+    checkedAt: new Date().toISOString(),
+    checks: {
+      chatGateway: "disabled",
+      database: "ok",
+      durableRedis: "ok",
+      ephemeralRedis: "ok",
+      maintenance: "ok",
+      queues: "ok",
+      workers: "ok",
+    },
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    status: "ok",
+    topology: "acl-fixture",
+    version: 1,
+  })
+  const sourceEvidence = JSON.stringify({
+    errorCategory: "timeout",
+    host: "fixture.invalid",
+    kind: "feed",
+    outcome: "failed",
+    timestamp: Date.now(),
+  })
+
+  try {
+    await redis.set(healthSnapshotKey, healthSnapshot, "PX", 60_000)
+    assert.equal(
+      await redis.get(healthSnapshotKey),
+      healthSnapshot,
+      "Restricted durable Redis must publish and read the health snapshot."
+    )
+    await redis.lpush(sourceEvidenceKey, sourceEvidence)
+    await redis.ltrim(sourceEvidenceKey, 0, 99)
+    assert.deepEqual(
+      await redis.lrange(sourceEvidenceKey, 0, 0),
+      [sourceEvidence],
+      "Restricted durable Redis must retain source refresh evidence."
+    )
+  } finally {
+    await redis.quit()
+  }
+}
+
+async function waitForCondition(condition, description) {
+  const deadline = Date.now() + 10_000
+
+  while (Date.now() < deadline) {
+    if (await condition()) {
+      return
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+
+  throw new Error(`Timed out waiting for ${description}.`)
 }
 
 function redisUrl(container, username, password) {

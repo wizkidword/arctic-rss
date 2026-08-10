@@ -79,7 +79,7 @@ services:
       DURABLE_REDIS_PASSWORD: ${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}
     # Durable BullMQ data must never be evicted. Keep a memory margin below the
     # container limit so Redis can safely rewrite AOF files under load.
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--auto-aof-rewrite-min-size", "64mb", "--auto-aof-rewrite-percentage", "100", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--user", "${DURABLE_REDIS_USERNAME:?DURABLE_REDIS_USERNAME is required}", "on", ">${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}", "~*", "&*", "+@all", "--user", "default", "off"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--auto-aof-rewrite-min-size", "64mb", "--auto-aof-rewrite-percentage", "100", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--user", "${DURABLE_REDIS_USERNAME:?DURABLE_REDIS_USERNAME is required}", "on", ">${DURABLE_REDIS_PASSWORD:?DURABLE_REDIS_PASSWORD is required}", "~*", "&*", "+@all", "-@admin", "-@dangerous", "+info", "--user", "default", "off"]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --no-auth-warning --user \"$${DURABLE_REDIS_USERNAME}\" -a \"$${DURABLE_REDIS_PASSWORD}\" ping"]
       interval: 10s
@@ -107,7 +107,7 @@ services:
     # Socket.IO, presence, replay, rate-limit, and security-event state is
     # intentionally disposable. Every application key has a bounded TTL, so
     # volatile-ttl can reclaim the shortest-lived state under memory pressure.
-    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-ttl", "--user", "${EPHEMERAL_REDIS_USERNAME:?EPHEMERAL_REDIS_USERNAME is required}", "on", ">${EPHEMERAL_REDIS_PASSWORD:?EPHEMERAL_REDIS_PASSWORD is required}", "~*", "&*", "+@all", "--user", "default", "off"]
+    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-ttl", "--user", "${EPHEMERAL_REDIS_USERNAME:?EPHEMERAL_REDIS_USERNAME is required}", "on", ">${EPHEMERAL_REDIS_PASSWORD:?EPHEMERAL_REDIS_PASSWORD is required}", "~*", "&*", "+@all", "-@admin", "-@dangerous", "+info", "--user", "default", "off"]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --no-auth-warning --user \"$${EPHEMERAL_REDIS_USERNAME}\" -a \"$${EPHEMERAL_REDIS_PASSWORD}\" ping"]
       interval: 10s
