@@ -5,6 +5,10 @@ ALERT_ENV_FILE="${OPS_ALERT_ENV_FILE:-/etc/arctic-rss/alerts.env}"
 BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/etc/arctic-rss/backup.env}"
 STATE_DIR="${MONITOR_STATE_DIR:-/var/lib/arctic-rss-monitor}"
 DISK_THRESHOLD_PERCENT="${DISK_THRESHOLD_PERCENT:-85}"
+# The normal percentage threshold detects a generally full filesystem.  This
+# lower, byte-based reserve gives an early warning when a typical off-host
+# image release would no longer have its required transfer/load workspace.
+RELEASE_MIN_FREE_BYTES="${RELEASE_MIN_FREE_BYTES:-4294967296}"
 BACKUP_MAX_AGE_SECONDS="${BACKUP_MAX_AGE_SECONDS:-108000}"
 TLS_MIN_VALIDITY_SECONDS="${TLS_MIN_VALIDITY_SECONDS:-2592000}"
 IMPORT_STUCK_AFTER_SECONDS="${IMPORT_STUCK_AFTER_SECONDS:-900}"
@@ -31,6 +35,11 @@ set +a
 
 if ! [[ "$DISK_THRESHOLD_PERCENT" =~ ^[1-9][0-9]?$|^100$ ]]; then
   echo "DISK_THRESHOLD_PERCENT must be between 1 and 100." >&2
+  exit 1
+fi
+
+if ! [[ "$RELEASE_MIN_FREE_BYTES" =~ ^[1-9][0-9]*$ ]]; then
+  echo "RELEASE_MIN_FREE_BYTES must be a positive whole number." >&2
   exit 1
 fi
 
@@ -136,9 +145,13 @@ if ! timeout 20 openssl s_client -connect "$OPS_PUBLIC_HOST:443" -servername "$O
 fi
 
 disk_percent="$(df -P / | awk 'NR == 2 {gsub(/%/, "", $5); print $5}')"
+disk_available_kib="$(df -Pk / | awk 'NR == 2 {print $4}')"
 inode_percent="$(df -Pi / | awk 'NR == 2 {gsub(/%/, "", $5); print $5}')"
 if (( disk_percent >= DISK_THRESHOLD_PERCENT )); then
   failures+=("disk")
+fi
+if ! [[ "$disk_available_kib" =~ ^[0-9]+$ ]] || (( disk_available_kib * 1024 < RELEASE_MIN_FREE_BYTES )); then
+  failures+=("release_disk_reserve")
 fi
 if (( inode_percent >= DISK_THRESHOLD_PERCENT )); then
   failures+=("inodes")
@@ -155,6 +168,47 @@ else
     failures+=("backup_stale")
   fi
 fi
+
+# Named recovery archives are intentionally outside automatic expiry.  An
+# operator can register a review deadline with the root-only helper; this
+# monitor emits a path-free alert once that deadline has passed.  Unregistered
+# historical directories remain untouched to avoid converting an inventory
+# migration into a destructive retention policy change.
+while IFS= read -r -d '' archive_manifest; do
+  if ! archive_review_state="$(python3 - "$archive_manifest" <<'PY'
+import datetime as dt
+import json
+import os
+import re
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    archive_name = manifest["archiveName"]
+    review_by = manifest["reviewBy"]
+    schema_version = manifest["schemaVersion"]
+except (OSError, ValueError, KeyError, TypeError):
+    raise SystemExit(1)
+
+if schema_version != 1 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", archive_name):
+    raise SystemExit(1)
+if archive_name != os.path.basename(os.path.dirname(path)):
+    raise SystemExit(1)
+try:
+    review_date = dt.date.fromisoformat(review_by)
+except ValueError:
+    raise SystemExit(1)
+
+print("expired" if dt.datetime.now(dt.timezone.utc).date() > review_date else "active")
+PY
+  )"; then
+    failures+=("backup_archive_manifest")
+  elif [[ "$archive_review_state" == expired ]]; then
+    failures+=("backup_archive_review")
+  fi
+done < <(find "$BACKUP_DIR" -mindepth 2 -maxdepth 2 -type f -name '.arctic-rss-archive.json' -print0)
 
 redis_cli() {
   local container_name="$1"

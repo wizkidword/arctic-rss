@@ -6,20 +6,21 @@
 
 **Source head before this completion commit:** `bb5c28f`
 
-**Current completion candidate:** this local commit; not deployed
+**Current independently verified website release:** `c04e509`
 
 ## Honest conclusion
 
-**SOURCE COMPLETE — NOT DEPLOYED**
+**SOURCE COMPLETE — WEBSITE RELEASED AND VERIFIED**
 
-**WEBSITE RELEASE READY — OWNER APPROVAL REQUIRED**
+**FUTURE WEBSITE RELEASES — FRESH APPROVAL REQUIRED**
 
 **ANDROID INTERNAL BUILD READY — PLAY OWNER APPROVAL REQUIRED**
 
-The first statement means the reviewed source and local verification are
-committed locally. It does not mean the candidate is pushed, deployed, or live.
-The second and third statements are separate: a fresh exact-commit website
-release and an exact-artifact Play decision remain owner actions.
+The first statement means the reviewed fifth-pass source is live as
+`c04e509` and independently verified through the approved controller. The
+second and third statements remain separate: every future website candidate
+needs its own exact-commit approval, while an exact Android artifact and Play
+decision remain owner actions.
 
 ## What this pass now contains
 
@@ -37,10 +38,11 @@ release and an exact-artifact Play decision remain owner actions.
   first-success milestone events, and fixed Android first-sync/return telemetry
   without user/device/content values.
 
-The primary commit sequence is `c7be850` (fifth-pass web release), `98e47b0`
+The primary commit sequence is `c7be850` (early fifth-pass web release), `98e47b0`
 (mobile API), `048f1a7` (device auth), `482d141` (sync), `55b6f0b` (Android
 alpha), `ec56986`/`bb5c28f` (private CI/release-gate remediation), then the
-committed Phase 14 candidate. The authoritative detailed finding ledger is
+committed Phase 14 candidate and `c04e509` (Phase 15 reader-state correction
+and verified website release). The authoritative detailed finding ledger is
 [fifth-pass capability status](./fifth-pass-capability-status.md).
 
 ## Database, compatibility, and security record
@@ -57,9 +59,11 @@ committed Phase 14 candidate. The authoritative detailed finding ledger is
   budgets, and topology validation have passing local evidence. No Phase 14
   secret, token, feed/article body, or user/device identifier is added to
   product telemetry.
-- The last independently verified production revision was `bb5c28f` on
-  2026-08-10. This closeout did not inspect production or change OVH, so it
-  makes no claim about live state after that verification.
+- The last independently verified production revision is `c04e509` on
+  2026-08-10. Its controller and independent checks passed fresh backup,
+  migration, selected-service, loopback, public health/login, and monitor
+  gates. The initial capacity stop and the narrow stale-image repair happened
+  before the successful release; no backup or data volume was removed.
 
 ## Phase 15 verification
 
@@ -97,18 +101,17 @@ remaining owner checklist.
 
 ## Remaining owner actions
 
-1. Review this committed candidate and obtain exact-commit CI.
-2. If a website release is desired, complete the current OVH preflight and
-   provide `DEPLOY <short-sha>` for that committed candidate. The release
-   package must capture exact images, migrations, backup/restore evidence,
+1. For any later website candidate, complete current exact-commit CI and the
+   OVH preflight, then provide `DEPLOY <short-sha>`. The release package must
+   capture exact images, migrations, backup/restore evidence,
    topology/environment/ACL evidence, rollback or forward repair, and
    post-release public health/login smoke.
-3. If an Android internal alpha is desired, confirm application-ID ownership,
+2. If an Android internal alpha is desired, confirm application-ID ownership,
    signing/EAS setup, the production API origin, App Links, the signed-device
    smoke record, Play Console policy forms/listing, and provide a separate
    exact-artifact/internal-track approval. Do not use a website deployment
    approval for that action.
-4. Triage the current dependency audit separately from this source closeout;
+3. Triage the current dependency audit separately from this source closeout;
    `npm audit --omit=dev --audit-level=high` currently reports 19 advisories
    (10 high, 9 moderate), chiefly through Expo/Metro build tooling plus
    transitive Hono/UUID paths. Automatic fixes were not applied because the

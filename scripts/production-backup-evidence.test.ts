@@ -31,6 +31,29 @@ describe("production backup evidence workflow", () => {
     expect(sync).toContain("Copy-RemoteEvidence")
   })
 
+  it("keeps the existing 30-day default while allowing an off-host-gated daily cap", async () => {
+    const script = await readFile("scripts/production-backup.sh", "utf8")
+
+    expect(script).toContain('MAX_BACKUPS_PER_DAY="${MAX_BACKUPS_PER_DAY:-0}"')
+    expect(script).toContain('MAX_BACKUPS_PER_DAY must be zero or a positive whole number.')
+    expect(script).toContain('evidence.get("offHostVerifiedAt")')
+    expect(script).toContain('Pruned off-host-verified excess backup')
+    expect(script).toContain('named recovery archives are')
+  })
+
+  it("uses an explicit, root-only manifest for named recovery archive review deadlines", async () => {
+    const [registrar, monitor] = await Promise.all([
+      readFile("scripts/production-register-backup-archive.sh", "utf8"),
+      readFile("scripts/production-monitor.sh", "utf8"),
+    ])
+
+    expect(registrar).toContain("<named-recovery-archive> <review-by-utc-date>")
+    expect(registrar).toContain('"reviewBy": review_by')
+    expect(registrar).toContain("os.replace(temporary_path, path)")
+    expect(monitor).toContain("backup_archive_review")
+    expect(monitor).toContain("backup_archive_manifest")
+  })
+
   it("records successful restore drills and release provenance against the exact evidence ID", async () => {
     const [drill, release] = await Promise.all([
       readFile("scripts/production-restore-drill.sh", "utf8"),

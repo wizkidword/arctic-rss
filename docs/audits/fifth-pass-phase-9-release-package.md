@@ -4,6 +4,11 @@
 **Production release:** `c7be850b644f44629a637fff0a381dee36ad853c`
 **Topology:** `all-in-one-with-chat`
 
+> Historical release record: `c7be850` was superseded by the independently
+> verified `c04e509` website release later on 2026-08-10. This document
+> preserves Phase 9 execution evidence; it is not the current-production
+> source of truth.
+
 ## Release execution result
 
 The owner approved `DEPLOY c7be850` after exact-commit CI passed. The guarded

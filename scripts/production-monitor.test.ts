@@ -36,4 +36,13 @@ describe("production monitor", () => {
     expect(script).toContain("app-worker-health-1")
     expect(script).toContain("app-worker-chat-events-1")
   })
+
+  it("warns before a release loses its byte-based workspace reserve", async () => {
+    const script = await readFile("scripts/production-monitor.sh", "utf8")
+
+    expect(script).toContain('RELEASE_MIN_FREE_BYTES="${RELEASE_MIN_FREE_BYTES:-4294967296}"')
+    expect(script).toContain("RELEASE_MIN_FREE_BYTES must be a positive whole number.")
+    expect(script).toContain("release_disk_reserve")
+    expect(script).toContain("disk_available_kib * 1024 < RELEASE_MIN_FREE_BYTES")
+  })
 })

@@ -218,6 +218,21 @@ describe("approved release command", () => {
     expect(script).toContain('[[ "$previous_commit" =~ ^[a-f0-9]{40}$ ]]')
   })
 
+  it("retires only unreferenced older release tags after public verification", async () => {
+    const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
+
+    expect(script).toContain("function Invoke-RollbackSafeImageRetention")
+    expect(script).toContain("the previous release's complete image environment")
+    expect(script).toContain("sudo -n docker ps -a --format '{{.Image}}'")
+    expect(script).toContain('docker image rm "$image_name"')
+    expect(script).toContain("IMAGE_RETENTION_RETIRED")
+    expect(script).toContain('imageRetention = $imageRetention')
+    expect(script.lastIndexOf("Invoke-RollbackSafeImageRetention")).toBeGreaterThan(
+      script.indexOf('$loginStatus = Invoke-ExpectedCurlResponse'),
+    )
+    expect(script).toContain("Post-release image retention was not completed")
+  })
+
   it("recognizes only the explicit pre-worker-health chat topology as a rollback predecessor", async () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 

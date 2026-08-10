@@ -8,6 +8,11 @@ umask 077
 
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-app}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
+# A release creates a deliberately fresh backup, which can otherwise leave
+# many safe-but-redundant timestamp directories on a busy release day.  The
+# default of zero preserves the existing retention behavior until the owner
+# selects a documented daily cap in the private backup environment.
+MAX_BACKUPS_PER_DAY="${MAX_BACKUPS_PER_DAY:-0}"
 BACKUP_READ_GROUP="${BACKUP_READ_GROUP:-}"
 BACKUP_ENVIRONMENT="${ARCTIC_RSS_BACKUP_ENVIRONMENT:-production}"
 BACKUP_EVIDENCE_TOOL_VERSION="arctic-rss-backup-evidence-v1"
@@ -19,6 +24,11 @@ fi
 
 if ! [[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]]; then
   echo "RETENTION_DAYS must be a positive whole number." >&2
+  exit 1
+fi
+
+if ! [[ "$MAX_BACKUPS_PER_DAY" =~ ^0$|^[1-9][0-9]*$ ]]; then
+  echo "MAX_BACKUPS_PER_DAY must be zero or a positive whole number." >&2
   exit 1
 fi
 
@@ -127,5 +137,46 @@ done < <(
   find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d \
     -name '20??????T??????Z' -mtime "+$RETENTION_DAYS" -print0
 )
+
+# A daily cap is deliberately opt-in and never removes a backup that has not
+# received the existing checksum-verified off-host acknowledgement.  It only
+# applies to standard timestamp directories; named recovery archives are
+# operator-managed and must never be silently expired by this release path.
+if (( MAX_BACKUPS_PER_DAY > 0 )); then
+  declare -A retained_for_day=()
+  mapfile -t completed_backups < <(
+    find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' \
+      -printf '%f\n' | sort -r
+  )
+
+  for backup_id in "${completed_backups[@]}"; do
+    backup_day="${backup_id:0:8}"
+    retained_count="${retained_for_day[$backup_day]:-0}"
+    if (( retained_count < MAX_BACKUPS_PER_DAY )); then
+      retained_for_day["$backup_day"]=$((retained_count + 1))
+      continue
+    fi
+
+    backup_evidence="$BACKUP_DIR/$backup_id/backup-evidence.json"
+    if python3 - "$backup_evidence" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        evidence = json.load(handle)
+except (OSError, ValueError, TypeError):
+    raise SystemExit(1)
+
+raise SystemExit(0 if isinstance(evidence.get("offHostVerifiedAt"), str) and evidence["offHostVerifiedAt"] else 1)
+PY
+    then
+      rm -rf -- "$BACKUP_DIR/$backup_id"
+      echo "Pruned off-host-verified excess backup: $backup_id"
+    else
+      echo "Retaining excess backup without off-host acknowledgement: $backup_id" >&2
+    fi
+  done
+fi
 
 echo "Arctic RSS backup verified: $timestamp"

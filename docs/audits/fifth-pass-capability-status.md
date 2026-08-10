@@ -2,19 +2,22 @@
 
 **Last source review:** 2026-08-10
 **Baseline:** `686cd18b7e7f6196865af34c93496c3bddf16a69`  
-**Last independently verified production revision:** `bb5c28f` on 2026-08-10
-through the approved OVH release controller. Phase 14 completion work is a
-committed local source candidate and is not deployed. This record does not
-assert a fresh live-production check after that release.
+**Last independently verified production revision:** `c04e509` on 2026-08-10
+through the approved OVH release controller. It includes the Phase 14
+completion work and the reader-state refresh correction. This record does not
+claim that every product flow was exercised with a real production account.
 
 ## Release addendum
 
 The approved release controller passed its exact-commit CI and local gates,
 fresh backup gate, migration ownership preflight, migration status,
 selected-service health, loopback health/liveness, public health/login, and
-monitor checks. Independent verification confirmed the deployed revision, its
-migration status, the required `all-in-one-with-chat` services, and the private
-release record. Phase 15 has not run a production release or live check.
+monitor checks. Independent verification confirmed `c04e509`, its migration
+status, the required `all-in-one-with-chat` services, and the private release
+record. An initial `c04e509` attempt stopped at the read-only capacity gate;
+the separately approved repair removed only stale, unreferenced older release
+image tags while preserving the then-live and rollback image sets. No backups,
+volumes, release sources, or journals were removed in that repair.
 
 The per-finding production and operator columns below are the preserved
 pre-release implementation snapshot. Their `Not deployed` and `No` entries are
@@ -70,16 +73,16 @@ column, and separate production/operator fields.
 
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
-| Browser PKCE device authorization, rotating device sessions, revocation, and web device management | Implemented with additive migration evidence and exercised by local contract/real-database suites; consumed by the local Android client | Included in last verified website release `bb5c28f`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for any later website release; signed Android distribution remains owner-gated |
+| Browser PKCE device authorization, rotating device sessions, revocation, and web device management | Implemented with additive migration evidence and exercised by local contract/real-database suites; consumed by the local Android client | Included in last verified website release `c04e509`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for any later website release; signed Android distribution remains owner-gated |
 
 ## Phase 12 mobile sync and notification addendum (2026-08-10)
 
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
-| Transactional user sync events/tombstones, cursor-floor full-resync handling, session-bound idempotent mobile writes, HTTPS web deep-link fallback, centralized notification preferences, and protected Android installation references | Implemented with additive migration evidence, private contract coverage, and a local Android client; App Link signing verification and push-provider delivery remain deferred | Included in last verified website release `bb5c28f`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for later website releases. A signing identity, App Link verification, and the separate Play owner approval are required for Android distribution |
+| Transactional user sync events/tombstones, cursor-floor full-resync handling, session-bound idempotent mobile writes, HTTPS web deep-link fallback, centralized notification preferences, and protected Android installation references | Implemented with additive migration evidence, private contract coverage, and a local Android client; App Link signing verification and push-provider delivery remain deferred | Included in last verified website release `c04e509`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for later website releases. A signing identity, App Link verification, and the separate Play owner approval are required for Android distribution |
 
 ## Phase 14 reader coherence and safe activation evidence addendum (2026-08-10)
 
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
-| Retained collection provenance and removal, bounded mobile offline indicators, consent-gated first-success milestone events, and fixed Android first-sync/return telemetry | Complete in the current committed source candidate with unit, contract, full-suite, typecheck, lint, web-build, and Android export evidence | Not deployed; `bb5c28f` is the last independently verified production revision | Exact-commit CI, then a fresh `DEPLOY <short-sha>` approval before a website release. Play distribution remains separately owner-gated |
+| Retained collection provenance and removal, bounded mobile offline indicators, consent-gated first-success milestone events, and fixed Android first-sync/return telemetry | Complete with unit, contract, full-suite, typecheck, lint, web-build, and Android export evidence | Included in independently verified website release `c04e509`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for a later website release. Play distribution remains separately owner-gated |

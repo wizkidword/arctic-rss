@@ -9,7 +9,7 @@ the secure server session; do not put credentials in shell history or commits.
 `scripts/production-backup.sh` creates a custom-format PostgreSQL database
 backup plus a separate SQL export of cluster-wide role definitions. It validates
 the database archive with `pg_restore -l`, verifies checksums for both files,
-and retains only the configured number of dated backup directories. Each
+and retains standard timestamp directories by configured age. Each
 completed directory also contains a small `backup-evidence.json` record. It
 binds a versioned schema, environment, database name, backup ID, UTC completion
 time, dump byte count, dump SHA-256, and a relative artifact name. The role
@@ -22,6 +22,10 @@ APP_DIR=/private/path/to/active/arctic-rss-release
 BACKUP_DIR=/private/path/to/arctic-rss-backups
 COMPOSE_PROJECT=app
 RETENTION_DAYS=30
+# Optional: 0 preserves all timestamp backups inside the age window. A positive
+# cap keeps the newest N per UTC day only after each older backup has received
+# checksum-verified off-host acknowledgement.
+MAX_BACKUPS_PER_DAY=0
 ARCTIC_RSS_BACKUP_ENVIRONMENT=production
 # Opaque label only; never put a storage URL, account, or credential here.
 BACKUP_OFF_HOST_TARGET=encrypted-windows-replica
@@ -36,7 +40,7 @@ systemctl start arctic-rss-backup.service
 systemctl show arctic-rss-backup.service -p Result -p ExecMainStatus
 ```
 
-Install the four root-only helpers together before enabling this evidence
+Install the root-only helpers together before enabling this evidence
 workflow. Keep their source and installed modes aligned; do not copy a backup
 directory, role export, or private environment file into the repository.
 
@@ -45,6 +49,7 @@ install -m 700 scripts/production-backup.sh /usr/local/sbin/arctic-rss-backup
 install -m 700 scripts/production-latest-backup.sh /usr/local/sbin/arctic-rss-latest-backup
 install -m 700 scripts/production-record-backup-offhost.sh /usr/local/sbin/arctic-rss-record-backup-offhost
 install -m 700 scripts/production-restore-drill.sh /usr/local/sbin/arctic-rss-restore-drill
+install -m 700 scripts/production-register-backup-archive.sh /usr/local/sbin/arctic-rss-register-backup-archive
 ```
 
 `latest-backup-evidence.json` is an atomically replaced relative symlink to
@@ -116,6 +121,44 @@ If a separate SSH account pulls completed backups with `scp`, set the optional
 then makes only completed backup directories group-readable (`750` directories
 and `640` files). Give that group no other server permissions, and never make
 the backup directory world-readable.
+
+## Storage retention and capacity controls
+
+Keep `RETENTION_DAYS=30` unless an owner explicitly changes the recovery
+policy. `MAX_BACKUPS_PER_DAY=0` is the safe compatibility default. After the
+checksum-verified off-host copy has a reliable cadence, an owner may set a
+small positive daily cap (for example, `2`) to prevent repeated release or
+manual backups from accumulating indefinitely. The cap never removes a
+timestamp backup that lacks the existing `offHostVerifiedAt` acknowledgement,
+and it does not affect named recovery directories.
+
+Named recovery archives are never automatically deleted. Once an archive has
+an agreed review deadline, register it with its direct directory name and a
+UTC review-by date:
+
+```bash
+sudo /usr/local/sbin/arctic-rss-register-backup-archive ARCHIVE_NAME YYYY-MM-DD
+```
+
+The helper atomically writes a path-local manifest. The five-minute monitor
+alerts only when a registered manifest is malformed or its review date has
+passed; it does not list archive names or delete anything. Before a manual
+archive removal, confirm its off-host recovery copy and record the decision in
+the private operator inventory.
+
+The monitor also keeps a 4 GiB byte-based release workspace reserve via
+`RELEASE_MIN_FREE_BYTES=4294967296`, in addition to the existing percentage
+and inode alarms. This is an early warning, not a release waiver: the approved
+release controller remains the exact-image, archive-aware capacity gate and
+can require more space. Raise the private value for larger expected images.
+
+Release-image retention happens only after a future release passes public
+health and login checks. It keeps the live tag set, the complete previous
+rollback set, and any tag referenced by a container; it never prunes backups,
+volumes, release directories, generic Docker cache, or journal data. The
+release controller already bounds the journal to 30 days. Review old source
+directories and any unregistered named recovery archives through a separate
+read-only inventory before authorizing their removal.
 
 ## Pre-change backup gate
 

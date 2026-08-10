@@ -492,6 +492,107 @@ function Get-ReleaseMarker {
   return $marker[0].Substring($Name.Length + 1)
 }
 
+function Invoke-RollbackSafeImageRetention {
+  param(
+    [Parameter(Mandatory)][pscustomobject]$Config,
+    [Parameter(Mandatory)][string[]]$CurrentImages,
+    [Parameter(Mandatory)][string]$PreviousRelease,
+    [Parameter(Mandatory)][string]$PreviousImages
+  )
+
+  # This cleanup is intentionally post-public-verification.  It preserves the
+  # current image set, the previous release's complete image environment, and
+  # any image referenced by a running or stopped container.  Backups, volumes,
+  # source releases, build cache, and non-release tags are outside its scope.
+  $currentImagesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes((($CurrentImages -join "`n") + "`n")))
+  $previousReleasePayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($PreviousRelease))
+  $previousImagesPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($PreviousImages + "`n")))
+  $script = @'
+set -euo pipefail
+compose_project='__COMPOSE_PROJECT__'
+current_images_b64='__CURRENT_IMAGES_BASE64__'
+previous_release_b64='__PREVIOUS_RELEASE_BASE64__'
+previous_images_b64='__PREVIOUS_IMAGES_BASE64__'
+previous_release="$(printf '%s' "$previous_release_b64" | base64 -d)"
+release_image_pattern="^${compose_project}-(migrate|web|worker|chat-gateway|edge-proxy):release-[a-f0-9]{7,40}$"
+declare -A keep_images=()
+
+keep_release_image() {
+  local image_name="$1"
+  if [[ "$image_name" =~ $release_image_pattern ]]; then
+    keep_images["$image_name"]=1
+  fi
+}
+
+while IFS= read -r image_name; do
+  [ -n "$image_name" ] || continue
+  if ! [[ "$image_name" =~ $release_image_pattern ]]; then
+    printf 'Current release image has an unexpected tag.\n' >&2
+    exit 1
+  fi
+  keep_release_image "$image_name"
+done < <(printf '%s' "$current_images_b64" | base64 -d)
+
+# The active-service capture protects the direct rollback record.  Reading the
+# previous release environment also retains its migrate image, which does not
+# have a persistent application container after a successful release.
+while IFS=' ' read -r _previous_service_image; do
+  previous_image_name="${_previous_service_image#*=}"
+  keep_release_image "$previous_image_name"
+done < <(printf '%s' "$previous_images_b64" | base64 -d | tr ' ' '\n')
+
+if test -f "$previous_release/.env"; then
+  while IFS='=' read -r _previous_variable previous_image_name; do
+    keep_release_image "$previous_image_name"
+  done < <(
+    sudo -n awk -F= '/^(MIGRATE_IMAGE|WEB_IMAGE|WORKER_IMAGE|CHAT_GATEWAY_IMAGE|EDGE_PROXY_IMAGE)=/ { name = $1; sub(/^[^=]*=/, ""); print name "=" $0 }' "$previous_release/.env"
+  )
+fi
+
+declare -A container_images=()
+while IFS= read -r image_name; do
+  [ -n "$image_name" ] && container_images["$image_name"]=1
+done < <(sudo -n docker ps -a --format '{{.Image}}' | sort -u)
+
+retired=0
+preserved=0
+skipped=0
+while IFS= read -r image_name; do
+  [ -n "$image_name" ] || continue
+  if [[ -n "${keep_images[$image_name]:-}" ]] || [[ -n "${container_images[$image_name]:-}" ]]; then
+    preserved=$((preserved + 1))
+    continue
+  fi
+
+  if sudo -n docker image rm "$image_name" >/dev/null; then
+    retired=$((retired + 1))
+  else
+    skipped=$((skipped + 1))
+  fi
+done < <(sudo -n docker image ls --format '{{.Repository}}:{{.Tag}}' | awk -v pattern="$release_image_pattern" '$0 ~ pattern { print }' | sort -u)
+
+printf 'IMAGE_RETENTION_RETIRED=%s\n' "$retired"
+printf 'IMAGE_RETENTION_PRESERVED=%s\n' "$preserved"
+printf 'IMAGE_RETENTION_SKIPPED=%s\n' "$skipped"
+'@
+  $script = $script.Replace('__COMPOSE_PROJECT__', $Config.ComposeProject).Replace('__CURRENT_IMAGES_BASE64__', $currentImagesPayload).Replace('__PREVIOUS_RELEASE_BASE64__', $previousReleasePayload).Replace('__PREVIOUS_IMAGES_BASE64__', $previousImagesPayload)
+  $output = Invoke-RemoteScript -Config $Config -Script $script
+  $result = [ordered]@{}
+  foreach ($marker in @("IMAGE_RETENTION_RETIRED", "IMAGE_RETENTION_PRESERVED", "IMAGE_RETENTION_SKIPPED")) {
+    $value = Get-ReleaseMarker -Output $output -Name $marker
+    if ($value -notmatch "^[0-9]+$") {
+      throw "The image-retention command returned an invalid $marker value."
+    }
+    $result[$marker] = [int]$value
+  }
+
+  return [pscustomobject]@{
+    Retired = $result.IMAGE_RETENTION_RETIRED
+    Preserved = $result.IMAGE_RETENTION_PRESERVED
+    Skipped = $result.IMAGE_RETENTION_SKIPPED
+  }
+}
+
 function Add-MigrationOwnershipTarget {
   param(
     [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Targets,
@@ -1335,6 +1436,25 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
     "-fsS", "-o", "NUL", "-w", "%{http_code}", "https://$($config.CanonicalHost)/login"
   )
 
+  $imageRetention = [ordered]@{
+    status = "unavailable"
+    retired = 0
+    preserved = 0
+    skipped = 0
+  }
+  try {
+    $retentionResult = Invoke-RollbackSafeImageRetention -Config $config -CurrentImages @($offHostImages.Images) -PreviousRelease $previousRelease -PreviousImages $previousImages
+    $imageRetention.status = "completed"
+    $imageRetention.retired = $retentionResult.Retired
+    $imageRetention.preserved = $retentionResult.Preserved
+    $imageRetention.skipped = $retentionResult.Skipped
+  } catch {
+    # A retention issue must not recast an already public-verified release as
+    # failed.  The private record makes the follow-up explicit without leaking
+    # host image names or operational paths to the console.
+    Write-Warning "Post-release image retention was not completed; review the private release record before the next release."
+  }
+
   New-Item -ItemType Directory -Force -Path $config.ReleaseRecordDirectory | Out-Null
   $deployedAt = (Get-Date).ToUniversalTime().ToString("o")
   $recordName = "$($deployedAt.Replace(':', '-'))-$shortSha.json"
@@ -1354,6 +1474,7 @@ printf 'EDGE_PROXY_IMAGE=%s\n' "$edge_proxy_image"
     previousCommit = $previousCommit
     previousTopology = $previousTopology
     previousImageTags = @($previousImages -split ' ' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    imageRetention = $imageRetention
     topology = $deployedTopology
     topologyHealth = $topologyHealth
     statefulNetworkReadiness = $statefulNetworkReadiness

@@ -1,7 +1,7 @@
 # Current production inventory
 
 **Captured:** 2026-07-29
-**Updated:** 2026-08-10, after the verified `c7be850` fifth-pass release.
+**Updated:** 2026-08-10, after the verified `c04e509` fifth-pass release.
 **Scope:** non-secret current-state addendum plus the historical `74ffd3f`
 reconciliation snapshot below.
 
@@ -9,46 +9,46 @@ This document intentionally excludes host addresses, account names, release
 paths, tunnel identifiers, environment values, and backup locations. Keep
 those details in the private operator inventory.
 
-## 2026-08-10 fifth-pass release addendum
+## 2026-08-10 current-release addendum
 
-`c7be850` is the current verified website release, deployed through the
+`c04e509` is the current verified website release, deployed through the
 approved controller with the `all-in-one-with-chat` topology. The controller
-recorded fresh private backup evidence, applied and verified all 51 migrations,
-and retained the previous release for rollback. A separately approved,
-narrow migration-role ownership repair for three pre-existing enum types passed
-the controller's ownership preflight before the release began.
+recorded fresh private backup evidence, verified migration status, retained the
+previous release for rollback, and passed selected-service, loopback, public
+health/login, and monitor gates.
 
-Independent verification confirmed the deployed revision, healthy PostgreSQL,
-durable Redis, ephemeral Redis, web, worker, worker-health, chat gateway, and
-edge proxy; loopback health/liveness; public health and login HTTP 200; public
-internal-health HTTP 403; and an active-successful monitor. The older snapshot
+The first `c04e509` controller attempt stopped before remote mutation at its
+capacity preflight. The separately approved repair removed only stale,
+unreferenced old release-image tags and explicitly preserved the live and
+rollback image sets; it did not remove backups, volumes, release sources, or
+journals. Independent verification then confirmed the deployed revision,
+healthy PostgreSQL, durable Redis, ephemeral Redis, web, worker,
+worker-health, chat gateway, and edge proxy; loopback health/liveness; public
+health and login HTTP 200; and an active-successful monitor. Roughly 7.4 GiB
+of root capacity was available after the successful release. The older snapshot
 below remains historical evidence only where it names `74ffd3f`, 32 migrations,
 or an inactive chat gateway.
 
-> The web and compatibility-worker images are running the approved
-> `74ffd3f` release. Durable and ephemeral Redis are healthy, and the
-> compatibility worker remains intentionally active. The opt-in chat gateway
-> is deliberately **not running**; do not describe its real-time path as
-> live-verified until it is separately activated and tested. The split-worker
-> profile remains deferred until sustained workload evidence justifies a
-> separately approved cutover.
+> The current release is `c04e509`. The all-in-one worker and active chat
+> gateway are part of the verified topology. The split-worker profile remains
+> deferred until sustained workload evidence justifies a separately approved
+> cutover.
 
 ## Verified runtime state
 
-- The Compose project runs `web`, `worker`, `chat-gateway`, `postgres`,
-  durable `redis`, disposable `redis-ephemeral`, and the one-shot `migrate`
-  service.
+- The Compose project runs `web`, `worker`, `worker-health`, `chat-gateway`,
+  `edge-proxy`, `postgres`, durable `redis`, and disposable `redis-ephemeral`;
+  the one-shot `migrate` service is used by the release controller.
 - PostgreSQL and both Redis services are loopback-bound. Durable Redis has
   append-only persistence, a deliberate memory ceiling, and a `noeviction`
   policy so queue jobs are not silently discarded. Ephemeral Redis has no
   volume and uses the separate short-lived-state policy.
-- PostgreSQL, durable Redis, ephemeral Redis, web, and the compatibility
-  worker report healthy Docker status. The worker updates an internal
-  heartbeat file for its health check.
-- The existing chat-gateway container is cleanly stopped rather than failed or
-  OOM-killed. Its release record is `not-running`, which is the expected
-  result for the opt-in profile; the release procedure did not implicitly
-  activate it.
+- PostgreSQL, durable Redis, ephemeral Redis, web, worker, worker-health,
+  chat gateway, and edge proxy report healthy Docker status. The workers update
+  internal heartbeat files for their health checks.
+- The chat gateway and edge proxy are active only because the selected
+  `all-in-one-with-chat` topology explicitly includes them; their canonical
+  browser path remains behind the managed tunnel.
 - Stateless containers use read-only filesystems, restricted temporary storage,
   dropped Linux capabilities, no-new-privileges, bounded CPU/memory/process
   limits, and bounded local Docker logs. Stateful services retain only the
@@ -66,14 +66,13 @@ or an inactive chat gateway.
   [trusted-ingress-verification.md](trusted-ingress-verification.md) retains
   the separate, still-open runtime proof for `CF-Connecting-IP` overwrite.
 - The production database has no unfinished Prisma migrations. One historical
-  rolled-back migration record remains in the ledger, while the approved
-  release record reports 32 applied migrations; it is not an active migration
-  failure. The release procedure validates a custom-format backup with
+  rolled-back migration record remains in the ledger; it is not an active
+  migration failure. The release procedure validates a custom-format backup with
   `pg_restore -l` before each swap and retains the prior release directory for
   rollback.
 - The private release record ties the live archive deployment to public commit
-  `74ffd3f`, its successful CI run, migration verification, source-built web
-  and worker image tags, and public health/login checks. The record itself
+  `c04e509`, its successful CI run, migration verification, source-built image
+  tags, and public health/login checks. The record itself
   remains outside Git.
 - Runtime and migration database accounts are separate, login-capable,
   non-superuser roles with no role-management or database-creation powers.
@@ -162,6 +161,11 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
 
 - Maintain the 30-day off-host backup retention and run the documented restore
   drill at least quarterly and after backup-format changes.
+- Review the root-capacity trend before every release. The approved controller
+  remains the exact archive-aware capacity gate; the monitor's byte reserve and
+  rollback-safe release-image retention are source safeguards pending their own
+  later approved deployment. Named recovery archives require an explicit review
+  deadline and are never automatically deleted by that safeguard.
 - Keep `NET-001` open only for its runtime `CF-Connecting-IP` overwrite proof.
   The current managed-tunnel-to-Compose mapping and no-bypass DNS inventory
   are already recorded; do not retry the blocked request form or alter ingress
