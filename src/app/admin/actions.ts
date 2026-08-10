@@ -19,10 +19,7 @@ import {
   addDiscoverSubredditToRedditTopic,
 } from "@/lib/discover-subreddits"
 import { OpmlError } from "@/lib/opml"
-import {
-  enforceRateLimit,
-  getRateLimitErrorMessage,
-} from "@/lib/rate-limit"
+import { enforceRateLimit, getRateLimitErrorMessage } from "@/lib/rate-limit"
 
 const MAX_DISCOVER_OPML_IMPORT_BYTES = 4 * 1024 * 1024
 
@@ -68,7 +65,7 @@ class DisableUserError extends Error {
 
 export async function importDiscoverOpmlAction(
   _previousState: ImportDiscoverOpmlActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<ImportDiscoverOpmlActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -123,7 +120,7 @@ export async function importDiscoverOpmlAction(
     refresh()
 
     const errors = summary.errors.map(
-      (error) => `${error.title}: ${error.message}`
+      (error) => `${error.title}: ${error.message}`,
     )
 
     return {
@@ -158,7 +155,7 @@ export async function importDiscoverOpmlAction(
 
 export async function updateDiscoverCategoryMetadataAction(
   _previousState: UpdateDiscoverCategoryMetadataActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<UpdateDiscoverCategoryMetadataActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -203,7 +200,7 @@ export async function updateDiscoverCategoryMetadataAction(
 
 export async function addDiscoverSubredditAction(
   _previousState: AddDiscoverSubredditActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AddDiscoverSubredditActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -246,7 +243,7 @@ export async function addDiscoverSubredditAction(
 
 export async function revokeUserSessionsAction(
   _previousState: RevokeUserSessionsActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<RevokeUserSessionsActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -320,7 +317,7 @@ export async function revokeUserSessionsAction(
 
 export async function disableUserAction(
   _previousState: DisableUserActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<DisableUserActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -358,12 +355,14 @@ export async function disableUserAction(
       }
 
       if (existingUser.id === admin.id) {
-        throw new DisableUserError("You cannot disable your own administrator account.")
+        throw new DisableUserError(
+          "You cannot disable your own administrator account.",
+        )
       }
 
       if (existingUser.role === "ADMIN") {
         throw new DisableUserError(
-          "Administrator accounts cannot be disabled from this dashboard."
+          "Administrator accounts cannot be disabled from this dashboard.",
         )
       }
 
@@ -431,12 +430,15 @@ export async function disableUserAction(
             emailErrorMessage: "ACCOUNT_DISABLED",
             emailStatus: "NOT_REQUESTED",
             errorMessage: "ACCOUNT_DISABLED",
+            lastHeartbeatAt: disabledAt,
+            leaseExpiresAt: null,
+            leaseOwner: null,
             processingStartedAt: null,
             status: "CANCELED",
           },
           where: {
             rule: { userId: user.id },
-            status: { in: ["PENDING", "FAILED"] },
+            status: { in: ["PENDING", "PROCESSING", "FAILED"] },
           },
         }),
         transaction.smartDigest.updateMany({

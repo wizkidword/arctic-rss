@@ -48,7 +48,8 @@ vi.mock("@/lib/discover-subreddits", () => ({
 
 vi.mock("@/lib/rate-limit", () => ({
   enforceRateLimit: mocks.enforceRateLimit,
-  getRateLimitErrorMessage: () => "Too many requests. Please wait a few minutes and try again.",
+  getRateLimitErrorMessage: () =>
+    "Too many requests. Please wait a few minutes and try again.",
 }))
 
 import {
@@ -69,7 +70,7 @@ describe("importDiscoverOpmlAction", () => {
     const formData = new FormData()
     formData.set(
       "opmlFile",
-      new File(["<opml></opml>"], "feeds.opml", { type: "text/xml" })
+      new File(["<opml></opml>"], "feeds.opml", { type: "text/xml" }),
     )
 
     const result = await importDiscoverOpmlAction(
@@ -77,7 +78,7 @@ describe("importDiscoverOpmlAction", () => {
         message: "",
         status: "idle",
       },
-      formData
+      formData,
     )
 
     expect(result).toEqual({
@@ -95,7 +96,7 @@ describe("importDiscoverOpmlAction", () => {
         message: "",
         status: "idle",
       },
-      new FormData()
+      new FormData(),
     )
 
     expect(result).toEqual({
@@ -120,7 +121,7 @@ describe("importDiscoverOpmlAction", () => {
       "opmlFile",
       new File(["<opml><body /></opml>"], "bangladesh.opml", {
         type: "text/xml",
-      })
+      }),
     )
     formData.set("categoryName", "General")
     formData.set("countryCode", "BD")
@@ -131,7 +132,7 @@ describe("importDiscoverOpmlAction", () => {
         message: "",
         status: "idle",
       },
-      formData
+      formData,
     )
 
     expect(mocks.importDiscoverOpml).toHaveBeenCalledWith({
@@ -175,7 +176,7 @@ describe("updateDiscoverCategoryMetadataAction", () => {
         message: "",
         status: "idle",
       },
-      formData
+      formData,
     )
 
     expect(result).toEqual({
@@ -203,7 +204,7 @@ describe("updateDiscoverCategoryMetadataAction", () => {
         message: "",
         status: "idle",
       },
-      formData
+      formData,
     )
 
     expect(mocks.updateDiscoverCategoryMetadata).toHaveBeenCalledWith({
@@ -216,7 +217,7 @@ describe("updateDiscoverCategoryMetadataAction", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/discover")
     expect(mocks.revalidateTag).toHaveBeenCalledWith(
       "admin-dashboard-overview",
-      "max"
+      "max",
     )
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
@@ -241,7 +242,7 @@ describe("addDiscoverSubredditAction", () => {
         message: "",
         status: "idle",
       },
-      formData
+      formData,
     )
 
     expect(result).toEqual({
@@ -267,7 +268,7 @@ describe("addDiscoverSubredditAction", () => {
         message: "",
         status: "idle",
       },
-      formData
+      formData,
     )
 
     expect(mocks.addDiscoverSubredditToRedditTopic).toHaveBeenCalledWith({
@@ -278,7 +279,7 @@ describe("addDiscoverSubredditAction", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/app/discover")
     expect(mocks.revalidateTag).toHaveBeenCalledWith(
       "admin-dashboard-overview",
-      "max"
+      "max",
     )
     expect(mocks.refresh).toHaveBeenCalled()
     expect(result).toEqual({
@@ -296,7 +297,10 @@ describe("revokeUserSessionsAction", () => {
   it("requires a fresh administrator session", async () => {
     mocks.requireFreshAdmin.mockResolvedValue(null)
 
-    const result = await revokeUserSessionsAction(initialState(), formData("user-1"))
+    const result = await revokeUserSessionsAction(
+      initialState(),
+      formData("user-1"),
+    )
 
     expect(result).toEqual({
       message: "Only administrators can revoke user sessions.",
@@ -324,7 +328,10 @@ describe("revokeUserSessionsAction", () => {
     mocks.getPrisma.mockReturnValue(prisma)
     mocks.requireFreshAdmin.mockResolvedValue({ id: "admin-1" })
 
-    const result = await revokeUserSessionsAction(initialState(), formData("user-1"))
+    const result = await revokeUserSessionsAction(
+      initialState(),
+      formData("user-1"),
+    )
 
     expect(transaction.user.update).toHaveBeenCalledWith({
       data: { authVersion: { increment: 1 } },
@@ -469,12 +476,15 @@ describe("disableUserAction", () => {
         emailErrorMessage: "ACCOUNT_DISABLED",
         emailStatus: "NOT_REQUESTED",
         errorMessage: "ACCOUNT_DISABLED",
+        lastHeartbeatAt: expect.any(Date),
+        leaseExpiresAt: null,
+        leaseOwner: null,
         processingStartedAt: null,
         status: "CANCELED",
       },
       where: {
         rule: { userId: "user-1" },
-        status: { in: ["PENDING", "FAILED"] },
+        status: { in: ["PENDING", "PROCESSING", "FAILED"] },
       },
     })
     expect(transaction.smartDigest.updateMany).toHaveBeenCalledWith({
