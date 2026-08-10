@@ -38,6 +38,6 @@
     "@types/react": "~19.2.3",
     "eslint-config-expo": "~57.0.0",
     "expo-doctor": "^1.20.1",
-    "typescript": "~6.0.3"
+    "typescript": "~7.0.2"
   }
 }
