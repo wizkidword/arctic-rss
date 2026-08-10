@@ -338,6 +338,9 @@ jobs:
 
   codeql:
     name: Static analysis
+    # Private repositories require Code Scanning to be enabled separately. Set the
+    # repository variable CODEQL_ENABLED=true once that service is available.
+    if: ${{ vars.CODEQL_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read

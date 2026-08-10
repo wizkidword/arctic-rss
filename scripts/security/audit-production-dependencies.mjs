@@ -22,15 +22,68 @@ function packageNameFromLockPath(lockPath) {
   return segments[0] || null;
 }
 
+function resolveDependencyLockPath(packages, parentPath, dependencyName) {
+  let currentPath = parentPath;
+
+  while (true) {
+    const candidate = currentPath
+      ? `${currentPath}/node_modules/${dependencyName}`
+      : `node_modules/${dependencyName}`;
+
+    if (packages[candidate]) {
+      return candidate;
+    }
+
+    if (!currentPath) {
+      return null;
+    }
+
+    const nestedNodeModulesIndex = currentPath.lastIndexOf("/node_modules/");
+    currentPath =
+      nestedNodeModulesIndex === -1
+        ? ""
+        : currentPath.slice(0, nestedNodeModulesIndex);
+  }
+}
+
+function runtimeDependencyNames(metadata) {
+  const requiredPeers = Object.keys(metadata.peerDependencies ?? {}).filter(
+    (dependencyName) =>
+      metadata.peerDependenciesMeta?.[dependencyName]?.optional !== true,
+  );
+
+  return new Set([
+    ...Object.keys(metadata.dependencies ?? {}),
+    ...Object.keys(metadata.optionalDependencies ?? {}),
+    ...requiredPeers,
+  ]);
+}
+
 function createProductionPayload(packages) {
   const versionsByPackage = new Map();
+  // The production image installs only the root manifest and lockfile. Start
+  // there instead of treating every workspace build dependency as server code.
+  const pending = Object.keys(packages[""]?.dependencies ?? {}).map(
+    (dependencyName) => ({ dependencyName, parentPath: "" }),
+  );
+  const visited = new Set();
 
-  for (const [lockPath, metadata] of Object.entries(packages)) {
-    if (
-      !lockPath ||
-      metadata.dev === true ||
-      typeof metadata.version !== "string"
-    ) {
+  while (pending.length > 0) {
+    const { dependencyName, parentPath } = pending.pop();
+    const lockPath = resolveDependencyLockPath(
+      packages,
+      parentPath,
+      dependencyName,
+    );
+
+    if (!lockPath || visited.has(lockPath)) {
+      continue;
+    }
+
+    visited.add(lockPath);
+    const metadata = packages[lockPath];
+
+    if (typeof metadata.version !== "string") {
       continue;
     }
 
@@ -42,6 +95,13 @@ function createProductionPayload(packages) {
     const versions = versionsByPackage.get(packageName) ?? new Set();
     versions.add(metadata.version);
     versionsByPackage.set(packageName, versions);
+
+    for (const childDependencyName of runtimeDependencyNames(metadata)) {
+      pending.push({
+        dependencyName: childDependencyName,
+        parentPath: lockPath,
+      });
+    }
   }
 
   return Object.fromEntries(
