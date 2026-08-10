@@ -25,6 +25,8 @@ describe("production backup evidence workflow", () => {
     expect(latest).toContain('backup_id != expected_backup_id')
     expect(recorder).toContain("BACKUP_OFF_HOST_TARGET")
     expect(recorder).toContain("BACKUP_EVIDENCE_ID")
+    expect(recorder).toContain("os.fchown(descriptor, original_stat.st_uid, original_stat.st_gid)")
+    expect(recorder).toContain("os.fchmod(descriptor, mode)")
     expect(recorder).toContain("os.replace(temporary_path, path)")
     expect(sync).toContain("Confirm-RemoteOffHostEvidence")
     expect(sync).toContain("arctic-rss-record-backup-offhost $BackupId")

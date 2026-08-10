@@ -68,15 +68,17 @@ if not target.strip():
 
 evidence["offHostTarget"] = target
 evidence["offHostVerifiedAt"] = verified_at
-mode = stat.S_IMODE(os.stat(path).st_mode)
+original_stat = os.stat(path)
+mode = stat.S_IMODE(original_stat.st_mode)
 descriptor, temporary_path = tempfile.mkstemp(prefix=".backup-evidence-", dir=os.path.dirname(path))
 try:
+    os.fchown(descriptor, original_stat.st_uid, original_stat.st_gid)
+    os.fchmod(descriptor, mode)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         json.dump(evidence, handle, separators=(",", ":"), sort_keys=True)
         handle.write("\n")
         handle.flush()
         os.fsync(handle.fileno())
-    os.chmod(temporary_path, mode)
     os.replace(temporary_path, path)
 finally:
     if os.path.exists(temporary_path):
