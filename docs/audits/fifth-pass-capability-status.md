@@ -1,9 +1,23 @@
 # Fifth-pass capability status
 
-**Last reviewed:** 2026-08-10
+**Last source review:** 2026-08-10
 **Baseline:** `686cd18b7e7f6196865af34c93496c3bddf16a69`  
-**Production status:** source review and local verification only; not deployed
-or operator-verified.
+**Production status:** `c7be850` was deployed and independently verified on
+2026-08-10 through the approved OVH release controller.
+
+## Release addendum
+
+The release controller passed the exact-commit CI and local gates, fresh backup
+gate, migration ownership preflight, migration status, selected-service health,
+loopback health/liveness, public health/login, and monitor checks. Independent
+verification confirmed all 51 migrations, the eight required
+`all-in-one-with-chat` services, and the private release record.
+
+The per-finding production and operator columns below are the preserved
+pre-release implementation snapshot. Their `Not deployed` and `No` entries are
+superseded by this release-level evidence; they do not claim that each product
+flow was exercised with a real production account. The mobile platform ADR
+remains owner-gated.
 
 | Finding ID | Source implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Unit/integration coverage                                                                                                                                                                                                                                                                                                                                                        | Browser evidence                      | Redis/PostgreSQL/Compose evidence                                                                                                                                                                                                                                    | Migration required                                                                               | Production release status | Operator verification | Mobile dependency                            | Remaining owner gate                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------- | --------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
