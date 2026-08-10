@@ -6,12 +6,37 @@ import { briefingsResponseSchema } from "./briefings"
 import { collectionsResponseSchema } from "./collections"
 import { apiV1ErrorEnvelopeSchema } from "./errors"
 import { feedsResponseSchema } from "./feeds"
+import {
+  articleStateMutationRequestSchema,
+  articleStateMutationResponseSchema,
+  collectionItemMutationResponseSchema,
+  collectionItemRequestSchema,
+  deviceSessionLogoutResponseSchema,
+  podcastEpisodeStateMutationResponseSchema,
+  podcastProgressMutationRequestSchema,
+  podcastStateMutationRequestSchema,
+} from "./mutations"
+import {
+  deviceInstallationRequestSchema,
+  deviceInstallationResponseSchema,
+  deviceInstallationUnregisterRequestSchema,
+  notificationPreferenceUpdateRequestSchema,
+  notificationPreferenceUpdateResponseSchema,
+  notificationPreferencesResponseSchema,
+} from "./notifications"
 import { podcastEpisodeResponseSchema, podcastsResponseSchema } from "./podcasts"
 import { savedViewsResponseSchema } from "./saved-views"
+import { syncResponseSchema } from "./sync"
 
 const schemas = {
   ApiV1Error: z.toJSONSchema(apiV1ErrorEnvelopeSchema, { target: "draft-2020-12" }),
   ArticleDetailResponse: z.toJSONSchema(articleDetailResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  ArticleStateMutationRequest: z.toJSONSchema(articleStateMutationRequestSchema, {
+    target: "draft-2020-12",
+  }),
+  ArticleStateMutationResponse: z.toJSONSchema(articleStateMutationResponseSchema, {
     target: "draft-2020-12",
   }),
   BriefingsResponse: z.toJSONSchema(briefingsResponseSchema, {
@@ -20,9 +45,45 @@ const schemas = {
   CollectionsResponse: z.toJSONSchema(collectionsResponseSchema, {
     target: "draft-2020-12",
   }),
+  CollectionItemMutationResponse: z.toJSONSchema(collectionItemMutationResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  CollectionItemRequest: z.toJSONSchema(collectionItemRequestSchema, {
+    target: "draft-2020-12",
+  }),
+  DeviceInstallationRequest: z.toJSONSchema(deviceInstallationRequestSchema, {
+    target: "draft-2020-12",
+  }),
+  DeviceInstallationResponse: z.toJSONSchema(deviceInstallationResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  DeviceInstallationUnregisterRequest: z.toJSONSchema(deviceInstallationUnregisterRequestSchema, {
+    target: "draft-2020-12",
+  }),
+  DeviceSessionLogoutResponse: z.toJSONSchema(deviceSessionLogoutResponseSchema, {
+    target: "draft-2020-12",
+  }),
   FeedsResponse: z.toJSONSchema(feedsResponseSchema, { target: "draft-2020-12" }),
   MeResponse: z.toJSONSchema(meResponseSchema, { target: "draft-2020-12" }),
   MobileTokenResponse: z.toJSONSchema(mobileTokenResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  NotificationPreferenceUpdateRequest: z.toJSONSchema(notificationPreferenceUpdateRequestSchema, {
+    target: "draft-2020-12",
+  }),
+  NotificationPreferenceUpdateResponse: z.toJSONSchema(notificationPreferenceUpdateResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  NotificationPreferencesResponse: z.toJSONSchema(notificationPreferencesResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  PodcastEpisodeStateMutationResponse: z.toJSONSchema(podcastEpisodeStateMutationResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  PodcastProgressMutationRequest: z.toJSONSchema(podcastProgressMutationRequestSchema, {
+    target: "draft-2020-12",
+  }),
+  PodcastStateMutationRequest: z.toJSONSchema(podcastStateMutationRequestSchema, {
     target: "draft-2020-12",
   }),
   PodcastEpisodeResponse: z.toJSONSchema(podcastEpisodeResponseSchema, {
@@ -37,6 +98,7 @@ const schemas = {
   SavedViewsResponse: z.toJSONSchema(savedViewsResponseSchema, {
     target: "draft-2020-12",
   }),
+  SyncResponse: z.toJSONSchema(syncResponseSchema, { target: "draft-2020-12" }),
 }
 
 function jsonResponse(schema: keyof typeof schemas) {
@@ -47,6 +109,17 @@ function jsonResponse(schema: keyof typeof schemas) {
       },
     },
     description: "A private Arctic RSS API response.",
+  }
+}
+
+function jsonRequest(schema: keyof typeof schemas) {
+  return {
+    content: {
+      "application/json": {
+        schema: { $ref: `#/components/schemas/${schema}` },
+      },
+    },
+    required: true,
   }
 }
 
@@ -67,6 +140,19 @@ export const mobileApiV1OpenApiDocument = {
   },
   openapi: "3.1.1",
   paths: {
+    "/api/v1/articles/{articleId}/state": {
+      patch: {
+        operationId: "updateArticleState",
+        requestBody: jsonRequest("ArticleStateMutationRequest"),
+        responses: {
+          "200": jsonResponse("ArticleStateMutationResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Idempotently update read, star, or archive state for one article.",
+      },
+    },
     "/api/v1/articles/{articleId}": {
       get: {
         operationId: "getArticle",
@@ -86,6 +172,33 @@ export const mobileApiV1OpenApiDocument = {
         operationId: "listCollections",
         responses: { "200": jsonResponse("CollectionsResponse"), ...defaultErrors },
         summary: "List the authenticated user's collections.",
+      },
+    },
+    "/api/v1/collections/{collectionId}/items": {
+      post: {
+        operationId: "addCollectionItem",
+        requestBody: jsonRequest("CollectionItemRequest"),
+        responses: {
+          "200": jsonResponse("CollectionItemMutationResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "404": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Idempotently save an authorized article to an existing collection.",
+      },
+    },
+    "/api/v1/collections/{collectionId}/items/{articleId}": {
+      delete: {
+        operationId: "removeCollectionItem",
+        responses: {
+          "200": jsonResponse("CollectionItemMutationResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "404": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Idempotently remove an article from an existing collection.",
       },
     },
     "/api/v1/device-authorizations/exchange": {
@@ -111,6 +224,38 @@ export const mobileApiV1OpenApiDocument = {
         summary: "Rotate a first-party device refresh token.",
       },
     },
+    "/api/v1/device-sessions/current/logout": {
+      post: {
+        operationId: "logoutCurrentDeviceSession",
+        responses: { "200": jsonResponse("DeviceSessionLogoutResponse"), ...defaultErrors },
+        summary: "Revoke the current bearer device session and its push installation references.",
+      },
+    },
+    "/api/v1/device-installations/current": {
+      delete: {
+        operationId: "unregisterCurrentDeviceInstallation",
+        requestBody: jsonRequest("DeviceInstallationUnregisterRequest"),
+        responses: {
+          "200": jsonResponse("DeviceInstallationResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "404": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Disable an unregistered push installation for the current device session.",
+      },
+      put: {
+        operationId: "registerCurrentDeviceInstallation",
+        requestBody: jsonRequest("DeviceInstallationRequest"),
+        responses: {
+          "200": jsonResponse("DeviceInstallationResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Register a protected push installation reference for the current device session.",
+      },
+    },
     "/api/v1/feeds": {
       get: {
         operationId: "listFeeds",
@@ -132,11 +277,59 @@ export const mobileApiV1OpenApiDocument = {
         summary: "Get one authorized podcast episode.",
       },
     },
+    "/api/v1/podcast-episodes/{episodeId}/progress": {
+      patch: {
+        operationId: "updatePodcastEpisodeProgress",
+        requestBody: jsonRequest("PodcastProgressMutationRequest"),
+        responses: {
+          "200": jsonResponse("PodcastEpisodeStateMutationResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "404": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Idempotently update playback progress for one authorized episode.",
+      },
+    },
+    "/api/v1/podcast-episodes/{episodeId}/state": {
+      patch: {
+        operationId: "updatePodcastEpisodeState",
+        requestBody: jsonRequest("PodcastStateMutationRequest"),
+        responses: {
+          "200": jsonResponse("PodcastEpisodeStateMutationResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "404": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Idempotently update played or starred state for one authorized episode.",
+      },
+    },
     "/api/v1/podcasts": {
       get: {
         operationId: "listPodcasts",
         responses: { "200": jsonResponse("PodcastsResponse"), ...defaultErrors },
         summary: "List subscribed podcasts and recent episodes.",
+      },
+    },
+    "/api/v1/notification-preferences": {
+      get: {
+        operationId: "listNotificationPreferences",
+        responses: { "200": jsonResponse("NotificationPreferencesResponse"), ...defaultErrors },
+        summary: "List centralized mobile-safe notification delivery preferences.",
+      },
+    },
+    "/api/v1/notification-preferences/{topic}": {
+      put: {
+        operationId: "updateNotificationPreference",
+        requestBody: jsonRequest("NotificationPreferenceUpdateRequest"),
+        responses: {
+          "200": jsonResponse("NotificationPreferenceUpdateResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Idempotently update one centralized notification delivery preference.",
       },
     },
     "/api/v1/reader": {
@@ -158,6 +351,18 @@ export const mobileApiV1OpenApiDocument = {
         operationId: "searchArticles",
         responses: { "200": jsonResponse("ReaderPageResponse"), ...defaultErrors },
         summary: "Search authorized reader article metadata without bodies.",
+      },
+    },
+    "/api/v1/sync": {
+      get: {
+        operationId: "syncUserChanges",
+        responses: {
+          "200": jsonResponse("SyncResponse"),
+          "400": jsonResponse("ApiV1Error"),
+          "409": jsonResponse("ApiV1Error"),
+          ...defaultErrors,
+        },
+        summary: "Read the current device session's incremental user sync events and tombstones.",
       },
     },
   },

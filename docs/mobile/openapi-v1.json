@@ -13,14 +13,20 @@
                 "enum": [
                   "ARTICLE_NOT_FOUND",
                   "AUTHENTICATION_REQUIRED",
+                  "COLLECTION_NOT_FOUND",
+                  "DEVICE_INSTALLATION_CONFLICT",
                   "DEVICE_AUTHORIZATION_INVALID",
                   "DEVICE_SESSION_LIMIT_REACHED",
+                  "FULL_RESYNC_REQUIRED",
+                  "IDEMPOTENCY_KEY_REUSED",
                   "INTERNAL_ERROR",
                   "MOBILE_AUTHENTICATION_UNAVAILABLE",
+                  "MOBILE_DEVICE_SESSION_REQUIRED",
                   "MOBILE_REFRESH_INVALID",
                   "PODCAST_EPISODE_NOT_FOUND",
                   "RATE_LIMITED",
                   "RATE_LIMIT_UNAVAILABLE",
+                  "RESOURCE_NOT_FOUND",
                   "REQUEST_VALIDATION_FAILED"
                 ]
               },
@@ -275,6 +281,125 @@
         ],
         "additionalProperties": false
       },
+      "ArticleStateMutationRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "isArchived": {
+            "type": "boolean"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "isStarred": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ArticleStateMutationResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "archivedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "articleId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "isRead": {
+                "type": "boolean"
+              },
+              "isStarred": {
+                "type": "boolean"
+              },
+              "readAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "starredAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "archivedAt",
+              "articleId",
+              "isRead",
+              "isStarred",
+              "readAt",
+              "replayed",
+              "starredAt"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
       "BriefingsResponse": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -419,6 +544,248 @@
             },
             "required": [
               "collections"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "CollectionItemMutationResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "articleId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "collectionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "removed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "articleId",
+              "collectionId",
+              "replayed",
+              "removed"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "CollectionItemRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "articleId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": [
+          "articleId"
+        ],
+        "additionalProperties": false
+      },
+      "DeviceInstallationRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "preview",
+              "production"
+            ]
+          },
+          "pushToken": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "environment",
+          "pushToken"
+        ],
+        "additionalProperties": false
+      },
+      "DeviceInstallationResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "installationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "lastSeenAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "DISABLED"
+                ]
+              }
+            },
+            "required": [
+              "installationId",
+              "lastSeenAt",
+              "replayed",
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "DeviceInstallationUnregisterRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "pushToken": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "pushToken"
+        ],
+        "additionalProperties": false
+      },
+      "DeviceSessionLogoutResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "loggedOut": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "loggedOut"
             ],
             "additionalProperties": false
           },
@@ -697,6 +1064,307 @@
           "data",
           "meta"
         ],
+        "additionalProperties": false
+      },
+      "NotificationPreferenceUpdateRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "IN_APP",
+              "EMAIL",
+              "MOBILE_PUSH",
+              "DISABLED"
+            ]
+          }
+        },
+        "required": [
+          "channel"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationPreferenceUpdateResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "IN_APP",
+                  "EMAIL",
+                  "MOBILE_PUSH",
+                  "DISABLED"
+                ]
+              },
+              "topic": {
+                "type": "string",
+                "enum": [
+                  "SECURITY_ALERTS",
+                  "SAVED_MONITOR_MATCHES",
+                  "SMART_DIGEST_COMPLETION",
+                  "CHAT_MENTIONS"
+                ]
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "channel",
+              "topic",
+              "updatedAt",
+              "replayed"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationPreferencesResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "preferences": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "channel": {
+                      "type": "string",
+                      "enum": [
+                        "IN_APP",
+                        "EMAIL",
+                        "MOBILE_PUSH",
+                        "DISABLED"
+                      ]
+                    },
+                    "topic": {
+                      "type": "string",
+                      "enum": [
+                        "SECURITY_ALERTS",
+                        "SAVED_MONITOR_MATCHES",
+                        "SMART_DIGEST_COMPLETION",
+                        "CHAT_MENTIONS"
+                      ]
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "channel",
+                    "topic",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "preferences"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "PodcastEpisodeStateMutationResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "episodeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "isPlayed": {
+                "type": "boolean"
+              },
+              "isStarred": {
+                "type": "boolean"
+              },
+              "playedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "playbackPositionSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "starredAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "episodeId",
+              "isPlayed",
+              "isStarred",
+              "playedAt",
+              "playbackPositionSeconds",
+              "replayed",
+              "starredAt"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "PodcastProgressMutationRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "playbackPositionSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 604800
+          }
+        },
+        "required": [
+          "playbackPositionSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "PodcastStateMutationRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "isPlayed": {
+            "type": "boolean"
+          },
+          "isStarred": {
+            "type": "boolean"
+          }
+        },
         "additionalProperties": false
       },
       "PodcastEpisodeResponse": {
@@ -1457,6 +2125,114 @@
           "meta"
         ],
         "additionalProperties": false
+      },
+      "SyncResponse": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "TOMBSTONE",
+                        "UPSERT"
+                      ]
+                    },
+                    "occurredAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "resourceId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "resourceType": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "resourceVersion": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "sequence": {
+                      "type": "string",
+                      "maxLength": 32,
+                      "pattern": "^\\d+$"
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "occurredAt",
+                    "payload",
+                    "resourceId",
+                    "resourceType",
+                    "resourceVersion",
+                    "sequence"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "fullResyncRequired": {
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "required": [
+              "events",
+              "fullResyncRequired"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "requestId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
       }
     }
   },
@@ -1467,6 +2243,94 @@
   },
   "openapi": "3.1.1",
   "paths": {
+    "/api/v1/articles/{articleId}/state": {
+      "patch": {
+        "operationId": "updateArticleState",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArticleStateMutationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleStateMutationResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Idempotently update read, star, or archive state for one article."
+      }
+    },
     "/api/v1/articles/{articleId}": {
       "get": {
         "operationId": "getArticle",
@@ -1651,6 +2515,192 @@
         "summary": "List the authenticated user's collections."
       }
     },
+    "/api/v1/collections/{collectionId}/items": {
+      "post": {
+        "operationId": "addCollectionItem",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionItemMutationResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Idempotently save an authorized article to an existing collection."
+      }
+    },
+    "/api/v1/collections/{collectionId}/items/{articleId}": {
+      "delete": {
+        "operationId": "removeCollectionItem",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionItemMutationResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Idempotently remove an article from an existing collection."
+      }
+    },
     "/api/v1/device-authorizations/exchange": {
       "post": {
         "operationId": "exchangeDeviceAuthorizationCode",
@@ -1795,6 +2845,248 @@
           }
         },
         "summary": "Rotate a first-party device refresh token."
+      }
+    },
+    "/api/v1/device-sessions/current/logout": {
+      "post": {
+        "operationId": "logoutCurrentDeviceSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceSessionLogoutResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Revoke the current bearer device session and its push installation references."
+      }
+    },
+    "/api/v1/device-installations/current": {
+      "delete": {
+        "operationId": "unregisterCurrentDeviceInstallation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceInstallationUnregisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceInstallationResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Disable an unregistered push installation for the current device session."
+      },
+      "put": {
+        "operationId": "registerCurrentDeviceInstallation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceInstallationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceInstallationResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Register a protected push installation reference for the current device session."
       }
     },
     "/api/v1/feeds": {
@@ -1981,6 +3273,202 @@
         "summary": "Get one authorized podcast episode."
       }
     },
+    "/api/v1/podcast-episodes/{episodeId}/progress": {
+      "patch": {
+        "operationId": "updatePodcastEpisodeProgress",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PodcastProgressMutationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PodcastEpisodeStateMutationResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Idempotently update playback progress for one authorized episode."
+      }
+    },
+    "/api/v1/podcast-episodes/{episodeId}/state": {
+      "patch": {
+        "operationId": "updatePodcastEpisodeState",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PodcastStateMutationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PodcastEpisodeStateMutationResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Idempotently update played or starred state for one authorized episode."
+      }
+    },
     "/api/v1/podcasts": {
       "get": {
         "operationId": "listPodcasts",
@@ -2037,6 +3525,152 @@
           }
         },
         "summary": "List subscribed podcasts and recent episodes."
+      }
+    },
+    "/api/v1/notification-preferences": {
+      "get": {
+        "operationId": "listNotificationPreferences",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "List centralized mobile-safe notification delivery preferences."
+      }
+    },
+    "/api/v1/notification-preferences/{topic}": {
+      "put": {
+        "operationId": "updateNotificationPreference",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferenceUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceUpdateResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Idempotently update one centralized notification delivery preference."
       }
     },
     "/api/v1/reader": {
@@ -2211,6 +3845,84 @@
           }
         },
         "summary": "Search authorized reader article metadata without bodies."
+      }
+    },
+    "/api/v1/sync": {
+      "get": {
+        "operationId": "syncUserChanges",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResponse"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiV1Error"
+                }
+              }
+            },
+            "description": "A private Arctic RSS API response."
+          }
+        },
+        "summary": "Read the current device session's incremental user sync events and tombstones."
       }
     }
   },

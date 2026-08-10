@@ -67,3 +67,9 @@ column, and separate production/operator fields.
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
 | Browser PKCE device authorization, rotating device sessions, revocation, and web device management | Implemented locally with additive migration-risk evidence; no native app or sync writes | Not deployed and no migration has run | Focused/full validation, source review, then an exact future `DEPLOY <short-sha>` approval before any production release |
+
+## Phase 12 mobile sync and notification addendum (2026-08-10)
+
+| Capability | Source status | Production status | Next gate |
+| --- | --- | --- | --- |
+| Transactional user sync events/tombstones, cursor-floor full-resync handling, session-bound idempotent mobile writes, HTTPS web deep-link fallback, centralized notification preferences, and protected Android installation references | Implemented locally with additive migration-risk evidence; Android App Link signing verification and push-provider delivery are intentionally deferred | Not deployed and no migration has run | Disposable PostgreSQL trigger/concurrency evidence, full local verification, source review, then an exact future `DEPLOY <short-sha>` approval before any production release; `APPROVE ANDROID INTERNAL ALPHA` remains required before Phase 13 |

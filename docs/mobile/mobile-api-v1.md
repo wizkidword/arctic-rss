@@ -100,9 +100,30 @@ List DTOs never contain `contentHtml` or `contentText`. Client applications
 must request a selected item through its detail endpoint before rendering a
 full body.
 
-## Deferred writes
+## Device-session sync and writes
 
-API v1 content operations remain read-only in Phase 11. Phase 12 will add
-state, collection, podcast progress, device logout, and sync writes only with
-device-session authentication and idempotency receipts. Advanced source
-management remains web-only for mobile v1.
+Phase 12 adds device-session-only operations. Each content mutation requires a
+bearer device session plus an `Idempotency-Key`; browser cookies cannot make
+mobile writes or read `/api/v1/sync`.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `PATCH /api/v1/articles/:id/state` | Set read, starred, or archived state |
+| `POST /api/v1/collections/:id/items` | Save an authorized article to an existing collection |
+| `DELETE /api/v1/collections/:id/items/:articleId` | Remove an article from a collection |
+| `PATCH /api/v1/podcast-episodes/:id/progress` | Set playback position |
+| `PATCH /api/v1/podcast-episodes/:id/state` | Set played or starred state |
+| `POST /api/v1/device-sessions/current/logout` | Revoke the current device session |
+| `GET /api/v1/sync` | Read compact user changes and tombstones |
+| `GET/PUT /api/v1/notification-preferences` | Read/update central delivery preferences |
+| `PUT/DELETE /api/v1/device-installations/current` | Register or disable a protected push-installation reference |
+
+Mutation receipts are session-bound and retain only a small response DTO. A
+same-key retry returns `replayed: true`; a same key with a different payload
+returns `409 IDEMPOTENCY_KEY_REUSED`. A cursor older than the retained event
+window returns `409 FULL_RESYNC_REQUIRED`. See
+[`mobile-sync-contract.md`](mobile-sync-contract.md) for the full cursor,
+tombstone, retention, and push-data rules.
+
+Advanced source replacement, bulk source actions, OPML, administration, and
+full-library offline sync remain web-only or deferred.

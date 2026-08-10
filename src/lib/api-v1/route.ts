@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 
+import { apiV1IdentifierSchema } from "@arctic-rss/api-contract"
 import type { ApiV1ErrorCode, ApiV1ValidationIssue } from "@arctic-rss/api-contract"
 import type { z } from "zod"
 
@@ -12,6 +13,7 @@ import {
   authenticateMobileAccessToken,
   MobileAuthError,
 } from "@/lib/mobile-auth"
+import { MobileSyncError } from "@/lib/mobile-sync"
 import { enforceRateLimit, getTrustedClientIp } from "@/lib/rate-limit"
 
 import {
@@ -192,6 +194,92 @@ export async function handleApiV1Read<T>({
   return response
 }
 
+export async function handleApiV1DeviceSession<T>({
+  endpoint,
+  request,
+  run,
+}: {
+  endpoint: ApiV1Endpoint
+  request: Request
+  run: (context: { deviceSessionId: string; userId: string }) => Promise<ApiV1Payload<T>>
+}): Promise<Response> {
+  const requestId = randomUUID()
+  const startedAt = performance.now()
+  let pageSize: number | null = null
+  let rateLimitResult: ApiV1RateLimitResult = "not_checked"
+  let response: Response
+
+  try {
+    const authorization = request.headers.get("authorization")?.trim()
+    const match = authorization ? /^Bearer ([^\s]+)$/i.exec(authorization) : null
+    if (!match) {
+      throw new ApiV1RouteError({
+        code: "MOBILE_DEVICE_SESSION_REQUIRED",
+        message: "A current mobile device session is required.",
+        retryable: false,
+        status: 401,
+      })
+    }
+    const principal = await authenticateMobileAccessToken({ accessToken: match[1] })
+    let rateLimit: Awaited<ReturnType<typeof enforceRateLimit>>
+    try {
+      rateLimit = await enforceRateLimit({
+        action: "mobile_api_write",
+        ip: getTrustedClientIp(request.headers),
+        userId: principal.userId,
+      })
+    } catch {
+      rateLimitResult = "unavailable"
+      throw new ApiV1RouteError({
+        code: "RATE_LIMIT_UNAVAILABLE",
+        message: "The mobile API is temporarily unavailable. Please try again later.",
+        retryable: true,
+        status: 503,
+      })
+    }
+
+    if (!rateLimit.allowed) {
+      rateLimitResult = rateLimit.reason === "unavailable" ? "unavailable" : "rate_limited"
+      response = apiV1ErrorResponse({
+        code: rateLimit.reason === "unavailable" ? "RATE_LIMIT_UNAVAILABLE" : "RATE_LIMITED",
+        message:
+          rateLimit.reason === "unavailable"
+            ? "The mobile API is temporarily unavailable. Please try again later."
+            : "Too many mobile API requests. Please try again later.",
+        requestId,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+        retryable: true,
+        status: rateLimit.reason === "unavailable" ? 503 : 429,
+      })
+    } else {
+      rateLimitResult = "allowed"
+      const payload = await run({
+        deviceSessionId: principal.deviceSessionId,
+        userId: principal.userId,
+      })
+      pageSize = payload.pageSize ?? null
+      response = apiV1SuccessResponse({
+        data: payload.data,
+        nextCursor: payload.nextCursor,
+        requestId,
+      })
+    }
+  } catch (error) {
+    response = mobileApiErrorResponse({ endpoint, error, requestId })
+  }
+
+  recordApiV1Request({
+    authMode: "device-session",
+    durationMs: Math.round(performance.now() - startedAt),
+    endpoint,
+    pageSize,
+    rateLimitResult,
+    requestId,
+    statusCode: response.status,
+  })
+  return response
+}
+
 export function parseApiV1Query<T extends z.ZodType>(
   request: Request,
   schema: T
@@ -219,6 +307,46 @@ export function parseApiV1Query<T extends z.ZodType>(
     )
   }
 
+  return parsed.data
+}
+
+export async function parseApiV1Json<T extends z.ZodType>(request: Request, schema: T): Promise<z.output<T>> {
+  let value: unknown
+  try {
+    value = await request.json()
+  } catch {
+    throw validationError([{ field: "body", message: "Provide a valid JSON request body." }])
+  }
+  const parsed = schema.safeParse(value)
+  if (!parsed.success) {
+    throw validationError(
+      parsed.error.issues.slice(0, 5).map((issue) => ({
+        field: issue.path.join(".") || "body",
+        message: issue.message.slice(0, 200),
+      }))
+    )
+  }
+  return parsed.data
+}
+
+export function parseApiV1IdempotencyKey(request: Request) {
+  const value = request.headers.get("idempotency-key")?.trim() ?? ""
+  if (!/^[A-Za-z0-9._:-]{16,128}$/.test(value)) {
+    throw validationError([
+      {
+        field: "idempotency-key",
+        message: "Provide an Idempotency-Key header between 16 and 128 safe characters.",
+      },
+    ])
+  }
+  return value
+}
+
+export function parseApiV1Identifier(value: string, field: string) {
+  const parsed = apiV1IdentifierSchema.safeParse(value)
+  if (!parsed.success) {
+    throw validationError([{ field, message: "Provide a valid resource identifier." }])
+  }
   return parsed.data
 }
 
@@ -321,5 +449,62 @@ async function withApiV1Authentication<T>(
   return withAuthenticatedRequestScope(async (session) => {
     const user = await requireFreshUser(session)
     return callback({ authMode: "web-session", userId: user.id })
+  })
+}
+
+function mobileApiErrorResponse({
+  endpoint,
+  error,
+  requestId,
+}: {
+  endpoint: ApiV1Endpoint
+  error: unknown
+  requestId: string
+}) {
+  if (error instanceof MobileAuthError) {
+    return apiV1ErrorResponse({
+      code: error.code === "configuration" ? "MOBILE_AUTHENTICATION_UNAVAILABLE" : "AUTHENTICATION_REQUIRED",
+      message:
+        error.code === "configuration"
+          ? "Mobile authentication is temporarily unavailable."
+          : "Authentication is required.",
+      requestId,
+      retryable: error.code === "configuration",
+      status: error.code === "configuration" ? 503 : 401,
+    })
+  }
+  if (error instanceof ApiV1RouteError) {
+    return apiV1ErrorResponse({
+      code: error.code,
+      issues: error.issues,
+      message: error.message,
+      requestId,
+      retryable: error.retryable,
+      status: error.status,
+    })
+  }
+  if (error instanceof MobileSyncError) {
+    const mapped = {
+      "collection-not-found": { code: "COLLECTION_NOT_FOUND" as const, status: 404 },
+      "full-resync-required": { code: "FULL_RESYNC_REQUIRED" as const, status: 409 },
+      "idempotency-conflict": { code: "IDEMPOTENCY_KEY_REUSED" as const, status: 409 },
+      "installation-conflict": { code: "DEVICE_INSTALLATION_CONFLICT" as const, status: 409 },
+      "resource-not-found": { code: "RESOURCE_NOT_FOUND" as const, status: 404 },
+    }[error.code]
+    return apiV1ErrorResponse({
+      code: mapped.code,
+      message: error.message,
+      requestId,
+      retryable: false,
+      status: mapped.status,
+    })
+  }
+  console.error(JSON.stringify({ endpoint, event: "mobile_api_v1_unhandled_error", requestId }))
+  return apiV1ErrorResponse({
+    code: "INTERNAL_ERROR",
+    message: "The mobile API could not complete this request.",
+    requestId,
+    retryable: true,
+    status: 500,
   })
 }

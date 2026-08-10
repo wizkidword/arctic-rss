@@ -1,10 +1,10 @@
 # Mobile platform ADR
 
 **Status:** accepted by owner approval `APPROVE MOBILE PLATFORM ADR` on 2026-08-10.
-**Scope:** The owner approval covers the Phase 10 architecture. Phase 11 now
-implements the approved browser-mediated device-authentication boundary locally;
-no native application, Android build, deployment, or Google Play action is
-authorized by this ADR.
+**Scope:** The owner approval covers the Phase 10 architecture. Phases 11–12
+implement the approved browser-mediated device-authentication, bounded sync,
+and notification foundations locally; no native application, Android build,
+deployment, or Google Play action is authorized by this ADR.
 
 ## Context
 
@@ -45,10 +45,12 @@ views, and briefings. The mobile client must consume those same domain rules.
   starred items, selected collections, recent podcast metadata/positions,
   queued idempotent mutations, and one sync cursor. Full-library offline sync
   is explicitly out of scope.
-- Phase 12 will add incremental sync, tombstones, idempotent mutations,
-  deep-link implementation, and notification preferences. Its stable link map
-  is reserved as `/articles/:id`, `/podcast-episodes/:id`, `/collections/:id`,
-  `/saved-views/:id`, and `/briefings/:id`, with HTTPS web fallback.
+- Phase 12 adds incremental sync, tombstones, session-bound idempotent
+  mutations, HTTPS deep-link fallback, and notification preferences. Its
+  stable link map is `/articles/:id`, `/podcast-episodes/:id`,
+  `/collections/:id`, `/saved-views/:id`, and `/briefings/:id`. Android App
+  Link certificate verification remains a Phase 13 obligation because no
+  Android signing identity exists yet.
 - Advanced source management, OPML, bulk source actions, administration, chat,
   provider controls, and account-export generation remain web-only in mobile
   v1.
@@ -65,10 +67,10 @@ commitment.
 
 ## Consequences
 
-Phase 11 can build device authorization on an already bounded API surface.
-Phase 12 can make writes and sync safe without changing response envelopes.
-Phase 13 may begin only after the Phase 10–12 security and integration gates
-pass and the owner supplies `APPROVE ANDROID INTERNAL ALPHA`.
+Phase 11 built device authorization on an already bounded API surface. Phase
+12 makes writes and sync safe without changing response envelopes. Phase 13
+may begin only after the Phase 10–12 security and integration gates pass and
+the owner supplies `APPROVE ANDROID INTERNAL ALPHA`.
 
 ## Rejected alternatives
 

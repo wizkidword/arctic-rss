@@ -1,14 +1,20 @@
 export type ApiV1Endpoint =
   | "articles"
+  | "article-state"
   | "briefings"
   | "collections"
+  | "collection-items"
+  | "device-installations"
+  | "device-sessions"
   | "feeds"
   | "me"
+  | "notification-preferences"
   | "podcast-episodes"
   | "podcasts"
   | "reader"
   | "saved-views"
   | "search"
+  | "sync"
 
 export type ApiV1AuthMode = "device-session" | "web-session"
 

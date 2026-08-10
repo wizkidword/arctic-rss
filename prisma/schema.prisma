@@ -343,6 +343,9 @@ model User {
   securityEvents                    SecurityEvent[]
   deviceAuthorizationCodes          DeviceAuthorizationCode[]
   deviceSessions                    DeviceSession[]
+  notificationPreferences           UserNotificationPreference[]
+  syncCursorFloor                   UserSyncCursorFloor?
+  syncEvents                        UserSyncEvent[]
   passwordResetTokens               PasswordResetToken[]
   emailVerificationTokens           EmailVerificationToken[]
   accountDeletionConfirmationTokens AccountDeletionConfirmationToken[]
@@ -469,9 +472,9 @@ model SecurityEvent {
 // Browser-mediated native authorization codes are deliberately short-lived and
 // stored only as SHA-256 digests. They never become browser or device sessions.
 model DeviceAuthorizationCode {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   userId              String
-  codeHash            String   @unique
+  codeHash            String    @unique
   codeChallenge       String
   codeChallengeMethod String
   redirectUri         String
@@ -482,7 +485,7 @@ model DeviceAuthorizationCode {
   authVersion         Int
   expiresAt           DateTime
   usedAt              DateTime?
-  createdAt           DateTime @default(now())
+  createdAt           DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -493,29 +496,116 @@ model DeviceAuthorizationCode {
 // Each refresh rotation is a new row in one token family. A conditional update
 // links the predecessor to its replacement so reuse can revoke the full family.
 model DeviceSession {
-  id               String         @id @default(cuid())
+  id               String    @id @default(cuid())
   userId           String
   tokenFamilyId    String
-  refreshTokenHash String         @unique
+  refreshTokenHash String    @unique
   deviceName       String
   platform         String
   appVersion       String
   authVersion      Int
-  createdAt        DateTime       @default(now())
+  createdAt        DateTime  @default(now())
   lastUsedAt       DateTime
   accessIssuedAt   DateTime
   refreshExpiresAt DateTime
   revokedAt        DateTime?
-  replacedById     String?        @unique
+  replacedById     String?   @unique
   reuseDetectedAt  DateTime?
 
-  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  replacedBy DeviceSession? @relation("DeviceSessionReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
-  replaces   DeviceSession? @relation("DeviceSessionReplacement")
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy       DeviceSession?          @relation("DeviceSessionReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces         DeviceSession?          @relation("DeviceSessionReplacement")
+  installations    DeviceInstallation[]
+  mutationReceipts DeviceMutationReceipt[]
 
   @@index([userId, revokedAt, replacedById])
   @@index([tokenFamilyId])
   @@index([refreshExpiresAt])
+}
+
+// The receipt stores only a bounded, mobile-safe result DTO. Request keys and
+// bodies are SHA-256 digests so retries cannot expose queued offline content.
+model DeviceMutationReceipt {
+  id                 String   @id @default(cuid())
+  deviceSessionId    String
+  idempotencyKeyHash String   @db.VarChar(64)
+  operation          String   @db.VarChar(80)
+  requestHash        String   @db.VarChar(64)
+  resultCode         String   @default("OK") @db.VarChar(32)
+  resultReference    String?  @db.VarChar(128)
+  result             Json
+  createdAt          DateTime @default(now())
+
+  deviceSession DeviceSession @relation(fields: [deviceSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceSessionId, idempotencyKeyHash])
+  @@index([createdAt])
+}
+
+// Phase 12 records a protected push-installation reference only. Push delivery
+// itself remains out of scope until a reviewed provider integration exists.
+model DeviceInstallation {
+  id              String    @id @default(cuid())
+  deviceSessionId String
+  platform        String    @db.VarChar(32)
+  environment     String    @db.VarChar(32)
+  tokenHash       String    @unique @db.VarChar(64)
+  lastSeenAt      DateTime
+  disabledAt      DateTime?
+  unregisteredAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  deviceSession DeviceSession @relation(fields: [deviceSessionId], references: [id], onDelete: Cascade)
+
+  @@index([deviceSessionId, disabledAt])
+  @@index([lastSeenAt])
+}
+
+// One central delivery choice per supported user-facing topic. `DISABLED`
+// intentionally means no channel, rather than a hidden false-value default.
+model UserNotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  topic     String   @db.VarChar(64)
+  channel   String   @default("IN_APP") @db.VarChar(32)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topic])
+  @@index([userId, updatedAt])
+}
+
+// The sequence is global so PostgreSQL can assign it atomically; queries are
+// always constrained by userId. Triggers append compact state/tombstone events
+// in the same transaction as the source mutation.
+model UserSyncEvent {
+  sequence        BigInt   @id @default(autoincrement())
+  userId          String
+  resourceType    String   @db.VarChar(64)
+  resourceId      String   @db.VarChar(128)
+  action          String   @db.VarChar(16)
+  resourceVersion String   @db.VarChar(64)
+  payload         Json
+  occurredAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sequence])
+  @@index([userId, occurredAt])
+  @@index([occurredAt])
+}
+
+// Retains the lowest still-valid cursor even after a user's old events have
+// been pruned, so an empty retained window still fails safely.
+model UserSyncCursorFloor {
+  userId          String   @id
+  minimumSequence BigInt   @default(0)
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserSettings {

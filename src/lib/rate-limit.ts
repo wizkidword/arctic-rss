@@ -53,6 +53,7 @@ export type RateLimitAction =
   | "login"
   | "mobile_device_authorization"
   | "mobile_api_read"
+  | "mobile_api_write"
   | "mobile_token_exchange"
   | "mobile_token_refresh"
   | "opml_import"
@@ -237,6 +238,10 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
   mobile_api_read: [
     { limit: 600, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
     { limit: 900, scope: "ip", subject: inputSubject("ip"), windowMs: 60_000 },
+  ],
+  mobile_api_write: [
+    { limit: 120, scope: "user", subject: inputSubject("userId"), windowMs: 60_000 },
+    { limit: 240, scope: "ip", subject: inputSubject("ip"), windowMs: 60_000 },
   ],
   mobile_device_authorization: [
     { limit: 20, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
