@@ -91,3 +91,32 @@ background eligibility policy, apply it at the existing monitor/digest
 boundaries, and add focused tests. The final Phase 0 closeout must update this
 record with the remaining reproductions and measurements before its status is
 changed to complete.
+
+## Phase 7 local reader-shell evidence
+
+The following is fresh, disposable **local-development** evidence from the
+repeatable `npm run shell:measure` runner. The runner requires an explicit
+`ARCTIC_RSS_SHELL_BENCHMARK_CONFIRM=disposable` value, rejects non-loopback
+PostgreSQL URLs, creates synthetic users and sources only, and removes them
+after each scale. It starts a local Next server with a signed synthetic session;
+it did not contact a production service or use a production account.
+
+| Subscriptions | DB queries | Sum of query durations | Loader wall time | Flight/RSC bytes | Client JS bytes | Shell hydration probe | JS heap after first interaction |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10 | 18 | 387.16 ms | 132.08 ms | 172,245 | 1,042,787 | 1,691.6 ms | 29,400,000 |
+| 100 | 18 | 158.88 ms | 51.34 ms | 390,649 | 1,042,787 | 1,541.1 ms | 42,100,000 |
+| 200 | 18 | 446.14 ms | 200.29 ms | 573,340 | 1,042,787 | 1,641.7 ms | 56,800,000 |
+
+The shell loader performs its independent reads concurrently, so the sum of
+individual query durations is intentionally larger than the wall-clock loader
+duration. The hydration probe records navigation-to-first interactive account
+menu; the memory value is Chromium's `usedJSHeapSize` after that interaction.
+The checked-in runner enforces the local-development regression budgets of 18
+queries, 600 ms summed query duration, 650,000 Flight bytes, 1,200,000 client
+JavaScript bytes, 2,000 ms hydration probe, and 75,000,000 bytes of post-
+interaction heap. These are local baseline thresholds, not production SLOs.
+
+At the same scale, Source Hygiene remains outside the app-shell projection. The
+global shell receives only `FeedNavigationItem` keys via an explicit server-side
+map; detailed source observations are still loaded only by Source Hygiene and
+the selected source-management surface.
