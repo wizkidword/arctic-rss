@@ -11,6 +11,12 @@ The command releases only a clean local checkout whose `HEAD` exactly matches
 to have passed for that exact commit, and then requires a typed console
 confirmation before it starts a production backup.
 
+`Static analysis` is the sole documented exception: when the repository is
+private and its `CODEQL_ENABLED` Actions variable is not `true`, the job is
+expected to be skipped because GitHub Code Scanning is unavailable. The release
+command rejects that skip for a public repository or after CodeQL is enabled;
+every other required CI job must succeed.
+
 ## Private configuration
 
 Copy `scripts/windows/release-config.example.json` to a private location outside

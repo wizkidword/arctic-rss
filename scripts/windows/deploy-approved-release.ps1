@@ -595,6 +595,26 @@ function Get-ReleaseRun {
   return @($json | ConvertFrom-Json | Sort-Object createdAt -Descending | Select-Object -First 1)[0]
 }
 
+function Test-ExpectedCodeQlSkip {
+  param([Parameter(Mandatory)][string]$Repository)
+
+  $isPrivate = (Invoke-RequiredCommand -FilePath "gh" -Arguments @(
+    "repo", "view", $Repository, "--json", "isPrivate", "--jq", ".isPrivate"
+  ) | Select-Object -Last 1).Trim()
+  if ($isPrivate -ne "true") {
+    return $false
+  }
+
+  $codeQlEnabled = @(
+    Invoke-RequiredCommand -FilePath "gh" -Arguments @(
+      "variable", "list", "--repo", $Repository, "--json", "name,value",
+      "--jq", '.[] | select(.name == "CODEQL_ENABLED") | .value'
+    ) | Select-Object -Last 1
+  ) -join ""
+
+  return $codeQlEnabled.Trim() -ine "true"
+}
+
 function Wait-ForSuccessfulCi {
   param(
     [Parameter(Mandatory)][string]$Repository,
@@ -626,7 +646,11 @@ function Wait-ForSuccessfulCi {
 
       foreach ($requiredJob in $requiredJobs) {
         $job = @($details.jobs | Where-Object { $_.name -eq $requiredJob } | Select-Object -First 1)
-        if ($job.Count -ne 1 -or $job[0].conclusion -ne "success") {
+        $expectedCodeQlSkip = $requiredJob -eq "Static analysis" -and
+          $job.Count -eq 1 -and
+          $job[0].conclusion -eq "skipped" -and
+          (Test-ExpectedCodeQlSkip -Repository $Repository)
+        if ($job.Count -ne 1 -or ($job[0].conclusion -ne "success" -and -not $expectedCodeQlSkip)) {
           throw "GitHub CI is missing a successful '$requiredJob' job."
         }
       }
