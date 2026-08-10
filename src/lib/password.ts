@@ -1,6 +1,9 @@
 import { compare, hash } from "bcryptjs"
 
-import { assertBcryptPasswordByteLength } from "@/lib/password-policy"
+import {
+  assertBcryptPasswordByteLength,
+  isBcryptPasswordByteLengthValid,
+} from "@/lib/password-policy"
 
 const PASSWORD_COST = 12
 
@@ -10,5 +13,9 @@ export function hashPassword(password: string) {
 }
 
 export function verifyPassword(password: string, passwordHash: string) {
+  if (!isBcryptPasswordByteLengthValid(password)) {
+    return false
+  }
+
   return compare(password, passwordHash)
 }
