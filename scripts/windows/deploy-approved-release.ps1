@@ -1380,6 +1380,9 @@ local_live='{"status":"ok"}'
 # below so a malformed helper cannot silently wait for the next timer tick.
 for helper_spec in \
   'production-backup.sh:arctic-rss-backup' \
+  'production-latest-backup.sh:arctic-rss-latest-backup' \
+  'production-record-backup-offhost.sh:arctic-rss-record-backup-offhost' \
+  'production-restore-drill.sh:arctic-rss-restore-drill' \
   'production-monitor.sh:arctic-rss-monitor' \
   'production-register-backup-archive.sh:arctic-rss-register-backup-archive'; do
   helper_source="${helper_spec%%:*}"

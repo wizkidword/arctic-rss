@@ -237,6 +237,9 @@ describe("approved release command", () => {
     const script = await readFile("scripts/windows/deploy-approved-release.ps1", "utf8")
 
     expect(script).toContain("production-backup.sh:arctic-rss-backup")
+    expect(script).toContain("production-latest-backup.sh:arctic-rss-latest-backup")
+    expect(script).toContain("production-record-backup-offhost.sh:arctic-rss-record-backup-offhost")
+    expect(script).toContain("production-restore-drill.sh:arctic-rss-restore-drill")
     expect(script).toContain("production-monitor.sh:arctic-rss-monitor")
     expect(script).toContain("production-register-backup-archive.sh:arctic-rss-register-backup-archive")
     expect(script).toContain('sudo -n install -m 700 "$live/scripts/$helper_source" "/usr/local/sbin/$helper_target"')

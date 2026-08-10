@@ -44,8 +44,9 @@ Install the root-only helpers together before enabling this evidence
 workflow. Keep their source and installed modes aligned; do not copy a backup
 directory, role export, or private environment file into the repository.
 After the initial bootstrap, the approved release controller refreshes the
-backup, monitor, and named-archive registration helpers from the exact live
-release and runs the monitor before declaring that release verified.
+backup, off-host evidence, restore-drill, monitor, and named-archive
+registration helpers from the exact live release and runs the monitor before
+declaring that release verified.
 
 ```bash
 install -m 700 scripts/production-backup.sh /usr/local/sbin/arctic-rss-backup
