@@ -106,10 +106,12 @@ import {
   listUserFeedSourceHygiene,
   listUserFeedSubscriptionUrls,
   markFeedSubscriptionAttentionReviewed,
+  pauseFeedSubscriptionsAtomically,
   replaceFeedSubscription,
   setFeedSubscriptionPaused,
   subscribeToFeed,
   unsubscribeFromFeed,
+  unsubscribeFromFeedsAtomically,
 } from "./feed-subscriptions"
 
 describe("feed subscriptions", () => {
@@ -175,6 +177,9 @@ describe("feed subscriptions", () => {
         },
         feedSubscription: {
           create: feedSubscriptionCreate,
+          deleteMany,
+          findMany,
+          updateMany: feedSubscriptionUpdateMany,
         },
         folder: {
           create: folderCreate,
@@ -431,6 +436,43 @@ describe("feed subscriptions", () => {
     ).rejects.toThrow("That feed subscription was not found.")
   })
 
+  it("pauses a complete owned selection within one transaction", async () => {
+    feedSubscriptionUpdateMany.mockResolvedValue({ count: 2 })
+
+    await expect(
+      pauseFeedSubscriptionsAtomically({
+        subscriptionIds: ["subscription-1", "subscription-2"],
+        userId: "user-1",
+      })
+    ).resolves.toEqual({ subscriptionIds: ["subscription-1", "subscription-2"] })
+
+    expect(transaction).toHaveBeenCalledTimes(1)
+    expect(feedSubscriptionUpdateMany).toHaveBeenCalledWith({
+      data: { isPaused: true },
+      where: {
+        id: { in: ["subscription-1", "subscription-2"] },
+        userId: "user-1",
+      },
+    })
+  })
+
+  it("rolls back a bulk pause when the full selection cannot be updated", async () => {
+    feedSubscriptionUpdateMany.mockResolvedValue({ count: 1 })
+
+    await expect(
+      pauseFeedSubscriptionsAtomically({
+        subscriptionIds: ["subscription-1", "subscription-2"],
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new FeedSubscriptionError(
+        "One or more selected sources are no longer available. Nothing was changed."
+      )
+    )
+
+    expect(transaction).toHaveBeenCalledTimes(1)
+  })
+
   it("marks only the current user's source recovery as reviewed", async () => {
     feedSubscriptionUpdateMany.mockResolvedValue({ count: 1 })
 
@@ -636,6 +678,78 @@ describe("feed subscriptions", () => {
         userId: "user-1",
       },
     })
+  })
+
+  it("unsubscribes a complete owned selection within one transaction", async () => {
+    findMany.mockResolvedValue([
+      {
+        customTitle: "My Example Feed",
+        feed: { title: "Example Feed" },
+        folderId: "folder-1",
+        id: "subscription-1",
+      },
+      {
+        customTitle: null,
+        feed: { title: "Second Feed" },
+        folderId: null,
+        id: "subscription-2",
+      },
+    ])
+    deleteMany.mockResolvedValue({ count: 2 })
+
+    await expect(
+      unsubscribeFromFeedsAtomically({
+        subscriptionIds: ["subscription-1", "subscription-2"],
+        userId: "user-1",
+      })
+    ).resolves.toEqual([
+      { folderId: "folder-1", id: "subscription-1", title: "My Example Feed" },
+      { folderId: null, id: "subscription-2", title: "Second Feed" },
+    ])
+
+    expect(transaction).toHaveBeenCalledTimes(1)
+    expect(findMany).toHaveBeenCalledWith({
+      select: {
+        customTitle: true,
+        feed: { select: { title: true } },
+        folderId: true,
+        id: true,
+      },
+      where: {
+        id: { in: ["subscription-1", "subscription-2"] },
+        userId: "user-1",
+      },
+    })
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["subscription-1", "subscription-2"] },
+        userId: "user-1",
+      },
+    })
+  })
+
+  it("does not commit a bulk unsubscribe when a selected source disappears", async () => {
+    findMany.mockResolvedValue([
+      {
+        customTitle: null,
+        feed: { title: "Example Feed" },
+        folderId: null,
+        id: "subscription-1",
+      },
+    ])
+
+    await expect(
+      unsubscribeFromFeedsAtomically({
+        subscriptionIds: ["subscription-1", "subscription-2"],
+        userId: "user-1",
+      })
+    ).rejects.toEqual(
+      new FeedSubscriptionError(
+        "One or more selected sources are no longer available. Nothing was changed."
+      )
+    )
+
+    expect(deleteMany).not.toHaveBeenCalled()
   })
 
   it("rejects directory alias-equivalent duplicate subscriptions before upserting a feed", async () => {

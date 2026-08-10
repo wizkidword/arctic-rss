@@ -15,10 +15,12 @@ import {
   FeedSubscriptionError,
   getUserFeedSubscription,
   markFeedSubscriptionAttentionReviewed,
+  pauseFeedSubscriptionsAtomically,
   replaceFeedSubscription,
   setFeedSubscriptionPaused,
   subscribeToFeed,
   unsubscribeFromFeed,
+  unsubscribeFromFeedsAtomically,
 } from "@/lib/feed-subscriptions"
 import { enforceRateLimit, getRateLimitErrorMessage } from "@/lib/rate-limit"
 import { FeedFetchError, UnsafeUrlError } from "@/lib/url-safety"
@@ -39,7 +41,13 @@ export type ReplaceFeedSubscriptionActionState = ActionState
 export type ReviewFeedAttentionActionState = ActionState
 export type SetFeedPausedActionState = ActionState
 export type UnsubscribeFeedActionState = ActionState
-export type BulkFeedAttentionActionState = ActionState
+export type BulkFeedAttentionResult = {
+  outcome: "already-active" | "queued" | "unavailable"
+  subscriptionId: string
+}
+export type BulkFeedAttentionActionState = ActionState & {
+  results?: BulkFeedAttentionResult[]
+}
 export type FollowCollectionArticleSourceActionState = ActionState
 
 type ActionState = { message: string; status: "idle" | "success" | "error" }
@@ -221,6 +229,38 @@ export async function bulkFeedAttentionAction(
     return rateLimitFailure()
   }
 
+  if (operation === "pause") {
+    try {
+      await pauseFeedSubscriptionsAtomically({ subscriptionIds, userId: session.user.id })
+    } catch (error) {
+      return bulkFeedAttentionMutationError(error, "Arctic RSS could not pause the selected sources.")
+    }
+    try { revalidatePath("/app", "layout") } catch { /* mutation is committed */ }
+    try { revalidateArticleListPaths() } catch { /* mutation is committed */ }
+    try { refresh() } catch { /* mutation is committed */ }
+    return {
+      message: `${subscriptionIds.length} ${sourceLabel(subscriptionIds.length)} paused.`,
+      status: "success",
+    }
+  }
+
+  if (operation === "unsubscribe") {
+    let removed: Awaited<ReturnType<typeof unsubscribeFromFeedsAtomically>>
+    try {
+      removed = await unsubscribeFromFeedsAtomically({ subscriptionIds, userId: session.user.id })
+    } catch (error) {
+      return bulkFeedAttentionMutationError(error, "Arctic RSS could not unsubscribe the selected sources.")
+    }
+    for (const folderId of new Set(removed.map((subscription) => subscription.folderId))) {
+      try { revalidateFeedSubscriptionPaths(folderId) } catch { /* mutation is committed */ }
+    }
+    try { refresh() } catch { /* mutation is committed */ }
+    return {
+      message: `${removed.length} ${sourceLabel(removed.length)} unsubscribed.`,
+      status: "success",
+    }
+  }
+
   const subscriptions = await Promise.all(
     subscriptionIds.map((subscriptionId) =>
       getUserFeedSubscription(session.user.id, subscriptionId)
@@ -230,36 +270,6 @@ export async function bulkFeedAttentionAction(
     return { message: "One or more selected sources are no longer available.", status: "error" }
   }
 
-  if (operation === "pause") {
-    await Promise.all(
-      subscriptionIds.map((subscriptionId) =>
-        setFeedSubscriptionPaused({ isPaused: true, subscriptionId, userId: session.user.id })
-      )
-    )
-    revalidatePath("/app", "layout")
-    revalidateArticleListPaths()
-    refresh()
-    return {
-      message: `${subscriptionIds.length} ${sourceLabel(subscriptionIds.length)} paused.`,
-      status: "success",
-    }
-  }
-
-  if (operation === "unsubscribe") {
-    const removed = await Promise.all(
-      subscriptionIds.map((subscriptionId) =>
-        unsubscribeFromFeed({ subscriptionId, userId: session.user.id })
-      )
-    )
-    await Promise.all(
-      removed.map((subscription) => revalidateFeedSubscriptionPaths(subscription.folderId))
-    )
-    return {
-      message: `${removed.length} ${sourceLabel(removed.length)} unsubscribed.`,
-      status: "success",
-    }
-  }
-
   if (subscriptions.some((subscription) => subscription!.isPaused)) {
     return {
       message: "Resume selected sources before retrying them.",
@@ -267,24 +277,27 @@ export async function bulkFeedAttentionAction(
     }
   }
 
-  const enqueued = await Promise.allSettled(
-    subscriptions.map((subscription) =>
-      enqueueFeedRefresh(subscription!.feedId, {
-        priority: 1,
-        trigger: "source-attention",
-      })
-    )
+  const results = await Promise.all(
+    subscriptions.map(async (subscription) => {
+      try {
+        const result = await enqueueFeedRefresh(subscription!.feedId, {
+          priority: 1,
+          trigger: "source-attention",
+        })
+        return { outcome: result.outcome, subscriptionId: subscription!.id }
+      } catch {
+        return { outcome: "unavailable" as const, subscriptionId: subscription!.id }
+      }
+    })
   )
-  const queued = enqueued.filter(
-    (result) => result.status === "fulfilled" && result.value.outcome === "queued"
-  ).length
-  const alreadyQueued = enqueued.filter(
-    (result) => result.status === "fulfilled" && result.value.outcome === "already-active"
-  ).length
-  revalidatePath("/app")
-  refresh()
+  const queued = results.filter((result) => result.outcome === "queued").length
+  const alreadyQueued = results.filter((result) => result.outcome === "already-active").length
+  const unavailable = results.filter((result) => result.outcome === "unavailable").length
+  try { revalidatePath("/app") } catch { /* queue results remain authoritative */ }
+  try { refresh() } catch { /* queue results remain authoritative */ }
   return {
-    message: sourceAttentionMessage({ alreadyQueued, queued, total: subscriptionIds.length }),
+    message: sourceAttentionMessage({ alreadyQueued, queued, unavailable }),
+    results,
     status: queued || alreadyQueued ? "success" : "error",
   }
 }
@@ -477,16 +490,12 @@ function sourceLabel(count: number) {
 function sourceAttentionMessage({
   alreadyQueued,
   queued,
-  total,
+  unavailable,
 }: {
   alreadyQueued: number
   queued: number
-  total: number
+  unavailable: number
 }) {
-  if (!queued && !alreadyQueued) {
-    return `Arctic RSS could not queue the selected ${sourceLabel(total)}.`
-  }
-
   const parts = []
   if (queued) {
     parts.push(`${queued} ${sourceLabel(queued)} queued`)
@@ -494,6 +503,15 @@ function sourceAttentionMessage({
   if (alreadyQueued) {
     parts.push(`${alreadyQueued} ${sourceLabel(alreadyQueued)} already queued`)
   }
+  if (unavailable) {
+    parts.push(`${unavailable} ${sourceLabel(unavailable)} could not be queued`)
+  }
 
   return `${parts.join("; ")}.`
+}
+
+function bulkFeedAttentionMutationError(error: unknown, fallback: string) {
+  return error instanceof FeedSubscriptionError
+    ? { message: error.message, status: "error" as const }
+    : { message: fallback, status: "error" as const }
 }

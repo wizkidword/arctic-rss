@@ -63,12 +63,26 @@ export function BulkFeedAttentionControls({
         </Button>
       </div>
       {state.status !== "idle" && (
-        <p
-          aria-live="polite"
-          className={state.status === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
-        >
-          {state.message}
-        </p>
+        <div aria-live="polite" className="grid gap-2">
+          <p className={state.status === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+            {state.message}
+          </p>
+          {state.results && (
+            <ul className="grid gap-1 text-sm text-muted-foreground">
+              {state.results.map((result) => {
+                const title = subscriptions.find((subscription) => subscription.id === result.subscriptionId)?.title
+                  ?? "Selected source"
+                const message = result.outcome === "queued"
+                  ? "refresh queued"
+                  : result.outcome === "already-active"
+                    ? "refresh already queued"
+                    : "refresh could not be queued"
+
+                return <li key={result.subscriptionId}>{title}: {message}</li>
+              })}
+            </ul>
+          )}
+        </div>
       )}
     </form>
   )

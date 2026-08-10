@@ -273,6 +273,34 @@ export async function setFeedSubscriptionPaused({
   return { isPaused, subscriptionId }
 }
 
+export async function pauseFeedSubscriptionsAtomically({
+  subscriptionIds,
+  userId,
+}: {
+  subscriptionIds: string[]
+  userId: string
+}) {
+  const prisma = getFeedSubscriptionStore()
+
+  return prisma.$transaction(async (transaction) => {
+    const update = await transaction.feedSubscription.updateMany({
+      data: { isPaused: true },
+      where: {
+        id: { in: subscriptionIds },
+        userId,
+      },
+    })
+
+    if (update.count !== subscriptionIds.length) {
+      throw new FeedSubscriptionError(
+        "One or more selected sources are no longer available. Nothing was changed."
+      )
+    }
+
+    return { subscriptionIds }
+  })
+}
+
 export async function markFeedSubscriptionAttentionReviewed({
   subscriptionId,
   userId,
@@ -462,6 +490,60 @@ export async function unsubscribeFromFeed({
     id: subscription.id,
     title: subscription.customTitle || subscription.feed.title,
   }
+}
+
+export async function unsubscribeFromFeedsAtomically({
+  subscriptionIds,
+  userId,
+}: {
+  subscriptionIds: string[]
+  userId: string
+}) {
+  const prisma = getFeedSubscriptionStore()
+
+  return prisma.$transaction(async (transaction) => {
+    const subscriptions = await transaction.feedSubscription.findMany({
+      select: {
+        customTitle: true,
+        feed: {
+          select: {
+            title: true,
+          },
+        },
+        folderId: true,
+        id: true,
+      },
+      where: {
+        id: { in: subscriptionIds },
+        userId,
+      },
+    })
+
+    if (subscriptions.length !== subscriptionIds.length) {
+      throw new FeedSubscriptionError(
+        "One or more selected sources are no longer available. Nothing was changed."
+      )
+    }
+
+    const deletion = await transaction.feedSubscription.deleteMany({
+      where: {
+        id: { in: subscriptionIds },
+        userId,
+      },
+    })
+
+    if (deletion.count !== subscriptionIds.length) {
+      throw new FeedSubscriptionError(
+        "One or more selected sources are no longer available. Nothing was changed."
+      )
+    }
+
+    return subscriptions.map((subscription) => ({
+      folderId: subscription.folderId,
+      id: subscription.id,
+      title: subscription.customTitle || subscription.feed.title,
+    }))
+  })
 }
 
 export async function subscribeToFeed({
