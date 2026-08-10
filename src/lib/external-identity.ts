@@ -15,3 +15,22 @@ export function externalIdentityHash(externalId: string) {
 
   return createHash(EXTERNAL_ID_HASH_ALGORITHM).update(normalized, "utf8").digest("hex")
 }
+
+export function countExternalIdentityHashCollisionCandidates(
+  inputs: Array<{ externalId: string; hash: string; scopeId: string }>
+) {
+  const rawIdsByScopedHash = new Map<string, Set<string>>()
+
+  for (const input of inputs) {
+    const key = `${input.scopeId}:${input.hash}`
+    const rawIds = rawIdsByScopedHash.get(key) ?? new Set<string>()
+    rawIds.add(input.externalId)
+    rawIdsByScopedHash.set(key, rawIds)
+  }
+
+  return inputs.filter((input) => {
+    const rawIds = rawIdsByScopedHash.get(`${input.scopeId}:${input.hash}`)
+
+    return (rawIds?.size ?? 0) > 1
+  }).length
+}

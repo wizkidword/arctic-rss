@@ -23,6 +23,7 @@
     "db:verify-chat-role": "tsx scripts/ci/verify-chat-runtime-role.ts",
     "build": "next build",
     "image-proxy:measure": "tsx scripts/measure-image-proxy.ts",
+    "ingestion:backfill-external-identity-hashes": "tsx scripts/backfill-external-identity-hashes.ts",
     "ingestion:persistence:measure": "tsx scripts/measure-ingestion-persistence.ts",
     "search:measure": "tsx scripts/measure-article-search.ts",
     "sources:orphan-report": "tsx scripts/report-source-orphan-retention.ts",
