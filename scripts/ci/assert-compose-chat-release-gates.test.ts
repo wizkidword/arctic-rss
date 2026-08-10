@@ -19,8 +19,13 @@ describe("Compose chat release gate assertion", () => {
       "CHAT_DATABASE_URL=postgresql://arctic_chat:ci-chat-runtime-password@postgres:5432/arctic_rss?schema=public"
     )
     expect(workflow).toContain("Bootstrap restricted chat runtime role after migrations")
+    expect(workflow).toContain("Wait for migration completion before provisioning the chat runtime role")
+    expect(workflow).toContain("wait migrate")
     expect(workflow).toContain("-v chat_role=arctic_chat")
     expect(workflow).toContain("-v chat_password=ci-chat-runtime-password")
+    expect(workflow.indexOf("Wait for migration completion before provisioning the chat runtime role")).toBeLessThan(
+      workflow.indexOf("Bootstrap restricted chat runtime role after migrations")
+    )
     expect(workflow.indexOf("Bootstrap restricted chat runtime role after migrations")).toBeLessThan(
       workflow.indexOf("Start the selected web, worker, and restricted chat topology")
     )
