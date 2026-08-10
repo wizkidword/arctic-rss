@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { refreshFeedWithClient } from "./feed-refresh"
 import { articleIngestionFingerprint } from "./ingestion-fingerprint"
+import { externalIdentityHash } from "./external-identity"
 import { parseFeedArticles } from "./feed-articles"
 
 const rssXml = `<?xml version="1.0"?>
@@ -82,6 +83,7 @@ describe("feed refresh", () => {
       data: [
         expect.objectContaining({
           externalId: "item-1",
+          externalIdHash: externalIdentityHash("item-1"),
           feedId: "feed-1",
           title: "Stored Article",
           url: "https://example.com/stored",
@@ -188,6 +190,7 @@ describe("feed refresh", () => {
     expect(store.article.update).toHaveBeenCalledWith({
       data: expect.objectContaining({
         publishedAt: new Date("2026-06-22T10:30:00.000Z"),
+        externalIdHash: externalIdentityHash("item-1"),
         summary: "Stored summary",
         title: "Stored Article",
         url: "https://example.com/stored",

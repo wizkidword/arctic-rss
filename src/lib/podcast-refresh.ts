@@ -9,6 +9,7 @@ import {
 import { nextFetchAt } from "./refresh-schedule"
 import { writeRefreshItems, type RefreshWriteStats } from "./refresh-write-batch"
 import { podcastEpisodeIngestionFingerprint } from "./ingestion-fingerprint"
+import { externalIdentityHash } from "./external-identity"
 
 type RefreshablePodcast = {
   consecutiveFailures: number
@@ -333,6 +334,7 @@ async function writePodcastEpisodes({
       }),
     items: episodes.map((episode) => ({
       ...episode,
+      externalIdHash: externalIdentityHash(episode.externalId),
       ingestionFingerprint: podcastEpisodeIngestionFingerprint(episode),
     })),
     runUpdateBatch: (operations) => store.$transaction(operations),
@@ -351,7 +353,7 @@ async function writePodcastEpisodes({
 
 function episodeCreateData(
   podcastId: string,
-  episode: ParsedPodcastEpisode & { ingestionFingerprint: string }
+  episode: ParsedPodcastEpisode & { externalIdHash: string; ingestionFingerprint: string }
 ) {
   return withoutUndefined({
     ...episode,
@@ -360,7 +362,7 @@ function episodeCreateData(
 }
 
 function episodeUpdateData(
-  episode: ParsedPodcastEpisode & { ingestionFingerprint: string }
+  episode: ParsedPodcastEpisode & { externalIdHash: string; ingestionFingerprint: string }
 ) {
   return {
     audioLengthBytes: episode.audioLengthBytes ?? null,
@@ -370,6 +372,7 @@ function episodeUpdateData(
     contentText: episode.contentText ?? null,
     description: episode.description ?? null,
     durationSeconds: episode.durationSeconds ?? null,
+    externalIdHash: episode.externalIdHash,
     imageUrl: episode.imageUrl ?? null,
     ingestionFingerprint: episode.ingestionFingerprint,
     publishedAt: episode.publishedAt ?? null,

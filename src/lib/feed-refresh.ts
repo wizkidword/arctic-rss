@@ -11,6 +11,7 @@ import {
 import { nextFetchAt } from "./refresh-schedule"
 import { writeRefreshItems, type RefreshWriteStats } from "./refresh-write-batch"
 import { articleIngestionFingerprint } from "./ingestion-fingerprint"
+import { externalIdentityHash } from "./external-identity"
 
 export const MAX_LINKED_ARTICLE_FETCHES = 12
 export const MAX_LINKED_ARTICLE_FETCH_CONCURRENCY = 3
@@ -376,6 +377,7 @@ async function writeFeedArticles({
         }),
     items: articles.map((article) => ({
       ...article,
+      externalIdHash: externalIdentityHash(article.externalId),
       ingestionFingerprint: articleIngestionFingerprint(article),
     })),
     runUpdateBatch: (operations) => store.$transaction(operations),
@@ -524,7 +526,7 @@ function excerpt(value: string) {
 
 function articleCreateData(
   feedId: string,
-  article: ParsedFeedArticle & { ingestionFingerprint: string }
+  article: ParsedFeedArticle & { externalIdHash: string; ingestionFingerprint: string }
 ) {
   return withoutUndefined({
     ...article,
@@ -533,13 +535,14 @@ function articleCreateData(
 }
 
 function articleUpdateData(
-  article: ParsedFeedArticle & { ingestionFingerprint: string }
+  article: ParsedFeedArticle & { externalIdHash: string; ingestionFingerprint: string }
 ) {
   return {
     author: article.author ?? null,
     canonicalUrl: article.canonicalUrl ?? null,
     contentHtml: article.contentHtml ?? null,
     contentText: article.contentText ?? null,
+    externalIdHash: article.externalIdHash,
     imageUrl: article.imageUrl ?? null,
     ingestionFingerprint: article.ingestionFingerprint,
     publishedAt: article.publishedAt ?? null,

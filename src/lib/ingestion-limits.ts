@@ -32,7 +32,7 @@ const defaults: IngestionLimits = {
   maxContentBytesPerField: 256 * KIB,
   maxDiscoveryCandidates: 6,
   maxDiscoveryDurationMs: 30_000,
-  maxExternalIdBytes: 4_096,
+  maxExternalIdBytes: 2_048,
   maxFeedItems: 1_000,
   maxPodcastEpisodes: 1_000,
   maxSummaryCharacters: 16_000,
@@ -93,7 +93,7 @@ export function getIngestionLimits(
       "INGESTION_MAX_EXTERNAL_ID_BYTES",
       defaults.maxExternalIdBytes,
       64,
-      16 * KIB
+      2 * KIB
     ),
     maxFeedItems: boundedEnvironmentInteger(
       environment,

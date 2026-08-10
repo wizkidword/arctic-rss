@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { PodcastRefreshError, refreshPodcastWithClient } from "./podcast-refresh"
 import { podcastEpisodeIngestionFingerprint } from "./ingestion-fingerprint"
+import { externalIdentityHash } from "./external-identity"
 import { parsePodcastFeed } from "./podcast-parser"
 
 function createStore(feedUrl = "https://example.com/podcast.xml") {
@@ -93,6 +94,7 @@ describe("refreshPodcastWithClient", () => {
           description: "Episode description",
           durationSeconds: 3723,
           externalId: "ep-1",
+          externalIdHash: externalIdentityHash("ep-1"),
           ingestionFingerprint: expect.stringMatching(/^v1:[a-f0-9]{64}$/),
           imageUrl: "https://example.com/episode.jpg",
           podcastId: "podcast-1",
@@ -142,6 +144,7 @@ describe("refreshPodcastWithClient", () => {
     expect(store.podcastEpisode.update).toHaveBeenCalledWith({
       data: expect.objectContaining({
         audioUrl: "https://cdn.example.com/ep.mp3",
+        externalIdHash: externalIdentityHash("ep-1"),
         title: "Episode",
       }),
       where: {

@@ -613,6 +613,7 @@ model PodcastEpisode {
   id                   String    @id @default(cuid())
   podcastId            String
   externalId           String
+  externalIdHash       String?
   title                String
   url                  String?
   description          String?
@@ -664,6 +665,7 @@ model Article {
   id                   String                   @id @default(cuid())
   feedId               String
   externalId           String
+  externalIdHash       String?
   title                String
   url                  String
   canonicalUrl         String?
