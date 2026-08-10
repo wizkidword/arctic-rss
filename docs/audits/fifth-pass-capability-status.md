@@ -24,3 +24,12 @@ This pass deliberately pauses monitor and Smart Digest rules on disablement and
 does not provide any automatic reactivation path. If an administrator later
 re-enables an account, automation must remain paused until the user or an
 explicitly reviewed administrator action opts into each rule again.
+
+## Ledger rules
+
+`FP-001` through `FP-010` are the stable IDs for this pass.  They are
+deliberately distinct from release and operator columns: passing local source
+evidence does not authorize a production release, and a release cannot be
+reported as operator-verified without fresh owner evidence.  Run
+`npm run audit:verify-fifth-pass-ledger` to check the IDs, source-evidence
+column, and separate production/operator fields.
