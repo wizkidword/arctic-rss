@@ -1,8 +1,30 @@
 # Fifth-pass Phase 9 release package
 
-**Status:** prepared only; no production action was performed.  
-**Production ready:** false  
-**Owner approval:** not granted
+**Status:** executed and independently verified on 2026-08-10.
+**Production release:** `c7be850b644f44629a637fff0a381dee36ad853c`
+**Topology:** `all-in-one-with-chat`
+
+## Release execution result
+
+The owner approved `DEPLOY c7be850` after exact-commit CI passed. The guarded
+release controller ran the local verification stack, built the migrate, web,
+worker, chat-gateway, and edge-proxy images off-host, retained the exact
+archive and private rollback evidence, ran the fresh backup gate, applied and
+verified all 51 migrations, and recreated only the selected application
+services.
+
+The first controller attempt stopped at its read-only migration-ownership
+preflight. A separately approved repair transferred ownership of only
+`DigestRunStatus`, `AiDigestStatus`, and `SmartDigestEmailStatus` to the
+configured migration role. The complete ownership preflight then passed before
+the successful release was retried.
+
+Independent OVH verification confirmed the deployed commit, migration status,
+eight required healthy services, loopback health/liveness, the active-successful
+monitor, public health and login HTTP 200, and public internal-health HTTP 403.
+The private release record is the authoritative non-secret record of the backup
+evidence and retained release artifacts. No authenticated production-user flow
+was exercised; CI remains the coverage for those paths.
 
 ## Reproducible local evidence
 
@@ -54,29 +76,24 @@ Smart-Digest lease, Smart-Digest `runId`, feed-subscription reverse, and
 podcast-subscription reverse indexes.  These are baseline schema measurements,
 not a duration, lock, or capacity estimate for production data.
 
-## Approved-release evidence to collect later
+## Deferred acceptance evidence
 
-After the candidate's remote CI succeeds, an approved operator must collect
-these current production facts before any migration or service change:
+The release gates above are complete. The following are valuable operational
+acceptance exercises, but were intentionally not performed against live user
+data during this release:
 
-1. The exact candidate SHA and successful CI run.
-2. A fresh backup evidence ID, an off-host copy identifier, and a successful
-   restore-drill evidence ID.
-3. Migration-role privileges, PostgreSQL version, current row/table/index
-   sizes, invalid-index state, lock wait, and relevant active transactions.
-4. Durable and ephemeral Redis ACL proof, including disabled default user and
-   denied admin/dangerous commands; then a durable Redis restart recovery test.
-5. Restricted chat-role allowed and denied SQL proof.
-6. Source Hygiene, collection-after-unsubscribe, monitor, Smart Digest, and
-   account-export smoke results against the actual release.
-7. Internal and public health/login evidence plus the monitor result after the
-   release is complete.
+1. A scheduled restore drill using the retained off-host backup evidence.
+2. Live Redis restart-recovery and ACL-denial exercises during an approved
+   maintenance window.
+3. Authenticated feature acceptance for Source Hygiene, collections, Smart
+   Digests, monitoring, and account export using owner-approved test accounts.
+4. Production sizing and lock measurements before any future schema-changing
+   release.
 
 Use the existing migration risk records for each migration's lock, rollback,
 and forward-repair decision.  A failed concurrent index requires an
 invalid-index inspection and a reviewed forward repair; never blindly rerun a
 partially failed migration.
 
-Only after those inputs are reviewed may the owner explicitly type
-`DEPLOY <short-sha>`.  That approval remains separate from CI success and from
-this package's local evidence.
+Every future release still requires a fresh `DEPLOY <short-sha>` approval after
+its own exact-commit CI and current readiness checks.

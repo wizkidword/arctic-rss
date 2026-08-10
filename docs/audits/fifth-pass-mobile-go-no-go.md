@@ -1,13 +1,13 @@
 # Fifth-pass mobile go/no-go
 
-**Backend integrity gate:** PASS (source and disposable-fixture evidence only)  
-**Production evidence gate:** OWNER-GATED  
+**Backend integrity gate:** PASS (source, disposable-fixture, and release evidence)
+**Production evidence gate:** PASS — website release `c7be850` independently verified on 2026-08-10
 **Mobile platform ADR may begin:** NO
 
-The web/backend changes have local test, disposable database, and boundary
-evidence, but no Arctic RSS production release or operator verification was
-performed in this pass.  No Expo application or mobile API implementation was
-created.
+The web/backend changes now have local, disposable-database, boundary, and
+release-level production evidence. No Expo application or mobile API
+implementation has been created. The remaining gate is the product and
+security decision captured by the mobile platform ADR.
 
 Phase 10 may begin only after the owner records the exact approval:
 

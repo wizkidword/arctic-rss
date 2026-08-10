@@ -1,12 +1,29 @@
 # Current production inventory
 
 **Captured:** 2026-07-29
-**Updated:** 2026-07-30, after managed-tunnel reconciliation.
-**Scope:** non-secret reconciliation after the approved `74ffd3f` release.
+**Updated:** 2026-08-10, after the verified `c7be850` fifth-pass release.
+**Scope:** non-secret current-state addendum plus the historical `74ffd3f`
+reconciliation snapshot below.
 
 This document intentionally excludes host addresses, account names, release
 paths, tunnel identifiers, environment values, and backup locations. Keep
 those details in the private operator inventory.
+
+## 2026-08-10 fifth-pass release addendum
+
+`c7be850` is the current verified website release, deployed through the
+approved controller with the `all-in-one-with-chat` topology. The controller
+recorded fresh private backup evidence, applied and verified all 51 migrations,
+and retained the previous release for rollback. A separately approved,
+narrow migration-role ownership repair for three pre-existing enum types passed
+the controller's ownership preflight before the release began.
+
+Independent verification confirmed the deployed revision, healthy PostgreSQL,
+durable Redis, ephemeral Redis, web, worker, worker-health, chat gateway, and
+edge proxy; loopback health/liveness; public health and login HTTP 200; public
+internal-health HTTP 403; and an active-successful monitor. The older snapshot
+below remains historical evidence only where it names `74ffd3f`, 32 migrations,
+or an inactive chat gateway.
 
 > The web and compatibility-worker images are running the approved
 > `74ffd3f` release. Durable and ephemeral Redis are healthy, and the
@@ -149,9 +166,9 @@ deadlines. A small SMTP connection pool is reused for matching configuration.
   The current managed-tunnel-to-Compose mapping and no-bypass DNS inventory
   are already recorded; do not retry the blocked request form or alter ingress
   without a new approved proof design.
-- Keep the chat gateway inactive until an explicitly approved beta activation
-  and controlled WebSocket acceptance test are scheduled. CHAT-AUTH-001 and
-  CHAT-REDIS-001 remain source- and CI-verified, not active-runtime verified.
+- The chat gateway is active as part of the verified `all-in-one-with-chat`
+  release. Schedule a controlled user-facing WebSocket acceptance test before
+  claiming its authenticated real-time flows are independently verified.
 - Keep provider snapshots and SSH/firewall recovery procedures in the private
   operator inventory.
 - Monitor queue backlog and failed email delivery in the application admin
