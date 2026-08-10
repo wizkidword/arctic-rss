@@ -1,5 +1,9 @@
 import { readClampedPositiveInteger } from "./refresh-schedule"
 import {
+  getBackgroundEligibility,
+  type BackgroundEligibilityStore,
+} from "./background-eligibility"
+import {
   listSavedMonitorArticleMatches,
   type SavedMonitorArticleCursor,
   type SavedMonitorArticleMatch,
@@ -65,7 +69,7 @@ export type SavedMonitorStore = {
     findMany(args: Record<string, unknown>): Promise<DueSavedMonitor[]>
     updateMany(args: Record<string, unknown>): Promise<{ count: number }>
   }
-}
+} & BackgroundEligibilityStore
 
 export type SavedMonitorSettings = {
   batchSize: number
@@ -179,6 +183,7 @@ export async function processDueSavedMonitors({
     where: {
       monitorEnabled: true,
       monitorNextRunAt: { lte: now },
+      user: { disabledAt: null },
     },
   })
   const result: SavedMonitorTickResult = {
@@ -193,6 +198,16 @@ export async function processDueSavedMonitors({
   for (const monitor of monitors) {
     assertLeaseHeld?.()
     if (!monitor.monitorNextRunAt) {
+      result.skipped += 1
+      continue
+    }
+
+    const eligibility = await getBackgroundEligibility({
+      store,
+      userId: monitor.userId,
+    })
+    if (!eligibility.active) {
+      await pauseIneligibleSavedMonitor({ monitor, store })
       result.skipped += 1
       continue
     }
@@ -235,6 +250,15 @@ export async function processDueSavedMonitors({
         limit: settings.matchBatchSize + 1,
         monitor,
       })
+      const currentEligibility = await getBackgroundEligibility({
+        store,
+        userId: monitor.userId,
+      })
+      if (!currentEligibility.active) {
+        await pauseIneligibleSavedMonitor({ claimUntil, monitor, store })
+        result.skipped += 1
+        continue
+      }
       const consumedMatches = matches.slice(0, settings.matchBatchSize)
       const nextCursor = consumedMatches.at(-1) ?? cursor
       const continued = matches.length > settings.matchBatchSize
@@ -287,6 +311,29 @@ export async function processDueSavedMonitors({
   }
 
   return result
+}
+
+async function pauseIneligibleSavedMonitor({
+  claimUntil,
+  monitor,
+  store,
+}: {
+  claimUntil?: Date
+  monitor: DueSavedMonitor
+  store: SavedMonitorStore
+}) {
+  await store.savedSearch.updateMany({
+    data: {
+      monitorEnabled: false,
+      monitorNextRunAt: null,
+    },
+    where: {
+      id: monitor.id,
+      monitorEnabled: true,
+      ...(claimUntil ? { monitorNextRunAt: claimUntil } : {}),
+      userId: monitor.userId,
+    },
+  })
 }
 
 async function applySavedMonitorAction({

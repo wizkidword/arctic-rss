@@ -29,11 +29,13 @@ type SmartDigestDetailData = {
   completedAt: Date | null
   createdAt: Date
   emailErrorMessage: string | null
-  emailStatus: "NOT_REQUESTED" | "PENDING" | "SENT" | "FAILED"
+  emailStatus:
+    "NOT_REQUESTED" | "PENDING" | "DELIVERY_UNKNOWN" | "SENT" | "FAILED"
   errorMessage: string | null
   id: string
   items: SmartDigestDetailItem[]
-  status: "PENDING" | "PROCESSING" | "COMPLETED" | "COMPLETED_NO_MATCHES" | "FAILED"
+  status:
+    "PENDING" | "PROCESSING" | "COMPLETED" | "COMPLETED_NO_MATCHES" | "FAILED"
   title: string
   topicPrompt: string
 }
@@ -104,7 +106,11 @@ export function SmartDigestDetail({
           {digestDateFormatter.format(digest.completedAt || digest.createdAt)}
         </p>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
-          This generated briefing matches {digest.items.length} articles from {groupedItems.length} {groupedItems.length === 1 ? "source" : "sources"}. Open every linked source for publisher wording; shared original reporting is not counted as independent confirmation.
+          This generated briefing matches {digest.items.length} articles from{" "}
+          {groupedItems.length}{" "}
+          {groupedItems.length === 1 ? "source" : "sources"}. Open every linked
+          source for publisher wording; shared original reporting is not counted
+          as independent confirmation.
         </p>
         {digest.emailErrorMessage && (
           <p className="mt-2 text-sm text-destructive">
@@ -117,7 +123,9 @@ export function SmartDigestDetail({
         groupedItems.map(([feedTitle, items]) => (
           <section className="rounded-lg border bg-card" key={feedTitle}>
             <div className="flex items-center justify-between gap-3 border-b p-4">
-              <h2 className="font-heading text-base font-medium">{feedTitle}</h2>
+              <h2 className="font-heading text-base font-medium">
+                {feedTitle}
+              </h2>
               <Badge variant="outline">{items.length}</Badge>
             </div>
             <div className="divide-y">
@@ -167,7 +175,9 @@ export function SmartDigestDetail({
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Why included:</span>{" "}
+                    <span className="font-medium text-foreground">
+                      Why included:
+                    </span>{" "}
                     {item.reason}
                   </p>
                 </article>
@@ -196,12 +206,15 @@ function groupItemsByFeed(items: SmartDigestDetailItem[]) {
     groups.set(item.feedTitle, existing)
   }
 
-  return Array.from(groups.entries()).map(([feedTitle, groupedItems]) => [
-    feedTitle,
-    groupedItems.sort(
-      (left, right) =>
-        (right.publishedAt?.getTime() ?? 0) -
-        (left.publishedAt?.getTime() ?? 0)
-    ),
-  ] as const)
+  return Array.from(groups.entries()).map(
+    ([feedTitle, groupedItems]) =>
+      [
+        feedTitle,
+        groupedItems.sort(
+          (left, right) =>
+            (right.publishedAt?.getTime() ?? 0) -
+            (left.publishedAt?.getTime() ?? 0),
+        ),
+      ] as const,
+  )
 }

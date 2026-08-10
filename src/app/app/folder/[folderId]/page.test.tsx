@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   listArticleCollectionsForUser: vi.fn(),
   listReaderArticlePage: vi.fn(),
   loadReaderArticleView: vi.fn(),
-  listUserFeedSubscriptions: vi.fn(),
+  listUserFeedNavigation: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NOT_FOUND")
   }),
@@ -71,7 +71,7 @@ vi.mock("@/lib/articles", () => ({
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
-  listUserFeedSubscriptions: mocks.listUserFeedSubscriptions,
+  listUserFeedNavigation: mocks.listUserFeedNavigation,
 }))
 
 vi.mock("@/lib/folders", () => ({
@@ -106,7 +106,7 @@ describe("FolderPage", () => {
       selectedArticle: null,
     })
     mocks.listArticleCollectionsForUser.mockResolvedValue([])
-    mocks.listUserFeedSubscriptions.mockResolvedValue([
+    mocks.listUserFeedNavigation.mockResolvedValue([
       {
         faviconUrl: null,
         feedId: "feed-1",
@@ -157,7 +157,7 @@ describe("FolderPage", () => {
       })
     )
 
-    expect(mocks.listUserFeedSubscriptions).toHaveBeenCalledWith("user-1")
+    expect(mocks.listUserFeedNavigation).toHaveBeenCalledWith("user-1")
     expect(markup).toContain("Feeds in this folder")
     expect(markup).toContain("Combined folder stream")
     expect(markup).toContain('href="/app/folder/folder-1"')

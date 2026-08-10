@@ -19,6 +19,14 @@ describe("feed refresh queue", () => {
     queueAdd.mockReset()
     queueGetJob.mockReset()
     queueConstructor.mockClear()
+    let storedOptions: Record<string, unknown> | undefined
+    queueAdd.mockImplementation(async (_name, _data, options) => {
+      storedOptions ??= options
+      return { id: options.jobId }
+    })
+    queueGetJob.mockImplementation(async () =>
+      storedOptions ? { opts: storedOptions } : undefined
+    )
   })
 
   it("uses BullMQ-compatible job ids", async () => {
@@ -27,7 +35,7 @@ describe("feed refresh queue", () => {
     expect(feedRefreshJobId("feed_123:abc")).toBe("feed-feed_123-abc")
   })
 
-  it("removes terminal source failures so the same source can be queued again", async () => {
+  it("atomically creates a source refresh with fixed durability settings", async () => {
     const { enqueueFeedRefresh, feedRefreshJobId } = await import(
       "./feed-refresh-queue"
     )
@@ -37,11 +45,10 @@ describe("feed refresh queue", () => {
       outcome: "queued",
     })
 
-    expect(queueGetJob).toHaveBeenCalledWith(feedRefreshJobId("feed-1"))
     expect(queueAdd).toHaveBeenCalledWith(
       "refresh-feed",
       { feedId: "feed-1", trigger: "scheduler" },
-      {
+      expect.objectContaining({
         attempts: 3,
         backoff: {
           delay: 10_000,
@@ -50,19 +57,27 @@ describe("feed refresh queue", () => {
         jobId: feedRefreshJobId("feed-1"),
         removeOnComplete: true,
         removeOnFail: true,
-      }
+      })
     )
   })
 
-  it("reports an already queued source without adding a duplicate job", async () => {
+  it("reports the loser of concurrent deterministic adds as already active", async () => {
     const { enqueueFeedRefresh, feedRefreshJobId } = await import("./feed-refresh-queue")
-    queueGetJob.mockResolvedValueOnce({ id: feedRefreshJobId("feed-1") })
 
-    await expect(enqueueFeedRefresh("feed-1", { trigger: "manual" })).resolves.toEqual({
+    const [first, second] = await Promise.all([
+      enqueueFeedRefresh("feed-1", { trigger: "manual" }),
+      enqueueFeedRefresh("feed-1", { trigger: "manual" }),
+    ])
+
+    expect([first, second]).toContainEqual({
       jobId: feedRefreshJobId("feed-1"),
-      outcome: "already-queued",
+      outcome: "queued",
     })
-    expect(queueAdd).not.toHaveBeenCalled()
+    expect([first, second]).toContainEqual({
+      jobId: feedRefreshJobId("feed-1"),
+      outcome: "already-active",
+    })
+    expect(queueAdd).toHaveBeenCalledTimes(2)
   })
 
   it("stores only the feed identifier and the safe trigger label", async () => {
@@ -75,5 +90,15 @@ describe("feed refresh queue", () => {
       { feedId: "feed-1", trigger: "manual" },
       expect.objectContaining({ priority: 1 })
     )
+  })
+
+  it("returns unavailable when BullMQ cannot confirm the stored job", async () => {
+    const { enqueueFeedRefresh, feedRefreshJobId } = await import("./feed-refresh-queue")
+    queueGetJob.mockResolvedValue(undefined)
+
+    await expect(enqueueFeedRefresh("feed-1")).resolves.toEqual({
+      jobId: feedRefreshJobId("feed-1"),
+      outcome: "unavailable",
+    })
   })
 })

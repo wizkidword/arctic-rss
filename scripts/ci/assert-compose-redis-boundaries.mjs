@@ -62,4 +62,20 @@ for (const [serviceName, expected] of Object.entries(expectedNetworks)) {
   )
 }
 
+for (const serviceName of ["redis", "redis-ephemeral"]) {
+  const command = compose.services[serviceName]?.command
+
+  assert.ok(Array.isArray(command), `${serviceName} must use an explicit Redis command.`)
+  for (const token of ["+@all", "-@admin", "-@dangerous", "+info"]) {
+    assert.ok(command.includes(token), `${serviceName} ACL command must include ${token}.`)
+  }
+
+  const defaultUser = command.lastIndexOf("--user")
+  assert.deepEqual(
+    command.slice(defaultUser),
+    ["--user", "default", "off"],
+    `${serviceName} must disable the Redis default user.`
+  )
+}
+
 console.log("Compose Redis network boundaries verified.")

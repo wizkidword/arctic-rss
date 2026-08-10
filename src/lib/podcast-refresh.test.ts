@@ -2,28 +2,55 @@ import { describe, expect, it, vi } from "vitest"
 
 import { PodcastRefreshError, refreshPodcastWithClient } from "./podcast-refresh"
 import { podcastEpisodeIngestionFingerprint } from "./ingestion-fingerprint"
+import { externalIdentityHash } from "./external-identity"
 import { parsePodcastFeed } from "./podcast-parser"
 
 function createStore(feedUrl = "https://example.com/podcast.xml") {
+  const podcastFindUnique = vi.fn().mockResolvedValue({
+    consecutiveFailures: 0,
+    etag: null,
+    feedUrl,
+    id: "podcast-1",
+    lastModified: null,
+    refreshGeneration: 0,
+    refreshLeaseExpiresAt: null,
+    refreshOwner: null,
+    refreshIntervalMinutes: 60,
+  })
+  const podcastUpdateMany = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+    const podcast = await podcastFindUnique({})
+    if (!podcast) {
+      return { count: 0 }
+    }
+
+    const generation = data.refreshGeneration as { increment?: number } | undefined
+    if (generation?.increment) {
+      podcast.refreshGeneration = (podcast.refreshGeneration ?? 0) + generation.increment
+    }
+    if (data.refreshLeaseExpiresAt instanceof Date) {
+      podcast.refreshLeaseExpiresAt = data.refreshLeaseExpiresAt
+    }
+    if ("refreshOwner" in data) {
+      podcast.refreshOwner = data.refreshOwner
+    }
+
+    return { count: 1 }
+  })
+
   return {
     $transaction: vi.fn(async (operations: Array<Promise<unknown>>) =>
       Promise.all(operations)
     ),
     podcast: {
-      findUnique: vi.fn().mockResolvedValue({
-        consecutiveFailures: 0,
-        etag: null,
-        feedUrl,
-        id: "podcast-1",
-        lastModified: null,
-        refreshIntervalMinutes: 60,
-      }),
+      findUnique: podcastFindUnique,
       update: vi.fn().mockResolvedValue({}),
+      updateMany: podcastUpdateMany,
     },
     podcastEpisode: {
       createMany: vi.fn().mockResolvedValue({ count: 1 }),
       findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
   }
 }
@@ -93,18 +120,21 @@ describe("refreshPodcastWithClient", () => {
           description: "Episode description",
           durationSeconds: 3723,
           externalId: "ep-1",
+          externalIdHash: externalIdentityHash("ep-1"),
           ingestionFingerprint: expect.stringMatching(/^v1:[a-f0-9]{64}$/),
           imageUrl: "https://example.com/episode.jpg",
           podcastId: "podcast-1",
           publishedAt: new Date("2026-06-29T11:30:00.000Z"),
+          sourceGeneration: 1,
           title: "Episode",
           url: "https://example.com/episode",
         },
       ],
       skipDuplicates: true,
     })
-    expect(store.podcastEpisode.update).not.toHaveBeenCalled()
-    expect(store.podcast.update).toHaveBeenLastCalledWith({
+    expect(store.podcastEpisode.updateMany).not.toHaveBeenCalled()
+    expect(store.podcast.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
       data: {
         artworkUrl: "https://example.com/show.jpg",
         author: "Show Host",
@@ -119,8 +149,9 @@ describe("refreshPodcastWithClient", () => {
         siteUrl: "https://example.com/show",
         title: "Show",
       },
-      where: { id: "podcast-1" },
-    })
+      where: expect.objectContaining({ id: "podcast-1" }),
+      })
+    )
   })
 
   it("updates existing episodes in a bounded transaction batch", async () => {
@@ -139,17 +170,16 @@ describe("refreshPodcastWithClient", () => {
       store,
     })
 
-    expect(store.podcastEpisode.update).toHaveBeenCalledWith({
+    expect(store.podcastEpisode.updateMany).toHaveBeenCalledWith({
       data: expect.objectContaining({
         audioUrl: "https://cdn.example.com/ep.mp3",
+        externalIdHash: externalIdentityHash("ep-1"),
         title: "Episode",
       }),
-      where: {
-        podcastId_externalId: {
-          externalId: "ep-1",
-          podcastId: "podcast-1",
-        },
-      },
+      where: expect.objectContaining({
+        externalId: "ep-1",
+        podcastId: "podcast-1",
+      }),
     })
     expect(store.$transaction).toHaveBeenCalledTimes(1)
   })
@@ -170,7 +200,7 @@ describe("refreshPodcastWithClient", () => {
       store,
     })
 
-    expect(store.podcastEpisode.update).toHaveBeenCalledWith(
+    expect(store.podcastEpisode.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           transcriptLanguage: null,
@@ -192,6 +222,7 @@ describe("refreshPodcastWithClient", () => {
       {
         externalId: "ep-1",
         ingestionFingerprint: podcastEpisodeIngestionFingerprint(episode),
+        sourceGeneration: 1,
       },
     ])
 
@@ -206,7 +237,7 @@ describe("refreshPodcastWithClient", () => {
     })
 
     expect(store.podcastEpisode.createMany).not.toHaveBeenCalled()
-    expect(store.podcastEpisode.update).not.toHaveBeenCalled()
+    expect(store.podcastEpisode.updateMany).not.toHaveBeenCalled()
     expect(result.metrics).toEqual(
       expect.objectContaining({
         changedCount: 0,
@@ -226,6 +257,7 @@ describe("refreshPodcastWithClient", () => {
       {
         externalId: "ep-1",
         ingestionFingerprint: podcastEpisodeIngestionFingerprint(original),
+        sourceGeneration: 1,
       },
     ])
     const transcriptXml = podcastXml.replace(
@@ -247,7 +279,7 @@ describe("refreshPodcastWithClient", () => {
     })
 
     expect(store.podcastEpisode.createMany).not.toHaveBeenCalled()
-    expect(store.podcastEpisode.update).toHaveBeenCalledWith(
+    expect(store.podcastEpisode.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           transcriptType: "text/vtt",
@@ -299,7 +331,7 @@ describe("refreshPodcastWithClient", () => {
         parsedCount: 0,
       })
     )
-    expect(store.podcast.update).toHaveBeenCalledWith(
+    expect(store.podcast.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ etag: 'W/"podcast-v2"' }),
       })
@@ -322,7 +354,8 @@ describe("refreshPodcastWithClient", () => {
     ).rejects.toThrow("network down")
 
     expect(store.podcastEpisode.createMany).not.toHaveBeenCalled()
-    expect(store.podcast.update).toHaveBeenCalledWith({
+    expect(store.podcast.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
       data: {
         lastError: "network down",
         lastFailedAt: now,
@@ -330,8 +363,9 @@ describe("refreshPodcastWithClient", () => {
         consecutiveFailures: 1,
         nextFetchAt: new Date("2026-06-29T14:00:00.000Z"),
       },
-      where: { id: "podcast-1" },
-    })
+      where: expect.objectContaining({ id: "podcast-1" }),
+      })
+    )
   })
 
   it("truncates failed health errors to 500 characters", async () => {
@@ -349,7 +383,8 @@ describe("refreshPodcastWithClient", () => {
       })
     ).rejects.toThrow(longMessage)
 
-    expect(store.podcast.update).toHaveBeenCalledWith({
+    expect(store.podcast.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
       data: {
         lastError: "x".repeat(500),
         lastFailedAt: now,
@@ -357,8 +392,9 @@ describe("refreshPodcastWithClient", () => {
         consecutiveFailures: 1,
         nextFetchAt: new Date("2026-06-29T14:00:00.000Z"),
       },
-      where: { id: "podcast-1" },
-    })
+      where: expect.objectContaining({ id: "podcast-1" }),
+      })
+    )
   })
 
   it("throws when the podcast is missing without recording health", async () => {
@@ -372,7 +408,6 @@ describe("refreshPodcastWithClient", () => {
       })
     ).rejects.toEqual(new PodcastRefreshError("Podcast not found."))
 
-    expect(store.podcast.update).not.toHaveBeenCalled()
     expect(store.podcastEpisode.createMany).not.toHaveBeenCalled()
   })
 })

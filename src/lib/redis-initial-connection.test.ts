@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
-const redisInstances = vi.hoisted(() => [] as Array<{ options: Record<string, unknown> }>)
+const redisInstances = vi.hoisted(
+  () => [] as Array<{ options: Record<string, unknown> }>
+)
 
 vi.mock("ioredis", () => {
   class MockRedis {
@@ -23,14 +25,16 @@ vi.mock("ioredis", () => {
     on = vi.fn()
     ping = vi.fn(async () => {
       if (this.options.enableOfflineQueue === false) {
-        throw new Error("Stream isn't writeable and enableOfflineQueue is false")
+        throw new Error(
+          "Stream isn't writeable and enableOfflineQueue is false"
+        )
       }
     })
     mget = vi.fn(async (...keys: string[]) =>
-      keys.map(() =>
+      keys.map((key) =>
         JSON.stringify({
           instanceId: "worker-1",
-          mode: "all",
+          mode: key.split(":").at(-1),
           timestamp: Date.now(),
           version: "test",
         })
@@ -79,8 +83,10 @@ describe("initial Redis health connections", () => {
 
     expect(result.status).toBe("ok")
     expect(redisInstances).toHaveLength(3)
-    expect(redisInstances.every((instance) => instance.options.enableOfflineQueue !== false)).toBe(
-      true
-    )
+    expect(
+      redisInstances.every(
+        (instance) => instance.options.enableOfflineQueue !== false
+      )
+    ).toBe(true)
   })
 })

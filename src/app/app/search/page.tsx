@@ -18,7 +18,7 @@ import {
   type ArticleSearchFilters,
   type ArticleSearchParams,
 } from "@/lib/article-search"
-import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
+import { listUserFeedNavigation } from "@/lib/feed-subscriptions"
 import { listUserFolders } from "@/lib/folders"
 import { normalizeDefaultView } from "@/lib/preferences"
 import { normalizeDateTimePreferences, normalizeDisplayMode } from "@/lib/settings"
@@ -41,7 +41,7 @@ export default async function SearchPage({
     await Promise.all([
       getOrCreateUserSettings(session.user.id),
       listArticleCollectionsForUser(session.user.id),
-      listUserFeedSubscriptions(session.user.id),
+      listUserFeedNavigation(session.user.id),
       listUserFolders(session.user.id),
     ])
   const basePath = articleSearchHref(filters, { after: filters.after })

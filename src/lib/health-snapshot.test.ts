@@ -17,8 +17,25 @@ const healthyResult = {
     durableRedis: "ok" as const,
     ephemeralRedis: "ok" as const,
     maintenance: "ok" as const,
+    maintenanceResponsibilities: {
+      "feed-scheduling": "ok" as const,
+      "podcast-scheduling": "ok" as const,
+    },
     queues: "ok" as const,
     workers: { all: "ok" as const, health: "ok" as const },
+  },
+  sourceReliability: {
+    affectedHosts: [],
+    available: true,
+    errorCategories: {},
+    failureCount: 0,
+    failurePercentage: null,
+    feedFailureCount: 0,
+    podcastFailureCount: 0,
+    platformImpact: "none" as const,
+    recentAttemptCount: 0,
+    recurringFailureHosts: [],
+    status: "ok" as const,
   },
   status: "ok" as const,
 }
@@ -84,10 +101,14 @@ describe("health snapshots", () => {
     })
 
     await expect(
-      readPublicHealthSnapshot({ store: { get: vi.fn().mockResolvedValue(null) } })
+      readPublicHealthSnapshot({
+        store: { get: vi.fn().mockResolvedValue(null) },
+      })
     ).resolves.toMatchObject({ source: "missing", status: "degraded" })
     await expect(
-      readPublicHealthSnapshot({ store: { get: vi.fn().mockResolvedValue("not-json") } })
+      readPublicHealthSnapshot({
+        store: { get: vi.fn().mockResolvedValue("not-json") },
+      })
     ).resolves.toMatchObject({ source: "missing", status: "degraded" })
     await expect(
       readPublicHealthSnapshot({
@@ -101,7 +122,9 @@ describe("health snapshots", () => {
     await expect(
       readPublicHealthSnapshot({
         readTimeoutMs: 1,
-        store: { get: vi.fn(() => new Promise<string | null>(() => undefined)) },
+        store: {
+          get: vi.fn(() => new Promise<string | null>(() => undefined)),
+        },
       })
     ).resolves.toMatchObject({ source: "unavailable", status: "degraded" })
   })

@@ -1,7 +1,18 @@
 import type { Prisma } from "../generated/prisma/client"
 
+import {
+  getBackgroundEligibility,
+  type BackgroundEligibilityStore,
+} from "./background-eligibility"
 import { getPrisma } from "./db"
 import { enqueueSmartDigestEmail } from "./smart-digest-email-queue"
+import {
+  claimSmartDigestRun,
+  runWithSmartDigestRunLeaseHeartbeat,
+  smartDigestRunLeaseWhere,
+  type SmartDigestRunLease,
+  SMART_DIGEST_PROCESSING_LEASE_MS,
+} from "./smart-digest-run-leases"
 import {
   scheduleNextSmartDigestRun,
   SmartDigestError,
@@ -11,11 +22,12 @@ import { matchSmartDigestArticle } from "./smart-digest-rules"
 
 const FIRST_RUN_LOOKBACK_MS = 24 * 60 * 60 * 1000
 export const SMART_DIGEST_LATE_ARRIVAL_LOOKBACK_MS = 2 * 60 * 60 * 1000
-export const SMART_DIGEST_PROCESSING_LEASE_MS = 10 * 60 * 1000
+export { SMART_DIGEST_PROCESSING_LEASE_MS }
 
 type SmartDigestStatusForProcessing = "COMPLETED" | "COMPLETED_NO_MATCHES"
 type SmartDigestEmailStatusForProcessing = "NOT_REQUESTED" | "PENDING"
-export type DigestRunStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
+export type DigestRunStatus =
+  "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELED"
 
 type SmartDigestRuleFindUniqueArgs = {
   include: {
@@ -47,6 +59,7 @@ type SmartDigestCreateArgs = {
       create: SmartDigestItemCreateData[]
     }
     ruleId: string
+    runId: string
     startedAt: Date
     status: SmartDigestStatusForProcessing
     title: string
@@ -67,10 +80,14 @@ type SmartDigestRuleUpdateArgs = {
 }
 
 export type DigestRunRecord = {
+  attempt: number
   completedAt: Date | null
   digestId: string | null
   emailStatus: string | null
   id: string
+  lastHeartbeatAt: Date | null
+  leaseExpiresAt: Date | null
+  leaseOwner: string | null
   processingStartedAt: Date | null
   ruleId: string
   scheduledFor: Date
@@ -155,10 +172,12 @@ export type EnqueueSmartDigestEmail = (runId: string) => Promise<unknown>
 
 export type SmartDigestProcessingStore = {
   $transaction<T>(
-    callback: (transaction: SmartDigestProcessingStore) => Promise<T>
+    callback: (transaction: SmartDigestProcessingStore) => Promise<T>,
   ): Promise<T>
   article: {
-    findMany(args: SmartDigestArticleFindManyArgs): Promise<SmartDigestCandidateArticle[]>
+    findMany(
+      args: SmartDigestArticleFindManyArgs,
+    ): Promise<SmartDigestCandidateArticle[]>
   }
   digestRun: {
     findUnique(args: { where: { id: string } }): Promise<DigestRunRecord | null>
@@ -187,15 +206,22 @@ export type SmartDigestProcessingStore = {
     }): Promise<DigestRunRecord>
   }
   smartDigest: {
-    create(args: SmartDigestCreateArgs): Promise<SmartDigestForEmail>
+    upsert(args: {
+      create: SmartDigestCreateArgs["data"]
+      include: SmartDigestCreateArgs["include"]
+      update: Record<string, never>
+      where: { runId: string }
+    }): Promise<SmartDigestForEmail>
   }
   smartDigestRule: {
     findUnique(
-      args: SmartDigestRuleFindUniqueArgs
+      args: SmartDigestRuleFindUniqueArgs,
     ): Promise<SmartDigestRuleForProcessing | null>
-    update(args: SmartDigestRuleUpdateArgs): Promise<SmartDigestRuleForProcessing | null>
+    update(
+      args: SmartDigestRuleUpdateArgs,
+    ): Promise<SmartDigestRuleForProcessing | null>
   }
-}
+} & BackgroundEligibilityStore
 
 export type SmartDigestProcessingResult = {
   articleCount: number
@@ -216,6 +242,7 @@ export async function processSmartDigestRule({
 }): Promise<SmartDigestProcessingResult> {
   return processSmartDigestRuleWithClient({
     enqueueEmail: enqueueSmartDigestEmail,
+    leaseNow: () => new Date(),
     now: new Date(),
     ruleId,
     scheduledFor: new Date(scheduledFor),
@@ -225,84 +252,23 @@ export async function processSmartDigestRule({
 
 export async function processSmartDigestRuleWithClient({
   enqueueEmail,
+  leaseNow = () => now,
   now,
   ruleId,
   scheduledFor,
   store,
 }: {
   enqueueEmail: EnqueueSmartDigestEmail
+  leaseNow?: () => Date
   now: Date
   ruleId: string
   scheduledFor: Date
   store: SmartDigestProcessingStore
 }): Promise<SmartDigestProcessingResult> {
   if (Number.isNaN(scheduledFor.getTime())) {
-    throw new SmartDigestError("Smart Digest run has an invalid scheduled time.")
-  }
-
-  const run = await store.digestRun.upsert({
-    create: {
-      emailStatus: "NOT_REQUESTED",
-      ruleId,
-      scheduledFor,
-      status: "PENDING",
-    },
-    update: {},
-    where: {
-      ruleId_scheduledFor: {
-        ruleId,
-        scheduledFor,
-      },
-    },
-  })
-  const claimed = await store.digestRun.updateMany({
-    data: {
-      errorMessage: null,
-      processingStartedAt: now,
-      status: "PROCESSING",
-    },
-    where: {
-      id: run.id,
-      OR: [
-        { status: "PENDING" },
-        { status: "FAILED" },
-        {
-          processingStartedAt: {
-            lt: new Date(now.getTime() - SMART_DIGEST_PROCESSING_LEASE_MS),
-          },
-          status: "PROCESSING",
-        },
-      ],
-    },
-  })
-
-  if (claimed.count === 0) {
-    await enqueuePendingEmail(run, enqueueEmail)
-    return skippedRunResult(run)
-  }
-
-  const claimedRun = await store.digestRun.findUnique({
-    where: { id: run.id },
-  })
-
-  if (!claimedRun) {
-    throw new SmartDigestError("Smart Digest run not found after it was claimed.")
-  }
-
-  // A worker may have died immediately after committing its digest. The run is
-  // recovered by marking that existing digest complete rather than creating a
-  // second one.
-  if (claimedRun.digestId) {
-    await store.digestRun.update({
-      data: {
-        completedAt: now,
-        processingStartedAt: null,
-        status: "COMPLETED",
-      },
-      where: { id: claimedRun.id },
-    })
-    await enqueuePendingEmail(claimedRun, enqueueEmail)
-    return skippedRunResult(claimedRun)
+    throw new SmartDigestError(
+      "Smart Digest run has an invalid scheduled time.",
+    )
   }
 
   const rule = await store.smartDigestRule.findUnique({
@@ -320,12 +286,73 @@ export async function processSmartDigestRuleWithClient({
   })
 
   if (!rule?.user || !rule.isEnabled) {
-    await failDigestRun({
-      message: "Smart Digest rule not found or disabled.",
-      runId: claimedRun.id,
-      store,
+    return skippedResult()
+  }
+
+  const eligibility = await getBackgroundEligibility({
+    store,
+    userId: rule.userId,
+  })
+  if (!eligibility.active || !eligibility.aiAllowed) {
+    return skippedResult()
+  }
+
+  const run = await store.digestRun.upsert({
+    create: {
+      emailStatus: "NOT_REQUESTED",
+      ruleId,
+      scheduledFor,
+      status: "PENDING",
+    },
+    update: {},
+    where: {
+      ruleId_scheduledFor: {
+        ruleId,
+        scheduledFor,
+      },
+    },
+  })
+  const lease = await claimSmartDigestRun({
+    now: leaseNow(),
+    runId: run.id,
+    store,
+  })
+
+  if (!lease) {
+    await enqueuePendingEmail(run, enqueueEmail)
+    return skippedRunResult(run)
+  }
+
+  const claimedRun = await store.digestRun.findUnique({
+    where: { id: run.id },
+  })
+
+  if (!claimedRun) {
+    throw new SmartDigestError(
+      "Smart Digest run not found after it was claimed.",
+    )
+  }
+
+  // A worker may have died immediately after committing its digest. The run is
+  // recovered by marking that existing digest complete rather than creating a
+  // second one.
+  if (claimedRun.digestId) {
+    const recovered = await store.digestRun.updateMany({
+      data: {
+        completedAt: now,
+        lastHeartbeatAt: now,
+        leaseExpiresAt: null,
+        leaseOwner: null,
+        processingStartedAt: null,
+        status: "COMPLETED",
+      },
+      where: smartDigestRunLeaseWhere(lease, leaseNow()),
     })
-    throw new SmartDigestError("Smart Digest rule not found.")
+    if (recovered.count === 0) {
+      return skippedRunResult(claimedRun)
+    }
+    await enqueuePendingEmail(claimedRun, enqueueEmail)
+    return skippedRunResult(claimedRun)
   }
 
   const watermarkFrom = digestWatermarkFrom(rule, now)
@@ -336,21 +363,31 @@ export async function processSmartDigestRuleWithClient({
   })
 
   try {
-    const candidates = await store.article.findMany({
-      include: { feed: true },
-      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-      take: 100,
-      where: {
-        AND: [
-          smartDigestCandidateWhere(rule),
-          smartDigestWindowWhere({
-            ruleId: rule.id,
-            watermarkFrom,
-            watermarkTo: now,
-          }),
-        ],
-      },
+    const candidateWork = await runWithSmartDigestRunLeaseHeartbeat({
+      lease,
+      now: leaseNow,
+      store,
+      work: () =>
+        store.article.findMany({
+          include: { feed: true },
+          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+          take: 100,
+          where: {
+            AND: [
+              smartDigestCandidateWhere(rule),
+              smartDigestWindowWhere({
+                ruleId: rule.id,
+                watermarkFrom,
+                watermarkTo: now,
+              }),
+            ],
+          },
+        }),
     })
+    if (!candidateWork.leaseHeld) {
+      return skippedRunResult(claimedRun)
+    }
+    const candidates = candidateWork.result
     const items = matchingDigestItems({
       articles: candidates,
       rule,
@@ -361,9 +398,38 @@ export async function processSmartDigestRuleWithClient({
     const emailStatus: SmartDigestEmailStatusForProcessing =
       rule.emailEnabled && items.length ? "PENDING" : "NOT_REQUESTED"
 
+    const currentEligibility = await getBackgroundEligibility({
+      store,
+      userId: rule.userId,
+    })
+    if (!currentEligibility.active || !currentEligibility.aiAllowed) {
+      await failDigestRun({
+        lease,
+        message:
+          "Smart Digest owner is no longer eligible for background work.",
+        now: leaseNow(),
+        store,
+      })
+      return skippedRunResult(claimedRun)
+    }
+
     const digest = await store.$transaction(async (transaction) => {
-      const createdDigest = await transaction.smartDigest.create({
+      const renewedAt = leaseNow()
+      const renewed = await transaction.digestRun.updateMany({
         data: {
+          lastHeartbeatAt: renewedAt,
+          leaseExpiresAt: new Date(
+            renewedAt.getTime() + SMART_DIGEST_PROCESSING_LEASE_MS,
+          ),
+        },
+        where: smartDigestRunLeaseWhere(lease, renewedAt),
+      })
+      if (renewed.count === 0) {
+        return null
+      }
+
+      const createdDigest = await transaction.smartDigest.upsert({
+        create: {
           articleCount: items.length,
           completedAt: now,
           emailStatus,
@@ -371,6 +437,7 @@ export async function processSmartDigestRuleWithClient({
             create: items,
           },
           ruleId: rule.id,
+          runId: claimedRun.id,
           startedAt: now,
           status,
           title: rule.name,
@@ -378,6 +445,8 @@ export async function processSmartDigestRuleWithClient({
           userId: rule.userId,
         },
         include: { items: true },
+        update: {},
+        where: { runId: claimedRun.id },
       })
 
       await transaction.smartDigestRule.update({
@@ -389,21 +458,28 @@ export async function processSmartDigestRuleWithClient({
         },
         where: { id: rule.id },
       })
-      await transaction.digestRun.update({
+      const completed = await transaction.digestRun.updateMany({
         data: {
           completedAt: now,
           digestId: createdDigest.id,
           emailStatus,
+          lastHeartbeatAt: leaseNow(),
+          leaseExpiresAt: null,
+          leaseOwner: null,
           processingStartedAt: null,
           status: "COMPLETED",
           watermarkFrom,
           watermarkTo: now,
         },
-        where: { id: claimedRun.id },
+        where: smartDigestRunLeaseWhere(lease, leaseNow()),
       })
 
-      return createdDigest
+      return completed.count === 1 ? createdDigest : null
     })
+
+    if (!digest) {
+      return skippedRunResult(claimedRun)
+    }
 
     if (emailStatus === "PENDING") {
       await enqueueEmail(claimedRun.id)
@@ -416,8 +492,9 @@ export async function processSmartDigestRuleWithClient({
     }
   } catch (error) {
     await failDigestRun({
+      lease,
       message: safeErrorMessage(error),
-      runId: claimedRun.id,
+      now: leaseNow(),
       store,
     })
     throw error
@@ -428,7 +505,7 @@ export function smartDigestCandidateWhere(
   rule: Pick<
     SmartDigestRuleForProcessing,
     "folders" | "sourceScope" | "subscriptions" | "userId"
-  >
+  >,
 ): Prisma.ArticleWhereInput {
   if (rule.sourceScope === "FOLDERS") {
     return {
@@ -453,7 +530,7 @@ export function smartDigestCandidateWhere(
           some: {
             id: {
               in: rule.subscriptions.map(
-                (subscription) => subscription.subscriptionId
+                (subscription) => subscription.subscriptionId,
               ),
             },
             isPaused: false,
@@ -519,7 +596,7 @@ export function smartDigestWindowWhere({
 
 export function digestWatermarkFrom(
   rule: Pick<SmartDigestRuleForProcessing, "contentWatermarkAt" | "lastRunAt">,
-  now: Date
+  now: Date,
 ) {
   const watermark =
     rule.contentWatermarkAt ??
@@ -573,7 +650,7 @@ function matchingDigestItems({
 
 async function enqueuePendingEmail(
   run: DigestRunRecord,
-  enqueueEmail: EnqueueSmartDigestEmail
+  enqueueEmail: EnqueueSmartDigestEmail,
 ) {
   if (run.digestId && run.emailStatus === "PENDING") {
     await enqueueEmail(run.id)
@@ -588,28 +665,41 @@ function skippedRunResult(run: DigestRunRecord): SmartDigestProcessingResult {
   }
 }
 
+function skippedResult(): SmartDigestProcessingResult {
+  return {
+    articleCount: 0,
+    digestId: null,
+    status: "SKIPPED",
+  }
+}
+
 async function failDigestRun({
+  lease,
   message,
-  runId,
+  now,
   store,
 }: {
+  lease: SmartDigestRunLease
   message: string
-  runId: string
+  now: Date
   store: SmartDigestProcessingStore
 }) {
-  await store.digestRun.update({
+  await store.digestRun.updateMany({
     data: {
       errorMessage: message,
+      lastHeartbeatAt: now,
+      leaseExpiresAt: null,
+      leaseOwner: null,
       processingStartedAt: null,
       status: "FAILED",
     },
-    where: { id: runId },
+    where: smartDigestRunLeaseWhere(lease, now),
   })
 }
 
 function compactArticleSummary(article: SmartDigestCandidateArticle) {
   const source = compactWhitespace(
-    article.summary || article.contentText || article.title
+    article.summary || article.contentText || article.title,
   )
   const fallback = compactWhitespace(article.title)
   const summary = source || fallback
@@ -626,5 +716,7 @@ function compactWhitespace(value: string) {
 }
 
 function safeErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Smart Digest processing failed."
+  return error instanceof Error
+    ? error.message
+    : "Smart Digest processing failed."
 }

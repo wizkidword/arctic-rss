@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process"
 import { once } from "node:events"
+import { readFile } from "node:fs/promises"
 import { createServer, type Server } from "node:http"
 
 import { afterEach, describe, expect, it } from "vitest"
@@ -11,6 +12,25 @@ afterEach(async () => {
 })
 
 describe("Compose chat release gate assertion", () => {
+  it("runs the full Compose chat topology with the restricted database role", async () => {
+    const workflow = await readFile(".github/workflows/ci.yml", "utf8")
+
+    expect(workflow).toContain(
+      "CHAT_DATABASE_URL=postgresql://arctic_chat:ci-chat-runtime-password@postgres:5432/arctic_rss?schema=public"
+    )
+    expect(workflow).toContain("Bootstrap restricted chat runtime role after migrations")
+    expect(workflow).toContain("Wait for migration completion before provisioning the chat runtime role")
+    expect(workflow).toContain("wait migrate")
+    expect(workflow).toContain("-v chat_role=arctic_chat")
+    expect(workflow).toContain("-v chat_password=ci-chat-runtime-password")
+    expect(workflow.indexOf("Wait for migration completion before provisioning the chat runtime role")).toBeLessThan(
+      workflow.indexOf("Bootstrap restricted chat runtime role after migrations")
+    )
+    expect(workflow.indexOf("Bootstrap restricted chat runtime role after migrations")).toBeLessThan(
+      workflow.indexOf("Start the selected web, worker, and restricted chat topology")
+    )
+  })
+
   it("sends the canonical Host header while probing the loopback web service", async () => {
     const web = createServer((request, response) => {
       if (request.headers.host !== "arcticrss.test") {

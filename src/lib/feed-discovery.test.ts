@@ -8,6 +8,15 @@ import {
 import { FeedFetchError, type SafeFetchTextResult } from "./url-safety"
 
 describe("feed discovery helpers", () => {
+  it("normalizes publisher metadata before returning it", () => {
+    expect(
+      parseFeedXml(
+        `<rss><channel><title>Cafe&#x301;&#0;</title><link>https://example.com</link></channel></rss>`,
+        "https://example.com/feed.xml"
+      )
+    ).toMatchObject({ title: "Café" })
+  })
+
   it("parses RSS metadata", () => {
     const feed = parseFeedXml(
       `<?xml version="1.0"?>

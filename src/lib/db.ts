@@ -17,7 +17,13 @@ export function getPrisma(connectionString = process.env.DATABASE_URL) {
     const settings = getDatabaseConnectionSettings()
     const pool = createDatabasePool({ connectionString, settings })
     const adapter = new PrismaPg(pool, { disposeExternalPool: true })
-    globalForPrisma.prisma = new PrismaClient({ adapter })
+    globalForPrisma.prisma = new PrismaClient({
+      adapter,
+      ...(process.env.NODE_ENV !== "production" &&
+      process.env.ARCTIC_RSS_QUERY_LOGGING === "1"
+        ? { log: [{ emit: "event" as const, level: "query" as const }] }
+        : {}),
+    })
   }
 
   return globalForPrisma.prisma

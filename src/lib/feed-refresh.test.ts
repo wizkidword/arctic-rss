@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { refreshFeedWithClient } from "./feed-refresh"
 import { articleIngestionFingerprint } from "./ingestion-fingerprint"
+import { externalIdentityHash } from "./external-identity"
 import { parseFeedArticles } from "./feed-articles"
 
 const rssXml = `<?xml version="1.0"?>
@@ -19,6 +20,40 @@ const rssXml = `<?xml version="1.0"?>
 </rss>`
 
 function createStore(feedUrl = "https://example.com/rss.xml") {
+  const feedFindUnique = vi.fn().mockResolvedValue({
+    consecutiveFailures: 0,
+    etag: null,
+    feedUrl,
+    id: "feed-1",
+    lastError: null,
+    lastFeedSelfUrl: null,
+    lastModified: null,
+    lastResolvedFeedUrl: null,
+    refreshGeneration: 0,
+    refreshLeaseExpiresAt: null,
+    refreshOwner: null,
+    refreshIntervalMinutes: 60,
+  })
+  const feedUpdateMany = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+    const feed = await feedFindUnique({})
+    if (!feed) {
+      return { count: 0 }
+    }
+
+    const generation = data.refreshGeneration as { increment?: number } | undefined
+    if (generation?.increment) {
+      feed.refreshGeneration = (feed.refreshGeneration ?? 0) + generation.increment
+    }
+    if (data.refreshLeaseExpiresAt instanceof Date) {
+      feed.refreshLeaseExpiresAt = data.refreshLeaseExpiresAt
+    }
+    if ("refreshOwner" in data) {
+      feed.refreshOwner = data.refreshOwner
+    }
+
+    return { count: 1 }
+  })
+
   return {
     $transaction: vi.fn(async (operations: Array<Promise<unknown>>) =>
       Promise.all(operations)
@@ -27,20 +62,12 @@ function createStore(feedUrl = "https://example.com/rss.xml") {
       createMany: vi.fn().mockResolvedValue({ count: 1 }),
       findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     feed: {
-      findUnique: vi.fn().mockResolvedValue({
-        consecutiveFailures: 0,
-      etag: null,
-      feedUrl,
-      id: "feed-1",
-      lastError: null,
-      lastFeedSelfUrl: null,
-      lastModified: null,
-      lastResolvedFeedUrl: null,
-      refreshIntervalMinutes: 60,
-      }),
+      findUnique: feedFindUnique,
       update: vi.fn().mockResolvedValue({}),
+      updateMany: feedUpdateMany,
     },
   }
 }
@@ -82,6 +109,7 @@ describe("feed refresh", () => {
       data: [
         expect.objectContaining({
           externalId: "item-1",
+          externalIdHash: externalIdentityHash("item-1"),
           feedId: "feed-1",
           title: "Stored Article",
           url: "https://example.com/stored",
@@ -100,7 +128,8 @@ describe("feed refresh", () => {
         unchangedCount: 0,
       })
     )
-    expect(store.feed.update).toHaveBeenCalledWith({
+    expect(store.feed.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
       data: expect.objectContaining({
         lastError: null,
         lastFeedSelfUrl: null,
@@ -113,8 +142,9 @@ describe("feed refresh", () => {
         consecutiveFailures: 0,
         nextFetchAt: new Date("2026-06-22T13:00:00.000Z"),
       }),
-      where: { id: "feed-1" },
-    })
+      where: expect.objectContaining({ id: "feed-1" }),
+      })
+    )
   })
 
   it("records source URL evidence and recovery after a successful redirected refresh", async () => {
@@ -154,7 +184,7 @@ describe("feed refresh", () => {
       store,
     })
 
-    expect(store.feed.update).toHaveBeenCalledWith(
+    expect(store.feed.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           lastFeedSelfUrl: "https://feeds.example.com/self.xml",
@@ -185,19 +215,18 @@ describe("feed refresh", () => {
       store,
     })
 
-    expect(store.article.update).toHaveBeenCalledWith({
+    expect(store.article.updateMany).toHaveBeenCalledWith({
       data: expect.objectContaining({
         publishedAt: new Date("2026-06-22T10:30:00.000Z"),
+        externalIdHash: externalIdentityHash("item-1"),
         summary: "Stored summary",
         title: "Stored Article",
         url: "https://example.com/stored",
       }),
-      where: {
-        feedId_externalId: {
-          externalId: "item-1",
-          feedId: "feed-1",
-        },
-      },
+      where: expect.objectContaining({
+        externalId: "item-1",
+        feedId: "feed-1",
+      }),
     })
     expect(store.$transaction).toHaveBeenCalledTimes(1)
   })
@@ -209,6 +238,7 @@ describe("feed refresh", () => {
       {
         externalId: "item-1",
         ingestionFingerprint: articleIngestionFingerprint(article),
+        sourceGeneration: 1,
       },
     ])
 
@@ -223,7 +253,7 @@ describe("feed refresh", () => {
     })
 
     expect(store.article.createMany).not.toHaveBeenCalled()
-    expect(store.article.update).not.toHaveBeenCalled()
+    expect(store.article.updateMany).not.toHaveBeenCalled()
     expect(result.metrics).toEqual(
       expect.objectContaining({
         changedCount: 0,
@@ -240,6 +270,7 @@ describe("feed refresh", () => {
       {
         externalId: "item-1",
         ingestionFingerprint: articleIngestionFingerprint(original),
+        sourceGeneration: 1,
       },
     ])
 
@@ -254,7 +285,7 @@ describe("feed refresh", () => {
     })
 
     expect(store.article.createMany).not.toHaveBeenCalled()
-    expect(store.article.update).toHaveBeenCalledWith(
+    expect(store.article.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ title: "Corrected Article" }),
       })
@@ -303,7 +334,7 @@ describe("feed refresh", () => {
         parsedCount: 0,
       })
     )
-    expect(store.feed.update).toHaveBeenCalledWith(
+    expect(store.feed.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ etag: 'W/"feed-v2"' }),
       })
@@ -487,7 +518,8 @@ describe("feed refresh", () => {
     ).rejects.toThrow("network down")
 
     expect(store.article.createMany).not.toHaveBeenCalled()
-    expect(store.feed.update).toHaveBeenCalledWith({
+    expect(store.feed.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
       data: {
         lastError: "network down",
         lastFailedAt: now,
@@ -495,7 +527,252 @@ describe("feed refresh", () => {
         consecutiveFailures: 1,
         nextFetchAt: new Date("2026-06-22T14:00:00.000Z"),
       },
-      where: { id: "feed-1" },
+      where: expect.objectContaining({ id: "feed-1" }),
+      })
+    )
+  })
+
+  it("keeps generation-two data when a stalled generation-one refresh resumes", async () => {
+    const { feed, items, store } = createGenerationFencingStore()
+    const startedAt = new Date(Date.now())
+    const replacementStartedAt = new Date(startedAt.getTime() + 2_000)
+    const stalledFetch = deferred<{
+      contentType: string
+      text: string
+      url: URL
+    }>()
+    const first = refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: () => stalledFetch.promise,
+      leaseDurationMs: 1_000,
+      leaseOwner: "worker-one",
+      now: () => startedAt,
+      store,
+    })
+
+    await vi.waitFor(() => expect(feed.refreshOwner).toBe("worker-one"))
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: async () => ({
+        contentType: "application/rss+xml",
+        text: rssXml.replace("Stored Article", "Generation two article"),
+        url: new URL("https://example.com/rss.xml"),
+      }),
+      leaseDurationMs: 1_000,
+      leaseOwner: "worker-two",
+      now: () => replacementStartedAt,
+      store,
+    })
+
+    stalledFetch.resolve({
+      contentType: "application/rss+xml",
+      text: rssXml.replace("Stored Article", "Stale generation one article"),
+      url: new URL("https://example.com/rss.xml"),
+    })
+
+    await expect(first).resolves.toEqual({
+      articleCount: 0,
+      feedId: "feed-1",
+      skipped: true,
+    })
+    expect(items.get("item-1")).toMatchObject({
+      sourceGeneration: 2,
+      title: "Generation two article",
+    })
+    expect(feed.lastSuccessfulFetchAt).toEqual(replacementStartedAt)
+  })
+
+  it("does not let a stalled generation-one failure overwrite generation-two success", async () => {
+    const { feed, store } = createGenerationFencingStore()
+    const startedAt = new Date(Date.now())
+    const replacementStartedAt = new Date(startedAt.getTime() + 2_000)
+    const stalledFetch = deferred<never>()
+    const first = refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: () => stalledFetch.promise,
+      leaseDurationMs: 1_000,
+      leaseOwner: "worker-one",
+      now: () => startedAt,
+      store,
+    })
+
+    await vi.waitFor(() => expect(feed.refreshOwner).toBe("worker-one"))
+    await refreshFeedWithClient({
+      feedId: "feed-1",
+      fetchText: async () => ({
+        contentType: "application/rss+xml",
+        text: rssXml.replace("Stored Article", "Generation two article"),
+        url: new URL("https://example.com/rss.xml"),
+      }),
+      leaseDurationMs: 1_000,
+      leaseOwner: "worker-two",
+      now: () => replacementStartedAt,
+      store,
+    })
+
+    stalledFetch.reject(new Error("stale fetch failed"))
+
+    await expect(first).rejects.toThrow("stale fetch failed")
+    expect(feed).toMatchObject({
+      consecutiveFailures: 0,
+      lastError: null,
+      lastSuccessfulFetchAt: replacementStartedAt,
+      refreshGeneration: 2,
     })
   })
 })
+
+function deferred<Value>() {
+  let reject!: (error: unknown) => void
+  let resolve!: (value: Value) => void
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+
+  return { promise, reject, resolve }
+}
+
+type GenerationFencingFeed = {
+  consecutiveFailures: number
+  etag: string | null
+  feedUrl: string
+  id: string
+  lastError: string | null
+  lastFeedSelfUrl: string | null
+  lastModified: string | null
+  lastResolvedFeedUrl: string | null
+  lastSuccessfulFetchAt?: Date
+  refreshGeneration: number
+  refreshIntervalMinutes: number
+  refreshLeaseExpiresAt: Date | null
+  refreshOwner: string | null
+  [key: string]: unknown
+}
+
+type GenerationFencingItem = {
+  externalId: string
+  id: string
+  ingestionFingerprint: string | null
+  sourceGeneration: number | null
+  title: string
+  [key: string]: unknown
+}
+
+function createGenerationFencingStore() {
+  const feed: GenerationFencingFeed = {
+    consecutiveFailures: 0,
+    etag: null,
+    feedUrl: "https://example.com/rss.xml",
+    id: "feed-1",
+    lastError: null,
+    lastFeedSelfUrl: null,
+    lastModified: null,
+    lastResolvedFeedUrl: null,
+    refreshGeneration: 0,
+    refreshLeaseExpiresAt: null,
+    refreshOwner: null,
+    refreshIntervalMinutes: 60,
+  }
+  const items = new Map<string, GenerationFencingItem>()
+  const store = {
+    $transaction: async (operations: Array<Promise<unknown>>) => Promise.all(operations),
+    article: {
+      createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
+        let count = 0
+        for (const item of data) {
+          const externalId = String(item.externalId)
+          if (!items.has(externalId)) {
+            items.set(externalId, {
+              ...item,
+              externalId,
+              id: `article-${externalId}`,
+              ingestionFingerprint: String(item.ingestionFingerprint),
+              sourceGeneration: Number(item.sourceGeneration),
+              title: String(item.title),
+            })
+            count += 1
+          }
+        }
+        return { count }
+      },
+      findMany: async ({ where }: { where: { externalId: { in: string[] } } }) =>
+        where.externalId.in.flatMap((externalId) => {
+          const item = items.get(externalId)
+          return item ? [{ ...item }] : []
+        }),
+      updateMany: async ({
+        data,
+        where,
+      }: {
+        data: Record<string, unknown>
+        where: Record<string, unknown>
+      }) => {
+        const item = items.get(String(where.externalId))
+        const conditions = where.OR as Array<Record<string, unknown>>
+        const mayUpdate = conditions.some((condition) =>
+          condition.sourceGeneration === null
+            ? item?.sourceGeneration === null
+            : item?.sourceGeneration !== undefined &&
+                item.sourceGeneration !== null &&
+                item.sourceGeneration < (condition.sourceGeneration as { lt: number }).lt,
+        )
+        if (!item || !mayUpdate) {
+          return { count: 0 }
+        }
+
+        Object.assign(item, data)
+        return { count: 1 }
+      },
+    },
+    feed: {
+      findUnique: async () => ({ ...feed }),
+      updateMany: async ({
+        data,
+        where,
+      }: {
+        data: Record<string, unknown>
+        where: Record<string, unknown>
+      }) => {
+        if (where.id !== feed.id) {
+          return { count: 0 }
+        }
+
+        const alternatives = where.OR as Array<Record<string, unknown>> | undefined
+        if (alternatives) {
+          const available = alternatives.some((condition) =>
+            condition.refreshLeaseExpiresAt === null
+              ? feed.refreshLeaseExpiresAt === null
+              : Boolean(
+                  feed.refreshLeaseExpiresAt &&
+                    feed.refreshLeaseExpiresAt <=
+                      (condition.refreshLeaseExpiresAt as { lte: Date }).lte,
+                ),
+          )
+          if (!available) {
+            return { count: 0 }
+          }
+        } else if (
+          where.refreshGeneration !== feed.refreshGeneration ||
+          where.refreshOwner !== feed.refreshOwner ||
+          !feed.refreshLeaseExpiresAt ||
+          feed.refreshLeaseExpiresAt <=
+            (where.refreshLeaseExpiresAt as { gt: Date }).gt
+        ) {
+          return { count: 0 }
+        }
+
+        const generation = data.refreshGeneration as { increment?: number } | undefined
+        if (generation?.increment) {
+          feed.refreshGeneration = Number(feed.refreshGeneration) + generation.increment
+        }
+        const sourceData = { ...data }
+        delete sourceData.refreshGeneration
+        Object.assign(feed, sourceData)
+        return { count: 1 }
+      },
+    },
+  }
+
+  return { feed, items, store }
+}

@@ -10,16 +10,26 @@ export type RefreshWriteStats = {
 type RefreshItem = {
   externalId: string
   ingestionFingerprint: string
+  sourceGeneration?: number
 }
 
 type RefreshWriteBatchOptions<Item extends RefreshItem> = {
   batchSize?: number
+  beforeWriteBatch?: () => Promise<void>
   createMany: (items: Item[]) => Promise<{ count: number }>
   findExistingItems: (externalIds: string[]) => Promise<
-    Array<{ externalId: string; ingestionFingerprint: string | null }>
+    Array<{
+      externalId: string
+      ingestionFingerprint: string | null
+      sourceGeneration?: number | null
+    }>
   >
   items: Item[]
   runUpdateBatch?: (operations: Array<Promise<unknown>>) => Promise<unknown>
+  shouldUpdateExisting?: (
+    existing: { ingestionFingerprint: string | null; sourceGeneration?: number | null },
+    item: Item,
+  ) => boolean
   update: (item: Item) => Promise<unknown>
 }
 
@@ -32,10 +42,12 @@ type RefreshWriteBatchOptions<Item extends RefreshItem> = {
  */
 export async function writeRefreshItems<Item extends RefreshItem>({
   batchSize = REFRESH_WRITE_BATCH_SIZE,
+  beforeWriteBatch,
   createMany,
   findExistingItems,
   items,
   runUpdateBatch,
+  shouldUpdateExisting,
   update,
 }: RefreshWriteBatchOptions<Item>): Promise<RefreshWriteStats> {
   const uniqueItems = deduplicateByExternalId(items)
@@ -62,18 +74,21 @@ export async function writeRefreshItems<Item extends RefreshItem>({
 
     return (
       existing !== undefined &&
-      existing.ingestionFingerprint !== item.ingestionFingerprint
+      (existing.ingestionFingerprint !== item.ingestionFingerprint ||
+        Boolean(shouldUpdateExisting?.(existing, item)))
     )
   })
   const unchangedCount = uniqueItems.length - newItems.length - changedItems.length
   let insertedCount = 0
 
   for (const batch of chunk(newItems, batchSize)) {
+    await beforeWriteBatch?.()
     const result = await createMany(batch)
     insertedCount += result.count
   }
 
   for (const batch of chunk(changedItems, batchSize)) {
+    await beforeWriteBatch?.()
     const operations = batch.map((item) => update(item))
 
     if (runUpdateBatch) {

@@ -196,7 +196,7 @@ function createAuthConfig(): NextAuthConfig {
         return true
       },
       async jwt({ token, user }) {
-        if (user) {
+        if (user?.id) {
           const appUser = user as typeof user & AppUser
 
           token.id = user.id

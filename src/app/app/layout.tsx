@@ -6,7 +6,7 @@ import { getReaderCounts } from "@/lib/articles"
 import { getCurrentBulkReadJobForUser } from "@/lib/bulk-read-jobs"
 import { isChatEnabled } from "@/lib/chat/feature-flags"
 import { listDiscoverInterestNavigation } from "@/lib/discover-interests"
-import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
+import { listUserFeedNavigation } from "@/lib/feed-subscriptions"
 import { listUserFolders } from "@/lib/folders"
 import {
   AuthorizationError,
@@ -25,7 +25,7 @@ export default async function AuthenticatedAppLayout({
     const currentUser = await requireFreshUser(session)
     const [
       articleCollections,
-      feedSubscriptions,
+      feedNavigation,
       readerCounts,
       folders,
       settings,
@@ -33,7 +33,7 @@ export default async function AuthenticatedAppLayout({
       bulkReadJob,
     ] = await Promise.all([
       listArticleCollectionsForUser(session.user.id),
-      listUserFeedSubscriptions(session.user.id),
+      listUserFeedNavigation(session.user.id),
       getReaderCounts(session.user.id),
       listUserFolders(session.user.id),
       getOrCreateUserSettings(session.user.id),
@@ -48,7 +48,16 @@ export default async function AuthenticatedAppLayout({
         chatEnabled={isChatEnabled()}
         discoverInterests={discoverInterests}
         displayMode={normalizeDisplayMode(settings.displayMode)}
-        feedSubscriptions={feedSubscriptions}
+        feedSubscriptions={feedNavigation.map((subscription) => ({
+          faviconUrl: subscription.faviconUrl,
+          feedId: subscription.feedId,
+          folderId: subscription.folderId,
+          id: subscription.id,
+          isPaused: subscription.isPaused,
+          needsAttention: subscription.needsAttention,
+          title: subscription.title,
+          unreadCount: subscription.unreadCount,
+        }))}
         folders={folders}
         readerCounts={readerCounts}
         showEmailVerificationReminder={!currentUser.emailVerified}

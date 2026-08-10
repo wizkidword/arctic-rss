@@ -9,6 +9,33 @@ type WorkerHeartbeatOptions = {
 
 export const DURABLE_WORKER_HEARTBEAT_TTL_MS = 90_000
 export const MAINTENANCE_TICK_KEY = "arctic-rss:maintenance-tick:v1"
+export const SCHEDULED_RESPONSIBILITIES = [
+  "ai-operation-reconciliation",
+  "auth-token-cleanup",
+  "chat-retention",
+  "feed-scheduling",
+  "health-snapshot",
+  "orphan-reporting",
+  "podcast-scheduling",
+  "saved-monitors",
+  "security-event-cleanup",
+  "smart-digest-email-scheduling",
+  "smart-digest-scheduling",
+] as const
+export type ScheduledResponsibility =
+  (typeof SCHEDULED_RESPONSIBILITIES)[number]
+
+/**
+ * Public readiness needs the source scheduler, not optional maintenance or
+ * publisher-quality work. The matrix is explicit so topology additions must
+ * deliberately choose their essential responsibilities.
+ */
+export const ESSENTIAL_SCHEDULED_RESPONSIBILITIES = {
+  "all-in-one": ["feed-scheduling", "podcast-scheduling"],
+  "all-in-one-with-chat": ["feed-scheduling", "podcast-scheduling"],
+  split: ["feed-scheduling", "podcast-scheduling"],
+  "split-with-chat": ["feed-scheduling", "podcast-scheduling"],
+} as const satisfies Record<string, readonly ScheduledResponsibility[]>
 const DEFAULT_SCHEDULER_INTERVAL_MS = 60_000
 
 export type DurableWorkerHeartbeat = {
@@ -69,6 +96,12 @@ export function durableWorkerHeartbeatKey(mode: string) {
   return `arctic-rss:worker-heartbeat:v1:${mode}`
 }
 
+export function durableResponsibilityTickKey(
+  responsibility: ScheduledResponsibility
+) {
+  return `arctic-rss:maintenance-tick:v2:${responsibility}`
+}
+
 export async function writeDurableWorkerHeartbeat({
   client,
   instanceId,
@@ -109,8 +142,31 @@ export async function writeDurableMaintenanceTick({
     version,
   }
 
+  await client.set(MAINTENANCE_TICK_KEY, JSON.stringify(tick), "PX", ttlMs)
+
+  return tick
+}
+
+export async function writeDurableResponsibilityTick({
+  client,
+  instanceId,
+  responsibility,
+  timestamp,
+  ttlMs = maintenanceTickMaxAgeMs(),
+  version,
+}: Omit<DurableWorkerHeartbeatOptions, "mode" | "ttlMs"> & {
+  responsibility: ScheduledResponsibility
+  ttlMs?: number
+}) {
+  const tick: DurableWorkerHeartbeat = {
+    instanceId,
+    mode: responsibility,
+    timestamp,
+    version,
+  }
+
   await client.set(
-    MAINTENANCE_TICK_KEY,
+    durableResponsibilityTickKey(responsibility),
     JSON.stringify(tick),
     "PX",
     ttlMs
@@ -155,12 +211,42 @@ export async function readDurableMaintenanceTick({
   client: Pick<DurableWorkerHeartbeatClient, "get">
   mode: string
 }) {
-  return parseDurableWorkerHeartbeat(await client.get(MAINTENANCE_TICK_KEY), mode)
+  return parseDurableWorkerHeartbeat(
+    await client.get(MAINTENANCE_TICK_KEY),
+    mode
+  )
+}
+
+export async function readDurableResponsibilityTicks({
+  client,
+  responsibilities,
+}: {
+  client: Pick<DurableWorkerHeartbeatClient, "mget">
+  responsibilities: readonly ScheduledResponsibility[]
+}) {
+  const values = await client.mget(
+    ...responsibilities.map(durableResponsibilityTickKey)
+  )
+  const ticks: Partial<
+    Record<ScheduledResponsibility, DurableWorkerHeartbeat>
+  > = {}
+
+  for (const [index, responsibility] of responsibilities.entries()) {
+    ticks[responsibility] = parseDurableWorkerHeartbeat(
+      values[index],
+      responsibility
+    )
+  }
+
+  return ticks
 }
 
 export function isFreshDurableWorkerHeartbeat(
   heartbeat: DurableWorkerHeartbeat | undefined,
-  { now = Date.now, maximumAgeMs = DURABLE_WORKER_HEARTBEAT_TTL_MS }: {
+  {
+    now = Date.now,
+    maximumAgeMs = DURABLE_WORKER_HEARTBEAT_TTL_MS,
+  }: {
     now?: () => number
     maximumAgeMs?: number
   } = {}
@@ -169,13 +255,16 @@ export function isFreshDurableWorkerHeartbeat(
 
   return Boolean(
     heartbeat &&
-      Number.isFinite(heartbeat.timestamp) &&
-      heartbeat.timestamp <= currentTime &&
-      currentTime - heartbeat.timestamp < maximumAgeMs
+    Number.isFinite(heartbeat.timestamp) &&
+    heartbeat.timestamp <= currentTime &&
+    currentTime - heartbeat.timestamp < maximumAgeMs
   )
 }
 
-function parseDurableWorkerHeartbeat(value: string | null | undefined, expectedMode: string) {
+function parseDurableWorkerHeartbeat(
+  value: string | null | undefined,
+  expectedMode: string
+) {
   if (!value) {
     return undefined
   }

@@ -19,10 +19,7 @@ import {
   addDiscoverSubredditToRedditTopic,
 } from "@/lib/discover-subreddits"
 import { OpmlError } from "@/lib/opml"
-import {
-  enforceRateLimit,
-  getRateLimitErrorMessage,
-} from "@/lib/rate-limit"
+import { enforceRateLimit, getRateLimitErrorMessage } from "@/lib/rate-limit"
 
 const MAX_DISCOVER_OPML_IMPORT_BYTES = 4 * 1024 * 1024
 
@@ -68,7 +65,7 @@ class DisableUserError extends Error {
 
 export async function importDiscoverOpmlAction(
   _previousState: ImportDiscoverOpmlActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<ImportDiscoverOpmlActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -123,7 +120,7 @@ export async function importDiscoverOpmlAction(
     refresh()
 
     const errors = summary.errors.map(
-      (error) => `${error.title}: ${error.message}`
+      (error) => `${error.title}: ${error.message}`,
     )
 
     return {
@@ -158,7 +155,7 @@ export async function importDiscoverOpmlAction(
 
 export async function updateDiscoverCategoryMetadataAction(
   _previousState: UpdateDiscoverCategoryMetadataActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<UpdateDiscoverCategoryMetadataActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -203,7 +200,7 @@ export async function updateDiscoverCategoryMetadataAction(
 
 export async function addDiscoverSubredditAction(
   _previousState: AddDiscoverSubredditActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AddDiscoverSubredditActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -246,7 +243,7 @@ export async function addDiscoverSubredditAction(
 
 export async function revokeUserSessionsAction(
   _previousState: RevokeUserSessionsActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<RevokeUserSessionsActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -320,7 +317,7 @@ export async function revokeUserSessionsAction(
 
 export async function disableUserAction(
   _previousState: DisableUserActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<DisableUserActionState> {
   const admin = await requireFreshAdmin().catch(() => null)
 
@@ -342,6 +339,7 @@ export async function disableUserAction(
 
   try {
     const target = await getPrisma().$transaction(async (transaction) => {
+      const disabledAt = new Date()
       const existingUser = await transaction.user.findUnique({
         select: {
           disabledAt: true,
@@ -357,12 +355,14 @@ export async function disableUserAction(
       }
 
       if (existingUser.id === admin.id) {
-        throw new DisableUserError("You cannot disable your own administrator account.")
+        throw new DisableUserError(
+          "You cannot disable your own administrator account.",
+        )
       }
 
       if (existingUser.role === "ADMIN") {
         throw new DisableUserError(
-          "Administrator accounts cannot be disabled from this dashboard."
+          "Administrator accounts cannot be disabled from this dashboard.",
         )
       }
 
@@ -374,7 +374,7 @@ export async function disableUserAction(
         where: { id: existingUser.id },
         data: {
           authVersion: { increment: 1 },
-          disabledAt: new Date(),
+          disabledAt,
         },
         select: {
           authVersion: true,
@@ -383,11 +383,92 @@ export async function disableUserAction(
         },
       })
 
+      await Promise.all([
+        transaction.savedSearch.updateMany({
+          data: {
+            monitorEnabled: false,
+            monitorNextRunAt: null,
+          },
+          where: {
+            monitorEnabled: true,
+            userId: user.id,
+          },
+        }),
+        transaction.smartDigestRule.updateMany({
+          data: {
+            isEnabled: false,
+            nextRunAt: null,
+          },
+          where: {
+            isEnabled: true,
+            userId: user.id,
+          },
+        }),
+        transaction.aiDigest.updateMany({
+          data: {
+            completedAt: disabledAt,
+            errorMessage: "ACCOUNT_DISABLED",
+            status: "CANCELED",
+          },
+          where: {
+            status: { in: ["PENDING", "PROCESSING", "FAILED"] },
+            userId: user.id,
+          },
+        }),
+        transaction.importJob.updateMany({
+          data: {
+            cancelRequestedAt: disabledAt,
+          },
+          where: {
+            status: { in: ["PENDING", "PROCESSING"] },
+            userId: user.id,
+          },
+        }),
+        transaction.digestRun.updateMany({
+          data: {
+            completedAt: disabledAt,
+            emailErrorMessage: "ACCOUNT_DISABLED",
+            emailStatus: "NOT_REQUESTED",
+            errorMessage: "ACCOUNT_DISABLED",
+            lastHeartbeatAt: disabledAt,
+            leaseExpiresAt: null,
+            leaseOwner: null,
+            processingStartedAt: null,
+            status: "CANCELED",
+          },
+          where: {
+            rule: { userId: user.id },
+            status: { in: ["PENDING", "PROCESSING", "FAILED"] },
+          },
+        }),
+        transaction.smartDigest.updateMany({
+          data: {
+            emailErrorMessage: "ACCOUNT_DISABLED",
+            emailStatus: "NOT_REQUESTED",
+          },
+          where: {
+            emailStatus: { in: ["PENDING", "FAILED"] },
+            userId: user.id,
+          },
+        }),
+        transaction.digestRun.updateMany({
+          data: {
+            emailErrorMessage: "ACCOUNT_DISABLED",
+            emailStatus: "NOT_REQUESTED",
+          },
+          where: {
+            emailStatus: { in: ["PENDING", "FAILED"] },
+            rule: { userId: user.id },
+          },
+        }),
+      ])
+
       await transaction.adminAuditLog.create({
         data: {
           action: "USER_DISABLED",
           adminUserId: admin.id,
           metadata: {
+            reason: "account_disabled",
             source: "admin-dashboard",
           },
           targetId: user.id,
@@ -408,7 +489,7 @@ export async function disableUserAction(
     refresh()
 
     return {
-      message: `Disabled ${target.email} and revoked all active sessions.`,
+      message: `Disabled ${target.email}, revoked active sessions, and paused background automations.`,
       status: "success",
     }
   } catch (error) {

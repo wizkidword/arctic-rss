@@ -59,7 +59,7 @@ type DashboardDigest = {
   id: string
   overview: string | null
   period: AiDigestPeriod
-  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELED"
   title: string | null
 }
 

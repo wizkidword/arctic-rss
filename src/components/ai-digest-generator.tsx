@@ -23,7 +23,7 @@ export function AiDigestGenerator({
   activeDigest: {
     id: string
     period?: "DAILY" | "WEEKLY"
-    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
+    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELED"
   } | null
   dailyArticleCount: number
   weeklyArticleCount: number

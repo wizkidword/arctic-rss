@@ -22,7 +22,18 @@ export class FeedSubscriptionError extends Error {
   }
 }
 
-export type FeedSubscriptionNavItem = {
+export type FeedNavigationItem = {
+  faviconUrl: string | null
+  feedId: string
+  folderId: string | null
+  id: string
+  isPaused: boolean
+  needsAttention: boolean
+  title: string
+  unreadCount: number
+}
+
+export type FeedSourceHygieneItem = {
   faviconUrl: string | null
   feedId: string
   feedUrl: string
@@ -64,9 +75,9 @@ type FeedSubscriptionStore = FeedSubscriptionTransactionStore & {
   ): Promise<T>
 }
 
-export const listUserFeedSubscriptions = cache(async function listUserFeedSubscriptions(
+export const listUserFeedSourceHygiene = cache(async function listUserFeedSourceHygiene(
   userId: string
-): Promise<FeedSubscriptionNavItem[]> {
+): Promise<FeedSourceHygieneItem[]> {
   const subscriptions = await getPrisma().feedSubscription.findMany({
     select: {
       customTitle: true,
@@ -138,6 +149,81 @@ export const listUserFeedSubscriptions = cache(async function listUserFeedSubscr
     }))
 })
 
+export const listUserFeedNavigation = cache(async function listUserFeedNavigation(
+  userId: string
+): Promise<FeedNavigationItem[]> {
+  const subscriptions = await getPrisma().feedSubscription.findMany({
+    select: {
+      customTitle: true,
+      feed: {
+        select: {
+          faviconUrl: true,
+          lastError: true,
+          lastRecoveredAt: true,
+          title: true,
+        },
+      },
+      feedId: true,
+      folderId: true,
+      id: true,
+      isPaused: true,
+      lastSourceAttentionReviewedAt: true,
+    },
+    orderBy: [{ sortOrder: "asc" }, { subscribedAt: "desc" }],
+    where: { userId },
+  })
+  const unreadCounts = await getUnreadArticleCountsByFeed(
+    userId,
+    subscriptions.map((subscription) => subscription.feedId)
+  )
+
+  return subscriptions.map((subscription) => ({
+    faviconUrl: subscription.feed.faviconUrl,
+    feedId: subscription.feedId,
+    folderId: subscription.folderId,
+    id: subscription.id,
+    isPaused: subscription.isPaused,
+    needsAttention: needsFeedAttention(subscription),
+    title: subscription.customTitle || subscription.feed.title,
+    unreadCount: unreadCounts.get(subscription.feedId) ?? 0,
+  }))
+})
+
+export const listUserFeedSubscriptionUrls = cache(
+  async function listUserFeedSubscriptionUrls(userId: string) {
+    const subscriptions = await getPrisma().feedSubscription.findMany({
+      select: {
+        feed: {
+          select: {
+            feedUrl: true,
+          },
+        },
+      },
+      where: { userId },
+    })
+
+    return subscriptions.map((subscription) => subscription.feed.feedUrl)
+  }
+)
+
+function needsFeedAttention(subscription: {
+  feed: {
+    lastError: string | null
+    lastRecoveredAt: Date | null
+  }
+  isPaused: boolean
+  lastSourceAttentionReviewedAt: Date | null
+}) {
+  return Boolean(
+    !subscription.isPaused &&
+      (subscription.feed.lastError ||
+        (subscription.feed.lastRecoveredAt &&
+          (!subscription.lastSourceAttentionReviewedAt ||
+            subscription.feed.lastRecoveredAt >
+              subscription.lastSourceAttentionReviewedAt)))
+  )
+}
+
 export async function hasUserFeedSubscriptions(userId: string) {
   const subscription = await getPrisma().feedSubscription.findFirst({
     where: { userId },
@@ -185,6 +271,34 @@ export async function setFeedSubscriptionPaused({
   }
 
   return { isPaused, subscriptionId }
+}
+
+export async function pauseFeedSubscriptionsAtomically({
+  subscriptionIds,
+  userId,
+}: {
+  subscriptionIds: string[]
+  userId: string
+}) {
+  const prisma = getFeedSubscriptionStore()
+
+  return prisma.$transaction(async (transaction) => {
+    const update = await transaction.feedSubscription.updateMany({
+      data: { isPaused: true },
+      where: {
+        id: { in: subscriptionIds },
+        userId,
+      },
+    })
+
+    if (update.count !== subscriptionIds.length) {
+      throw new FeedSubscriptionError(
+        "One or more selected sources are no longer available. Nothing was changed."
+      )
+    }
+
+    return { subscriptionIds }
+  })
 }
 
 export async function markFeedSubscriptionAttentionReviewed({
@@ -376,6 +490,60 @@ export async function unsubscribeFromFeed({
     id: subscription.id,
     title: subscription.customTitle || subscription.feed.title,
   }
+}
+
+export async function unsubscribeFromFeedsAtomically({
+  subscriptionIds,
+  userId,
+}: {
+  subscriptionIds: string[]
+  userId: string
+}) {
+  const prisma = getFeedSubscriptionStore()
+
+  return prisma.$transaction(async (transaction) => {
+    const subscriptions = await transaction.feedSubscription.findMany({
+      select: {
+        customTitle: true,
+        feed: {
+          select: {
+            title: true,
+          },
+        },
+        folderId: true,
+        id: true,
+      },
+      where: {
+        id: { in: subscriptionIds },
+        userId,
+      },
+    })
+
+    if (subscriptions.length !== subscriptionIds.length) {
+      throw new FeedSubscriptionError(
+        "One or more selected sources are no longer available. Nothing was changed."
+      )
+    }
+
+    const deletion = await transaction.feedSubscription.deleteMany({
+      where: {
+        id: { in: subscriptionIds },
+        userId,
+      },
+    })
+
+    if (deletion.count !== subscriptionIds.length) {
+      throw new FeedSubscriptionError(
+        "One or more selected sources are no longer available. Nothing was changed."
+      )
+    }
+
+    return subscriptions.map((subscription) => ({
+      folderId: subscription.folderId,
+      id: subscription.id,
+      title: subscription.customTitle || subscription.feed.title,
+    }))
+  })
 }
 
 export async function subscribeToFeed({

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
-  listUserFeedSubscriptions: vi.fn(),
+  listUserFeedSourceHygiene: vi.fn(),
   listUserFolders: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`)
@@ -36,7 +36,7 @@ vi.mock("@/app/app/actions", () => ({
 }))
 
 vi.mock("@/lib/feed-subscriptions", () => ({
-  listUserFeedSubscriptions: mocks.listUserFeedSubscriptions,
+  listUserFeedSourceHygiene: mocks.listUserFeedSourceHygiene,
 }))
 
 vi.mock("@/lib/folders", () => ({
@@ -89,7 +89,7 @@ describe("FoldersPage", () => {
       },
     })
     mocks.listUserFolders.mockResolvedValue([])
-    mocks.listUserFeedSubscriptions.mockResolvedValue([
+    mocks.listUserFeedSourceHygiene.mockResolvedValue([
       {
         faviconUrl: null,
         feedId: "feed-1",

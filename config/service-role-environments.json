@@ -77,7 +77,7 @@
     "worker-maintenance": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
     "worker-chat-events": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
     "worker-health": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
-    "chat-gateway": ["ARCTIC_RSS_ALLOW_LEGACY_REDIS_URL_FOR_MIGRATION", "REDIS_URL"],
+    "chat-gateway": [],
     "cloudflared": []
   },
   "managedAliases": [

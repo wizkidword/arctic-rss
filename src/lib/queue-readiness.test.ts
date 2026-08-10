@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { inspectQueueReadinessWithClients, type QueueReadinessReader } from "./queue-readiness"
+import {
+  inspectQueueReadinessWithClients,
+  type QueueReadinessReader,
+} from "./queue-readiness"
 
 const now = () => 1_752_428_800_000
 
@@ -38,7 +41,10 @@ describe("queue readiness", () => {
     })
 
     await expect(
-      inspectQueueReadinessWithClients({ queues: [{ name: "feed", reader: queue }], now })
+      inspectQueueReadinessWithClients({
+        queues: [{ name: "feed", reader: queue }],
+        now,
+      })
     ).resolves.toEqual({
       available: true,
       oldestActiveJobAgeMs: 1_000,
@@ -49,7 +55,11 @@ describe("queue readiness", () => {
       totalActive: 1,
       totalWaiting: 1,
     })
-    expect(queue.getJobCounts).toHaveBeenCalledWith("waiting", "active", "failed")
+    expect(queue.getJobCounts).toHaveBeenCalledWith(
+      "waiting",
+      "active",
+      "failed"
+    )
   })
 
   it("degrades for an excessively old waiting job", async () => {
@@ -103,7 +113,7 @@ describe("queue readiness", () => {
     expect(result).toMatchObject({ recentFailureCount: 2, ready: false })
   })
 
-  it("uses explicit source-failure evidence instead of retained source jobs", async () => {
+  it("keeps publisher failures out of platform queue readiness", async () => {
     const queue = reader({
       counts: { active: 0, failed: 4, waiting: 0 },
       failed: [{ finishedOn: now() - 100, timestamp: now() - 100 }],
@@ -112,19 +122,23 @@ describe("queue readiness", () => {
     const result = await inspectQueueReadinessWithClients({
       maxRecentFailures: 1,
       queues: [{ failureEvidence: "source", name: "feed", reader: queue }],
-      recentSourceFailureCount: 2,
     })
 
-    expect(result).toMatchObject({ recentFailureCount: 2, ready: false })
+    expect(result).toMatchObject({ recentFailureCount: 0, ready: true })
     expect(queue.getJobs).not.toHaveBeenCalledWith(["failed"], 0, 24, false)
   })
 
   it("fails closed when queue metadata cannot be read", async () => {
     const queue = reader()
-    vi.mocked(queue.getJobCounts).mockRejectedValue(new Error("connect ECONNREFUSED"))
+    vi.mocked(queue.getJobCounts).mockRejectedValue(
+      new Error("connect ECONNREFUSED")
+    )
 
     await expect(
-      inspectQueueReadinessWithClients({ queues: [{ name: "feed", reader: queue }], now })
+      inspectQueueReadinessWithClients({
+        queues: [{ name: "feed", reader: queue }],
+        now,
+      })
     ).resolves.toMatchObject({ available: false, ready: false })
   })
 })

@@ -21,7 +21,7 @@ import { FeedUnsubscribeButton } from "@/components/feed-unsubscribe-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { listUserFeedSubscriptions } from "@/lib/feed-subscriptions"
+import { listUserFeedSourceHygiene } from "@/lib/feed-subscriptions"
 import { listUserFolders } from "@/lib/folders"
 
 export default async function FoldersPage() {
@@ -33,7 +33,7 @@ export default async function FoldersPage() {
 
   const [folders, subscriptions] = await Promise.all([
     listUserFolders(session.user.id),
-    listUserFeedSubscriptions(session.user.id),
+    listUserFeedSourceHygiene(session.user.id),
   ])
 
   return (

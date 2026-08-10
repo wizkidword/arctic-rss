@@ -31,6 +31,7 @@ import {
   cancelOpmlImportJob,
   createOpmlImportJob,
   OpmlImportJobError,
+  processOpmlImportJob,
   retryOpmlImportJob,
 } from "./opml-import-jobs"
 
@@ -223,5 +224,46 @@ describe("OPML import jobs", () => {
         }),
       })
     )
+  })
+
+  it("cancels before external subscription work when the owner is disabled", async () => {
+    const importJobFindUnique = vi.fn().mockResolvedValue({
+      cancelRequestedAt: null,
+      id: "job-1",
+      startedAt: null,
+      status: "PENDING",
+      userId: "user-1",
+    })
+    const importJobUpdateMany = vi.fn().mockResolvedValue({ count: 1 })
+    const userFindUnique = vi.fn().mockResolvedValue({
+      disabledAt: new Date("2026-08-09T12:00:00.000Z"),
+      emailVerified: new Date("2026-08-01T12:00:00.000Z"),
+      id: "user-1",
+      plan: "FREE",
+    })
+    mocks.getPrisma.mockReturnValue({
+      importJob: {
+        findUnique: importJobFindUnique,
+        updateMany: importJobUpdateMany,
+      },
+      user: { findUnique: userFindUnique },
+    })
+
+    await expect(
+      processOpmlImportJob({
+        jobId: "job-1",
+        now: () => new Date("2026-08-09T12:01:00.000Z"),
+      })
+    ).resolves.toEqual({ status: "CANCELED" })
+    expect(importJobUpdateMany).toHaveBeenCalledWith({
+      data: {
+        completedAt: new Date("2026-08-09T12:01:00.000Z"),
+        status: "CANCELED",
+      },
+      where: {
+        id: "job-1",
+        status: { in: ["PENDING", "PROCESSING"] },
+      },
+    })
   })
 })

@@ -114,6 +114,34 @@ describe("story cluster reader evaluation", () => {
 })
 
 describe("story cluster reader presentation", () => {
+  it("qualifies selected articles through current-version membership in PostgreSQL", async () => {
+    const queryRaw = vi.fn().mockResolvedValue([{ id: "cluster-current" }])
+    const findMany = vi.fn().mockResolvedValue([])
+
+    await expect(
+      listStoryClustersForArticleUserWithClient({
+        articleId: "article-1",
+        loadArticles: vi.fn(),
+        store: { $queryRaw: queryRaw, storyCluster: { findMany } },
+        userId: "user-1",
+      })
+    ).resolves.toEqual([])
+
+    expect(queryRaw).toHaveBeenCalledTimes(1)
+    expect(queryRaw.mock.calls[0]?.[0].strings.join("?")).toContain(
+      '"currentVersion"."version" = "cluster"."currentVersionNumber"'
+    )
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { in: ["cluster-current"] },
+          status: "ACTIVE",
+          userId: "user-1",
+        }),
+      })
+    )
+  })
+
   it("loads active groups that overlap a reader page with one bounded query", async () => {
     const findMany = vi.fn().mockResolvedValue([])
 
@@ -121,7 +149,10 @@ describe("story cluster reader presentation", () => {
       listStoryClustersForArticlesUserWithClient({
         articleIds: ["article-1", "article-2", "article-1"],
         loadArticles: vi.fn(),
-        store: { storyCluster: { findMany } },
+        store: {
+          $queryRaw: currentClusterIds("cluster-1"),
+          storyCluster: { findMany },
+        },
         userId: "user-1"
       })
     ).resolves.toEqual([])
@@ -132,15 +163,7 @@ describe("story cluster reader presentation", () => {
         where: expect.objectContaining({
           status: "ACTIVE",
           userId: "user-1",
-          versions: {
-            some: {
-              members: {
-                some: {
-                  articleId: { in: ["article-1", "article-2"] }
-                }
-              }
-            }
-          }
+          id: { in: ["cluster-1"] }
         }),
         select: expect.objectContaining({
           versions: expect.objectContaining({
@@ -154,6 +177,7 @@ describe("story cluster reader presentation", () => {
 
   it("returns only current clusters whose members remain visible to the user", async () => {
     const store = {
+      $queryRaw: currentClusterIds("cluster-current"),
       storyCluster: {
         findMany: vi.fn().mockResolvedValue([
           currentClusterFromVersion({
@@ -240,7 +264,7 @@ describe("story cluster reader presentation", () => {
         where: expect.objectContaining({
           status: "ACTIVE",
           userId: "user-1",
-          versions: { some: { members: { some: { articleId: "article-1" } } } }
+          id: { in: ["cluster-current"] },
         }),
         select: expect.objectContaining({
           versions: expect.objectContaining({ take: 1 })
@@ -300,7 +324,13 @@ describe("story cluster reader presentation", () => {
         createStoryClusterArticle("article-3", "Older current", "older"),
       ]),
       maxResults: 2,
-      store: { storyCluster: { findMany } },
+      store: {
+        $queryRaw: currentClusterIds(
+          "cluster-heavily-versioned",
+          "cluster-older-current"
+        ),
+        storyCluster: { findMany },
+      },
       userId: "user-1",
     })
 
@@ -326,6 +356,7 @@ describe("story cluster reader presentation", () => {
           createStoryClusterArticle("article-1", "Current article", "current")
         ]),
       store: {
+        $queryRaw: currentClusterIds("cluster-hidden-member"),
         storyCluster: {
           findMany: vi.fn().mockResolvedValue([
             currentClusterFromVersion({
@@ -363,6 +394,7 @@ describe("story cluster reader presentation", () => {
           createStoryClusterArticle("article-2", "Related article", "related")
         ]),
       store: {
+        $queryRaw: currentClusterIds("cluster-current"),
         storyCluster: {
           findMany: vi.fn().mockResolvedValue([
             currentClusterFromVersion({
@@ -428,6 +460,10 @@ function createStorySignalArticle(
     title,
     url: `https://example.com/${path}`
   }
+}
+
+function currentClusterIds(...ids: string[]) {
+  return vi.fn().mockResolvedValue(ids.map((id) => ({ id })))
 }
 
 function currentClusterFromVersion<

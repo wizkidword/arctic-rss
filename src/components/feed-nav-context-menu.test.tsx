@@ -40,9 +40,7 @@ const subscription: FeedNavContextMenuSubscription = {
   feedId: "feed-wired-science",
   id: "sub-wired-science",
   isPaused: false,
-  lastError: null,
-  lastSuccessfulFetchAt: new Date("2026-06-28T12:00:00.000Z"),
-  siteUrl: "https://www.wired.com/category/science/",
+  needsAttention: false,
   title: "WIRED Science",
   unreadCount: 7,
 }
@@ -99,14 +97,7 @@ describe("FeedNavMenuController", () => {
     expect(screen.getByRole("menuitem", { name: "Go to feed" }).getAttribute("href")).toBe(
       "/app/feed/sub-wired-science"
     )
-    expect(
-      screen.getByRole("menuitem", { name: "Open original site" })
-    ).toBeTruthy()
-    expect(
-      screen
-        .getByRole("menuitem", { name: "Open original site" })
-        .getAttribute("href")
-    ).toBe("https://www.wired.com/category/science/")
+    expect(screen.queryByRole("menuitem", { name: "Open original site" })).toBeNull()
     expect(screen.getByRole("menuitem", { name: "Delete feed" })).toBeTruthy()
   })
 
@@ -175,7 +166,7 @@ describe("FeedNavMenuController", () => {
         {
           ...subscription,
           isPaused: true,
-          lastError: "HTTP 503 upstream trace should stay private",
+          needsAttention: true,
         },
       ],
     })

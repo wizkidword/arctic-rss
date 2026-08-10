@@ -31,15 +31,10 @@ describe("bcrypt password byte policy", () => {
     expect(bcrypt.hash).not.toHaveBeenCalled()
   })
 
-  it("keeps legacy password verification compatible", async () => {
+  it("returns a generic failed verification for over-limit password candidates", async () => {
     bcrypt.compare.mockResolvedValue(true)
 
-    await expect(
-      verifyPassword("😀".repeat(19), "legacy-password-hash")
-    ).resolves.toBe(true)
-    expect(bcrypt.compare).toHaveBeenCalledWith(
-      "😀".repeat(19),
-      "legacy-password-hash"
-    )
+    expect(verifyPassword("😀".repeat(19), "legacy-password-hash")).toBe(false)
+    expect(bcrypt.compare).not.toHaveBeenCalled()
   })
 })

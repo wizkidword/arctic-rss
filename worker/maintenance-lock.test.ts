@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { createMaintenanceLock, MaintenanceLeaseLostError } from "./maintenance-lock"
+import {
+  createMaintenanceLock,
+  MaintenanceLeaseLostError,
+} from "./maintenance-lock"
 
 type ManualTimer = ReturnType<typeof manualTimer>
 
@@ -30,48 +33,54 @@ function manualTimer() {
 }
 
 function sharedRedis(clock: { now: number }) {
-  let expiresAt = 0
-  let owner: string | undefined
+  const leases = new Map<string, { expiresAt: number; owner: string }>()
 
-  const currentOwner = () => {
-    if (owner && expiresAt <= clock.now) {
-      owner = undefined
+  const currentOwner = (key: string) => {
+    const lease = leases.get(key)
+    if (lease && lease.expiresAt <= clock.now) {
+      leases.delete(key)
     }
-    return owner
+    return leases.get(key)?.owner
   }
 
   return {
     disconnect: vi.fn(),
-    eval: vi.fn(async (
-      script: string,
-      _keyCount: number,
-      _key: string,
-      token: string,
-      ...arguments_: string[]
-    ) => {
-      if (currentOwner() !== token) {
-        return 0
-      }
+    eval: vi.fn(
+      async (
+        script: string,
+        _keyCount: number,
+        key: string,
+        token: string,
+        ...arguments_: string[]
+      ) => {
+        if (currentOwner(key) !== token) {
+          return 0
+        }
 
-      if (script.includes("pexpire")) {
-        expiresAt = clock.now + Number(arguments_[0])
+        if (script.includes("pexpire")) {
+          leases.set(key, {
+            expiresAt: clock.now + Number(arguments_[0]),
+            owner: token,
+          })
+          return 1
+        }
+
+        leases.delete(key)
         return 1
       }
-
-      owner = undefined
-      return 1
-    }),
-    owner: () => currentOwner(),
+    ),
+    owner: (key = "arctic-rss:worker:maintenance-lock:v1") => currentOwner(key),
     quit: vi.fn().mockResolvedValue("OK"),
-    set: vi.fn(async (_key: string, token: string, _mode: string, ttl: number) => {
-      if (currentOwner()) {
-        return null
-      }
+    set: vi.fn(
+      async (key: string, token: string, _mode: string, ttl: number) => {
+        if (currentOwner(key)) {
+          return null
+        }
 
-      owner = token
-      expiresAt = clock.now + ttl
-      return "OK"
-    }),
+        leases.set(key, { expiresAt: clock.now + ttl, owner: token })
+        return "OK"
+      }
+    ),
   }
 }
 
@@ -144,11 +153,53 @@ describe("maintenance lock", () => {
     await firstTimer.tick()
     clock.now = 35
 
-    await expect(second.run(async () => "overlap")).resolves.toEqual({ acquired: false })
+    await expect(second.run(async () => "overlap")).resolves.toEqual({
+      acquired: false,
+    })
     expect(redis.owner()).toBe("first-owner")
 
     firstGate.resolve("done")
     await expect(running).resolves.toEqual({ acquired: true, value: "done" })
+  })
+
+  it("does not let maintenance lock contention suppress the health snapshot lease", async () => {
+    const clock = { now: 0 }
+    const redis = sharedRedis(clock)
+    const maintenanceTimer = manualTimer()
+    const maintenanceGate = deferred<string>()
+    const maintenance = createMaintenanceLock({
+      client: redis,
+      now: () => clock.now,
+      timer: maintenanceTimer,
+      tokenFactory: () => "maintenance-owner",
+    })
+    const healthSnapshot = createMaintenanceLock({
+      client: redis,
+      key: "arctic-rss:worker:health-snapshot-lock:v1",
+      name: "health_snapshot",
+      now: () => clock.now,
+      tokenFactory: () => "health-owner",
+    })
+
+    const runningMaintenance = maintenance.run(
+      async () => maintenanceGate.promise
+    )
+    await waitForLease(maintenanceTimer)
+
+    await expect(healthSnapshot.run(async () => "snapshot")).resolves.toEqual({
+      acquired: true,
+      value: "snapshot",
+    })
+    expect(redis.owner()).toBe("maintenance-owner")
+    expect(
+      redis.owner("arctic-rss:worker:health-snapshot-lock:v1")
+    ).toBeUndefined()
+
+    maintenanceGate.resolve("done")
+    await expect(runningMaintenance).resolves.toEqual({
+      acquired: true,
+      value: "done",
+    })
   })
 
   it("marks the lease lost and safely cancels the pass when Redis renewal is interrupted", async () => {
@@ -302,7 +353,9 @@ describe("maintenance lock", () => {
       tokenFactory: () => "owner",
     })
 
-    await expect(lock.run(async () => "too early")).resolves.toEqual({ acquired: false })
+    await expect(lock.run(async () => "too early")).resolves.toEqual({
+      acquired: false,
+    })
     expect(redis.set).not.toHaveBeenCalled()
 
     ready = true
@@ -312,7 +365,9 @@ describe("maintenance lock", () => {
     })
     const operation = vi.fn()
 
-    await expect(lock.run(operation)).rejects.toMatchObject({ reason: "connection_lost" })
+    await expect(lock.run(operation)).rejects.toMatchObject({
+      reason: "connection_lost",
+    })
     expect(operation).not.toHaveBeenCalled()
     expect(redis.eval).not.toHaveBeenCalled()
   })
@@ -322,7 +377,9 @@ describe("maintenance lock", () => {
     let ready = false
     const lock = createMaintenanceLock({ client: redis, isReady: () => ready })
 
-    await expect(lock.run(async () => "first")).resolves.toEqual({ acquired: false })
+    await expect(lock.run(async () => "first")).resolves.toEqual({
+      acquired: false,
+    })
 
     ready = true
     await expect(lock.run(async () => "recovered")).resolves.toEqual({

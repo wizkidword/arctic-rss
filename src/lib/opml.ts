@@ -3,6 +3,7 @@ import { XMLParser } from "fast-xml-parser"
 import { getPrisma } from "./db"
 import { enqueueFeedRefresh as enqueueFeedRefreshJob } from "./feed-refresh-queue"
 import { decodeStandardXmlEntities, safeXmlParserOptions } from "./ingestion-limits"
+import { normalizePublisherExternalIdentity, normalizePublisherText } from "./publisher-text"
 import type { SourceRefreshTrigger } from "./source-refresh-queue"
 import {
   FeedSubscriptionError,
@@ -377,7 +378,7 @@ function collectOutlineSubscriptions(
     )
   }
 
-  const xmlUrl = stringAttribute(outline.xmlUrl)
+  const xmlUrl = urlAttribute(outline.xmlUrl)
   const title =
     stringAttribute(outline.title) ||
     stringAttribute(outline.text) ||
@@ -399,7 +400,7 @@ function collectOutlineSubscriptions(
 
     entries.push({
       folderName: folderPath.length ? folderPath.join(" / ") : null,
-      htmlUrl: stringAttribute(outline.htmlUrl) || undefined,
+      htmlUrl: urlAttribute(outline.htmlUrl) || undefined,
       title,
       xmlUrl,
     })
@@ -495,7 +496,13 @@ function normalizeFolderName(name: string) {
 
 function stringAttribute(value: unknown) {
   return typeof value === "string" && value.trim()
-    ? decodeStandardXmlEntities(value).trim()
+    ? normalizePublisherText(decodeStandardXmlEntities(value)).value.trim()
+    : undefined
+}
+
+function urlAttribute(value: unknown) {
+  return typeof value === "string" && value.trim()
+    ? normalizePublisherExternalIdentity(decodeStandardXmlEntities(value)).value.trim()
     : undefined
 }
 

@@ -19,6 +19,14 @@ describe("podcast refresh queue", () => {
     queueAdd.mockReset()
     queueGetJob.mockReset()
     queueConstructor.mockClear()
+    let storedOptions: Record<string, unknown> | undefined
+    queueAdd.mockImplementation(async (_name, _data, options) => {
+      storedOptions ??= options
+      return { id: options.jobId }
+    })
+    queueGetJob.mockImplementation(async () =>
+      storedOptions ? { opts: storedOptions } : undefined
+    )
   })
 
   it("uses a stable queue name", async () => {
@@ -56,7 +64,7 @@ describe("podcast refresh queue", () => {
     expect(queueAdd).toHaveBeenCalledWith(
       "refresh-podcast",
       { podcastId: "podcast-1", trigger: "scheduler" },
-      {
+      expect.objectContaining({
         attempts: 3,
         backoff: {
           delay: 30_000,
@@ -65,42 +73,56 @@ describe("podcast refresh queue", () => {
         jobId: podcastRefreshJobId("podcast-1"),
         removeOnComplete: true,
         removeOnFail: true,
-      }
+      })
     )
   })
 
-  it("applies options overrides after defaults", async () => {
+  it("only allows the safe priority override", async () => {
     const { enqueuePodcastRefresh } = await import("./podcast-refresh-queue")
 
     await enqueuePodcastRefresh("podcast-1", {
-      attempts: 1,
-      jobId: "manual-job",
+      priority: 1,
     })
 
     expect(queueAdd).toHaveBeenCalledWith(
       "refresh-podcast",
       { podcastId: "podcast-1", trigger: "scheduler" },
-      {
-        attempts: 1,
-        backoff: {
-          delay: 30_000,
-          type: "exponential",
-        },
-        jobId: "manual-job",
-        removeOnComplete: true,
-        removeOnFail: true,
-      }
+      expect.objectContaining({
+        attempts: 3,
+        jobId: "podcast-podcast-1",
+        priority: 1,
+      })
     )
   })
 
-  it("reports an already queued source without adding a duplicate job", async () => {
+  it("reports the loser of concurrent deterministic adds as already active", async () => {
     const { enqueuePodcastRefresh, podcastRefreshJobId } = await import("./podcast-refresh-queue")
-    queueGetJob.mockResolvedValueOnce({ id: podcastRefreshJobId("podcast-1") })
 
-    await expect(enqueuePodcastRefresh("podcast-1", { trigger: "manual" })).resolves.toEqual({
+    const [first, second] = await Promise.all([
+      enqueuePodcastRefresh("podcast-1", { trigger: "manual" }),
+      enqueuePodcastRefresh("podcast-1", { trigger: "manual" }),
+    ])
+
+    expect([first, second]).toContainEqual({
       jobId: podcastRefreshJobId("podcast-1"),
-      outcome: "already-queued",
+      outcome: "queued",
     })
-    expect(queueAdd).not.toHaveBeenCalled()
+    expect([first, second]).toContainEqual({
+      jobId: podcastRefreshJobId("podcast-1"),
+      outcome: "already-active",
+    })
+    expect(queueAdd).toHaveBeenCalledTimes(2)
+  })
+
+  it("returns unavailable when BullMQ cannot confirm the stored job", async () => {
+    const { enqueuePodcastRefresh, podcastRefreshJobId } = await import(
+      "./podcast-refresh-queue"
+    )
+    queueGetJob.mockResolvedValue(undefined)
+
+    await expect(enqueuePodcastRefresh("podcast-1")).resolves.toEqual({
+      jobId: podcastRefreshJobId("podcast-1"),
+      outcome: "unavailable",
+    })
   })
 })

@@ -4,6 +4,7 @@ import Redis from "ioredis"
 import sanitizeHtml from "sanitize-html"
 
 import { getPrisma } from "./db"
+import { normalizePublisherText } from "./publisher-text"
 import { ephemeralRedisConnectionOptions } from "./redis-config"
 import {
   createHostRequestLimiter,
@@ -413,10 +414,11 @@ function parseTimestamp(value: string) {
 }
 
 function normalizeCueText(value: string) {
-  return sanitizeHtml(value, {
+  const sanitized = sanitizeHtml(value, {
     allowedAttributes: {},
     allowedTags: [],
   })
+  return normalizePublisherText(sanitized).value
     .replace(/\s+/g, " ")
     .trim()
 }

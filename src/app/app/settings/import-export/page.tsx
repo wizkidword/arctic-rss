@@ -83,8 +83,10 @@ export default async function ImportExportSettingsPage() {
             searches, Smart Digest rules, and reader settings as JSON.
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
-            This one-time download is not retained. It excludes passwords,
-            sessions, provider secrets, and full publisher article bodies.
+            This one-time access export is not a restorable backup: it cannot
+            be imported into Arctic RSS or another reader. It is not retained
+            and excludes passwords, sessions, provider secrets, and full
+            publisher article bodies.
           </p>
           <a
             className={cn(buttonVariants(), "w-fit")}

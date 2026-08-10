@@ -86,4 +86,26 @@ describe("writeRefreshItems", () => {
       unchangedCount: 0,
     })
   })
+
+  it("checks ownership before each bounded persistence batch", async () => {
+    const beforeWriteBatch = vi.fn().mockResolvedValue(undefined)
+
+    await writeRefreshItems({
+      batchSize: 2,
+      beforeWriteBatch,
+      createMany: vi.fn(async (items: Array<{ externalId: string }>) => ({ count: items.length })),
+      findExistingItems: vi.fn().mockResolvedValue([
+        { externalId: "existing", ingestionFingerprint: "old" },
+      ]),
+      items: [
+        { externalId: "new-1", ingestionFingerprint: "new-1" },
+        { externalId: "existing", ingestionFingerprint: "new" },
+        { externalId: "new-2", ingestionFingerprint: "new-2" },
+        { externalId: "new-3", ingestionFingerprint: "new-3" },
+      ],
+      update: vi.fn().mockResolvedValue({}),
+    })
+
+    expect(beforeWriteBatch).toHaveBeenCalledTimes(3)
+  })
 })

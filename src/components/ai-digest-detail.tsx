@@ -34,7 +34,7 @@ type DigestDetail = {
   overview: string | null
   period: "DAILY" | "WEEKLY"
   provider: string | null
-  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELED"
   title: string | null
 }
 
@@ -74,6 +74,22 @@ export function AiDigestDetail({ digest }: { digest: DigestDetail }) {
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           {digest.errorMessage || "Arctic RSS could not generate this briefing."}
+        </p>
+      </section>
+    )
+  }
+
+  if (digest.status === "CANCELED") {
+    return (
+      <section className="rounded-lg border bg-card p-4">
+        <div className="flex items-center gap-2">
+          <AlertCircleIcon className="size-4 text-muted-foreground" />
+          <h2 className="font-heading text-base font-medium">
+            Briefing canceled
+          </h2>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This briefing was canceled because the account is no longer eligible for background work.
         </p>
       </section>
     )

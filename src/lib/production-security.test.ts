@@ -5,6 +5,10 @@ import {
   PRODUCTION_SERVICE_ROLES,
   UnsafeProductionConfigurationError,
 } from "./production-security"
+import {
+  ALL_MANAGED_ENVIRONMENT_VARIABLES,
+  getRuntimeAllowedServiceRoleEnvironment,
+} from "./service-role-environment"
 
 const webProductionEnvironment = {
   ARCTIC_RSS_TOPOLOGY: "all-in-one",
@@ -344,6 +348,26 @@ describe("production security configuration", () => {
     }
   )
 
+  it.each(PRODUCTION_SERVICE_ROLES)(
+    "rejects every managed variable and compatibility alias not assigned to %s",
+    (role) => {
+      const allowed = new Set(getRuntimeAllowedServiceRoleEnvironment(role))
+
+      for (const variable of ALL_MANAGED_ENVIRONMENT_VARIABLES) {
+        if (allowed.has(variable)) {
+          continue
+        }
+
+        expect(() =>
+          assertSecureProductionConfiguration(
+            { ...validProductionEnvironmentForRole(role), [variable]: "injected" },
+            role
+          )
+        ).toThrow(`${variable} must not be present for the ${role} service.`)
+      }
+    }
+  )
+
   it("does not reject ordinary process variables while rejecting registered aliases", () => {
     expect(() =>
       assertSecureProductionConfiguration(
@@ -387,6 +411,58 @@ describe("production security configuration", () => {
       })
     ).toThrow("MIGRATE_DATABASE_URL must not be present for the web service.")
   })
+
+  it("requires distinct Redis ACL credentials for the dual-workload chat-events worker", () => {
+    const environment = validProductionEnvironmentForRole("worker-chat-events")
+    const durableRedisUrl = webProductionEnvironment.DURABLE_REDIS_URL
+
+    expect(() =>
+      assertSecureProductionConfiguration(
+        {
+          ...environment,
+          EPHEMERAL_REDIS_URL: durableRedisUrl,
+        },
+        "worker-chat-events"
+      )
+    ).toThrow("must not target the same Redis endpoint")
+  })
+
+  it.each(["web", "worker-all", "worker-chat-events", "worker-health"] as const)(
+    "requires distinct Redis endpoints, usernames, and passwords for %s",
+    (role) => {
+      const environment = validProductionEnvironmentForRole(role)
+      const durableRedisUrl = webProductionEnvironment.DURABLE_REDIS_URL
+
+      expect(() =>
+        assertSecureProductionConfiguration(
+          { ...environment, EPHEMERAL_REDIS_URL: durableRedisUrl },
+          role
+        )
+      ).toThrow("must not target the same Redis endpoint")
+
+      expect(() =>
+        assertSecureProductionConfiguration(
+          {
+            ...environment,
+            EPHEMERAL_REDIS_URL:
+              "redis://arctic_durable:ephemeral-redis-password@redis-ephemeral:6379/0",
+          },
+          role
+        )
+      ).toThrow("must use distinct Redis ACL usernames")
+
+      expect(() =>
+        assertSecureProductionConfiguration(
+          {
+            ...environment,
+            EPHEMERAL_REDIS_URL:
+              "redis://arctic_ephemeral:durable-redis-password@redis-ephemeral:6379/0",
+          },
+          role
+        )
+      ).toThrow("must use distinct Redis passwords")
+    }
+  )
 })
 
 function validProductionEnvironmentForRole(

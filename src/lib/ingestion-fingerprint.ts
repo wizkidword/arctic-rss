@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto"
 
+import { normalizePublisherText } from "./publisher-text"
+
 export const INGESTION_FINGERPRINT_VERSION = "v1"
 
 type CanonicalValue = Date | bigint | number | string | null | undefined
@@ -88,5 +90,5 @@ function canonicalValue(value: CanonicalValue) {
     return value.toString(10)
   }
 
-  return typeof value === "string" ? value.normalize("NFC") : value
+  return typeof value === "string" ? normalizePublisherText(value).value : value
 }

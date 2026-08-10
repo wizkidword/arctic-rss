@@ -247,6 +247,10 @@ function createStore(): AiDigestStore {
       findUnique: vi.fn().mockResolvedValue({
         aiMonthlyLimit: 100,
         aiMonthlyUsed: 4,
+        disabledAt: null,
+        emailVerified: new Date("2026-06-01T00:00:00.000Z"),
+        id: "user-1",
+        plan: "FREE",
       }),
       update: vi.fn().mockResolvedValue({}),
     },
@@ -513,7 +517,11 @@ describe("AI digest requests", () => {
     vi.mocked(store.user.findUnique).mockResolvedValue({
       aiMonthlyLimit: 0,
       aiMonthlyUsed: 0,
-    })
+      disabledAt: null,
+      emailVerified: new Date("2026-06-01T00:00:00.000Z"),
+      id: "user-1",
+      plan: "FREE",
+    } as never)
 
     await expect(
       requestAiDigestWithClient({ store, userId: "user-1" }),
@@ -531,7 +539,11 @@ describe("AI digest processing", () => {
     vi.mocked(store.user.findUnique).mockResolvedValue({
       aiMonthlyLimit: 0,
       aiMonthlyUsed: 0,
-    })
+      disabledAt: null,
+      emailVerified: new Date("2026-06-01T00:00:00.000Z"),
+      id: "user-1",
+      plan: "FREE",
+    } as never)
     const provider: AiDigestProvider = {
       generate: vi.fn(),
       model: "local-digest-v1",
@@ -547,6 +559,92 @@ describe("AI digest processing", () => {
     ).rejects.toThrow("AI monthly limit reached.")
 
     expect(provider.generate).not.toHaveBeenCalled()
+  })
+
+  it("cancels a digest before reserving provider work for a disabled account", async () => {
+    const store = createStore()
+    vi.mocked(store.user.findUnique).mockResolvedValue({
+      aiMonthlyLimit: 100,
+      aiMonthlyUsed: 4,
+      disabledAt: new Date("2026-06-23T12:59:00.000Z"),
+      emailVerified: new Date("2026-06-01T00:00:00.000Z"),
+      id: "user-1",
+      plan: "FREE",
+    } as never)
+    const provider: AiDigestProvider = {
+      generate: vi.fn(),
+      model: "local-digest-v1",
+      name: "local",
+    }
+
+    await expect(
+      processAiDigestWithClient({
+        digestId: "digest-1",
+        provider,
+        store,
+      }),
+    ).resolves.toEqual({
+      articleCount: 0,
+      digestId: "digest-1",
+      status: "CANCELED",
+    })
+
+    expect(store.aiOperation.create).not.toHaveBeenCalled()
+    expect(provider.generate).not.toHaveBeenCalled()
+    expect(store.aiDigest.update).toHaveBeenCalledWith({
+      data: {
+        completedAt: expect.any(Date),
+        errorMessage: "ACCOUNT_DISABLED",
+        status: "CANCELED",
+      },
+      where: { id: "digest-1" },
+    })
+  })
+
+  it("rechecks eligibility immediately before the provider request", async () => {
+    const store = createStore()
+    const activeUser = {
+      aiMonthlyLimit: 100,
+      aiMonthlyUsed: 4,
+      disabledAt: null,
+      emailVerified: new Date("2026-06-01T00:00:00.000Z"),
+      id: "user-1",
+      plan: "FREE" as const,
+    }
+    vi.mocked(store.user.findUnique)
+      .mockResolvedValueOnce(activeUser as never)
+      .mockResolvedValueOnce(activeUser as never)
+      .mockResolvedValueOnce({
+        ...activeUser,
+        disabledAt: new Date("2026-06-23T13:00:00.000Z"),
+      } as never)
+    const provider: AiDigestProvider = {
+      generate: vi.fn(),
+      model: "local-digest-v1",
+      name: "local",
+    }
+
+    await expect(
+      processAiDigestWithClient({
+        digestId: "digest-1",
+        provider,
+        store,
+      }),
+    ).resolves.toEqual({
+      articleCount: 0,
+      digestId: "digest-1",
+      status: "CANCELED",
+    })
+
+    expect(provider.generate).not.toHaveBeenCalled()
+    expect(store.aiDigest.update).toHaveBeenLastCalledWith({
+      data: {
+        completedAt: expect.any(Date),
+        errorMessage: "ACCOUNT_DISABLED",
+        status: "CANCELED",
+      },
+      where: { id: "digest-1" },
+    })
   })
 
   it("stores generated items and records one usage unit", async () => {

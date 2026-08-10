@@ -5,8 +5,16 @@ import { redditDirectoryFeeds } from "./reddit-directory"
 
 export const SOURCE_ORPHAN_GRACE_PERIOD_DAYS = 60
 export const SOURCE_ORPHAN_REPORT_VERSION = 1
+export const SOURCE_ORPHAN_REPORT_STATEMENT_TIMEOUT_MS = 15_000
+export const SOURCE_ORPHAN_REPORT_MAX_CANDIDATE_SOURCES = 5_000
 
-export type SourceOrphanRetentionStore = Pick<PrismaClient, "$queryRaw">
+export type SourceOrphanRetentionStore = Pick<PrismaClient, "$queryRaw"> & {
+  $transaction?<T>(
+    operation: (
+      transaction: Pick<PrismaClient, "$executeRaw" | "$queryRaw">
+    ) => Promise<T>
+  ): Promise<T>
+}
 
 type FeedOrphanReferences = {
   activeChatLegalHolds: number
@@ -38,6 +46,7 @@ type SourceOrphanSummary<References> = {
 }
 
 export type SourceOrphanRetentionReport = {
+  candidateLimit: number
   dryRun: true
   feeds: SourceOrphanSummary<FeedOrphanReferences>
   generatedAt: string
@@ -48,6 +57,7 @@ export type SourceOrphanRetentionReport = {
     purgeRequiresSeparateOwnerApproval: true
   }
   schemaVersion: typeof SOURCE_ORPHAN_REPORT_VERSION
+  storageEstimate: "approximate"
 }
 
 type FeedReportRow = {
@@ -86,37 +96,64 @@ type PodcastReportRow = {
  * until a separately approved, bounded purge release.
  */
 export async function reportSourceOrphanRetention({
+  maxCandidateSources = SOURCE_ORPHAN_REPORT_MAX_CANDIDATE_SOURCES,
   now = new Date(),
   store,
 }: {
+  maxCandidateSources?: number
   now?: Date
   store: SourceOrphanRetentionStore
 }): Promise<SourceOrphanRetentionReport> {
-  const staticDirectoryUrls = [
-    ...new Set(
-      [...feedDirectoryFeeds, ...redditDirectoryFeeds].map((feed) => feed.url)
-    ),
-  ]
-  const [feedRows, podcastRows] = await Promise.all([
-    store.$queryRaw<FeedReportRow[]>(feedOrphanReportQuery(staticDirectoryUrls)),
-    store.$queryRaw<PodcastReportRow[]>(podcastOrphanReportQuery),
-  ])
+  const candidateLimit = boundedCandidateLimit(maxCandidateSources)
+  const report = async (
+    queryStore: Pick<PrismaClient, "$queryRaw">
+  ): Promise<SourceOrphanRetentionReport> => {
+    const staticDirectoryUrls = [
+      ...new Set(
+        [...feedDirectoryFeeds, ...redditDirectoryFeeds].map((feed) => feed.url)
+      ),
+    ]
+    const [feedRows, podcastRows] = await Promise.all([
+      queryStore.$queryRaw<FeedReportRow[]>(
+        feedOrphanReportQuery(staticDirectoryUrls, candidateLimit)
+      ),
+      queryStore.$queryRaw<PodcastReportRow[]>(
+        podcastOrphanReportQuery(candidateLimit)
+      ),
+    ])
 
-  return {
-    dryRun: true,
-    feeds: mapFeedSummary(singleRow(feedRows, "feed")),
-    generatedAt: now.toISOString(),
-    podcasts: mapPodcastSummary(singleRow(podcastRows, "podcast")),
-    policy: {
-      destructivePurgeEnabled: false,
-      gracePeriodDays: SOURCE_ORPHAN_GRACE_PERIOD_DAYS,
-      purgeRequiresSeparateOwnerApproval: true,
-    },
-    schemaVersion: SOURCE_ORPHAN_REPORT_VERSION,
+    return {
+      candidateLimit,
+      dryRun: true,
+      feeds: mapFeedSummary(singleRow(feedRows, "feed")),
+      generatedAt: now.toISOString(),
+      podcasts: mapPodcastSummary(singleRow(podcastRows, "podcast")),
+      policy: {
+        destructivePurgeEnabled: false,
+        gracePeriodDays: SOURCE_ORPHAN_GRACE_PERIOD_DAYS,
+        purgeRequiresSeparateOwnerApproval: true,
+      },
+      schemaVersion: SOURCE_ORPHAN_REPORT_VERSION,
+      storageEstimate: "approximate",
+    }
   }
+
+  if (!store.$transaction) {
+    return report(store)
+  }
+
+  return store.$transaction(async (transaction) => {
+    await transaction.$executeRaw(
+      Prisma.sql`SELECT set_config('statement_timeout', ${String(SOURCE_ORPHAN_REPORT_STATEMENT_TIMEOUT_MS)}, true)`
+    )
+    return report(transaction)
+  })
 }
 
-function feedOrphanReportQuery(staticDirectoryUrls: string[]) {
+function feedOrphanReportQuery(
+  staticDirectoryUrls: string[],
+  candidateLimit: number
+) {
   return Prisma.sql`
     WITH "orphanFeeds" AS (
       SELECT feed.*
@@ -126,6 +163,8 @@ function feedOrphanReportQuery(staticDirectoryUrls: string[]) {
         FROM "FeedSubscription" AS subscription
         WHERE subscription."feedId" = feed."id"
       )
+      ORDER BY feed."createdAt" ASC, feed."id" ASC
+      LIMIT ${candidateLimit}
     ),
     "orphanArticles" AS (
       SELECT article.*
@@ -213,7 +252,8 @@ function feedOrphanReportQuery(staticDirectoryUrls: string[]) {
   `
 }
 
-const podcastOrphanReportQuery = Prisma.sql`
+function podcastOrphanReportQuery(candidateLimit: number) {
+  return Prisma.sql`
   WITH "orphanPodcasts" AS (
     SELECT podcast.*
     FROM "Podcast" AS podcast
@@ -222,6 +262,8 @@ const podcastOrphanReportQuery = Prisma.sql`
       FROM "PodcastSubscription" AS subscription
       WHERE subscription."podcastId" = podcast."id"
     )
+    ORDER BY podcast."createdAt" ASC, podcast."id" ASC
+    LIMIT ${candidateLimit}
   ),
   "orphanEpisodes" AS (
     SELECT episode.*
@@ -246,9 +288,12 @@ const podcastOrphanReportQuery = Prisma.sql`
       FROM "PodcastEpisodeState" AS state
       INNER JOIN "orphanEpisodes" AS episode ON episode."id" = state."episodeId"
     ) AS "episodeStates"
-`
+  `
+}
 
-function mapFeedSummary(row: FeedReportRow): SourceOrphanSummary<FeedOrphanReferences> {
+function mapFeedSummary(
+  row: FeedReportRow
+): SourceOrphanSummary<FeedOrphanReferences> {
   return {
     estimatedStoredBytes: bytes(row.estimatedStoredBytes),
     itemCount: count(row.articleCount),
@@ -289,7 +334,9 @@ function mapPodcastSummary(
 
 function singleRow<Row>(rows: Row[], sourceType: string) {
   if (rows.length !== 1) {
-    throw new Error(`Expected exactly one ${sourceType} orphan-retention report row.`)
+    throw new Error(
+      `Expected exactly one ${sourceType} orphan-retention report row.`
+    )
   }
 
   return rows[0]
@@ -323,8 +370,20 @@ function timestamp(value: Date | string | null) {
   const parsed = value instanceof Date ? value : new Date(value)
 
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error("Orphan-retention report contains an invalid source timestamp.")
+    throw new Error(
+      "Orphan-retention report contains an invalid source timestamp."
+    )
   }
 
   return parsed.toISOString()
+}
+
+function boundedCandidateLimit(value: number) {
+  if (!Number.isInteger(value) || value < 1 || value > 50_000) {
+    throw new Error(
+      "Orphan-retention candidate limit must be between 1 and 50000."
+    )
+  }
+
+  return value
 }

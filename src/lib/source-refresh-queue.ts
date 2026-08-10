@@ -8,5 +8,5 @@ export type SourceRefreshTrigger =
 
 export type SourceRefreshEnqueueResult = {
   jobId: string
-  outcome: "already-queued" | "queued"
+  outcome: "already-active" | "queued" | "unavailable"
 }

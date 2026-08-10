@@ -27,12 +27,9 @@ export type ShellFeedSubscription = {
   faviconUrl: string | null
   feedId: string
   folderId: string | null
-  folderName: string | null
   id: string
   isPaused: boolean
-  lastError: string | null
-  lastSuccessfulFetchAt: Date | null
-  siteUrl: string | null
+  needsAttention: boolean
   title: string
   unreadCount: number
 }
@@ -156,7 +153,7 @@ function FeedNavLink({ subscription }: { subscription: ShellFeedSubscription }) 
       )}
       {subscription.isPaused ? (
         <span className="text-xs text-muted-foreground">Paused</span>
-      ) : subscription.lastError ? (
+      ) : subscription.needsAttention ? (
         <span
           aria-label="Feed needs attention"
           className="size-1.5 rounded-full bg-destructive"

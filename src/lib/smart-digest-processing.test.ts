@@ -34,7 +34,7 @@ describe("smart digest processing", () => {
         ruleId: "rule-1",
         scheduledFor,
         store,
-      })
+      }),
     ).resolves.toEqual({
       articleCount: 1,
       digestId: "digest-1",
@@ -63,11 +63,11 @@ describe("smart digest processing", () => {
             }),
           ],
         },
-      })
+      }),
     )
     expect(enqueueEmail).toHaveBeenCalledWith("run-1")
     expect(mocks.events.indexOf("create-digest")).toBeLessThan(
-      mocks.events.indexOf("enqueue-email")
+      mocks.events.indexOf("enqueue-email"),
     )
   })
 
@@ -88,7 +88,7 @@ describe("smart digest processing", () => {
         ruleId: "rule-1",
         scheduledFor,
         store,
-      })
+      }),
     ).resolves.toEqual({
       articleCount: 0,
       digestId: "digest-existing",
@@ -115,7 +115,7 @@ describe("smart digest processing", () => {
         ruleId: "rule-1",
         scheduledFor,
         store,
-      })
+      }),
     ).resolves.toEqual({
       articleCount: 0,
       digestId: "digest-existing",
@@ -123,10 +123,98 @@ describe("smart digest processing", () => {
     })
 
     expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
-    expect(mocks.digestRunUpdate).toHaveBeenCalledWith(
+    expect(mocks.digestRunUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: "COMPLETED" }),
+      }),
+    )
+  })
+
+  it("never reclaims a run canceled by account disablement", async () => {
+    const { mocks, store } = createStore({
+      run: digestRun({ status: "CANCELED" }),
+    })
+
+    await expect(
+      processSmartDigestRuleWithClient({
+        enqueueEmail: vi.fn(),
+        now,
+        ruleId: "rule-1",
+        scheduledFor,
+        store,
+      }),
+    ).resolves.toEqual({
+      articleCount: 0,
+      digestId: null,
+      status: "SKIPPED",
+    })
+
+    expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
+  })
+
+  it("does not create a run or digest for an account disabled after scheduling", async () => {
+    const { mocks, store } = createStore({
+      user: {
+        disabledAt: new Date("2026-07-13T08:30:00.000Z"),
+        emailVerified: new Date("2026-07-01T00:00:00.000Z"),
+        id: "user-1",
+        plan: "FREE",
+      },
+    })
+
+    await expect(
+      processSmartDigestRuleWithClient({
+        enqueueEmail: vi.fn(),
+        now,
+        ruleId: "rule-1",
+        scheduledFor,
+        store,
+      }),
+    ).resolves.toEqual({
+      articleCount: 0,
+      digestId: null,
+      status: "SKIPPED",
+    })
+
+    expect(mocks.digestRunUpsert).not.toHaveBeenCalled()
+    expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
+  })
+
+  it("does not persist a digest when the account is disabled during processing", async () => {
+    const { mocks, store } = createStore({
+      articles: [article({ id: "article-1", title: "Arctic climate report" })],
+    })
+    mocks.userFindUnique
+      .mockResolvedValueOnce(activeUser())
+      .mockResolvedValueOnce({
+        ...activeUser(),
+        disabledAt: new Date("2026-07-13T08:45:00.000Z"),
       })
+
+    await expect(
+      processSmartDigestRuleWithClient({
+        enqueueEmail: vi.fn(),
+        now,
+        ruleId: "rule-1",
+        scheduledFor,
+        store,
+      }),
+    ).resolves.toEqual({
+      articleCount: 0,
+      digestId: null,
+      status: "SKIPPED",
+    })
+
+    expect(mocks.smartDigestCreate).not.toHaveBeenCalled()
+    expect(mocks.digestRunUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          errorMessage:
+            "Smart Digest owner is no longer eligible for background work.",
+          status: "FAILED",
+        }),
+        where: expect.objectContaining({ id: "run-1" }),
+      }),
     )
   })
 
@@ -136,7 +224,7 @@ describe("smart digest processing", () => {
         ruleId: "rule-1",
         watermarkFrom: new Date("2026-07-13T06:00:00.000Z"),
         watermarkTo: now,
-      })
+      }),
     ).toEqual({
       AND: [
         {
@@ -169,14 +257,14 @@ describe("smart digest processing", () => {
     expect(
       digestWatermarkFrom(
         baseRule({ contentWatermarkAt: new Date("2026-07-13T08:00:00.000Z") }),
-        now
-      )
+        now,
+      ),
     ).toEqual(new Date("2026-07-13T06:00:00.000Z"))
   })
 })
 
 function baseRule(
-  overrides: Partial<SmartDigestRuleForProcessing> = {}
+  overrides: Partial<SmartDigestRuleForProcessing> = {},
 ): SmartDigestRuleForProcessing {
   return {
     contentWatermarkAt: null,
@@ -227,10 +315,14 @@ function article({
 
 function digestRun(overrides: Partial<DigestRunRecord> = {}): DigestRunRecord {
   return {
+    attempt: 0,
     completedAt: null,
     digestId: null,
     emailStatus: "NOT_REQUESTED",
     id: "run-1",
+    lastHeartbeatAt: null,
+    leaseExpiresAt: null,
+    leaseOwner: null,
     processingStartedAt: null,
     ruleId: "rule-1",
     scheduledFor,
@@ -243,10 +335,12 @@ function createStore({
   articles = [],
   rule = baseRule(),
   run = null,
+  user = activeUser(),
 }: {
   articles?: ReturnType<typeof article>[]
   rule?: SmartDigestRuleForProcessing
   run?: DigestRunRecord | null
+  user?: ReturnType<typeof activeUser> | null
 } = {}) {
   let currentRun = run
   const events: string[] = []
@@ -257,20 +351,35 @@ function createStore({
       return Promise.resolve(currentRun)
     }),
     digestRunUpdateMany: vi.fn((args) => {
-      const staleLease = currentRun?.processingStartedAt
-        ? currentRun.processingStartedAt.getTime() <
-          new Date("2026-07-13T08:50:00.000Z").getTime()
-        : false
+      const claimWhere = Array.isArray(args.where.OR)
       const canClaim =
         currentRun?.status === "PENDING" ||
         currentRun?.status === "FAILED" ||
-        (currentRun?.status === "PROCESSING" && staleLease)
+        (currentRun?.status === "PROCESSING" &&
+          currentRun.leaseExpiresAt === null)
+      const fenceWhere = args.where as {
+        attempt?: number
+        leaseExpiresAt?: { gt: Date }
+        leaseOwner?: string
+      }
+      const matchesFence =
+        currentRun?.status === "PROCESSING" &&
+        currentRun.attempt === fenceWhere.attempt &&
+        currentRun.leaseOwner === fenceWhere.leaseOwner &&
+        currentRun.leaseExpiresAt !== null &&
+        currentRun.leaseExpiresAt > (fenceWhere.leaseExpiresAt?.gt ?? now)
 
-      if (!canClaim) {
+      if ((claimWhere && !canClaim) || (!claimWhere && !matchesFence)) {
         return Promise.resolve({ count: 0 })
       }
 
-      currentRun = { ...currentRun!, ...args.data }
+      const data = { ...args.data }
+      const attemptIncrement = data.attempt as
+        { increment?: number } | undefined
+      if (attemptIncrement?.increment !== undefined) {
+        data.attempt = (currentRun?.attempt ?? 0) + attemptIncrement.increment
+      }
+      currentRun = { ...currentRun!, ...data }
       return Promise.resolve({ count: 1 })
     }),
     digestRunUpsert: vi.fn((args) => {
@@ -283,21 +392,24 @@ function createStore({
       return Promise.resolve(currentRun)
     }),
     smartDigestCreate: vi.fn((args) => {
+      const data = args.create ?? args.data
       events.push("create-digest")
       return Promise.resolve({
-        articleCount: args.data.articleCount,
+        articleCount: data.articleCount,
         id: "digest-1",
-        items: args.data.items.create,
-        title: args.data.title,
-        topicPrompt: args.data.topicPrompt,
+        items: data.items.create,
+        title: data.title,
+        topicPrompt: data.topicPrompt,
       })
     }),
     smartDigestRuleUpdate: vi.fn().mockResolvedValue(rule),
+    userFindUnique: vi.fn().mockResolvedValue(user),
   }
 
   const store = {
-    $transaction: async (callback: (transaction: unknown) => Promise<unknown>) =>
-      callback(store),
+    $transaction: async (
+      callback: (transaction: unknown) => Promise<unknown>,
+    ) => callback(store),
     article: {
       findMany: mocks.articleFindMany,
     },
@@ -308,11 +420,14 @@ function createStore({
       upsert: mocks.digestRunUpsert,
     },
     smartDigest: {
-      create: mocks.smartDigestCreate,
+      upsert: mocks.smartDigestCreate,
     },
     smartDigestRule: {
       findUnique: vi.fn().mockResolvedValue(rule),
       update: mocks.smartDigestRuleUpdate,
+    },
+    user: {
+      findUnique: mocks.userFindUnique,
     },
   }
 
@@ -322,5 +437,19 @@ function createStore({
       events,
     },
     store: store as unknown as SmartDigestProcessingStore,
+  }
+}
+
+function activeUser(): {
+  disabledAt: Date | null
+  emailVerified: Date | null
+  id: string
+  plan: "FREE"
+} {
+  return {
+    disabledAt: null,
+    emailVerified: new Date("2026-07-01T00:00:00.000Z"),
+    id: "user-1",
+    plan: "FREE" as const,
   }
 }
