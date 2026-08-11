@@ -19,6 +19,11 @@
     "experiments": {
       "typedRoutes": true
     },
+    "extra": {
+      "eas": {
+        "projectId": "78ead450-1670-4661-a568-ce53552f2794"
+      }
+    },
     "android": {
       "package": "com.arcticrss.reader",
       "versionCode": 1,
