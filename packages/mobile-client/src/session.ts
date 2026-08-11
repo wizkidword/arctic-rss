@@ -83,6 +83,13 @@ export class MobileSessionManager {
     return this.tokens !== null
   }
 
+  getOwner() {
+    if (!this.tokens) {
+      return null
+    }
+    return { mobileDeviceId: this.tokens.mobileDeviceId, userId: this.tokens.userId }
+  }
+
   private async refreshSingleFlight(tokens: StoredMobileTokens) {
     if (!this.refreshPromise) {
       const generation = this.sessionGeneration

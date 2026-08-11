@@ -72,7 +72,16 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
           return
         }
         setIsSignedIn(signedIn)
+        if (!signedIn) {
+          await offline.purgeForLogout()
+        }
         if (signedIn) {
+          const owner = session.getOwner()
+          if (!owner) {
+            await clearInvalidSession()
+            return
+          }
+          await offline.claimOwner(owner)
           try {
             await flushPendingMutations(api, offline)
             await synchronizeMobileState(api, offline)
@@ -89,6 +98,7 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {
         if (current) {
+          void offline.purgeForLogout()
           setIsSignedIn(false)
           setIsReady(true)
         }
@@ -119,6 +129,12 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback(async () => {
     const tokens = await beginBrowserMobileLogin({ api: unauthenticatedApi, origin: MOBILE_SERVICE_ORIGIN })
     await session.setTokens(tokens)
+    const owner = session.getOwner()
+    if (!owner) {
+      await clearInvalidSession()
+      throw new Error("Arctic RSS could not establish local device ownership. Sign in again.")
+    }
+    await offline.claimOwner(owner)
     setIsSignedIn(true)
     try {
       await flushPendingMutations(api, offline)
