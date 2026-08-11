@@ -26,3 +26,7 @@ not yet backfilled.
 New access tokens also carry the stable device ID and server validation checks
 that the linked device remains active. Tokens created before this source change
 are short-lived and intentionally fail closed once the new code is active.
+
+Authenticated reads update the rotating session and stable-device activity
+timestamps at most once every five minutes. The validation read still checks
+both records on every request; only redundant timestamp writes are skipped.

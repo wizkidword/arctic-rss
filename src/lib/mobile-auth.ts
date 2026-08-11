@@ -22,6 +22,9 @@ export const MOBILE_AUTHORIZATION_REQUEST_TTL_MS = 10 * 60_000
 export const MOBILE_ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 export const MOBILE_REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60_000
 export const MAX_MOBILE_DEVICE_SESSIONS_PER_USER = 5
+// Access-token checks can be frequent while reading. Five minutes keeps device
+// activity useful without turning normal reader traffic into write traffic.
+export const MOBILE_ACTIVITY_WRITE_INTERVAL_MS = 5 * 60_000
 
 const PKCE_VALUE_PATTERN = /^[A-Za-z0-9._~-]{43,128}$/
 const NONCE_PATTERN = /^[A-Za-z0-9._~-]{16,256}$/
@@ -802,13 +805,28 @@ export async function authenticateMobileAccessToken({
     throw new MobileAuthError("refresh-invalid", "The access token is invalid or expired.")
   }
 
-  const touched = await store.deviceSession.updateMany({
-    data: { lastUsedAt: now },
-    where: { id: session.id, replacedById: null, revokedAt: null, userId: session.userId },
-  })
-  if (touched.count !== 1) {
-    throw new MobileAuthError("refresh-invalid", "The access token is invalid or expired.")
-  }
+  const activityCutoff = new Date(now.getTime() - MOBILE_ACTIVITY_WRITE_INTERVAL_MS)
+  await Promise.all([
+    store.deviceSession.updateMany({
+      data: { lastUsedAt: now },
+      where: {
+        id: session.id,
+        lastUsedAt: { lt: activityCutoff },
+        replacedById: null,
+        revokedAt: null,
+        userId: session.userId,
+      },
+    }),
+    store.mobileDevice.updateMany({
+      data: { lastUsedAt: now },
+      where: {
+        id: session.mobileDeviceId,
+        lastUsedAt: { lt: activityCutoff },
+        revokedAt: null,
+        userId: session.userId,
+      },
+    }),
+  ])
 
   return {
     authVersion: payload.av,
