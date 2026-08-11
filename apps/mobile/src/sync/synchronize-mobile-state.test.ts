@@ -29,6 +29,24 @@ const syncResponse = {
   meta: { nextCursor: "2", requestId: "11111111-1111-4111-8111-111111111111" },
 }
 
+const unappliedEventResponse = {
+  data: {
+    events: [
+      {
+        action: "UPSERT" as const,
+        occurredAt: "2026-08-11T00:00:00.000Z",
+        payload: {},
+        resourceId: "article-1",
+        resourceType: "ARTICLE_STATE",
+        resourceVersion: "1",
+        sequence: "2",
+      },
+    ],
+    fullResyncRequired: false as const,
+  },
+  meta: { nextCursor: "2", requestId: "11111111-1111-4111-8111-111111111111" },
+}
+
 describe("synchronizeMobileState", () => {
   it("records the first successful sync once per local signed-in device", async () => {
     const offline = createOffline({ cursor: "1" })
@@ -71,6 +89,19 @@ describe("synchronizeMobileState", () => {
       )
     ).rejects.toThrow("offline")
 
+    expect(offline.markProductMilestone).not.toHaveBeenCalled()
+  })
+
+  it("does not acknowledge events until the client can apply them transactionally", async () => {
+    const offline = createOffline({ cursor: "1" })
+    const api = { sync: vi.fn().mockResolvedValue(unappliedEventResponse) }
+
+    await synchronizeMobileState(
+      api as unknown as MobileApiClient,
+      offline as unknown as MobileOfflineStore
+    )
+
+    expect(offline.setCursor).not.toHaveBeenCalled()
     expect(offline.markProductMilestone).not.toHaveBeenCalled()
   })
 })
