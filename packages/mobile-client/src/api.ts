@@ -58,6 +58,7 @@ export type MobileApiClientOptions = {
   fetch?: FetchImplementation
   getAccessToken?: () => Promise<string>
   origin: string
+  refreshAccessToken?: () => Promise<string>
 }
 
 export type IdempotentRequest = {
@@ -75,6 +76,7 @@ export class MobileApiClient {
   private readonly fetchImplementation: FetchImplementation
   private readonly getAccessToken: (() => Promise<string>) | undefined
   private readonly origin: string
+  private readonly refreshAccessToken: (() => Promise<string>) | undefined
 
   constructor(options: MobileApiClientOptions) {
     this.origin = normalizeMobileApiOrigin(
@@ -83,6 +85,7 @@ export class MobileApiClient {
     )
     this.fetchImplementation = options.fetch ?? fetch
     this.getAccessToken = options.getAccessToken
+    this.refreshAccessToken = options.refreshAccessToken
   }
 
   exchangeAuthorizationCode(input: {
@@ -294,7 +297,8 @@ export class MobileApiClient {
     if (options.idempotencyKey) {
       headers.set("Idempotency-Key", options.idempotencyKey)
     }
-    if (options.auth !== false) {
+    const requiresAuthentication = options.auth !== false
+    if (requiresAuthentication) {
       if (!this.getAccessToken) {
         throw new MobileApiError(
           "MOBILE_DEVICE_SESSION_REQUIRED",
@@ -306,15 +310,31 @@ export class MobileApiClient {
       headers.set("Authorization", `Bearer ${await this.getAccessToken()}`)
     }
 
+    const url = buildMobileApiUrl(this.origin, path, options.query)
     let response: Response
     try {
-      response = await this.fetchImplementation(buildMobileApiUrl(this.origin, path, options.query), {
+      response = await this.fetchImplementation(url, {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         headers,
         method,
       })
     } catch {
       throw new MobileNetworkError()
+    }
+
+    if (requiresAuthentication && response.status === 401 && this.refreshAccessToken) {
+      // A refresh is coordinated by MobileSessionManager. Replay exactly once
+      // with the persisted replacement token; do not recurse on another 401.
+      headers.set("Authorization", `Bearer ${await this.refreshAccessToken()}`)
+      try {
+        response = await this.fetchImplementation(url, {
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          headers,
+          method,
+        })
+      } catch {
+        throw new MobileNetworkError()
+      }
     }
 
     const body = await readJson(response)

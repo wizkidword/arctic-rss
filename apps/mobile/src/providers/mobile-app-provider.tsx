@@ -53,6 +53,7 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
         allowInsecureDevelopmentOrigin: __DEV__,
         getAccessToken: () => session.getAccessToken(),
         origin: MOBILE_SERVICE_ORIGIN,
+        refreshAccessToken: () => session.refreshAccessToken(),
       }),
     [session]
   )

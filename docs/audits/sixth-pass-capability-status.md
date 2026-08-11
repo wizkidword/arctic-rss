@@ -8,7 +8,7 @@ Play action is represented by this ledger.
 | --- | --- | --- |
 | MOB-AUTH-001 | IN_PROGRESS | Phase 2 source now registers `android:com.arcticrss.reader`, accepts the exact HTTPS callback in production, creates a server-stored one-time approval request on GET, and issues a code only after explicit approve POST. The feature remains default-off. Recent-auth proof, real signing/App Link verification, disposable-DB migration rehearsal, and owner enablement remain open. |
 | MOB-BODY-001 | SOURCE_VERIFIED | Phase 1 adds a shared 8 KiB/5 s JSON reader, media/encoding/UTF-8/JSON checks, IP-only pre-body limits, secret-specific post-body limits, generic errors, OpenAPI codes, and focused/full-suite evidence. No deployment is implied. |
-| MOB-REFRESH-001 | IN_PROGRESS | Server refresh rotation is transactional, but native refresh single-flight and atomic persistence are not yet established. |
+| MOB-REFRESH-001 | SOURCE_VERIFIED | Phase 3 source serializes Android refresh callers behind one promise, writes a single validated v2 bundle before publishing it, retains the old bundle for retryable failures, clears terminal failures once, and permits one coordinated API-401 replay. Device-bound bundle fields await MOB-DEVICE-001. |
 | MOB-DEVICE-001 | NOT_STARTED | `DeviceSession` is refresh-token history. An additive stable `MobileDevice` model and family-aware migration are required. |
 | MOB-OFFLINE-001 | IN_PROGRESS | SQLite is present but has no proved authenticated-owner boundary or Android restore proof. |
 | MOB-SYNC-001 | IN_PROGRESS | The existing bounded sync contract is a starting point; cursor advancement and invalidation need transactional non-lossy behavior. |

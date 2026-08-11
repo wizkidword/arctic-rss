@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   MobileApiClient,
   MobileApiError,
+  MOBILE_TOKEN_BUNDLE_SCHEMA_VERSION,
   MobileSessionManager,
   assertQueuedMutation,
   createPkceAuthorization,
@@ -60,6 +61,32 @@ describe("mobile client safeguards", () => {
     )
   })
 
+  it("replays one authenticated request after a coordinated token refresh", async () => {
+    const authorizationHeaders: Array<string | null> = []
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      authorizationHeaders.push((init.headers as Headers).get("authorization"))
+      if (authorizationHeaders.length === 1) {
+        return new Response(JSON.stringify({ error: { code: "MOBILE_DEVICE_SESSION_REQUIRED" } }), { status: 401 })
+      }
+      return new Response(JSON.stringify({
+        data: { email: "reader@example.test", id: "reader_1", name: null, plan: "FREE" },
+        meta: { requestId: "11111111-1111-4111-8111-111111111111" },
+      }), { status: 200 })
+    })
+    const refreshAccessToken = vi.fn().mockResolvedValue("new-access-token")
+    const client = new MobileApiClient({
+      fetch: fetch as typeof globalThis.fetch,
+      getAccessToken: async () => "old-access-token",
+      origin: "https://arcticrss.example",
+      refreshAccessToken,
+    })
+
+    await expect(client.me()).resolves.toMatchObject({ data: { id: "reader_1" } })
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1)
+    expect(authorizationHeaders).toEqual(["Bearer old-access-token", "Bearer new-access-token"])
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
   it("makes deterministic URL-safe PKCE material with a SHA-256 challenge", async () => {
     const pkce = await createPkceAuthorization({
       randomBytes: (size) => Uint8Array.from({ length: size }, (_, index) => index),
@@ -102,6 +129,7 @@ describe("mobile client safeguards", () => {
         accessTokenExpiresAt: 1,
         accessTokenExpiresIn: 60,
         refreshToken: "refresh",
+        schemaVersion: MOBILE_TOKEN_BUNDLE_SCHEMA_VERSION,
       }),
       write: vi.fn().mockResolvedValue(undefined),
     }
@@ -117,4 +145,107 @@ describe("mobile client safeguards", () => {
     expect(store.clear).not.toHaveBeenCalled()
     expect(session.isSignedIn()).toBe(true)
   })
+
+  it("shares one refresh and publishes its bundle only after persistence succeeds", async () => {
+    let resolveRefresh: ((value: { accessToken: string; accessTokenExpiresIn: number; refreshToken: string }) => void) | undefined
+    const refreshed = new Promise<{ accessToken: string; accessTokenExpiresIn: number; refreshToken: string }>((resolve) => {
+      resolveRefresh = resolve
+    })
+    const store = {
+      clear: vi.fn().mockResolvedValue(undefined),
+      read: vi.fn().mockResolvedValue(storedTokens()),
+      write: vi.fn().mockResolvedValue(undefined),
+    }
+    const refresh = vi.fn().mockReturnValue(refreshed)
+    const session = new MobileSessionManager(
+      store,
+      { refresh },
+      { now: () => 1_000, refreshSkewMs: 0 }
+    )
+
+    await session.hydrate()
+    const callers = Array.from({ length: 20 }, () => session.getAccessToken())
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(store.write).not.toHaveBeenCalled()
+
+    resolveRefresh?.({ accessToken: "new-access", accessTokenExpiresIn: 60, refreshToken: "new-refresh" })
+    await expect(Promise.all(callers)).resolves.toEqual(Array.from({ length: 20 }, () => "new-access"))
+    expect(store.write).toHaveBeenCalledTimes(1)
+    expect(session.isSignedIn()).toBe(true)
+  })
+
+  it("preserves the old complete bundle after a retryable persistence failure", async () => {
+    const persistenceFailure = new Error("secure storage unavailable")
+    const store = {
+      clear: vi.fn().mockResolvedValue(undefined),
+      read: vi.fn().mockResolvedValue(storedTokens()),
+      write: vi.fn().mockRejectedValue(persistenceFailure),
+    }
+    const session = new MobileSessionManager(
+      store,
+      { refresh: vi.fn().mockResolvedValue({ accessToken: "new", accessTokenExpiresIn: 60, refreshToken: "next" }) },
+      { isRetryableFailure: (error) => error === persistenceFailure, now: () => 1_000, refreshSkewMs: 0 }
+    )
+
+    await session.hydrate()
+    await expect(session.getAccessToken()).rejects.toBe(persistenceFailure)
+    expect(store.clear).not.toHaveBeenCalled()
+    expect(session.isSignedIn()).toBe(true)
+    expect(store.write).toHaveBeenCalledTimes(1)
+  })
+
+  it("clears a terminal refresh failure once even when many callers are waiting", async () => {
+    const terminal = new Error("refresh revoked")
+    const store = {
+      clear: vi.fn().mockResolvedValue(undefined),
+      read: vi.fn().mockResolvedValue(storedTokens()),
+      write: vi.fn().mockResolvedValue(undefined),
+    }
+    const refresh = vi.fn().mockRejectedValue(terminal)
+    const session = new MobileSessionManager(store, { refresh }, { now: () => 1_000, refreshSkewMs: 0 })
+
+    await session.hydrate()
+    const callers = Array.from({ length: 20 }, () => session.getAccessToken())
+
+    await expect(Promise.all(callers)).rejects.toBe(terminal)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(store.clear).toHaveBeenCalledTimes(1)
+    expect(session.isSignedIn()).toBe(false)
+  })
+
+  it("does not restore tokens when local sign-out supersedes an in-flight refresh", async () => {
+    let resolveRefresh: ((value: { accessToken: string; accessTokenExpiresIn: number; refreshToken: string }) => void) | undefined
+    const refresh = new Promise<{ accessToken: string; accessTokenExpiresIn: number; refreshToken: string }>((resolve) => {
+      resolveRefresh = resolve
+    })
+    const store = {
+      clear: vi.fn().mockResolvedValue(undefined),
+      read: vi.fn().mockResolvedValue(storedTokens()),
+      write: vi.fn().mockResolvedValue(undefined),
+    }
+    const session = new MobileSessionManager(store, { refresh: vi.fn().mockReturnValue(refresh) }, {
+      now: () => 1_000,
+      refreshSkewMs: 0,
+    })
+
+    await session.hydrate()
+    const access = session.getAccessToken()
+    await session.clear()
+    resolveRefresh?.({ accessToken: "new", accessTokenExpiresIn: 60, refreshToken: "next" })
+
+    await expect(access).rejects.toThrow()
+    expect(store.write).not.toHaveBeenCalled()
+    expect(store.clear).toHaveBeenCalledTimes(1)
+    expect(session.isSignedIn()).toBe(false)
+  })
 })
+
+function storedTokens() {
+  return {
+    accessToken: "old",
+    accessTokenExpiresAt: 1,
+    accessTokenExpiresIn: 60,
+    refreshToken: "refresh",
+    schemaVersion: MOBILE_TOKEN_BUNDLE_SCHEMA_VERSION,
+  } as const
+}
