@@ -28,9 +28,9 @@ export function ReaderScreen({
     <Screen isRefreshing={isRefreshing} onRefresh={refresh} title={collectionId ? "Collection" : "Articles"}>
       {!collectionId ? (
         <View style={mobileStyles.actionRow}>
-          <ActionButton onPress={() => router.replace("/(tabs)")} tone={state === "all" ? "primary" : "secondary"}>All</ActionButton>
-          <ActionButton onPress={() => router.replace("/(tabs)/unread")} tone={state === "unread" ? "primary" : "secondary"}>Unread</ActionButton>
-          <ActionButton onPress={() => router.replace("/(tabs)/starred")} tone={state === "starred" ? "primary" : "secondary"}>Starred</ActionButton>
+          <ActionButton onPress={() => router.replace("/(authenticated)/(tabs)")} tone={state === "all" ? "primary" : "secondary"}>All</ActionButton>
+          <ActionButton onPress={() => router.replace("/(authenticated)/(tabs)/unread")} tone={state === "unread" ? "primary" : "secondary"}>Unread</ActionButton>
+          <ActionButton onPress={() => router.replace("/(authenticated)/(tabs)/starred")} tone={state === "starred" ? "primary" : "secondary"}>Starred</ActionButton>
         </View>
       ) : null}
       {error ? <Notice>{error}</Notice> : null}
