@@ -9,6 +9,11 @@ This is an owner checklist, not authorization to upload or submit anything.
 Recheck the linked official requirements in Play Console immediately before an
 upload because requirements can change.
 
+The source-backed [Data Safety evidence](./google-play-data-safety-evidence.md)
+and [signed-device smoke plan](./android-signed-device-smoke-plan.md) now
+prepare the two Phase 11 handoff inputs. They remain owner/legal review items,
+not completed declarations or test results.
+
 ## Current source facts
 
 | Item | Current evidence | Owner action before internal upload |
@@ -52,15 +57,14 @@ Google Play's current target-SDK requirement is documented at
    icon/feature graphics as required, content rating questionnaire, and any
    app-access instructions for the reviewer. Verify all public URLs from a
    signed-out browser.
-8. Complete the Data safety and Data deletion declarations from a current
-   code-and-SDK inventory. The form covers data transmitted by the app and its
-   SDKs, not merely data stored locally. The current source sends account and
-   reader-state requests to the Arctic RSS first-party service, stores tokens
-   in secure storage, and retains bounded reader/cache/mutation data locally;
-   it has no configured advertising, analytics, or push-provider SDK. A legal
-   and owner review must validate the final answers, purposes, retention, and
-   all bundled SDK disclosures.
-9. Ensure the store listing and in-app settings link to the live privacy policy
+8. Complete the Data safety and Data deletion declarations from the current
+   [code-and-SDK inventory](./google-play-data-safety-evidence.md). The form
+   covers data transmitted by the app and its SDKs, not merely data stored
+   locally. A legal and owner review must validate the final answers, purposes,
+   retention, live log destination, and all bundled SDK disclosures.
+9. Execute the approved [signed-device smoke plan](./android-signed-device-smoke-plan.md)
+   against the exact AAB and record only redacted results.
+10. Ensure the store listing and in-app settings link to the live privacy policy
    at `https://arcticrss.com/privacy`, and that account deletion is available
    from the app/web handoff at `https://arcticrss.com/delete-account`. Recheck
    the hosted flows after the candidate website revision is live.
