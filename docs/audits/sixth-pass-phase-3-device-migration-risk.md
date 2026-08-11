@@ -17,3 +17,8 @@ PostgreSQL rehearsal before any production deployment.
 expansion: it backfills nullable device references on receipts and
 installations from their already-linked refresh-session rows. Existing unique
 keys and foreign keys remain in place until the later dual-write cutover.
+
+New source writes now populate both the stable-device reference and the legacy
+session relation. Idempotency lookup prefers the stable device, preserving a
+key across refresh rotation; a nullable legacy fallback remains only for rows
+not yet backfilled.

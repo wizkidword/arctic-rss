@@ -371,6 +371,10 @@ export async function registerMobileDeviceInstallation({
     input: { environment, pushToken },
     operation: "DEVICE_INSTALLATION_REGISTER",
     run: async (tx) => {
+      const session = await tx.deviceSession.findUnique({
+        select: { mobileDeviceId: true },
+        where: { id: deviceSessionId },
+      })
       const tokenHash = hashMobileValue("installation-token", pushToken)
       const existing = await tx.deviceInstallation.findUnique({
         include: { deviceSession: { select: { userId: true } } },
@@ -385,6 +389,7 @@ export async function registerMobileDeviceInstallation({
       const installation = await tx.deviceInstallation.upsert({
         create: {
           deviceSessionId,
+          mobileDeviceId: session?.mobileDeviceId ?? null,
           environment,
           lastSeenAt: new Date(),
           platform: "android",
@@ -392,6 +397,7 @@ export async function registerMobileDeviceInstallation({
         },
         update: {
           deviceSessionId,
+          mobileDeviceId: session?.mobileDeviceId ?? null,
           disabledAt: null,
           environment,
           lastSeenAt: new Date(),
@@ -544,14 +550,21 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
 
   try {
     return await prisma.$transaction(async (tx) => {
+      const session = await tx.deviceSession.findUnique({
+        select: { mobileDeviceId: true },
+        where: { id: deviceSessionId },
+      })
+      const receiptScope = session?.mobileDeviceId
+        ? { mobileDeviceId: session.mobileDeviceId }
+        : { deviceSessionId }
       await tx.deviceMutationReceipt.deleteMany({
         where: {
           createdAt: { lt: new Date(Date.now() - MOBILE_MUTATION_RECEIPT_RETENTION_DAYS * 86_400_000) },
-          deviceSessionId,
+          ...receiptScope,
         },
       })
-      const existing = await tx.deviceMutationReceipt.findUnique({
-        where: { deviceSessionId_idempotencyKeyHash: { deviceSessionId, idempotencyKeyHash } },
+      const existing = await tx.deviceMutationReceipt.findFirst({
+        where: { ...receiptScope, idempotencyKeyHash },
       })
       if (existing) {
         return replayReceipt<T>({ existing, operation, requestHash })
@@ -561,6 +574,7 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
       await tx.deviceMutationReceipt.create({
         data: {
           deviceSessionId,
+          mobileDeviceId: session?.mobileDeviceId ?? null,
           idempotencyKeyHash,
           operation,
           requestHash,
@@ -574,8 +588,15 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
     if (!isUniqueReceiptError(error)) {
       throw error
     }
-    const existing = await prisma.deviceMutationReceipt.findUnique({
-      where: { deviceSessionId_idempotencyKeyHash: { deviceSessionId, idempotencyKeyHash } },
+    const session = await prisma.deviceSession.findUnique({
+      select: { mobileDeviceId: true },
+      where: { id: deviceSessionId },
+    })
+    const existing = await prisma.deviceMutationReceipt.findFirst({
+      where: {
+        ...(session?.mobileDeviceId ? { mobileDeviceId: session.mobileDeviceId } : { deviceSessionId }),
+        idempotencyKeyHash,
+      },
     })
     if (!existing) {
       throw error
