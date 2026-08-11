@@ -19,7 +19,7 @@ Play action is represented by this ledger.
 | MOB-PUSH-001 | IN_PROGRESS | Phase 9 removes `MOBILE_PUSH` from the Android picker and labels any retained server-side value unavailable. There is still no provider, permission, token registration, delivery receipt, revocation, privacy, or device evidence. |
 | MOB-PODCAST-001 | OWNER_ACTION_REQUIRED | Choose real native playback or remove podcast playback controls before internal testing. |
 | OPS-TOPOLOGY-001 | IN_PROGRESS | Phase 10 source makes the production monitor resolve the active release marker against the reviewed topology manifest, including the recorded Compose project, required health services, worker modes, chat gateway, and edge proxy. Fixture coverage exercises every supported topology and a non-default project on Linux; a Windows source run skips that Bash/Python fixture. No production monitor installation or topology change occurred. |
-| NET-001 | OWNER_ACTION_REQUIRED | A safe owner-run ingress proof package is required; no ingress modification is authorized. |
+| NET-001 | OWNER_ACTION_REQUIRED | Phase 10 supplies a one-request-per-case, redacted owner-run proof package for direct-origin bypass, Cloudflare header overwrite, alternative-header rejection, and mobile API limiter attribution. It forbids retrying the previously edge-blocked image-proxy form or changing ingress to make a test pass. Fresh method-specific owner approval and runtime evidence remain required. |
 | PLAY-001 | OWNER_ACTION_REQUIRED | No signing identity, signed AAB, App Link certificate proof, or Play-track approval exists. |
 
 States describe source and evidence independently. `SOURCE_COMPLETE` will not

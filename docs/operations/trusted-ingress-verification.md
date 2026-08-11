@@ -89,3 +89,9 @@ settings without that approval.
 
 This is an evidence task, not authorization to change the tunnel, DNS,
 firewall, or application deployment.
+
+The required fresh-approval, one-request, redacted proof procedure is in
+[trusted-ingress-proof-package.md](trusted-ingress-proof-package.md). It
+requires an edge-accepted method that differs from the blocked image-proxy
+attempts and expressly forbids an ingress/configuration change merely to make
+a proof request pass.
