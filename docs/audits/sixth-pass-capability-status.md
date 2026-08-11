@@ -18,7 +18,7 @@ Play action is represented by this ledger.
 | MOB-UX-001 | IN_PROGRESS | Phase 9 adds bounded reader/search pagination and now derives the displayed app version from Expo runtime config. Dynamic config records nonsecret source/build context, preview/production profiles set explicit HTTPS origins, and nonproduction builds display their environment. Saved-view/briefing pagination, offline-download expansion, a real Android build, and device UX evidence remain open. |
 | MOB-PUSH-001 | IN_PROGRESS | Phase 9 removes `MOBILE_PUSH` from the Android picker and labels any retained server-side value unavailable. There is still no provider, permission, token registration, delivery receipt, revocation, privacy, or device evidence. |
 | MOB-PODCAST-001 | OWNER_ACTION_REQUIRED | Choose real native playback or remove podcast playback controls before internal testing. |
-| OPS-TOPOLOGY-001 | NOT_STARTED | Monitoring must derive requirements from the reviewed topology manifest for every supported topology. |
+| OPS-TOPOLOGY-001 | IN_PROGRESS | Phase 10 source makes the production monitor resolve the active release marker against the reviewed topology manifest, including the recorded Compose project, required health services, worker modes, chat gateway, and edge proxy. Fixture coverage exercises every supported topology and a non-default project on Linux; a Windows source run skips that Bash/Python fixture. No production monitor installation or topology change occurred. |
 | NET-001 | OWNER_ACTION_REQUIRED | A safe owner-run ingress proof package is required; no ingress modification is authorized. |
 | PLAY-001 | OWNER_ACTION_REQUIRED | No signing identity, signed AAB, App Link certificate proof, or Play-track approval exists. |
 

@@ -1057,7 +1057,7 @@ done
 sudo -n install -d -m 755 "$stage"
 sudo -n tar -xzf "$archive" -C "$stage"
 test -f "$stage/ops/systemd/60-arctic-rss-log-retention.conf"
-printf '{\n  "schemaVersion": 1,\n  "commit": "%s",\n  "topology": "%s"\n}\n' "$commit" "$topology_name" | sudo -n tee "$stage/.arctic-rss-release.json" >/dev/null
+printf '{\n  "schemaVersion": 1,\n  "commit": "%s",\n  "topology": "%s",\n  "composeProject": "%s"\n}\n' "$commit" "$topology_name" "$compose_project" | sudo -n tee "$stage/.arctic-rss-release.json" >/dev/null
 sudo -n install -m 600 -o root -g root "$live/.env" "$stage/.env"
 # Compose reads the image variables from the staged environment file. Keep the
 # tag immutable so a loaded archive cannot alter the still-live source before
@@ -1383,6 +1383,7 @@ for helper_spec in \
   'production-latest-backup.sh:arctic-rss-latest-backup' \
   'production-record-backup-offhost.sh:arctic-rss-record-backup-offhost' \
   'production-restore-drill.sh:arctic-rss-restore-drill' \
+  'production-monitor-topology.sh:arctic-rss-monitor-topology' \
   'production-monitor.sh:arctic-rss-monitor' \
   'production-register-backup-archive.sh:arctic-rss-register-backup-archive'; do
   helper_source="${helper_spec%%:*}"

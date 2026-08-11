@@ -60,3 +60,15 @@ The release commands also inject the selected manifest name as
 These variables let readiness validate the same selected topology and attach a
 non-secret version to durable worker heartbeats; do not replace them with a
 manually guessed service list.
+
+The approved release also records the selected topology and Compose project in
+the root-owned active-release marker. The production monitor resolves that
+marker against the active release's topology manifest before it checks
+containers. It therefore checks only the selected worker model, requires the
+chat gateway and edge proxy only for a chat topology, and uses the recorded
+Compose project for container names. Do not override that project in monitor
+environment files; a disagreement is treated as a failed configuration rather
+than silently checking a different Compose application. A retained marker from
+before this field existed uses the established `COMPOSE_PROJECT` value (or
+`app`) only to keep an approved rollback monitorable; the next approved
+release records the explicit value.

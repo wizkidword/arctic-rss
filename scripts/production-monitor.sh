@@ -33,6 +33,86 @@ set +a
 : "${OPS_PUBLIC_HEALTH_URL:?OPS_PUBLIC_HEALTH_URL is required}"
 : "${OPS_PUBLIC_HOST:?OPS_PUBLIC_HOST is required}"
 
+TOPOLOGY_RESOLVER="${TOPOLOGY_RESOLVER:-/usr/local/sbin/arctic-rss-monitor-topology}"
+if [[ ! -x "$TOPOLOGY_RESOLVER" ]]; then
+  echo "Required monitor topology resolver is not executable." >&2
+  exit 1
+fi
+
+if ! topology_configuration="$($TOPOLOGY_RESOLVER)"; then
+  echo "Could not resolve the active monitor topology." >&2
+  exit 1
+fi
+
+release_compose_project=""
+selected_topology=""
+chat_enabled=""
+edge_proxy_enabled=""
+required_health_services=()
+required_worker_modes=()
+while IFS= read -r topology_line; do
+  topology_key="${topology_line%%=*}"
+  topology_value="${topology_line#*=}"
+  case "$topology_key" in
+    compose_project)
+      [[ -z "$release_compose_project" ]] || { echo "Monitor topology repeats its Compose project." >&2; exit 1; }
+      release_compose_project="$topology_value"
+      ;;
+    topology)
+      [[ -z "$selected_topology" ]] || { echo "Monitor topology repeats its name." >&2; exit 1; }
+      selected_topology="$topology_value"
+      ;;
+    chat_enabled)
+      [[ -z "$chat_enabled" ]] || { echo "Monitor topology repeats chat state." >&2; exit 1; }
+      chat_enabled="$topology_value"
+      ;;
+    edge_proxy_enabled)
+      [[ -z "$edge_proxy_enabled" ]] || { echo "Monitor topology repeats edge proxy state." >&2; exit 1; }
+      edge_proxy_enabled="$topology_value"
+      ;;
+    required_service)
+      required_health_services+=("$topology_value")
+      ;;
+    required_worker_mode)
+      required_worker_modes+=("$topology_value")
+      ;;
+    *)
+      echo "Monitor topology emitted an unknown setting." >&2
+      exit 1
+      ;;
+  esac
+done <<< "$topology_configuration"
+
+if [[ ! "$release_compose_project" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]] ||
+  [[ ! "$selected_topology" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] ||
+  [[ "$chat_enabled" != true && "$chat_enabled" != false ]] ||
+  [[ "$edge_proxy_enabled" != true && "$edge_proxy_enabled" != false ]] ||
+  (( ${#required_health_services[@]} == 0 )) ||
+  (( ${#required_worker_modes[@]} == 0 )); then
+  echo "Monitor topology output is incomplete or invalid." >&2
+  exit 1
+fi
+
+if [[ -n "${COMPOSE_PROJECT:-}" && "$COMPOSE_PROJECT" != "$release_compose_project" ]]; then
+  echo "Configured Compose project does not match the active release record." >&2
+  exit 1
+fi
+COMPOSE_PROJECT="$release_compose_project"
+
+for worker_mode in "${required_worker_modes[@]}"; do
+  worker_is_required=false
+  for service_name in "${required_health_services[@]}"; do
+    if [[ "$service_name" == "$worker_mode" ]]; then
+      worker_is_required=true
+      break
+    fi
+  done
+  if [[ "$worker_is_required" != true ]]; then
+    echo "Monitor topology has an unrequired worker mode." >&2
+    exit 1
+  fi
+done
+
 # Stateful Redis containers are intentionally not recreated by application
 # releases. Their running environment can therefore predate the current
 # Compose definition. Use the root-owned live environment only for each
@@ -95,49 +175,48 @@ if [[ -r "$REDIS_METRICS_FILE" ]]; then
   done < "$REDIS_METRICS_FILE"
 fi
 
-check_healthy_container() {
-  local container_name="$1"
+container_name_for_service() {
+  local service_name="$1"
+
+  printf '%s-%s-1' "$COMPOSE_PROJECT" "$service_name"
+}
+
+check_healthy_service() {
+  local service_name="$1"
+  local container_name
   local health
 
+  container_name="$(container_name_for_service "$service_name")"
   health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_name" 2>/dev/null || true)"
   if [[ "$health" != healthy ]]; then
     failures+=("$container_name")
   fi
 }
 
-check_healthy_container app-web-1
-check_healthy_container app-worker-1
-check_healthy_container app-postgres-1
-check_healthy_container app-redis-1
-check_healthy_container app-redis-ephemeral-1
-
-# Split workers are opt-in during capacity rollout. Once present, each has an
-# independent heartbeat health check and must participate in host monitoring.
-for split_worker in \
-  app-worker-ingestion-1 \
-  app-worker-ai-mail-1 \
-  app-worker-imports-1 \
-  app-worker-maintenance-1 \
-  app-worker-health-1 \
-  app-worker-chat-events-1; do
-  if docker inspect "$split_worker" >/dev/null 2>&1; then
-    check_healthy_container "$split_worker"
-  fi
+for service_name in "${required_health_services[@]}"; do
+  case "$service_name" in
+    chat-gateway|edge-proxy)
+      ;;
+    *)
+      check_healthy_service "$service_name"
+      ;;
+  esac
 done
 
-# The gateway is an opt-in profile. When it is running, its Compose healthcheck
+if [[ "$edge_proxy_enabled" == true ]]; then
+  check_healthy_service edge-proxy
+fi
+
+# The gateway is selected only by chat topologies. Its Compose healthcheck
 # probes /ready, and this explicit probe makes a lost Redis subscription visible
 # to the existing host alert flow without exposing gateway traffic publicly.
-if docker inspect app-chat-gateway-1 >/dev/null 2>&1; then
-  check_healthy_container app-chat-gateway-1
-  if ! docker exec app-chat-gateway-1 node -e \
+if [[ "$chat_enabled" == true ]]; then
+  check_healthy_service chat-gateway
+  chat_gateway_container="$(container_name_for_service chat-gateway)"
+  if ! docker exec "$chat_gateway_container" node -e \
     "fetch('http://127.0.0.1:3001/ready').then((response) => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"; then
     failures+=("chat_gateway_ready")
   fi
-fi
-
-if docker inspect app-edge-proxy-1 >/dev/null 2>&1; then
-  check_healthy_container app-edge-proxy-1
 fi
 
 if ! curl --fail --silent --show-error --max-time 10 \
@@ -222,14 +301,17 @@ PY
 done < <(find "$BACKUP_DIR" -mindepth 2 -maxdepth 2 -type f -name '.arctic-rss-archive.json' -print0)
 
 redis_cli() {
-  local container_name="$1"
+  local service_name="$1"
+  local container_name
   shift
 
-  case "$container_name" in
-    app-redis-1)
+  container_name="$(container_name_for_service "$service_name")"
+
+  case "$service_name" in
+    redis)
       docker exec --env-file "$REDIS_ENV_FILE" "$container_name" sh -c 'redis-cli --no-auth-warning --user "$DURABLE_REDIS_USERNAME" -a "$DURABLE_REDIS_PASSWORD" "$@"' sh "$@"
       ;;
-    app-redis-ephemeral-1)
+    redis-ephemeral)
       docker exec --env-file "$REDIS_ENV_FILE" "$container_name" sh -c 'redis-cli --no-auth-warning --user "$EPHEMERAL_REDIS_USERNAME" -a "$EPHEMERAL_REDIS_PASSWORD" "$@"' sh "$@"
       ;;
     *)
@@ -239,8 +321,11 @@ redis_cli() {
 }
 
 redis_start_option() {
-  local container_name="$1"
+  local service_name="$1"
   local setting="$2"
+  local container_name
+
+  container_name="$(container_name_for_service "$service_name")"
 
   # Redis correctly withholds CONFIG from the application ACL. The Compose
   # command is immutable container metadata, so inspect the launch arguments
@@ -295,20 +380,20 @@ record_redis_counter() {
   fi
 }
 
-if [[ "$(redis_start_option app-redis-1 appendonly || true)" != yes ]]; then
+if [[ "$(redis_start_option redis appendonly || true)" != yes ]]; then
   failures+=("redis_durable_persistence_configuration")
 fi
-if [[ "$(redis_start_option app-redis-1 maxmemory-policy || true)" != noeviction ]]; then
+if [[ "$(redis_start_option redis maxmemory-policy || true)" != noeviction ]]; then
   failures+=("redis_durable_memory_policy")
 fi
-if [[ "$(redis_start_option app-redis-ephemeral-1 appendonly || true)" != no ]]; then
+if [[ "$(redis_start_option redis-ephemeral appendonly || true)" != no ]]; then
   failures+=("redis_ephemeral_persistence_configuration")
 fi
-if [[ "$(redis_start_option app-redis-ephemeral-1 maxmemory-policy || true)" != volatile-ttl ]]; then
+if [[ "$(redis_start_option redis-ephemeral maxmemory-policy || true)" != volatile-ttl ]]; then
   failures+=("redis_ephemeral_memory_policy")
 fi
 
-if ! redis_cli app-redis-1 INFO persistence \
+if ! redis_cli redis INFO persistence \
   | tr -d '\r' \
   | grep -q '^aof_last_write_status:ok$'; then
   failures+=("redis_durable_persistence")
@@ -316,16 +401,16 @@ fi
 
 for redis_workload in durable ephemeral; do
   if [[ "$redis_workload" == durable ]]; then
-    redis_container="app-redis-1"
+    redis_service="redis"
   else
-    redis_container="app-redis-ephemeral-1"
+    redis_service="redis-ephemeral"
   fi
 
-  rejected_connections="$(redis_info_value "$redis_container" stats rejected_connections || true)"
-  rejected_commands="$(redis_info_value "$redis_container" stats total_error_replies || true)"
-  oom_commands="$(redis_error_count "$redis_container" errorstat_OOM || true)"
-  fragmentation_ratio="$(redis_info_value "$redis_container" memory mem_fragmentation_ratio || true)"
-  fragmentation_bytes="$(redis_info_value "$redis_container" memory mem_fragmentation_bytes || true)"
+  rejected_connections="$(redis_info_value "$redis_service" stats rejected_connections || true)"
+  rejected_commands="$(redis_info_value "$redis_service" stats total_error_replies || true)"
+  oom_commands="$(redis_error_count "$redis_service" errorstat_OOM || true)"
+  fragmentation_ratio="$(redis_info_value "$redis_service" memory mem_fragmentation_ratio || true)"
+  fragmentation_bytes="$(redis_info_value "$redis_service" memory mem_fragmentation_bytes || true)"
 
   record_redis_counter "${redis_workload}_rejected_connections" "$rejected_connections"
   record_redis_counter "${redis_workload}_rejected_commands" "$rejected_commands"
@@ -355,7 +440,7 @@ mv "$redis_metrics_tmp" "$REDIS_METRICS_FILE"
 stuck_import_count="$(
   docker exec \
     -e "IMPORT_STUCK_AFTER_SECONDS=$IMPORT_STUCK_AFTER_SECONDS" \
-    app-postgres-1 \
+    "$(container_name_for_service postgres)" \
     sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "SELECT count(*) FROM \"ImportJob\" WHERE \"status\" IN ('\''PENDING'\'', '\''PROCESSING'\'') AND \"updatedAt\" < NOW() - make_interval(secs => ${IMPORT_STUCK_AFTER_SECONDS});"' \
     2>/dev/null || true
 )"
