@@ -33,6 +33,7 @@ type MobileAuthStore = Pick<
   PrismaClient,
   | "deviceAuthorizationCode"
   | "deviceSession"
+  | "mobileDevice"
   | "mobileAuthorizationRequest"
   | "securityEvent"
   | "user"
@@ -524,6 +525,7 @@ export async function exchangeDeviceAuthorizationCode({
 
   const refreshToken = randomToken()
   const refreshExpiresAt = new Date(now.getTime() + MOBILE_REFRESH_TOKEN_TTL_MS)
+  const tokenFamilyId = randomUUID()
   const deviceSession = await store.$transaction(async (transaction) => {
     // Updating the user row serializes device-cap checks for one account. That
     // makes the count and session creation race-safe on PostgreSQL.
@@ -539,15 +541,14 @@ export async function exchangeDeviceAuthorizationCode({
       throw new MobileAuthError("authorization-invalid", "The authorization code is invalid or expired.")
     }
 
-    const activeSessions = await transaction.deviceSession.count({
+    const activeDevices = await transaction.mobileDevice.count({
       where: {
         refreshExpiresAt: { gt: now },
-        replacedById: null,
         revokedAt: null,
         userId: authorizationCode.userId,
       },
     })
-    if (activeSessions >= MAX_MOBILE_DEVICE_SESSIONS_PER_USER) {
+    if (activeDevices >= MAX_MOBILE_DEVICE_SESSIONS_PER_USER) {
       throw new MobileAuthError(
         "device-limit",
         "This account already has the maximum number of mobile devices. Revoke a device first."
@@ -568,6 +569,18 @@ export async function exchangeDeviceAuthorizationCode({
       throw new MobileAuthError("authorization-invalid", "The authorization code is invalid or expired.")
     }
 
+    const device = await transaction.mobileDevice.create({
+      data: {
+        appVersion: authorizationCode.appVersion,
+        authVersion: authorizationCode.authVersion,
+        deviceName: authorizationCode.deviceName,
+        lastUsedAt: now,
+        platform: authorizationCode.platform,
+        refreshExpiresAt,
+        tokenFamilyId,
+        userId: authorizationCode.userId,
+      },
+    })
     const session = await transaction.deviceSession.create({
       data: {
         accessIssuedAt: now,
@@ -575,10 +588,11 @@ export async function exchangeDeviceAuthorizationCode({
         authVersion: authorizationCode.authVersion,
         deviceName: authorizationCode.deviceName,
         lastUsedAt: now,
+        mobileDeviceId: device.id,
         platform: authorizationCode.platform,
         refreshExpiresAt,
         refreshTokenHash: hashCredential(refreshToken),
-        tokenFamilyId: randomUUID(),
+        tokenFamilyId,
         userId: authorizationCode.userId,
       },
     })
@@ -676,8 +690,9 @@ export async function refreshMobileDeviceSession({
           accessIssuedAt: now,
           appVersion: current.appVersion,
           authVersion: current.authVersion,
-          deviceName: current.deviceName,
-          lastUsedAt: now,
+        deviceName: current.deviceName,
+        lastUsedAt: now,
+        mobileDeviceId: current.mobileDeviceId,
           platform: current.platform,
           refreshExpiresAt,
           refreshTokenHash: hashCredential(nextRefreshToken),
@@ -696,6 +711,12 @@ export async function refreshMobileDeviceSession({
       })
       if (consumed.count !== 1) {
         throw new RefreshReuseDetectedError()
+      }
+      if (current.mobileDeviceId) {
+        await transaction.mobileDevice.updateMany({
+          data: { lastUsedAt: now, refreshExpiresAt },
+          where: { id: current.mobileDeviceId, revokedAt: null, userId: current.userId },
+        })
       }
       await transaction.securityEvent.create({
         data: {
@@ -983,6 +1004,10 @@ async function revokeMobileDeviceFamily({
 }) {
   await store.$transaction(async (transaction) => {
     await transaction.deviceSession.updateMany({
+      data: { ...(markReuse ? { reuseDetectedAt: now } : {}), revokedAt: now },
+      where: { revokedAt: null, tokenFamilyId, userId },
+    })
+    await transaction.mobileDevice.updateMany({
       data: { ...(markReuse ? { reuseDetectedAt: now } : {}), revokedAt: now },
       where: { revokedAt: null, tokenFamilyId, userId },
     })
