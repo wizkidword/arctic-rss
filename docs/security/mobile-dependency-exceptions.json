@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "exceptions": [
+    {
+      "package": "image-size",
+      "installedVersion": "1.2.1",
+      "advisoryId": "1138808",
+      "advisoryUrl": "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
+      "severity": "high",
+      "reachability": "build",
+      "fixedVersion": "No fixed version published",
+      "breakingChange": true,
+      "decision": "Build-only Metro asset inspection dependency; no upstream fixed version is published. Re-evaluate on the next Expo/Metro update.",
+      "decisionOwner": "Arctic RSS owner",
+      "expiresAt": "2026-09-11"
+    },
+    {
+      "package": "image-size",
+      "installedVersion": "1.2.1",
+      "advisoryId": "1138809",
+      "advisoryUrl": "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
+      "severity": "high",
+      "reachability": "build",
+      "fixedVersion": "No fixed version published",
+      "breakingChange": true,
+      "decision": "Build-only Metro asset inspection dependency; no upstream fixed version is published. Re-evaluate on the next Expo/Metro update.",
+      "decisionOwner": "Arctic RSS owner",
+      "expiresAt": "2026-09-11"
+    }
+  ]
+}

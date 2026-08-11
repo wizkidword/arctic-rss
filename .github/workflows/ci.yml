@@ -81,6 +81,57 @@ jobs:
       - name: Build production application
         run: npm run build
 
+  mobile-source:
+    name: Android source, contract, and native configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Generate Prisma client used by shared mobile contracts
+        run: npm run prisma:generate
+      - name: Verify mobile API contract drift
+        run: npm run api:openapi:check
+      - name: Inspect mobile package health
+        run: npm run mobile:doctor
+      - name: Check mobile types and lint
+        run: |
+          npm run mobile:typecheck
+          npm run mobile:lint
+      - name: Generate and inspect clean Android source
+        run: npm run mobile:verify-native-config
+      - name: Export Android JavaScript bundle
+        run: npm run mobile:export:android
+      - name: Run mobile client and synchronization tests explicitly
+        run: >-
+          npm exec vitest run
+          packages/mobile-client/src/mobile-client.test.ts
+          apps/mobile/src/sync/flush-pending-mutations.test.ts
+          apps/mobile/src/sync/mobile-foreground-coordinator.test.ts
+          apps/mobile/src/sync/submit-mobile-mutation.test.ts
+          apps/mobile/src/sync/synchronize-mobile-state.test.ts
+      - name: Review complete installed mobile dependency graph
+        run: node scripts/security/audit-mobile-dependencies.mjs --output mobile-dependency-audit.json
+      - name: Generate mobile dependency SBOM
+        run: node scripts/security/generate-mobile-sbom.mjs --output mobile-sbom.cdx.json
+      - name: Upload mobile supply-chain evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: arctic-rss-mobile-supply-chain
+          path: |
+            mobile-dependency-audit.json
+            mobile-sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
   browser-smoke:
     name: Browser smoke and reader journeys
     runs-on: ubuntu-latest

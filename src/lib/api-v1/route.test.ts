@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => {
     MobileAuthError,
     MobileSyncError,
     recordApiV1Request: vi.fn(),
+    recordMobileQueueConflict: vi.fn(),
   }
 })
 
@@ -37,7 +38,10 @@ vi.mock("@/lib/rate-limit", () => ({
   enforceRateLimit: mocks.enforceRateLimit,
   getTrustedClientIp: mocks.getTrustedClientIp,
 }))
-vi.mock("./telemetry", () => ({ recordApiV1Request: mocks.recordApiV1Request }))
+vi.mock("./telemetry", () => ({
+  recordApiV1Request: mocks.recordApiV1Request,
+  recordMobileQueueConflict: mocks.recordMobileQueueConflict,
+}))
 
 import { handleApiV1DeviceSession } from "./route"
 
@@ -113,6 +117,50 @@ describe("handleApiV1DeviceSession", () => {
       ip: "198.51.100.24",
       userId: "user-1",
     })
+    expect(mocks.recordMobileQueueConflict).not.toHaveBeenCalled()
+  })
+
+  it("records only marked replay conflicts as an aggregate outcome", async () => {
+    await handleApiV1DeviceSession({
+      endpoint: "article-state",
+      request: request({ authorization: "Bearer device-access-token" }),
+      run: async () => {
+        throw new mocks.MobileSyncError("idempotency-conflict", "A direct mutation conflicts.")
+      },
+    })
+
+    expect(mocks.recordMobileQueueConflict).not.toHaveBeenCalled()
+
+    const response = await handleApiV1DeviceSession({
+      endpoint: "article-state",
+      request: request({
+        authorization: "Bearer device-access-token",
+        "x-arctic-rss-mutation-replay": "1",
+      }),
+      run: async () => {
+        throw new mocks.MobileSyncError(
+          "idempotency-conflict",
+          "The queued change conflicts with the recorded mutation."
+        )
+      },
+    })
+
+    expect(response.status).toBe(409)
+    expect(mocks.recordMobileQueueConflict).toHaveBeenCalledWith("idempotency_key_reused")
+
+    const missingResource = await handleApiV1DeviceSession({
+      endpoint: "collection-items",
+      request: request({
+        authorization: "Bearer device-access-token",
+        "x-arctic-rss-mutation-replay": "1",
+      }),
+      run: async () => {
+        throw new mocks.MobileSyncError("collection-not-found", "The queued collection is unavailable.")
+      },
+    })
+
+    expect(missingResource.status).toBe(404)
+    expect(mocks.recordMobileQueueConflict).toHaveBeenLastCalledWith("resource_not_found")
   })
 })
 

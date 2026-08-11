@@ -5,9 +5,10 @@
 **Topology:** `all-in-one-with-chat`
 
 > Historical release record: `c7be850` was superseded by the independently
-> verified `c04e509` website release later on 2026-08-10. This document
-> preserves Phase 9 execution evidence; it is not the current-production
-> source of truth.
+> verified `c04e509` website release, which was later followed by the
+> independently verified `7e5f7fe` operational release on 2026-08-10. This
+> document preserves Phase 9 execution evidence; it is not the
+> current-production source of truth.
 
 ## Release execution result
 

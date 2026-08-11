@@ -9,6 +9,8 @@ import type {
 
 import { articleAccessWhere } from "./articles"
 import { getPrisma } from "./db"
+import { toMobileSyncEvent } from "./mobile-sync-event"
+import { recordMobileSyncPage } from "./mobile-telemetry"
 
 export const MOBILE_SYNC_RETENTION_DAYS = 180
 export const MOBILE_MUTATION_RECEIPT_RETENTION_DAYS = 30
@@ -55,6 +57,7 @@ export async function listMobileSync({
   limit: number
   userId: string
 }) {
+  const startedAt = performance.now()
   const prisma = getPrisma()
   const requestedCursor = cursor ? BigInt(cursor) : null
   const floor = await prisma.userSyncCursorFloor.findUnique({
@@ -66,6 +69,12 @@ export async function listMobileSync({
     requestedCursor !== null &&
     requestedCursor < (floor?.minimumSequence ?? BigInt(0)) - BigInt(1)
   ) {
+    recordMobileSyncPage({
+      durationMs: performance.now() - startedAt,
+      eventCount: 0,
+      fullResyncRequired: true,
+      hasMore: false,
+    })
     throw new MobileSyncError(
       "full-resync-required",
       "This device's sync cursor is outside the retained history. Perform a full resync."
@@ -84,18 +93,28 @@ export async function listMobileSync({
   const page = hasMore ? events.slice(0, limit) : events
   const nextCursor = page.at(-1)?.sequence.toString() ?? cursor ?? null
 
-  return {
-    events: page.map((event) => ({
-      action: event.action as "TOMBSTONE" | "UPSERT",
-      occurredAt: event.occurredAt.toISOString(),
-      payload: event.payload as Record<string, unknown>,
-      resourceId: event.resourceId,
-      resourceType: event.resourceType,
-      resourceVersion: event.resourceVersion,
-      sequence: event.sequence.toString(),
-    })),
+  const result = {
+    events: page.map(toMobileSyncEvent),
+    hasMore,
     nextCursor,
   }
+  recordMobileSyncPage({
+    durationMs: performance.now() - startedAt,
+    eventCount: result.events.length,
+    fullResyncRequired: false,
+    hasMore,
+  })
+  return result
+}
+
+export async function getMobileSyncBootstrap(userId: string) {
+  const latest = await getPrisma().userSyncEvent.findFirst({
+    orderBy: { sequence: "desc" },
+    select: { sequence: true },
+    where: { userId },
+  })
+
+  return { highWaterCursor: latest?.sequence.toString() ?? null }
 }
 
 export async function updateMobileArticleState({
@@ -371,6 +390,10 @@ export async function registerMobileDeviceInstallation({
     input: { environment, pushToken },
     operation: "DEVICE_INSTALLATION_REGISTER",
     run: async (tx) => {
+      const session = await tx.deviceSession.findUnique({
+        select: { mobileDeviceId: true },
+        where: { id: deviceSessionId },
+      })
       const tokenHash = hashMobileValue("installation-token", pushToken)
       const existing = await tx.deviceInstallation.findUnique({
         include: { deviceSession: { select: { userId: true } } },
@@ -385,6 +408,7 @@ export async function registerMobileDeviceInstallation({
       const installation = await tx.deviceInstallation.upsert({
         create: {
           deviceSessionId,
+          mobileDeviceId: session?.mobileDeviceId ?? null,
           environment,
           lastSeenAt: new Date(),
           platform: "android",
@@ -392,6 +416,7 @@ export async function registerMobileDeviceInstallation({
         },
         update: {
           deviceSessionId,
+          mobileDeviceId: session?.mobileDeviceId ?? null,
           disabledAt: null,
           environment,
           lastSeenAt: new Date(),
@@ -544,14 +569,21 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
 
   try {
     return await prisma.$transaction(async (tx) => {
+      const session = await tx.deviceSession.findUnique({
+        select: { mobileDeviceId: true },
+        where: { id: deviceSessionId },
+      })
+      const receiptScope = session?.mobileDeviceId
+        ? { mobileDeviceId: session.mobileDeviceId }
+        : { deviceSessionId }
       await tx.deviceMutationReceipt.deleteMany({
         where: {
           createdAt: { lt: new Date(Date.now() - MOBILE_MUTATION_RECEIPT_RETENTION_DAYS * 86_400_000) },
-          deviceSessionId,
+          ...receiptScope,
         },
       })
-      const existing = await tx.deviceMutationReceipt.findUnique({
-        where: { deviceSessionId_idempotencyKeyHash: { deviceSessionId, idempotencyKeyHash } },
+      const existing = await tx.deviceMutationReceipt.findFirst({
+        where: { ...receiptScope, idempotencyKeyHash },
       })
       if (existing) {
         return replayReceipt<T>({ existing, operation, requestHash })
@@ -561,6 +593,7 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
       await tx.deviceMutationReceipt.create({
         data: {
           deviceSessionId,
+          mobileDeviceId: session?.mobileDeviceId ?? null,
           idempotencyKeyHash,
           operation,
           requestHash,
@@ -574,8 +607,15 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
     if (!isUniqueReceiptError(error)) {
       throw error
     }
-    const existing = await prisma.deviceMutationReceipt.findUnique({
-      where: { deviceSessionId_idempotencyKeyHash: { deviceSessionId, idempotencyKeyHash } },
+    const session = await prisma.deviceSession.findUnique({
+      select: { mobileDeviceId: true },
+      where: { id: deviceSessionId },
+    })
+    const existing = await prisma.deviceMutationReceipt.findFirst({
+      where: {
+        ...(session?.mobileDeviceId ? { mobileDeviceId: session.mobileDeviceId } : { deviceSessionId }),
+        idempotencyKeyHash,
+      },
     })
     if (!existing) {
       throw error

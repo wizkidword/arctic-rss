@@ -6,12 +6,19 @@ const mocks = vi.hoisted(() => {
       super(code)
     }
   }
+  class BoundedJsonBodyError extends Error {
+    constructor(readonly code: string) {
+      super(code)
+    }
+  }
 
   return {
+    BoundedJsonBodyError,
     enforceRateLimit: vi.fn(),
     getTrustedClientIp: vi.fn(),
     MobileAuthError,
     parseMobileRefreshRequest: vi.fn(),
+    readBoundedJsonBody: vi.fn(),
     refreshMobileDeviceSession: vi.fn(),
   }
 })
@@ -27,6 +34,10 @@ vi.mock("@/lib/api-v1/route", () => ({
   apiV1SuccessResponse: ({ data }: { data: unknown }) =>
     Response.json({ data }, { headers: { "Cache-Control": "private, no-store, max-age=0" } }),
 }))
+vi.mock("@/lib/api-v1/bounded-json", () => ({
+  BoundedJsonBodyError: mocks.BoundedJsonBodyError,
+  readBoundedJsonBody: mocks.readBoundedJsonBody,
+}))
 vi.mock("@/lib/rate-limit", () => ({
   enforceRateLimit: mocks.enforceRateLimit,
   getTrustedClientIp: mocks.getTrustedClientIp,
@@ -38,6 +49,7 @@ describe("POST /api/v1/device-sessions/refresh", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.parseMobileRefreshRequest.mockReturnValue(refreshRequest)
+    mocks.readBoundedJsonBody.mockResolvedValue(refreshRequest)
     mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
     mocks.getTrustedClientIp.mockReturnValue("198.51.100.24")
     mocks.refreshMobileDeviceSession.mockResolvedValue({
@@ -51,16 +63,32 @@ describe("POST /api/v1/device-sessions/refresh", () => {
     vi.restoreAllMocks()
   })
 
-  it("rotates only through a no-store response and limits by the supplied refresh secret", async () => {
+  it("rotates only through a no-store response after pre-body and secret-specific limits", async () => {
     const response = await POST(refreshHttpRequest())
 
     expect(response.status).toBe(200)
     expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0")
-    expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
-      action: "mobile_token_refresh",
+    expect(mocks.enforceRateLimit).toHaveBeenNthCalledWith(1, {
+      action: "mobile_token_refresh_prebody",
       ip: "198.51.100.24",
+    })
+    expect(mocks.enforceRateLimit).toHaveBeenNthCalledWith(2, {
+      action: "mobile_token_refresh",
       token: refreshRequest.refreshToken,
     })
+  })
+
+  it("does not log a malformed token body", async () => {
+    mocks.readBoundedJsonBody.mockRejectedValue(new mocks.BoundedJsonBodyError("invalid-body"))
+    const consoleError = vi.spyOn(console, "error")
+
+    const response = await POST(refreshHttpRequest())
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "MOBILE_REFRESH_INVALID", retryable: false },
+    })
+    expect(consoleError).not.toHaveBeenCalled()
   })
 
   it("returns one invalid-refresh shape for replay and expiration", async () => {

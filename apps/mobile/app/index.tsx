@@ -1,15 +1,17 @@
-import { Redirect } from "expo-router"
+import { Redirect, type Href, useLocalSearchParams } from "expo-router"
 import { useState } from "react"
 import { Text } from "react-native"
 
 import { ActionButton, Notice, Screen, Section, mobileStyles } from "@/components/mobile-ui"
 import { useMobileApp } from "@/providers/mobile-app-provider"
+import { safeMobileReturnPath } from "@/auth/safe-mobile-return-path"
 
 export default function WelcomeScreen() {
   const { isSignedIn, signIn } = useMobileApp()
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>()
   const [error, setError] = useState<string | null>(null)
   if (isSignedIn) {
-    return <Redirect href="/(tabs)" />
+    return <Redirect href={(safeMobileReturnPath(returnTo) ?? "/(authenticated)/(tabs)") as Href} />
   }
 
   return (

@@ -1,6 +1,10 @@
 import { z } from "zod"
 
-import { meResponseSchema, mobileTokenResponseSchema } from "./account"
+import {
+  deviceAuthorizationExchangeRequestSchema,
+  meResponseSchema,
+  mobileTokenResponseSchema,
+} from "./account"
 import { articleDetailResponseSchema, readerPageResponseSchema } from "./articles"
 import { briefingDetailResponseSchema, briefingsResponseSchema } from "./briefings"
 import { collectionsResponseSchema } from "./collections"
@@ -26,7 +30,7 @@ import {
 } from "./notifications"
 import { podcastEpisodeResponseSchema, podcastsResponseSchema } from "./podcasts"
 import { savedViewsResponseSchema } from "./saved-views"
-import { syncResponseSchema } from "./sync"
+import { syncBootstrapResponseSchema, syncResponseSchema } from "./sync"
 
 const schemas = {
   ApiV1Error: z.toJSONSchema(apiV1ErrorEnvelopeSchema, { target: "draft-2020-12" }),
@@ -66,6 +70,9 @@ const schemas = {
   DeviceSessionLogoutResponse: z.toJSONSchema(deviceSessionLogoutResponseSchema, {
     target: "draft-2020-12",
   }),
+  DeviceAuthorizationExchangeRequest: z.toJSONSchema(deviceAuthorizationExchangeRequestSchema, {
+    target: "draft-2020-12",
+  }),
   FeedsResponse: z.toJSONSchema(feedsResponseSchema, { target: "draft-2020-12" }),
   MeResponse: z.toJSONSchema(meResponseSchema, { target: "draft-2020-12" }),
   MobileTokenResponse: z.toJSONSchema(mobileTokenResponseSchema, {
@@ -102,6 +109,7 @@ const schemas = {
     target: "draft-2020-12",
   }),
   SyncResponse: z.toJSONSchema(syncResponseSchema, { target: "draft-2020-12" }),
+  SyncBootstrapResponse: z.toJSONSchema(syncBootstrapResponseSchema, { target: "draft-2020-12" }),
 }
 
 function jsonResponse(schema: keyof typeof schemas) {
@@ -214,6 +222,7 @@ export const mobileApiV1OpenApiDocument = {
     "/api/v1/device-authorizations/exchange": {
       post: {
         operationId: "exchangeDeviceAuthorizationCode",
+        requestBody: jsonRequest("DeviceAuthorizationExchangeRequest"),
         responses: {
           "200": jsonResponse("MobileTokenResponse"),
           "400": jsonResponse("ApiV1Error"),
@@ -373,6 +382,13 @@ export const mobileApiV1OpenApiDocument = {
           ...defaultErrors,
         },
         summary: "Read the current device session's incremental user sync events and tombstones.",
+      },
+    },
+    "/api/v1/sync/bootstrap": {
+      get: {
+        operationId: "bootstrapUserSync",
+        responses: { "200": jsonResponse("SyncBootstrapResponse"), ...defaultErrors },
+        summary: "Read a high-water cursor after clearing derived mobile cache during a full resync.",
       },
     },
   },

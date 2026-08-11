@@ -11,11 +11,20 @@ import { z } from "zod"
 
 import { getPrisma } from "@/lib/db"
 
-export const MOBILE_REDIRECT_URI = "arcticrss://auth/callback"
+export const MOBILE_ANDROID_CLIENT_ID = "android:com.arcticrss.reader"
+export const MOBILE_PRODUCTION_REDIRECT_URI = "https://arcticrss.com/mobile/auth/callback"
+export const MOBILE_DEVELOPMENT_REDIRECT_URI = "arcticrss://auth/callback"
+// Kept as an explicit development-only compatibility export while the Android
+// alpha is unsigned. Production requests must use the claimed HTTPS App Link.
+export const MOBILE_REDIRECT_URI = MOBILE_DEVELOPMENT_REDIRECT_URI
 export const MOBILE_AUTHORIZATION_CODE_TTL_MS = 5 * 60_000
+export const MOBILE_AUTHORIZATION_REQUEST_TTL_MS = 10 * 60_000
 export const MOBILE_ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 export const MOBILE_REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60_000
 export const MAX_MOBILE_DEVICE_SESSIONS_PER_USER = 5
+// Access-token checks can be frequent while reading. Five minutes keeps device
+// activity useful without turning normal reader traffic into write traffic.
+export const MOBILE_ACTIVITY_WRITE_INTERVAL_MS = 5 * 60_000
 
 const PKCE_VALUE_PATTERN = /^[A-Za-z0-9._~-]{43,128}$/
 const NONCE_PATTERN = /^[A-Za-z0-9._~-]{16,256}$/
@@ -25,7 +34,13 @@ const ACCESS_TOKEN_CONTEXT = "arctic-rss:mobile-auth:v1:access"
 
 type MobileAuthStore = Pick<
   PrismaClient,
-  "deviceAuthorizationCode" | "deviceSession" | "securityEvent" | "user" | "$transaction"
+  | "deviceAuthorizationCode"
+  | "deviceSession"
+  | "mobileDevice"
+  | "mobileAuthorizationRequest"
+  | "securityEvent"
+  | "user"
+  | "$transaction"
 >
 
 type ActiveMobileUser = {
@@ -45,10 +60,24 @@ export type IssuedDeviceAuthorizationCode = MobileDevice & {
   expiresAt: Date
 }
 
+export type PendingMobileAuthorizationRequest = {
+  approvalToken: string
+  expiresAt: Date
+  id: string
+}
+
+export type CompletedMobileAuthorizationRequest = {
+  code?: string
+  redirectUri: string
+  state: string
+}
+
 export type MobileSessionTokens = {
   accessToken: string
   accessTokenExpiresIn: number
+  mobileDeviceId: string
   refreshToken: string
+  userId: string
 }
 
 export type MobileDeviceSession = MobileDevice & {
@@ -59,6 +88,7 @@ export type MobileDeviceSession = MobileDevice & {
 
 export type MobileAccessPrincipal = {
   authVersion: number
+  mobileDeviceId: string
   deviceSessionId: string
   userId: string
 }
@@ -68,6 +98,7 @@ export type MobileAuthErrorCode =
   | "configuration"
   | "device-limit"
   | "refresh-invalid"
+  | "refresh-reuse-detected"
 
 export class MobileAuthError extends Error {
   constructor(
@@ -89,20 +120,22 @@ const mobileDeviceSchema = z
 
 const browserDeviceAuthorizationRequestSchema = mobileDeviceSchema
   .extend({
+    clientId: z.literal(MOBILE_ANDROID_CLIENT_ID),
     codeChallenge: z.string().regex(PKCE_VALUE_PATTERN),
     codeChallengeMethod: z.literal("S256"),
     nonce: z.string().regex(NONCE_PATTERN),
-    redirectUri: z.literal(MOBILE_REDIRECT_URI),
+    redirectUri: z.string().min(1).max(500),
     state: z.string().regex(STATE_PATTERN),
   })
   .strict()
 
 const deviceAuthorizationExchangeRequestSchema = z
   .object({
+    clientId: z.literal(MOBILE_ANDROID_CLIENT_ID),
     code: z.string().min(32).max(512),
     codeVerifier: z.string().regex(PKCE_VALUE_PATTERN),
     nonce: z.string().regex(NONCE_PATTERN),
-    redirectUri: z.literal(MOBILE_REDIRECT_URI),
+    redirectUri: z.string().min(1).max(500),
   })
   .strict()
 
@@ -117,9 +150,13 @@ export type DeviceAuthorizationExchangeRequest = z.infer<
   typeof deviceAuthorizationExchangeRequestSchema
 >
 
-export function parseBrowserDeviceAuthorizationRequest(searchParams: URLSearchParams) {
+export function parseBrowserDeviceAuthorizationRequest(
+  searchParams: URLSearchParams,
+  environment: Readonly<Record<string, string | undefined>> = process.env
+) {
   const wireNames = {
     appVersion: "app_version",
+    clientId: "client_id",
     codeChallenge: "code_challenge",
     codeChallengeMethod: "code_challenge_method",
     deviceName: "device_name",
@@ -149,17 +186,39 @@ export function parseBrowserDeviceAuthorizationRequest(searchParams: URLSearchPa
     throw new MobileAuthError("authorization-invalid", "The authorization request is invalid.")
   }
 
+  assertRegisteredMobileClient(parsed.data.clientId, parsed.data.redirectUri, environment)
+
   return parsed.data
 }
 
-export function parseDeviceAuthorizationExchangeRequest(value: unknown) {
+export function parseDeviceAuthorizationExchangeRequest(
+  value: unknown,
+  environment: Readonly<Record<string, string | undefined>> = process.env
+) {
   const parsed = deviceAuthorizationExchangeRequestSchema.safeParse(value)
 
   if (!parsed.success) {
     throw new MobileAuthError("authorization-invalid", "The authorization exchange is invalid.")
   }
 
+  assertRegisteredMobileClient(parsed.data.clientId, parsed.data.redirectUri, environment)
+
   return parsed.data
+}
+
+function assertRegisteredMobileClient(
+  clientId: string,
+  redirectUri: string,
+  environment: Readonly<Record<string, string | undefined>>
+) {
+  const isProduction = environment.NODE_ENV === "production"
+  const allowedRedirect =
+    redirectUri === MOBILE_PRODUCTION_REDIRECT_URI ||
+    (!isProduction && redirectUri === MOBILE_DEVELOPMENT_REDIRECT_URI)
+
+  if (clientId !== MOBILE_ANDROID_CLIENT_ID || !allowedRedirect) {
+    throw new MobileAuthError("authorization-invalid", "The registered mobile client is invalid.")
+  }
 }
 
 export function parseMobileRefreshRequest(value: unknown) {
@@ -178,6 +237,209 @@ export function createPkceS256Challenge(codeVerifier: string) {
   }
 
   return createHash("sha256").update(codeVerifier).digest("base64url")
+}
+
+// GET creates this record, but deliberately does not create an authorization
+// code. Only a later, user-initiated POST can consume the opaque approval token.
+export async function createMobileAuthorizationRequest({
+  authVersion,
+  request,
+  store = getPrisma(),
+  userId,
+  now = new Date(),
+}: {
+  authVersion: number
+  request: BrowserDeviceAuthorizationRequest
+  store?: MobileAuthStore
+  userId: string
+  now?: Date
+}): Promise<PendingMobileAuthorizationRequest> {
+  const user = await store.user.findUnique({
+    select: { authVersion: true, disabledAt: true, id: true },
+    where: { id: userId },
+  })
+  assertActiveUser(user, authVersion, "authorization-invalid")
+
+  const approvalToken = randomToken()
+  const expiresAt = new Date(now.getTime() + MOBILE_AUTHORIZATION_REQUEST_TTL_MS)
+  const pending = await store.$transaction(async (transaction) => {
+    const created = await transaction.mobileAuthorizationRequest.create({
+      data: {
+        appVersion: request.appVersion,
+        approvalTokenHash: hashCredential(approvalToken),
+        authVersion,
+        clientId: request.clientId,
+        codeChallenge: request.codeChallenge,
+        codeChallengeMethod: request.codeChallengeMethod,
+        deviceName: request.deviceName,
+        expiresAt,
+        nonceHash: hashCredential(request.nonce),
+        platform: request.platform,
+        redirectUri: request.redirectUri,
+        state: request.state,
+        userId,
+      },
+      select: { id: true },
+    })
+    await transaction.securityEvent.create({
+      data: {
+        eventType: "MOBILE_AUTHORIZATION_APPROVAL_REQUESTED",
+        metadata: { clientId: request.clientId, platform: request.platform },
+        userId,
+      },
+    })
+    return created
+  })
+
+  return { approvalToken, expiresAt, id: pending.id }
+}
+
+export async function approveMobileAuthorizationRequest({
+  approvalToken,
+  requestId,
+  store = getPrisma(),
+  userId,
+  now = new Date(),
+}: {
+  approvalToken: string
+  requestId: string
+  store?: MobileAuthStore
+  userId: string
+  now?: Date
+}): Promise<CompletedMobileAuthorizationRequest> {
+  const pending = await getPendingMobileAuthorizationRequest({
+    approvalToken,
+    requestId,
+    store,
+    userId,
+    now,
+  })
+  const code = randomToken()
+
+  await store.$transaction(async (transaction) => {
+    const currentUser = await transaction.user.updateMany({
+      data: { updatedAt: now },
+      where: { authVersion: pending.authVersion, disabledAt: null, id: userId },
+    })
+    if (currentUser.count !== 1) {
+      throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
+    }
+    const approved = await transaction.mobileAuthorizationRequest.updateMany({
+      data: { approvedAt: now },
+      where: {
+        approvalTokenHash: hashCredential(approvalToken),
+        approvedAt: null,
+        authVersion: pending.authVersion,
+        cancelledAt: null,
+        expiresAt: { gt: now },
+        id: pending.id,
+        userId,
+      },
+    })
+    if (approved.count !== 1) {
+      throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
+    }
+    await transaction.deviceAuthorizationCode.create({
+      data: {
+        appVersion: pending.appVersion,
+        authVersion: pending.authVersion,
+        clientId: pending.clientId,
+        codeChallenge: pending.codeChallenge,
+        codeChallengeMethod: pending.codeChallengeMethod,
+        codeHash: hashCredential(code),
+        deviceName: pending.deviceName,
+        expiresAt: new Date(now.getTime() + MOBILE_AUTHORIZATION_CODE_TTL_MS),
+        nonceHash: pending.nonceHash,
+        platform: pending.platform,
+        redirectUri: pending.redirectUri,
+        userId,
+      },
+    })
+    await transaction.securityEvent.create({
+      data: {
+        eventType: "MOBILE_AUTHORIZATION_APPROVED",
+        metadata: { clientId: pending.clientId, platform: pending.platform },
+        userId,
+      },
+    })
+  })
+
+  return { code, redirectUri: pending.redirectUri, state: pending.state }
+}
+
+export async function cancelMobileAuthorizationRequest({
+  approvalToken,
+  requestId,
+  store = getPrisma(),
+  userId,
+  now = new Date(),
+}: {
+  approvalToken: string
+  requestId: string
+  store?: MobileAuthStore
+  userId: string
+  now?: Date
+}): Promise<CompletedMobileAuthorizationRequest> {
+  const pending = await getPendingMobileAuthorizationRequest({
+    approvalToken,
+    requestId,
+    store,
+    userId,
+    now,
+  })
+  await store.$transaction(async (transaction) => {
+    const cancelled = await transaction.mobileAuthorizationRequest.updateMany({
+      data: { cancelledAt: now },
+      where: {
+        approvalTokenHash: hashCredential(approvalToken),
+        approvedAt: null,
+        authVersion: pending.authVersion,
+        cancelledAt: null,
+        expiresAt: { gt: now },
+        id: pending.id,
+        userId,
+      },
+    })
+    if (cancelled.count !== 1) {
+      throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
+    }
+    await transaction.securityEvent.create({
+      data: {
+        eventType: "MOBILE_AUTHORIZATION_CANCELLED",
+        metadata: { clientId: pending.clientId, platform: pending.platform },
+        userId,
+      },
+    })
+  })
+
+  return { redirectUri: pending.redirectUri, state: pending.state }
+}
+
+async function getPendingMobileAuthorizationRequest({
+  approvalToken,
+  requestId,
+  store,
+  userId,
+  now,
+}: {
+  approvalToken: string
+  requestId: string
+  store: MobileAuthStore
+  userId: string
+  now: Date
+}) {
+  const pending = await store.mobileAuthorizationRequest.findUnique({ where: { id: requestId } })
+  if (
+    !pending ||
+    pending.userId !== userId ||
+    pending.approvedAt ||
+    pending.cancelledAt ||
+    pending.expiresAt <= now ||
+    !safeEqual(pending.approvalTokenHash, hashCredential(approvalToken))
+  ) {
+    throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
+  }
+  return pending
 }
 
 export async function issueDeviceAuthorizationCode({
@@ -207,6 +469,7 @@ export async function issueDeviceAuthorizationCode({
       data: {
         appVersion: request.appVersion,
         authVersion,
+        clientId: request.clientId,
         codeChallenge: request.codeChallenge,
         codeChallengeMethod: request.codeChallengeMethod,
         codeHash: hashCredential(code),
@@ -257,6 +520,7 @@ export async function exchangeDeviceAuthorizationCode({
     !authorizationCode ||
     authorizationCode.usedAt ||
     authorizationCode.expiresAt <= now ||
+    authorizationCode.clientId !== request.clientId ||
     authorizationCode.redirectUri !== request.redirectUri ||
     authorizationCode.codeChallengeMethod !== "S256" ||
     !safeEqual(authorizationCode.nonceHash, hashCredential(request.nonce)) ||
@@ -268,6 +532,7 @@ export async function exchangeDeviceAuthorizationCode({
 
   const refreshToken = randomToken()
   const refreshExpiresAt = new Date(now.getTime() + MOBILE_REFRESH_TOKEN_TTL_MS)
+  const tokenFamilyId = randomUUID()
   const deviceSession = await store.$transaction(async (transaction) => {
     // Updating the user row serializes device-cap checks for one account. That
     // makes the count and session creation race-safe on PostgreSQL.
@@ -283,15 +548,14 @@ export async function exchangeDeviceAuthorizationCode({
       throw new MobileAuthError("authorization-invalid", "The authorization code is invalid or expired.")
     }
 
-    const activeSessions = await transaction.deviceSession.count({
+    const activeDevices = await transaction.mobileDevice.count({
       where: {
         refreshExpiresAt: { gt: now },
-        replacedById: null,
         revokedAt: null,
         userId: authorizationCode.userId,
       },
     })
-    if (activeSessions >= MAX_MOBILE_DEVICE_SESSIONS_PER_USER) {
+    if (activeDevices >= MAX_MOBILE_DEVICE_SESSIONS_PER_USER) {
       throw new MobileAuthError(
         "device-limit",
         "This account already has the maximum number of mobile devices. Revoke a device first."
@@ -312,6 +576,18 @@ export async function exchangeDeviceAuthorizationCode({
       throw new MobileAuthError("authorization-invalid", "The authorization code is invalid or expired.")
     }
 
+    const device = await transaction.mobileDevice.create({
+      data: {
+        appVersion: authorizationCode.appVersion,
+        authVersion: authorizationCode.authVersion,
+        deviceName: authorizationCode.deviceName,
+        lastUsedAt: now,
+        platform: authorizationCode.platform,
+        refreshExpiresAt,
+        tokenFamilyId,
+        userId: authorizationCode.userId,
+      },
+    })
     const session = await transaction.deviceSession.create({
       data: {
         accessIssuedAt: now,
@@ -319,10 +595,11 @@ export async function exchangeDeviceAuthorizationCode({
         authVersion: authorizationCode.authVersion,
         deviceName: authorizationCode.deviceName,
         lastUsedAt: now,
+        mobileDeviceId: device.id,
         platform: authorizationCode.platform,
         refreshExpiresAt,
         refreshTokenHash: hashCredential(refreshToken),
-        tokenFamilyId: randomUUID(),
+        tokenFamilyId,
         userId: authorizationCode.userId,
       },
     })
@@ -339,6 +616,7 @@ export async function exchangeDeviceAuthorizationCode({
   return issueSessionTokens({
     accessTokenEnvironment,
     authVersion: deviceSession.authVersion,
+    mobileDeviceId: requireStableDeviceId(deviceSession.mobileDeviceId),
     deviceSessionId: deviceSession.id,
     refreshToken,
     userId: deviceSession.userId,
@@ -389,7 +667,7 @@ export async function refreshMobileDeviceSession({
       tokenFamilyId: previous.tokenFamilyId,
       userId: previous.userId,
     })
-    throw new MobileAuthError("refresh-invalid", "The refresh token is invalid or expired.")
+    throw new MobileAuthError("refresh-reuse-detected", "The refresh token is invalid or expired.")
   }
 
   const nextRefreshToken = randomToken()
@@ -420,8 +698,9 @@ export async function refreshMobileDeviceSession({
           accessIssuedAt: now,
           appVersion: current.appVersion,
           authVersion: current.authVersion,
-          deviceName: current.deviceName,
-          lastUsedAt: now,
+        deviceName: current.deviceName,
+        lastUsedAt: now,
+        mobileDeviceId: current.mobileDeviceId,
           platform: current.platform,
           refreshExpiresAt,
           refreshTokenHash: hashCredential(nextRefreshToken),
@@ -440,6 +719,12 @@ export async function refreshMobileDeviceSession({
       })
       if (consumed.count !== 1) {
         throw new RefreshReuseDetectedError()
+      }
+      if (current.mobileDeviceId) {
+        await transaction.mobileDevice.updateMany({
+          data: { lastUsedAt: now, refreshExpiresAt },
+          where: { id: current.mobileDeviceId, revokedAt: null, userId: current.userId },
+        })
       }
       await transaction.securityEvent.create({
         data: {
@@ -460,7 +745,7 @@ export async function refreshMobileDeviceSession({
         tokenFamilyId: previous.tokenFamilyId,
         userId: previous.userId,
       })
-      throw new MobileAuthError("refresh-invalid", "The refresh token is invalid or expired.")
+      throw new MobileAuthError("refresh-reuse-detected", "The refresh token is invalid or expired.")
     }
     if (error instanceof RefreshAccountInvalidatedError) {
       await revokeMobileDeviceFamily({
@@ -478,6 +763,7 @@ export async function refreshMobileDeviceSession({
   return issueSessionTokens({
     accessTokenEnvironment,
     authVersion: replacement.authVersion,
+    mobileDeviceId: requireStableDeviceId(replacement.mobileDeviceId),
     deviceSessionId: replacement.id,
     refreshToken: nextRefreshToken,
     userId: replacement.userId,
@@ -498,7 +784,10 @@ export async function authenticateMobileAccessToken({
 }): Promise<MobileAccessPrincipal> {
   const payload = parseMobileAccessToken(accessToken, accessTokenEnvironment, now)
   const session = await store.deviceSession.findUnique({
-    include: { user: { select: { authVersion: true, disabledAt: true, id: true } } },
+    include: {
+      mobileDevice: true,
+      user: { select: { authVersion: true, disabledAt: true, id: true } },
+    },
     where: { id: payload.sid },
   })
 
@@ -508,6 +797,10 @@ export async function authenticateMobileAccessToken({
     session.authVersion !== payload.av ||
     session.user.disabledAt ||
     session.user.authVersion !== payload.av ||
+    session.mobileDeviceId !== payload.did ||
+    !session.mobileDevice ||
+    session.mobileDevice.revokedAt ||
+    session.mobileDevice.authVersion !== payload.av ||
     session.revokedAt ||
     session.replacedById ||
     session.refreshExpiresAt <= now
@@ -515,15 +808,35 @@ export async function authenticateMobileAccessToken({
     throw new MobileAuthError("refresh-invalid", "The access token is invalid or expired.")
   }
 
-  const touched = await store.deviceSession.updateMany({
-    data: { lastUsedAt: now },
-    where: { id: session.id, replacedById: null, revokedAt: null, userId: session.userId },
-  })
-  if (touched.count !== 1) {
-    throw new MobileAuthError("refresh-invalid", "The access token is invalid or expired.")
-  }
+  const activityCutoff = new Date(now.getTime() - MOBILE_ACTIVITY_WRITE_INTERVAL_MS)
+  await Promise.all([
+    store.deviceSession.updateMany({
+      data: { lastUsedAt: now },
+      where: {
+        id: session.id,
+        lastUsedAt: { lt: activityCutoff },
+        replacedById: null,
+        revokedAt: null,
+        userId: session.userId,
+      },
+    }),
+    store.mobileDevice.updateMany({
+      data: { lastUsedAt: now },
+      where: {
+        id: session.mobileDeviceId,
+        lastUsedAt: { lt: activityCutoff },
+        revokedAt: null,
+        userId: session.userId,
+      },
+    }),
+  ])
 
-  return { authVersion: payload.av, deviceSessionId: session.id, userId: session.userId }
+  return {
+    authVersion: payload.av,
+    deviceSessionId: session.id,
+    mobileDeviceId: session.mobileDeviceId,
+    userId: session.userId,
+  }
 }
 
 export async function listMobileDeviceSessions({
@@ -535,7 +848,7 @@ export async function listMobileDeviceSessions({
   userId: string
   now?: Date
 }): Promise<MobileDeviceSession[]> {
-  return store.deviceSession.findMany({
+  return store.mobileDevice.findMany({
     orderBy: { lastUsedAt: "desc" },
     select: {
       appVersion: true,
@@ -547,7 +860,6 @@ export async function listMobileDeviceSessions({
     },
     where: {
       refreshExpiresAt: { gt: now },
-      replacedById: null,
       revokedAt: null,
       userId,
     },
@@ -565,11 +877,18 @@ export async function revokeMobileDeviceSession({
   store?: MobileAuthStore
   userId: string
 }) {
-  const session = await store.deviceSession.findFirst({
+  const device = await store.mobileDevice.findFirst({
     select: { tokenFamilyId: true },
     where: { id: sessionId, userId },
   })
-  if (!session) {
+  const session = device
+    ? null
+    : await store.deviceSession.findFirst({
+      select: { tokenFamilyId: true },
+      where: { id: sessionId, userId },
+    })
+  const tokenFamilyId = device?.tokenFamilyId ?? session?.tokenFamilyId
+  if (!tokenFamilyId) {
     return { revoked: false }
   }
 
@@ -577,7 +896,7 @@ export async function revokeMobileDeviceSession({
     eventType: "MOBILE_DEVICE_SESSION_REVOKED",
     now,
     store,
-    tokenFamilyId: session.tokenFamilyId,
+    tokenFamilyId,
     userId,
   })
   return { revoked: true }
@@ -597,18 +916,23 @@ export async function revokeAllMobileDeviceSessions({
       data: { revokedAt: now },
       where: { revokedAt: null, userId },
     })
-    if (revoked.count) {
+    const devices = await transaction.mobileDevice.updateMany({
+      data: { revokedAt: now },
+      where: { revokedAt: null, userId },
+    })
+    if (devices.count) {
       await transaction.securityEvent.create({
         data: { eventType: "MOBILE_DEVICE_SESSIONS_REVOKED_ALL", userId },
       })
     }
-    return { revoked: revoked.count }
+    return { revoked: devices.count, revokedRefreshSessions: revoked.count }
   })
 }
 
 function issueSessionTokens({
   accessTokenEnvironment,
   authVersion,
+  mobileDeviceId,
   deviceSessionId,
   refreshToken,
   userId,
@@ -616,6 +940,7 @@ function issueSessionTokens({
 }: {
   accessTokenEnvironment: Readonly<Record<string, string | undefined>>
   authVersion: number
+  mobileDeviceId: string
   deviceSessionId: string
   refreshToken: string
   userId: string
@@ -623,18 +948,21 @@ function issueSessionTokens({
 }): MobileSessionTokens {
   return {
     accessToken: createMobileAccessToken(
-      { av: authVersion, sid: deviceSessionId, sub: userId },
+      { av: authVersion, did: mobileDeviceId, sid: deviceSessionId, sub: userId },
       accessTokenEnvironment,
       now
     ),
     accessTokenExpiresIn: MOBILE_ACCESS_TOKEN_TTL_SECONDS,
+    mobileDeviceId,
     refreshToken,
+    userId,
   }
 }
 
 export function createMobileAccessToken(
-  principal: Pick<MobileAccessPrincipal, "authVersion" | "deviceSessionId" | "userId"> | {
+  principal: Pick<MobileAccessPrincipal, "authVersion" | "deviceSessionId" | "mobileDeviceId" | "userId"> | {
     av: number
+    did: string
     sid: string
     sub: string
   },
@@ -642,7 +970,7 @@ export function createMobileAccessToken(
   now = new Date()
 ) {
   const payload = "authVersion" in principal
-    ? { av: principal.authVersion, sid: principal.deviceSessionId, sub: principal.userId }
+    ? { av: principal.authVersion, did: principal.mobileDeviceId, sid: principal.deviceSessionId, sub: principal.userId }
     : principal
   const encodedPayload = Buffer.from(
     JSON.stringify({
@@ -687,6 +1015,7 @@ function parseMobileAccessToken(
       parsed.v === 1 &&
       typeof parsed.sub === "string" &&
       typeof parsed.sid === "string" &&
+      typeof parsed.did === "string" &&
       Number.isInteger(parsed.av) &&
       typeof parsed.exp === "number" &&
       Number.isInteger(parsed.exp) &&
@@ -694,7 +1023,7 @@ function parseMobileAccessToken(
     if (!isValid) {
       throw new Error("invalid access token payload")
     }
-    return { av: parsed.av as number, sid: parsed.sid as string, sub: parsed.sub as string }
+    return { av: parsed.av as number, did: parsed.did as string, sid: parsed.sid as string, sub: parsed.sub as string }
   } catch {
     throw new MobileAuthError("refresh-invalid", "The access token is invalid or expired.")
   }
@@ -730,6 +1059,10 @@ async function revokeMobileDeviceFamily({
       data: { ...(markReuse ? { reuseDetectedAt: now } : {}), revokedAt: now },
       where: { revokedAt: null, tokenFamilyId, userId },
     })
+    await transaction.mobileDevice.updateMany({
+      data: { ...(markReuse ? { reuseDetectedAt: now } : {}), revokedAt: now },
+      where: { revokedAt: null, tokenFamilyId, userId },
+    })
     await transaction.securityEvent.create({
       data: { eventType, userId },
     })
@@ -744,6 +1077,13 @@ function assertActiveUser(
   if (!user || user.disabledAt || user.authVersion !== authVersion) {
     throw new MobileAuthError(code, "The account is no longer authorized.")
   }
+}
+
+function requireStableDeviceId(mobileDeviceId: string | null) {
+  if (!mobileDeviceId) {
+    throw new MobileAuthError("authorization-invalid", "The mobile device is no longer authorized.")
+  }
+  return mobileDeviceId
 }
 
 function hashCredential(value: string) {

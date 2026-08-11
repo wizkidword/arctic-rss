@@ -194,6 +194,7 @@ describe("approved release command", () => {
     expect(script).toContain("TOPOLOGY_HEALTH")
     expect(script).toContain('ARCTIC_RSS_TOPOLOGY="$topology_name"')
     expect(script).toContain('ARCTIC_RSS_BUILD_SHA="$commit"')
+    expect(script).toContain('"composeProject": "%s"')
   })
 
   it("hands the fixed managed-tunnel listener to the edge proxy for chat topologies", async () => {
@@ -240,6 +241,7 @@ describe("approved release command", () => {
     expect(script).toContain("production-latest-backup.sh:arctic-rss-latest-backup")
     expect(script).toContain("production-record-backup-offhost.sh:arctic-rss-record-backup-offhost")
     expect(script).toContain("production-restore-drill.sh:arctic-rss-restore-drill")
+    expect(script).toContain("production-monitor-topology.sh:arctic-rss-monitor-topology")
     expect(script).toContain("production-monitor.sh:arctic-rss-monitor")
     expect(script).toContain("production-register-backup-archive.sh:arctic-rss-register-backup-archive")
     expect(script).toContain('sudo -n install -m 700 "$live/scripts/$helper_source" "/usr/local/sbin/$helper_target"')

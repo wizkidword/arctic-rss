@@ -6,7 +6,7 @@
 
 **Source head before this completion commit:** `bb5c28f`
 
-**Current independently verified website release:** `c04e509`
+**Current independently verified website release:** `7e5f7fe`
 
 ## Honest conclusion
 
@@ -16,11 +16,13 @@
 
 **ANDROID INTERNAL BUILD READY — PLAY OWNER APPROVAL REQUIRED**
 
-The first statement means the reviewed fifth-pass source is live as
-`c04e509` and independently verified through the approved controller. The
-second and third statements remain separate: every future website candidate
-needs its own exact-commit approval, while an exact Android artifact and Play
-decision remain owner actions.
+The reviewed fifth-pass source was completed and first released as `c04e509`.
+The later independently verified `7e5f7fe` operational release retains that
+source and its Phase 14/15 outcomes while preserving monitor and off-host
+backup-evidence behavior. These website releases remain separate from Android
+distribution: every future website candidate needs its own exact-commit
+approval, while an exact Android artifact and Play decision remain owner
+actions.
 
 ## What this pass now contains
 
@@ -42,8 +44,11 @@ The primary commit sequence is `c7be850` (early fifth-pass web release), `98e47b
 (mobile API), `048f1a7` (device auth), `482d141` (sync), `55b6f0b` (Android
 alpha), `ec56986`/`bb5c28f` (private CI/release-gate remediation), then the
 committed Phase 14 candidate and `c04e509` (Phase 15 reader-state correction
-and verified website release). The authoritative detailed finding ledger is
-[fifth-pass capability status](./fifth-pass-capability-status.md).
+and verified website release). The later `e7701cf`, `a9c6524`, `32b3d77`,
+`cb62e4c`, and `7e5f7fe` commits are post-closeout operational hardening; the
+last is the current independently verified website release. The authoritative
+detailed finding ledger is [fifth-pass capability
+status](./fifth-pass-capability-status.md).
 
 ## Database, compatibility, and security record
 
@@ -59,11 +64,13 @@ and verified website release). The authoritative detailed finding ledger is
   budgets, and topology validation have passing local evidence. No Phase 14
   secret, token, feed/article body, or user/device identifier is added to
   product telemetry.
-- The last independently verified production revision is `c04e509` on
+- The last independently verified production revision is `7e5f7fe` on
   2026-08-10. Its controller and independent checks passed fresh backup,
-  migration, selected-service, loopback, public health/login, and monitor
-  gates. The initial capacity stop and the narrow stale-image repair happened
-  before the successful release; no backup or data volume was removed.
+  migration status, selected-service, loopback, public health/login, monitor,
+  and image-retention gates. The initial `c04e509` capacity stop and the narrow
+  stale-image repair happened before that successful Phase 15 release; no
+  backup or data volume was removed. The later `7e5f7fe` operational release
+  made no schema, mobile-contract, or Android-distribution change.
 
 ## Phase 15 verification
 
@@ -111,10 +118,9 @@ remaining owner checklist.
    smoke record, Play Console policy forms/listing, and provide a separate
    exact-artifact/internal-track approval. Do not use a website deployment
    approval for that action.
-3. Triage the current dependency audit separately from this source closeout;
-   `npm audit --omit=dev --audit-level=high` currently reports 19 advisories
-   (10 high, 9 moderate), chiefly through Expo/Metro build tooling plus
-   transitive Hono/UUID paths. Automatic fixes were not applied because the
-   offered remedies include breaking Expo/React Native changes. Record a
-   reviewed dependency decision before the signed Android build or a future
-   release.
+3. Apply the reviewed [dependency audit decision](./fifth-pass-dependency-audit-decision.md)
+   before the signed Android build or any future dependency remediation. The
+   2026-08-10 audit reports 19 advisories (10 high, 9 moderate) and no critical
+   findings; automatic fixes remain intentionally disallowed because the
+   offered Expo/React Native resolution is breaking. Rerun the exact checks for
+   the source revision immediately before signing.

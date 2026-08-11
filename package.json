@@ -45,6 +45,9 @@
     "mobile:lint": "npm --workspace @arctic-rss/mobile run lint",
     "mobile:start": "npm --workspace @arctic-rss/mobile run start",
     "mobile:typecheck": "npm --workspace @arctic-rss/mobile run typecheck",
+    "mobile:audit-dependencies": "node scripts/security/audit-mobile-dependencies.mjs",
+    "mobile:sbom": "node scripts/security/generate-mobile-sbom.mjs",
+    "mobile:verify-native-config": "node scripts/ci/assert-mobile-native-config.mjs",
     "migration:risk": "tsx scripts/check-migration-risk.ts",
     "migration:fifth-pass:verify": "node scripts/ci/verify-fifth-pass-migration-evidence.mjs",
     "audit:verify-fifth-pass-ledger": "node scripts/ci/assert-fifth-pass-capability-ledger.mjs",
@@ -126,7 +129,7 @@
   "overrides": {
     "@hono/node-server": "1.19.17",
     "minimatch@3": {
-      "brace-expansion": "1.1.16"
+      "brace-expansion": "1.1.18"
     },
     "minimatch@10": {
       "brace-expansion": "5.0.9"

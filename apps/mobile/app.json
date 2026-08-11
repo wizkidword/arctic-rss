@@ -14,13 +14,25 @@
           "configureAndroidBackup": true
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "./plugins/with-no-cleartext.cjs"
     ],
     "experiments": {
       "typedRoutes": true
     },
+    "extra": {
+      "eas": {
+        "projectId": "78ead450-1670-4661-a568-ce53552f2794"
+      }
+    },
     "android": {
       "package": "com.arcticrss.reader",
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "versionCode": 1,
       "intentFilters": [
         {
@@ -32,7 +44,8 @@
             { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/podcast-episodes" },
             { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/collections" },
             { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/saved-views" },
-            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/briefings" }
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/briefings" },
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/mobile/auth/callback" }
           ]
         }
       ]

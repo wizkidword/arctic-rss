@@ -15,6 +15,7 @@ export type ApiV1Endpoint =
   | "saved-views"
   | "search"
   | "sync"
+  | "sync-bootstrap"
 
 export type ApiV1AuthMode = "device-session" | "web-session"
 
@@ -28,13 +29,16 @@ export type MobileProductMilestone =
   | "first_mobile_sync"
   | "first_return_session"
 
+export type MobileQueueConflictOutcome =
+  | "idempotency_key_reused"
+  | "resource_not_found"
+
 export function recordApiV1Request({
   authMode,
   durationMs,
   endpoint,
   pageSize,
   rateLimitResult,
-  requestId,
   statusCode,
 }: {
   authMode: ApiV1AuthMode
@@ -42,12 +46,12 @@ export function recordApiV1Request({
   endpoint: ApiV1Endpoint
   pageSize: number | null
   rateLimitResult: ApiV1RateLimitResult
-  requestId: string
   statusCode: number
 }) {
   // This intentionally carries only low-cardinality operational dimensions.
   // Do not add account identifiers, search terms, article data, tokens, or
-  // application headers here.
+  // application headers here. Request IDs are correlation values rather than
+  // an aggregate metric dimension, so they remain in the response only.
   console.info(
     JSON.stringify({
       authMode,
@@ -56,7 +60,7 @@ export function recordApiV1Request({
       event: "mobile_api_v1_request",
       pageSize,
       rateLimitResult,
-      requestId,
+      responseClass: `${Math.floor(statusCode / 100)}xx`,
       statusCode,
     })
   )
@@ -84,6 +88,17 @@ export function recordMobileProductMilestone(milestone: MobileProductMilestone) 
       event: "mobile_product_milestone",
       milestone,
       platform: "android",
+    })
+  )
+}
+
+export function recordMobileQueueConflict(outcome: MobileQueueConflictOutcome) {
+  // The marker and outcome are fixed values. Do not add user/device IDs,
+  // mutation keys, resource IDs, request IDs, or mutation bodies here.
+  console.info(
+    JSON.stringify({
+      event: "mobile_queue_conflict",
+      outcome,
     })
   )
 }

@@ -41,9 +41,10 @@ responsibility, so a split deployment must include all five modes:
 durable-Redis lease, so concurrent maintenance workers skip rather than run
 the same schedule twice. Its work includes due feed/podcast refresh enqueueing,
 auth-token and security-event cleanup, AI-operation lease reconciliation,
-saved-monitor processing, bounded chat retention, and pending smart-digest
-email enqueueing. A durable maintenance-tick record is refreshed only after
-all of those scheduler operations succeed while the lease remains held.
+saved-monitor processing, bounded chat retention, bounded mobile sync-event
+retention, and pending smart-digest email enqueueing. A durable maintenance-tick
+record is refreshed only after all of those scheduler operations succeed while
+the lease remains held.
 
 `chat-events` also runs the transactional chat-event outbox publisher. The
 publisher leases and retries rows from PostgreSQL before publishing versioned,

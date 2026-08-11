@@ -11,27 +11,46 @@ export async function synchronizeMobileState(
   offline: MobileOfflineStore,
   { returnSession = false }: { returnSession?: boolean } = {}
 ) {
-  const cursor = await offline.getCursor()
+  let cursor = await offline.getCursor()
   const milestone = await nextMobileSyncMilestone(offline, returnSession)
-  try {
-    const response = await api.sync(cursor ?? undefined, milestone)
-    await offline.setCursor(response.meta.nextCursor ?? cursor)
-    if (milestone) {
-      await offline.markProductMilestone(milestone)
-    }
-    return response
-  } catch (error) {
-    if (!(error instanceof MobileApiError) || error.code !== "FULL_RESYNC_REQUIRED") {
+  let bootstrapped = false
+  while (true) {
+    let response: Awaited<ReturnType<MobileApiClient["sync"]>>
+    try {
+      response = await api.sync(cursor ?? undefined)
+    } catch (error) {
+      if (
+        !bootstrapped &&
+        error instanceof MobileApiError &&
+        error.code === "FULL_RESYNC_REQUIRED"
+      ) {
+        const bootstrap = await api.syncBootstrap()
+        await offline.bootstrapSync(bootstrap.data.highWaterCursor)
+        cursor = bootstrap.data.highWaterCursor
+        bootstrapped = true
+        continue
+      }
       throw error
     }
-
-    await offline.clearDownloadedData()
-    const response = await api.sync(undefined, milestone)
-    await offline.setCursor(response.meta.nextCursor ?? null)
-    if (milestone) {
-      await offline.markProductMilestone(milestone)
+    const followingCursor = response.meta.nextCursor
+    const nextCursor = followingCursor ?? cursor
+    if (!response.data.hasMore) {
+      await offline.commitSyncPage({
+        cursor: nextCursor,
+        events: response.data.events,
+        milestone,
+      })
+      return response
     }
-    return response
+    if (!followingCursor || followingCursor === cursor) {
+      throw new Error("Arctic RSS returned an incomplete mobile sync page.")
+    }
+    await offline.commitSyncPage({
+      cursor: nextCursor,
+      events: response.data.events,
+      milestone: undefined,
+    })
+    cursor = followingCursor
   }
 }
 

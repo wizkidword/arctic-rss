@@ -23,6 +23,7 @@ type WorkerEvent = {
 
 type LeaseWorker = {
   child: ChildProcess;
+  closePromise?: Promise<void>;
   events: WorkerEvent[];
   stderr: string[];
 };
@@ -201,16 +202,18 @@ async function waitForEvent(
 }
 
 async function closeLeaseWorker(worker: LeaseWorker) {
-  if (worker.child.exitCode !== null) {
-    return;
+  if (!worker.closePromise) {
+    worker.closePromise = new Promise<void>((resolve) => {
+      if (worker.child.exitCode !== null) {
+        resolve();
+        return;
+      }
+      worker.child.once("exit", () => resolve());
+      worker.child.stdin?.end();
+      worker.child.kill();
+    });
   }
-
-  const exited = new Promise<void>((resolve) => {
-    worker.child.once("exit", () => resolve());
-  });
-  worker.child.stdin?.end();
-  worker.child.kill();
-  await exited;
+  await worker.closePromise;
 }
 
 function sleep(durationMs: number) {

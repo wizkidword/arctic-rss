@@ -18,7 +18,10 @@ export const apiV1ErrorCodeSchema = z.enum([
   "RATE_LIMITED",
   "RATE_LIMIT_UNAVAILABLE",
   "RESOURCE_NOT_FOUND",
+  "REQUEST_TIMEOUT",
+  "REQUEST_TOO_LARGE",
   "REQUEST_VALIDATION_FAILED",
+  "UNSUPPORTED_MEDIA_TYPE",
 ])
 
 export const apiV1ValidationIssueSchema = z
