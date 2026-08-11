@@ -52,6 +52,7 @@ export type RateLimitAction =
   | "image_proxy"
   | "login"
   | "mobile_device_authorization"
+  | "mobile_device_authorization_approval"
   | "mobile_api_read"
   | "mobile_api_write"
   | "mobile_token_exchange"
@@ -246,6 +247,10 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
     { limit: 240, scope: "ip", subject: inputSubject("ip"), windowMs: 60_000 },
   ],
   mobile_device_authorization: [
+    { limit: 20, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
+    { limit: 60, scope: "ip", subject: inputSubject("ip"), windowMs: 60 * 60_000 },
+  ],
+  mobile_device_authorization_approval: [
     { limit: 20, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },
     { limit: 60, scope: "ip", subject: inputSubject("ip"), windowMs: 60 * 60_000 },
   ],

@@ -86,6 +86,7 @@ export class MobileApiClient {
   }
 
   exchangeAuthorizationCode(input: {
+    clientId: string
     code: string
     codeVerifier: string
     nonce: string

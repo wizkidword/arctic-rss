@@ -5,6 +5,9 @@ import { afterAll, describe, expect, test } from "vitest"
 import { getPrisma } from "@/lib/db"
 
 import {
+  approveMobileAuthorizationRequest,
+  cancelMobileAuthorizationRequest,
+  createMobileAuthorizationRequest,
   createPkceS256Challenge,
   exchangeDeviceAuthorizationCode,
   issueDeviceAuthorizationCode,
@@ -31,6 +34,75 @@ describe("mobile device sessions in PostgreSQL", () => {
   })
 
   databaseTest(
+    "keeps browser approval server-side and consumes approve or cancel exactly once",
+    async () => {
+      prisma = getPrisma()
+      const user = await createUser(prisma, userIds)
+      const request = deviceAuthorizationRequest("p".repeat(43))
+      const pending = await createMobileAuthorizationRequest({
+        authVersion: user.authVersion,
+        now,
+        request,
+        store: prisma,
+        userId: user.id,
+      })
+
+      await expect(
+        prisma.deviceAuthorizationCode.count({ where: { userId: user.id } }),
+      ).resolves.toBe(0)
+
+      const approved = await approveMobileAuthorizationRequest({
+        approvalToken: pending.approvalToken,
+        now,
+        requestId: pending.id,
+        store: prisma,
+        userId: user.id,
+      })
+      expect(approved).toMatchObject({ redirectUri: request.redirectUri, state: request.state })
+      expect(approved.code).toHaveLength(43)
+
+      await expect(
+        approveMobileAuthorizationRequest({
+          approvalToken: pending.approvalToken,
+          now,
+          requestId: pending.id,
+          store: prisma,
+          userId: user.id,
+        }),
+      ).rejects.toMatchObject({ code: "authorization-invalid" } satisfies Partial<MobileAuthError>)
+
+      const cancelledPending = await createMobileAuthorizationRequest({
+        authVersion: user.authVersion,
+        now,
+        request,
+        store: prisma,
+        userId: user.id,
+      })
+      await expect(
+        cancelMobileAuthorizationRequest({
+          approvalToken: cancelledPending.approvalToken,
+          now,
+          requestId: cancelledPending.id,
+          store: prisma,
+          userId: user.id,
+        }),
+      ).resolves.toEqual({ redirectUri: request.redirectUri, state: request.state })
+      await expect(
+        approveMobileAuthorizationRequest({
+          approvalToken: cancelledPending.approvalToken,
+          now,
+          requestId: cancelledPending.id,
+          store: prisma,
+          userId: user.id,
+        }),
+      ).rejects.toMatchObject({ code: "authorization-invalid" } satisfies Partial<MobileAuthError>)
+      await expect(
+        prisma.deviceAuthorizationCode.count({ where: { userId: user.id } }),
+      ).resolves.toBe(1)
+    },
+  )
+
+  databaseTest(
     "enforces PKCE, exact redirect URI, one-time codes, and fresh account state",
     async () => {
       prisma = getPrisma()
@@ -50,6 +122,7 @@ describe("mobile device sessions in PostgreSQL", () => {
           accessTokenEnvironment,
           now,
           request: {
+            clientId: authorizationRequest.clientId,
             code: issued.code,
             codeVerifier: "w".repeat(43),
             nonce: authorizationRequest.nonce,
@@ -64,6 +137,7 @@ describe("mobile device sessions in PostgreSQL", () => {
           accessTokenEnvironment,
           now,
           request: {
+            clientId: authorizationRequest.clientId,
             code: issued.code,
             codeVerifier: verifier,
             nonce: authorizationRequest.nonce,
@@ -73,10 +147,26 @@ describe("mobile device sessions in PostgreSQL", () => {
         }),
       ).rejects.toMatchObject({ code: "authorization-invalid" } satisfies Partial<MobileAuthError>)
 
+      await expect(
+        exchangeDeviceAuthorizationCode({
+          accessTokenEnvironment,
+          now,
+          request: {
+            clientId: "android:other.reader" as never,
+            code: issued.code,
+            codeVerifier: verifier,
+            nonce: authorizationRequest.nonce,
+            redirectUri: authorizationRequest.redirectUri,
+          },
+          store: prisma,
+        }),
+      ).rejects.toMatchObject({ code: "authorization-invalid" } satisfies Partial<MobileAuthError>)
+
       const tokens = await exchangeDeviceAuthorizationCode({
         accessTokenEnvironment,
         now,
         request: {
+          clientId: authorizationRequest.clientId,
           code: issued.code,
           codeVerifier: verifier,
           nonce: authorizationRequest.nonce,
@@ -91,6 +181,7 @@ describe("mobile device sessions in PostgreSQL", () => {
           accessTokenEnvironment,
           now,
           request: {
+            clientId: authorizationRequest.clientId,
             code: issued.code,
             codeVerifier: verifier,
             nonce: authorizationRequest.nonce,
@@ -112,6 +203,7 @@ describe("mobile device sessions in PostgreSQL", () => {
           accessTokenEnvironment,
           now: new Date(expired.expiresAt.getTime() + 1),
           request: {
+            clientId: authorizationRequest.clientId,
             code: expired.code,
             codeVerifier: verifier,
             nonce: authorizationRequest.nonce,
@@ -141,6 +233,7 @@ describe("mobile device sessions in PostgreSQL", () => {
         accessTokenEnvironment,
         now,
         request: {
+          clientId: authorizationRequest.clientId,
           code: issued.code,
           codeVerifier: verifier,
           nonce: authorizationRequest.nonce,
@@ -229,6 +322,7 @@ describe("mobile device sessions in PostgreSQL", () => {
             accessTokenEnvironment,
             now,
             request: {
+              clientId: request.clientId,
               code: issued.code,
               codeVerifier: verifier,
               nonce: request.nonce,
@@ -258,6 +352,7 @@ describe("mobile device sessions in PostgreSQL", () => {
           accessTokenEnvironment,
           now,
           request: {
+            clientId: sixthRequest.clientId,
             code: sixthCode.code,
             codeVerifier: `6${"d".repeat(42)}`,
             nonce: sixthRequest.nonce,
@@ -318,6 +413,7 @@ describe("mobile device sessions in PostgreSQL", () => {
         accessTokenEnvironment,
         now,
         request: {
+          clientId: request.clientId,
           code: issued.code,
           codeVerifier: verifier,
           nonce: request.nonce,
@@ -351,6 +447,7 @@ describe("mobile device sessions in PostgreSQL", () => {
         accessTokenEnvironment,
         now: new Date(now.getTime() + 3_000),
         request: {
+          clientId: request.clientId,
           code: reenabledCode.code,
           codeVerifier: verifier,
           nonce: request.nonce,
@@ -386,6 +483,7 @@ async function createUser(prisma: ReturnType<typeof getPrisma>, userIds: string[
 function deviceAuthorizationRequest(codeVerifier: string) {
   return {
     appVersion: "0.1.0-test",
+    clientId: "android:com.arcticrss.reader" as const,
     codeChallenge: createPkceS256Challenge(codeVerifier),
     codeChallengeMethod: "S256" as const,
     deviceName: "Test Android",

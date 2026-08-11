@@ -11,8 +11,14 @@ import { z } from "zod"
 
 import { getPrisma } from "@/lib/db"
 
-export const MOBILE_REDIRECT_URI = "arcticrss://auth/callback"
+export const MOBILE_ANDROID_CLIENT_ID = "android:com.arcticrss.reader"
+export const MOBILE_PRODUCTION_REDIRECT_URI = "https://arcticrss.com/mobile/auth/callback"
+export const MOBILE_DEVELOPMENT_REDIRECT_URI = "arcticrss://auth/callback"
+// Kept as an explicit development-only compatibility export while the Android
+// alpha is unsigned. Production requests must use the claimed HTTPS App Link.
+export const MOBILE_REDIRECT_URI = MOBILE_DEVELOPMENT_REDIRECT_URI
 export const MOBILE_AUTHORIZATION_CODE_TTL_MS = 5 * 60_000
+export const MOBILE_AUTHORIZATION_REQUEST_TTL_MS = 10 * 60_000
 export const MOBILE_ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 export const MOBILE_REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60_000
 export const MAX_MOBILE_DEVICE_SESSIONS_PER_USER = 5
@@ -25,7 +31,12 @@ const ACCESS_TOKEN_CONTEXT = "arctic-rss:mobile-auth:v1:access"
 
 type MobileAuthStore = Pick<
   PrismaClient,
-  "deviceAuthorizationCode" | "deviceSession" | "securityEvent" | "user" | "$transaction"
+  | "deviceAuthorizationCode"
+  | "deviceSession"
+  | "mobileAuthorizationRequest"
+  | "securityEvent"
+  | "user"
+  | "$transaction"
 >
 
 type ActiveMobileUser = {
@@ -43,6 +54,18 @@ export type MobileDevice = {
 export type IssuedDeviceAuthorizationCode = MobileDevice & {
   code: string
   expiresAt: Date
+}
+
+export type PendingMobileAuthorizationRequest = {
+  approvalToken: string
+  expiresAt: Date
+  id: string
+}
+
+export type CompletedMobileAuthorizationRequest = {
+  code?: string
+  redirectUri: string
+  state: string
 }
 
 export type MobileSessionTokens = {
@@ -89,20 +112,22 @@ const mobileDeviceSchema = z
 
 const browserDeviceAuthorizationRequestSchema = mobileDeviceSchema
   .extend({
+    clientId: z.literal(MOBILE_ANDROID_CLIENT_ID),
     codeChallenge: z.string().regex(PKCE_VALUE_PATTERN),
     codeChallengeMethod: z.literal("S256"),
     nonce: z.string().regex(NONCE_PATTERN),
-    redirectUri: z.literal(MOBILE_REDIRECT_URI),
+    redirectUri: z.string().min(1).max(500),
     state: z.string().regex(STATE_PATTERN),
   })
   .strict()
 
 const deviceAuthorizationExchangeRequestSchema = z
   .object({
+    clientId: z.literal(MOBILE_ANDROID_CLIENT_ID),
     code: z.string().min(32).max(512),
     codeVerifier: z.string().regex(PKCE_VALUE_PATTERN),
     nonce: z.string().regex(NONCE_PATTERN),
-    redirectUri: z.literal(MOBILE_REDIRECT_URI),
+    redirectUri: z.string().min(1).max(500),
   })
   .strict()
 
@@ -117,9 +142,13 @@ export type DeviceAuthorizationExchangeRequest = z.infer<
   typeof deviceAuthorizationExchangeRequestSchema
 >
 
-export function parseBrowserDeviceAuthorizationRequest(searchParams: URLSearchParams) {
+export function parseBrowserDeviceAuthorizationRequest(
+  searchParams: URLSearchParams,
+  environment: Readonly<Record<string, string | undefined>> = process.env
+) {
   const wireNames = {
     appVersion: "app_version",
+    clientId: "client_id",
     codeChallenge: "code_challenge",
     codeChallengeMethod: "code_challenge_method",
     deviceName: "device_name",
@@ -149,17 +178,39 @@ export function parseBrowserDeviceAuthorizationRequest(searchParams: URLSearchPa
     throw new MobileAuthError("authorization-invalid", "The authorization request is invalid.")
   }
 
+  assertRegisteredMobileClient(parsed.data.clientId, parsed.data.redirectUri, environment)
+
   return parsed.data
 }
 
-export function parseDeviceAuthorizationExchangeRequest(value: unknown) {
+export function parseDeviceAuthorizationExchangeRequest(
+  value: unknown,
+  environment: Readonly<Record<string, string | undefined>> = process.env
+) {
   const parsed = deviceAuthorizationExchangeRequestSchema.safeParse(value)
 
   if (!parsed.success) {
     throw new MobileAuthError("authorization-invalid", "The authorization exchange is invalid.")
   }
 
+  assertRegisteredMobileClient(parsed.data.clientId, parsed.data.redirectUri, environment)
+
   return parsed.data
+}
+
+function assertRegisteredMobileClient(
+  clientId: string,
+  redirectUri: string,
+  environment: Readonly<Record<string, string | undefined>>
+) {
+  const isProduction = environment.NODE_ENV === "production"
+  const allowedRedirect =
+    redirectUri === MOBILE_PRODUCTION_REDIRECT_URI ||
+    (!isProduction && redirectUri === MOBILE_DEVELOPMENT_REDIRECT_URI)
+
+  if (clientId !== MOBILE_ANDROID_CLIENT_ID || !allowedRedirect) {
+    throw new MobileAuthError("authorization-invalid", "The registered mobile client is invalid.")
+  }
 }
 
 export function parseMobileRefreshRequest(value: unknown) {
@@ -178,6 +229,209 @@ export function createPkceS256Challenge(codeVerifier: string) {
   }
 
   return createHash("sha256").update(codeVerifier).digest("base64url")
+}
+
+// GET creates this record, but deliberately does not create an authorization
+// code. Only a later, user-initiated POST can consume the opaque approval token.
+export async function createMobileAuthorizationRequest({
+  authVersion,
+  request,
+  store = getPrisma(),
+  userId,
+  now = new Date(),
+}: {
+  authVersion: number
+  request: BrowserDeviceAuthorizationRequest
+  store?: MobileAuthStore
+  userId: string
+  now?: Date
+}): Promise<PendingMobileAuthorizationRequest> {
+  const user = await store.user.findUnique({
+    select: { authVersion: true, disabledAt: true, id: true },
+    where: { id: userId },
+  })
+  assertActiveUser(user, authVersion, "authorization-invalid")
+
+  const approvalToken = randomToken()
+  const expiresAt = new Date(now.getTime() + MOBILE_AUTHORIZATION_REQUEST_TTL_MS)
+  const pending = await store.$transaction(async (transaction) => {
+    const created = await transaction.mobileAuthorizationRequest.create({
+      data: {
+        appVersion: request.appVersion,
+        approvalTokenHash: hashCredential(approvalToken),
+        authVersion,
+        clientId: request.clientId,
+        codeChallenge: request.codeChallenge,
+        codeChallengeMethod: request.codeChallengeMethod,
+        deviceName: request.deviceName,
+        expiresAt,
+        nonceHash: hashCredential(request.nonce),
+        platform: request.platform,
+        redirectUri: request.redirectUri,
+        state: request.state,
+        userId,
+      },
+      select: { id: true },
+    })
+    await transaction.securityEvent.create({
+      data: {
+        eventType: "MOBILE_AUTHORIZATION_APPROVAL_REQUESTED",
+        metadata: { clientId: request.clientId, platform: request.platform },
+        userId,
+      },
+    })
+    return created
+  })
+
+  return { approvalToken, expiresAt, id: pending.id }
+}
+
+export async function approveMobileAuthorizationRequest({
+  approvalToken,
+  requestId,
+  store = getPrisma(),
+  userId,
+  now = new Date(),
+}: {
+  approvalToken: string
+  requestId: string
+  store?: MobileAuthStore
+  userId: string
+  now?: Date
+}): Promise<CompletedMobileAuthorizationRequest> {
+  const pending = await getPendingMobileAuthorizationRequest({
+    approvalToken,
+    requestId,
+    store,
+    userId,
+    now,
+  })
+  const code = randomToken()
+
+  await store.$transaction(async (transaction) => {
+    const currentUser = await transaction.user.updateMany({
+      data: { updatedAt: now },
+      where: { authVersion: pending.authVersion, disabledAt: null, id: userId },
+    })
+    if (currentUser.count !== 1) {
+      throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
+    }
+    const approved = await transaction.mobileAuthorizationRequest.updateMany({
+      data: { approvedAt: now },
+      where: {
+        approvalTokenHash: hashCredential(approvalToken),
+        approvedAt: null,
+        authVersion: pending.authVersion,
+        cancelledAt: null,
+        expiresAt: { gt: now },
+        id: pending.id,
+        userId,
+      },
+    })
+    if (approved.count !== 1) {
+      throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
+    }
+    await transaction.deviceAuthorizationCode.create({
+      data: {
+        appVersion: pending.appVersion,
+        authVersion: pending.authVersion,
+        clientId: pending.clientId,
+        codeChallenge: pending.codeChallenge,
+        codeChallengeMethod: pending.codeChallengeMethod,
+        codeHash: hashCredential(code),
+        deviceName: pending.deviceName,
+        expiresAt: new Date(now.getTime() + MOBILE_AUTHORIZATION_CODE_TTL_MS),
+        nonceHash: pending.nonceHash,
+        platform: pending.platform,
+        redirectUri: pending.redirectUri,
+        userId,
+      },
+    })
+    await transaction.securityEvent.create({
+      data: {
+        eventType: "MOBILE_AUTHORIZATION_APPROVED",
+        metadata: { clientId: pending.clientId, platform: pending.platform },
+        userId,
+      },
+    })
+  })
+
+  return { code, redirectUri: pending.redirectUri, state: pending.state }
+}
+
+export async function cancelMobileAuthorizationRequest({
+  approvalToken,
+  requestId,
+  store = getPrisma(),
+  userId,
+  now = new Date(),
+}: {
+  approvalToken: string
+  requestId: string
+  store?: MobileAuthStore
+  userId: string
+  now?: Date
+}): Promise<CompletedMobileAuthorizationRequest> {
+  const pending = await getPendingMobileAuthorizationRequest({
+    approvalToken,
+    requestId,
+    store,
+    userId,
+    now,
+  })
+  await store.$transaction(async (transaction) => {
+    const cancelled = await transaction.mobileAuthorizationRequest.updateMany({
+      data: { cancelledAt: now },
+      where: {
+        approvalTokenHash: hashCredential(approvalToken),
+        approvedAt: null,
+        authVersion: pending.authVersion,
+        cancelledAt: null,
+        expiresAt: { gt: now },
+        id: pending.id,
+        userId,
+      },
+    })
+    if (cancelled.count !== 1) {
+      throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
+    }
+    await transaction.securityEvent.create({
+      data: {
+        eventType: "MOBILE_AUTHORIZATION_CANCELLED",
+        metadata: { clientId: pending.clientId, platform: pending.platform },
+        userId,
+      },
+    })
+  })
+
+  return { redirectUri: pending.redirectUri, state: pending.state }
+}
+
+async function getPendingMobileAuthorizationRequest({
+  approvalToken,
+  requestId,
+  store,
+  userId,
+  now,
+}: {
+  approvalToken: string
+  requestId: string
+  store: MobileAuthStore
+  userId: string
+  now: Date
+}) {
+  const pending = await store.mobileAuthorizationRequest.findUnique({ where: { id: requestId } })
+  if (
+    !pending ||
+    pending.userId !== userId ||
+    pending.approvedAt ||
+    pending.cancelledAt ||
+    pending.expiresAt <= now ||
+    !safeEqual(pending.approvalTokenHash, hashCredential(approvalToken))
+  ) {
+    throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
+  }
+  return pending
 }
 
 export async function issueDeviceAuthorizationCode({
@@ -207,6 +461,7 @@ export async function issueDeviceAuthorizationCode({
       data: {
         appVersion: request.appVersion,
         authVersion,
+        clientId: request.clientId,
         codeChallenge: request.codeChallenge,
         codeChallengeMethod: request.codeChallengeMethod,
         codeHash: hashCredential(code),
@@ -257,6 +512,7 @@ export async function exchangeDeviceAuthorizationCode({
     !authorizationCode ||
     authorizationCode.usedAt ||
     authorizationCode.expiresAt <= now ||
+    authorizationCode.clientId !== request.clientId ||
     authorizationCode.redirectUri !== request.redirectUri ||
     authorizationCode.codeChallengeMethod !== "S256" ||
     !safeEqual(authorizationCode.nonceHash, hashCredential(request.nonce)) ||

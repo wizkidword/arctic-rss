@@ -6,7 +6,7 @@ Play action is represented by this ledger.
 
 | ID | Status | Current evidence and next gate |
 | --- | --- | --- |
-| MOB-AUTH-001 | IN_PROGRESS | Phase 1 source verification: `MOBILE_NATIVE_AUTHORIZATION_ENABLED` is default-off; disabled authorization/exchange return `404` before body/session work. Existing GET issue, custom callback, registered-client binding, explicit consent, recent auth, and owner signing/App Link proof remain for Phase 2. |
+| MOB-AUTH-001 | IN_PROGRESS | Phase 2 source now registers `android:com.arcticrss.reader`, accepts the exact HTTPS callback in production, creates a server-stored one-time approval request on GET, and issues a code only after explicit approve POST. The feature remains default-off. Recent-auth proof, real signing/App Link verification, disposable-DB migration rehearsal, and owner enablement remain open. |
 | MOB-BODY-001 | SOURCE_VERIFIED | Phase 1 adds a shared 8 KiB/5 s JSON reader, media/encoding/UTF-8/JSON checks, IP-only pre-body limits, secret-specific post-body limits, generic errors, OpenAPI codes, and focused/full-suite evidence. No deployment is implied. |
 | MOB-REFRESH-001 | IN_PROGRESS | Server refresh rotation is transactional, but native refresh single-flight and atomic persistence are not yet established. |
 | MOB-DEVICE-001 | NOT_STARTED | `DeviceSession` is refresh-token history. An additive stable `MobileDevice` model and family-aware migration are required. |

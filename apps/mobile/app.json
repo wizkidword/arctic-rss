@@ -37,7 +37,8 @@
             { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/podcast-episodes" },
             { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/collections" },
             { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/saved-views" },
-            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/briefings" }
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/briefings" },
+            { "scheme": "https", "host": "arcticrss.com", "pathPrefix": "/mobile/auth/callback" }
           ]
         }
       ]

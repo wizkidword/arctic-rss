@@ -1,6 +1,10 @@
 import { z } from "zod"
 
-import { meResponseSchema, mobileTokenResponseSchema } from "./account"
+import {
+  deviceAuthorizationExchangeRequestSchema,
+  meResponseSchema,
+  mobileTokenResponseSchema,
+} from "./account"
 import { articleDetailResponseSchema, readerPageResponseSchema } from "./articles"
 import { briefingDetailResponseSchema, briefingsResponseSchema } from "./briefings"
 import { collectionsResponseSchema } from "./collections"
@@ -64,6 +68,9 @@ const schemas = {
     target: "draft-2020-12",
   }),
   DeviceSessionLogoutResponse: z.toJSONSchema(deviceSessionLogoutResponseSchema, {
+    target: "draft-2020-12",
+  }),
+  DeviceAuthorizationExchangeRequest: z.toJSONSchema(deviceAuthorizationExchangeRequestSchema, {
     target: "draft-2020-12",
   }),
   FeedsResponse: z.toJSONSchema(feedsResponseSchema, { target: "draft-2020-12" }),
@@ -214,6 +221,7 @@ export const mobileApiV1OpenApiDocument = {
     "/api/v1/device-authorizations/exchange": {
       post: {
         operationId: "exchangeDeviceAuthorizationCode",
+        requestBody: jsonRequest("DeviceAuthorizationExchangeRequest"),
         responses: {
           "200": jsonResponse("MobileTokenResponse"),
           "400": jsonResponse("ApiV1Error"),

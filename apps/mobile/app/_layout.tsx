@@ -23,6 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="collections/[collectionId]" options={{ title: "Collection" }} />
         <Stack.Screen name="saved-views/[savedViewId]" options={{ title: "Saved view" }} />
         <Stack.Screen name="briefings/[briefingId]" options={{ title: "Briefing" }} />
+        <Stack.Screen name="mobile/auth/callback" options={{ title: "Sign in" }} />
       </Stack>
     </MobileAppProvider>
   )

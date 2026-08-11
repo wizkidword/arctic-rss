@@ -3,7 +3,7 @@ import * as WebBrowser from "expo-web-browser"
 
 import { createPkceAuthorization, type MobileApiClient } from "@arctic-rss/mobile-client"
 
-import { MOBILE_APP_VERSION, MOBILE_AUTH_REDIRECT_URI } from "@/config"
+import { MOBILE_APP_VERSION, MOBILE_AUTH_REDIRECT_URI, MOBILE_PUBLIC_CLIENT_ID } from "@/config"
 
 export class BrowserLoginError extends Error {
   constructor(message: string) {
@@ -25,6 +25,7 @@ export async function beginBrowserMobileLogin({
   })
   const authorizationUrl = new URL("/api/mobile/authorize", origin)
   authorizationUrl.searchParams.set("app_version", MOBILE_APP_VERSION)
+  authorizationUrl.searchParams.set("client_id", MOBILE_PUBLIC_CLIENT_ID)
   authorizationUrl.searchParams.set("code_challenge", authorization.codeChallenge)
   authorizationUrl.searchParams.set("code_challenge_method", "S256")
   authorizationUrl.searchParams.set("device_name", "Arctic RSS Android")
@@ -42,7 +43,12 @@ export async function beginBrowserMobileLogin({
   }
 
   const callback = new URL(result.url)
-  if (callback.protocol !== "arcticrss:" || callback.host !== "auth" || callback.pathname !== "/callback") {
+  const expectedCallback = new URL(MOBILE_AUTH_REDIRECT_URI)
+  if (
+    callback.protocol !== expectedCallback.protocol ||
+    callback.host !== expectedCallback.host ||
+    callback.pathname !== expectedCallback.pathname
+  ) {
     throw new BrowserLoginError("Arctic RSS returned an unexpected sign-in callback.")
   }
   const code = callback.searchParams.get("code")
@@ -52,6 +58,7 @@ export async function beginBrowserMobileLogin({
 
   return (
     await api.exchangeAuthorizationCode({
+      clientId: MOBILE_PUBLIC_CLIENT_ID,
       code,
       codeVerifier: authorization.codeVerifier,
       nonce: authorization.nonce,

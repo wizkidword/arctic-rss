@@ -1085,6 +1085,41 @@
         ],
         "additionalProperties": false
       },
+      "DeviceAuthorizationExchangeRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "const": "android:com.arcticrss.reader"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 512
+          },
+          "codeVerifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._~-]{43,128}$"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._~-]{16,256}$"
+          },
+          "redirectUri": {
+            "type": "string",
+            "const": "https://arcticrss.com/mobile/auth/callback"
+          }
+        },
+        "required": [
+          "clientId",
+          "code",
+          "codeVerifier",
+          "nonce",
+          "redirectUri"
+        ],
+        "additionalProperties": false
+      },
       "FeedsResponse": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -3053,6 +3088,16 @@
     "/api/v1/device-authorizations/exchange": {
       "post": {
         "operationId": "exchangeDeviceAuthorizationCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceAuthorizationExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {

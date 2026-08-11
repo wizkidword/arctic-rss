@@ -15,7 +15,9 @@ owner-gated.
   default is disabled; setting it requires an explicit operational decision.
 - Authorization validates an exact registered client ID and redirect URI,
   requires PKCE S256, state, nonce, explicit browser approval, and a current
-  authenticated browser session. It has no mobile client secret.
+  authenticated browser session. The approval request and anti-replay token
+  are stored server-side; the POST consumes them once. It has no mobile client
+  secret.
 - The authorization page displays the registered Arctic RSS client name and
   current account. Device-provided name, platform, and app version are
   descriptive only and never prove client identity.

@@ -341,6 +341,7 @@ model User {
   adminAuditLogs                    AdminAuditLog[]                    @relation("AdminAuditActor")
   planQuota                         UserPlanQuota?
   securityEvents                    SecurityEvent[]
+  mobileAuthorizationRequests       MobileAuthorizationRequest[]
   deviceAuthorizationCodes          DeviceAuthorizationCode[]
   deviceSessions                    DeviceSession[]
   notificationPreferences           UserNotificationPreference[]
@@ -474,6 +475,7 @@ model SecurityEvent {
 model DeviceAuthorizationCode {
   id                  String    @id @default(cuid())
   userId              String
+  clientId            String?   @db.VarChar(128)
   codeHash            String    @unique
   codeChallenge       String
   codeChallengeMethod String
@@ -490,6 +492,34 @@ model DeviceAuthorizationCode {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+// A browser-created, one-time approval request. The browser never receives an
+// authorization code until the signed-in account explicitly approves this row.
+// The approval token is stored only as a SHA-256 digest.
+model MobileAuthorizationRequest {
+  id                  String    @id @default(cuid())
+  userId              String
+  clientId            String    @db.VarChar(128)
+  redirectUri         String    @db.VarChar(500)
+  codeChallenge       String    @db.VarChar(256)
+  codeChallengeMethod String    @db.VarChar(16)
+  nonceHash           String    @db.VarChar(64)
+  state               String    @db.VarChar(512)
+  approvalTokenHash   String    @unique @db.VarChar(64)
+  deviceName          String    @db.VarChar(120)
+  platform            String    @db.VarChar(32)
+  appVersion          String    @db.VarChar(80)
+  authVersion         Int
+  expiresAt           DateTime
+  approvedAt          DateTime?
+  cancelledAt         DateTime?
+  createdAt           DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
   @@index([expiresAt])
 }
 
