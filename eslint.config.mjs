@@ -19,7 +19,7 @@ const eslintConfig = defineConfig([
   ]),
   {
     // Expo resolves managed-app config plugins with CommonJS.
-    files: ["apps/mobile/plugins/**/*.cjs"],
+    files: ["apps/mobile/app.config.cjs", "apps/mobile/plugins/**/*.cjs"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },

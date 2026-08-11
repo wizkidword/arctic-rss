@@ -6,12 +6,29 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_ARCTIC_RSS_ENVIRONMENT": "development"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_ARCTIC_RSS_ENVIRONMENT": "preview",
+        "EXPO_PUBLIC_ARCTIC_RSS_ORIGIN": "https://arcticrss.com"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_ARCTIC_RSS_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_ARCTIC_RSS_ORIGIN": "https://arcticrss.com"
+      },
       "android": {
         "buildType": "app-bundle"
       }

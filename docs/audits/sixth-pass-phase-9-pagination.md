@@ -28,3 +28,13 @@ The notification picker also no longer offers `MOBILE_PUSH`: there is no
 provider, permission flow, device-token registration, or delivery evidence in
 this alpha. Existing server-side push preferences remain visible only as
 unavailable and can be changed to an implemented channel.
+
+The app now reads its display version from Expo runtime configuration instead
+of a separate hard-coded alpha value. The dynamic Expo config records only a
+validated EAS or GitHub source revision and an explicit public build
+environment; it records `unknown` when neither is supplied. Development and
+preview builds show a visible environment banner, while production does not.
+Preview and production profiles explicitly set the public HTTPS service origin;
+development retains the existing requirement that its origin be supplied by
+the operator. The production profile has Android bundle auto-increment
+configured, but no EAS build, signing, upload, or Play action was run.

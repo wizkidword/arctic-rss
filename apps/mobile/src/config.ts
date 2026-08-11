@@ -1,4 +1,9 @@
-export const MOBILE_APP_VERSION = "0.1.0-alpha"
+import Constants from "expo-constants"
+
+export const MOBILE_APP_VERSION = Constants.expoConfig?.version ?? "unknown"
+export const MOBILE_BUILD_ENVIRONMENT = process.env.EXPO_PUBLIC_ARCTIC_RSS_ENVIRONMENT?.trim() || (
+  __DEV__ ? "development" : "production"
+)
 export const MOBILE_PUBLIC_CLIENT_ID = "android:com.arcticrss.reader"
 export const MOBILE_PRODUCTION_AUTH_REDIRECT_URI = "https://arcticrss.com/mobile/auth/callback"
 export const MOBILE_DEVELOPMENT_AUTH_REDIRECT_URI = "arcticrss://auth/callback"
