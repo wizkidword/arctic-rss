@@ -6,6 +6,7 @@ describe("safeMobileReturnPath", () => {
   it("keeps recognized protected deep links", () => {
     expect(safeMobileReturnPath("/articles/article-1")).toBe("/articles/article-1")
     expect(safeMobileReturnPath("/collection-picker")).toBe("/collection-picker")
+    expect(safeMobileReturnPath("/offline-changes")).toBe("/offline-changes")
     expect(safeMobileReturnPath(["/settings", "/articles/ignored"])).toBe("/settings")
   })
 

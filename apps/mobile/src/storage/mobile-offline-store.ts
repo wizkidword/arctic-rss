@@ -2,6 +2,14 @@ import * as SQLite from "expo-sqlite"
 
 import {
   assertQueuedMutation,
+  completePendingMobileMutation,
+  createPendingMobileMutation,
+  failPendingMobileMutation,
+  isReplayableMobileMutation,
+  MOBILE_OFFLINE_LIMITS,
+  type QueuedMobileMutation,
+  retryPendingMobileMutation,
+  startPendingMobileMutation,
   type MobileProductMilestone,
   selectMobileCacheEvictions,
   type PendingMobileMutation,
@@ -12,7 +20,10 @@ import {
   userSyncEventSchema,
 } from "@arctic-rss/api-contract"
 
-import { MOBILE_STORE_SCHEMA_VERSION, requiresMobileStoreInitialization } from "@/storage/mobile-store-schema"
+import {
+  MOBILE_STORE_SCHEMA_VERSION,
+  mobileStoreUpgrade,
+} from "@/storage/mobile-store-schema"
 import { readPendingMobileMutations, type StoredPendingMutationRow } from "@/storage/pending-mobile-mutations"
 
 type CacheIndexRow = {
@@ -28,6 +39,7 @@ type StoreOwnerRow = { mobileDeviceId: string; ownerUserId: string }
 export type MobileStoreOwner = { mobileDeviceId: string; userId: string }
 
 const MOBILE_STORE_DATABASE_NAME = "arctic-rss-mobile.db"
+const MOBILE_MUTATION_SEND_LEASE_MS = 60_000
 
 export class MobileOfflineStore {
   private databasePromise: Promise<SQLite.SQLiteDatabase> | null = null
@@ -111,24 +123,40 @@ export class MobileOfflineStore {
     }
   }
 
-  async queueMutation(mutation: PendingMobileMutation) {
-    await this.assertOwner()
-    assertQueuedMutation(mutation)
+  async queueMutation(mutation: QueuedMobileMutation) {
+    const owner = await this.assertOwner()
+    const pending = createPendingMobileMutation(mutation, owner)
     const database = await this.database()
     await database.withExclusiveTransactionAsync(async (transaction) => {
+      if (!(await this.ownerRecordMatches(transaction, owner))) {
+        throw new Error("Mobile offline storage ownership changed.")
+      }
       await this.deleteCorruptPendingMutations(transaction)
-      const count = await transaction.getFirstAsync<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM mobile_pending_mutation"
+      const rows = await transaction.getAllAsync<StoredPendingMutationRow>(
+        "SELECT idempotencyKey, payload FROM mobile_pending_mutation"
       )
-      if ((count?.count ?? 0) >= 100) {
+      const { mutations } = readPendingMobileMutations(rows)
+      if (mutations.some((entry) => entry.idempotencyKey === pending.idempotencyKey)) {
+        throw new Error("A matching offline change is already queued on this device.")
+      }
+      for (const completed of mutations.filter((entry) => entry.state === "COMPLETED")) {
+        await transaction.runAsync(
+          "DELETE FROM mobile_pending_mutation WHERE idempotencyKey = ?",
+          completed.idempotencyKey
+        )
+      }
+      if (
+        mutations.filter((entry) => entry.state !== "COMPLETED").length >=
+        MOBILE_OFFLINE_LIMITS.maximumPendingMutations
+      ) {
         throw new Error("The mobile offline queue is full. Reconnect before adding more changes.")
       }
       await transaction.runAsync(
-        `INSERT OR REPLACE INTO mobile_pending_mutation (idempotencyKey, payload, createdAt)
+        `INSERT INTO mobile_pending_mutation (idempotencyKey, payload, createdAt)
          VALUES (?, ?, ?)`,
-        mutation.idempotencyKey,
-        JSON.stringify(mutation),
-        mutation.createdAt
+        pending.idempotencyKey,
+        JSON.stringify(pending),
+        pending.createdAt
       )
     })
   }
@@ -159,6 +187,82 @@ export class MobileOfflineStore {
     await database.runAsync(
       "DELETE FROM mobile_pending_mutation WHERE idempotencyKey = ?",
       idempotencyKey
+    )
+  }
+
+  async nextReplayableMutation(now = Date.now()): Promise<PendingMobileMutation | null> {
+    const owner = await this.assertOwner()
+    const database = await this.database()
+    let next: PendingMobileMutation | null = null
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      if (!(await this.ownerRecordMatches(transaction, owner))) {
+        throw new Error("Mobile offline storage ownership changed.")
+      }
+      await this.deleteCorruptPendingMutations(transaction)
+      const rows = await transaction.getAllAsync<StoredPendingMutationRow>(
+        "SELECT idempotencyKey, payload FROM mobile_pending_mutation ORDER BY createdAt ASC"
+      )
+      const { mutations } = readPendingMobileMutations(rows)
+      for (const mutation of mutations) {
+        if (
+          mutation.state === "SENDING" &&
+          mutation.lastAttemptAt !== null &&
+          now - mutation.lastAttemptAt >= MOBILE_MUTATION_SEND_LEASE_MS
+        ) {
+          const recovered = failPendingMobileMutation(mutation, {
+            code: "INTERRUPTED_REPLAY",
+            state: "RETRYABLE_FAILURE",
+            updatedAt: now,
+          })
+          await this.writePendingMutation(transaction, recovered)
+        }
+      }
+      const replayable = mutations.find((mutation) => isReplayableMobileMutation(mutation, now))
+      if (!replayable) {
+        return
+      }
+      const sending = startPendingMobileMutation(replayable, now)
+      if (sending.state === "PERMANENT_FAILURE") {
+        await this.writePendingMutation(transaction, sending)
+        return
+      }
+      await this.writePendingMutation(transaction, sending)
+      next = sending
+    })
+    return next
+  }
+
+  async completePendingMutation(idempotencyKey: string, now = Date.now()) {
+    return this.updatePendingMutation(idempotencyKey, (mutation) =>
+      completePendingMobileMutation(mutation, now)
+    )
+  }
+
+  async failPendingMutation({
+    code,
+    idempotencyKey,
+    state,
+    now = Date.now(),
+  }: {
+    code: string
+    idempotencyKey: string
+    now?: number
+    state: "CONFLICT" | "PERMANENT_FAILURE" | "RETRYABLE_FAILURE"
+  }) {
+    return this.updatePendingMutation(idempotencyKey, (mutation) =>
+      failPendingMobileMutation(mutation, { code, state, updatedAt: now })
+    )
+  }
+
+  async retryTerminalPendingMutation(idempotencyKey: string, now = Date.now()) {
+    return this.updatePendingMutation(idempotencyKey, (mutation) =>
+      retryPendingMobileMutation(mutation, now)
+    )
+  }
+
+  async conflictMutations() {
+    return (await this.pendingMutations()).filter(
+      (mutation) => mutation.state === "CONFLICT" || mutation.state === "PERMANENT_FAILURE"
     )
   }
 
@@ -307,11 +411,17 @@ export class MobileOfflineStore {
     await database.execAsync("PRAGMA journal_mode = WAL;")
     const result = await database.getFirstAsync<{ user_version: number }>("PRAGMA user_version")
     const currentVersion = result?.user_version ?? 0
-    if (!requiresMobileStoreInitialization(currentVersion)) {
+    const upgrade = mobileStoreUpgrade(currentVersion)
+    if (upgrade === "none") {
       return database
     }
 
     await database.withExclusiveTransactionAsync(async (transaction) => {
+      if (upgrade === "upgrade-v1") {
+        await this.upgradePendingMutationsFromVersion1(transaction)
+        await transaction.execAsync(`PRAGMA user_version = ${MOBILE_STORE_SCHEMA_VERSION};`)
+        return
+      }
       await transaction.execAsync(`
       DROP TABLE IF EXISTS mobile_cache;
       DROP TABLE IF EXISTS mobile_pending_mutation;
@@ -345,6 +455,39 @@ export class MobileOfflineStore {
     `)
     })
     return database
+  }
+
+  private async upgradePendingMutationsFromVersion1(database: SQLite.SQLiteDatabase) {
+    const owner = await database.getFirstAsync<StoreOwnerRow>(
+      "SELECT ownerUserId, mobileDeviceId FROM mobile_store_metadata WHERE id = 1"
+    )
+    const rows = await database.getAllAsync<StoredPendingMutationRow>(
+      "SELECT idempotencyKey, payload FROM mobile_pending_mutation"
+    )
+    for (const row of rows) {
+      try {
+        const legacy = JSON.parse(row.payload) as QueuedMobileMutation
+        assertQueuedMutation(legacy)
+        if (
+          legacy.idempotencyKey !== row.idempotencyKey ||
+          !Number.isFinite(legacy.createdAt) ||
+          legacy.createdAt <= 0 ||
+          !owner
+        ) {
+          throw new Error("Legacy mobile mutation cannot be safely owned.")
+        }
+        const mutation = createPendingMobileMutation(legacy, {
+          mobileDeviceId: owner.mobileDeviceId,
+          userId: owner.ownerUserId,
+        })
+        await this.writePendingMutation(database, mutation)
+      } catch {
+        await database.runAsync(
+          "DELETE FROM mobile_pending_mutation WHERE idempotencyKey = ?",
+          row.idempotencyKey
+        )
+      }
+    }
   }
 
   private async assertOwner() {
@@ -381,6 +524,55 @@ export class MobileOfflineStore {
     for (const idempotencyKey of readPendingMobileMutations(rows).corruptKeys) {
       await database.runAsync("DELETE FROM mobile_pending_mutation WHERE idempotencyKey = ?", idempotencyKey)
     }
+  }
+
+  private async updatePendingMutation(
+    idempotencyKey: string,
+    update: (mutation: PendingMobileMutation) => PendingMobileMutation
+  ) {
+    const owner = await this.assertOwner()
+    const database = await this.database()
+    let updated: PendingMobileMutation | null = null
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      if (!(await this.ownerRecordMatches(transaction, owner))) {
+        throw new Error("Mobile offline storage ownership changed.")
+      }
+      const row = await transaction.getFirstAsync<StoredPendingMutationRow>(
+        "SELECT idempotencyKey, payload FROM mobile_pending_mutation WHERE idempotencyKey = ?",
+        idempotencyKey
+      )
+      if (!row) {
+        throw new Error("The queued mobile mutation is unavailable.")
+      }
+      const parsed = readPendingMobileMutations([row])
+      const mutation = parsed.mutations[0]
+      if (!mutation || mutation.ownerUserId !== owner.userId || mutation.mobileDeviceId !== owner.mobileDeviceId) {
+        await transaction.runAsync(
+          "DELETE FROM mobile_pending_mutation WHERE idempotencyKey = ?",
+          idempotencyKey
+        )
+        throw new Error("The queued mobile mutation no longer belongs to this session.")
+      }
+      updated = update(mutation)
+      await this.writePendingMutation(transaction, updated)
+    })
+    if (!updated) {
+      throw new Error("The queued mobile mutation is unavailable.")
+    }
+    return updated
+  }
+
+  private async writePendingMutation(
+    database: SQLite.SQLiteDatabase,
+    mutation: PendingMobileMutation
+  ) {
+    await database.runAsync(
+      `INSERT OR REPLACE INTO mobile_pending_mutation (idempotencyKey, payload, createdAt)
+       VALUES (?, ?, ?)`,
+      mutation.idempotencyKey,
+      JSON.stringify(mutation),
+      mutation.createdAt
+    )
   }
 
   private async purge(database: SQLite.SQLiteDatabase) {

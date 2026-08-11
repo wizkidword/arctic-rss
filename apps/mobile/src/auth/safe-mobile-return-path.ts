@@ -1,6 +1,6 @@
 const protectedRoutePatterns = [
   /^\/(?:article|articles|podcast|podcast-episodes|collection|collections|saved-view|saved-views|briefing|briefings)\/[^/?#]+$/,
-  /^\/(?:collection-picker|notifications|support|search|library|settings|unread|starred)$/,
+  /^\/(?:collection-picker|notifications|offline-changes|support|search|library|settings|unread|starred)$/,
 ]
 
 export function safeMobileReturnPath(value: string | string[] | undefined) {

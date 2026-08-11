@@ -14,6 +14,9 @@ export function readPendingMobileMutations(rows: StoredPendingMutationRow[]) {
       const mutation = JSON.parse(row.payload) as PendingMobileMutation
       assertQueuedMutation(mutation)
       assertPendingMobileMutation(mutation)
+      if (mutation.idempotencyKey !== row.idempotencyKey) {
+        throw new Error("Queued mobile mutation row identity is invalid.")
+      }
       mutations.push(mutation)
     } catch {
       corruptKeys.push(row.idempotencyKey)

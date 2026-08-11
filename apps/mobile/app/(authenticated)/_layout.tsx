@@ -20,6 +20,7 @@ export default function AuthenticatedLayout() {
       <Stack.Screen name="briefing/[briefingId]" options={{ title: "Briefing" }} />
       <Stack.Screen name="collection-picker" options={{ title: "Save to collection" }} />
       <Stack.Screen name="notifications" options={{ title: "Notifications" }} />
+      <Stack.Screen name="offline-changes" options={{ title: "Offline changes need attention" }} />
       <Stack.Screen name="support" options={{ title: "Support" }} />
       <Stack.Screen name="articles/[articleId]" options={{ title: "Article" }} />
       <Stack.Screen name="podcast-episodes/[episodeId]" options={{ title: "Episode" }} />

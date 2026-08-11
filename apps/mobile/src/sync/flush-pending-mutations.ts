@@ -8,17 +8,42 @@ import type { MobileOfflineStore } from "@/storage/mobile-offline-store"
 
 export async function flushPendingMutations(api: MobileApiClient, offline: MobileOfflineStore) {
   let completed = 0
-  for (const mutation of await offline.pendingMutations()) {
+  let conflicts = 0
+  while (true) {
+    const mutation = await offline.nextReplayableMutation()
+    if (!mutation) {
+      return { completed, conflicts }
+    }
     try {
       await api.replayMutation(mutation)
-      await offline.removePendingMutation(mutation.idempotencyKey)
+      await offline.completePendingMutation(mutation.idempotencyKey)
       completed += 1
     } catch (error) {
       if (error instanceof MobileNetworkError || (error instanceof MobileApiError && error.retryable)) {
-        break
+        await offline.failPendingMutation({
+          code: error instanceof MobileApiError ? error.code : "NETWORK_UNAVAILABLE",
+          idempotencyKey: mutation.idempotencyKey,
+          state: "RETRYABLE_FAILURE",
+        })
+        return { completed, conflicts }
       }
-      await offline.removePendingMutation(mutation.idempotencyKey)
+      if (error instanceof MobileApiError && error.status === 401) {
+        await offline.failPendingMutation({
+          code: error.code,
+          idempotencyKey: mutation.idempotencyKey,
+          state: "PERMANENT_FAILURE",
+        })
+        throw error
+      }
+      const state = error instanceof MobileApiError && (error.status === 404 || error.code === "IDEMPOTENCY_KEY_REUSED")
+        ? "CONFLICT"
+        : "PERMANENT_FAILURE"
+      await offline.failPendingMutation({
+        code: error instanceof MobileApiError ? error.code : "UNKNOWN_REPLAY_FAILURE",
+        idempotencyKey: mutation.idempotencyKey,
+        state,
+      })
+      conflicts += state === "CONFLICT" ? 1 : 0
     }
   }
-  return completed
 }

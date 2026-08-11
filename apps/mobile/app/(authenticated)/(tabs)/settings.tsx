@@ -18,6 +18,7 @@ export default function SettingsScreen() {
       <Section title="Account">
         {data ? <Text style={mobileStyles.muted}>{data.data.name ?? data.data.email} · {data.data.plan}</Text> : <Loading />}
         <ActionButton onPress={() => router.push("/notifications")} tone="secondary">Notification preferences</ActionButton>
+        <ActionButton onPress={() => router.push("/offline-changes")} tone="secondary">Offline changes need attention</ActionButton>
         <ActionButton onPress={() => void openArcticRssWebPath(MOBILE_WEB_LINKS.deviceManagement)} tone="secondary">Manage devices on web</ActionButton>
       </Section>
       <Section title="Downloaded data">

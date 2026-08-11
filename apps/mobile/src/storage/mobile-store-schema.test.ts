@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest"
 
-import { MOBILE_STORE_SCHEMA_VERSION, requiresMobileStoreInitialization } from "./mobile-store-schema"
+import {
+  MOBILE_STORE_SCHEMA_VERSION,
+  mobileStoreUpgrade,
+  requiresMobileStoreInitialization,
+} from "./mobile-store-schema"
 
 describe("mobile store schema", () => {
-  it("initializes the only supported schema exactly once", () => {
+  it("initializes and upgrades supported alpha schemas exactly once", () => {
     expect(requiresMobileStoreInitialization(0)).toBe(true)
+    expect(mobileStoreUpgrade(0)).toBe("initialize")
+    expect(mobileStoreUpgrade(1)).toBe("upgrade-v1")
     expect(requiresMobileStoreInitialization(MOBILE_STORE_SCHEMA_VERSION)).toBe(false)
   })
 
