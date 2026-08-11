@@ -15,13 +15,14 @@ const MAX_MOBILE_SYNC_RETENTION_INTERVAL_MS = 24 * 60 * 60_000
 
 type MobileSyncRetentionDatabase = Pick<
   PrismaClient,
-  "$executeRaw" | "$queryRaw" | "userSyncEvent"
+  "$executeRaw" | "$queryRaw" | "mobileDevice" | "userSyncEvent"
 >
 
 export type MobileSyncRetentionStore = MobileSyncRetentionDatabase &
   Pick<PrismaClient, "$transaction">
 
 export type MobileSyncRetentionSummary = {
+  activeStableDeviceCount: number
   cutoffAt: string
   moreEligible: boolean
   oldestRetainedEventAgeMs: number | null
@@ -119,6 +120,9 @@ export async function pruneMobileSyncEvents({
           oldest: await retentionStore.userSyncEvent.aggregate({
             _min: { occurredAt: true },
           }),
+          activeStableDeviceCount: await retentionStore.mobileDevice.count({
+            where: { refreshExpiresAt: { gt: now }, revokedAt: null },
+          }),
           remainingUsers: await retentionStore.$queryRaw<
             Array<{ count: bigint }>
           >(Prisma.sql`
@@ -136,6 +140,9 @@ export async function pruneMobileSyncEvents({
         now,
         oldest: await retentionStore.userSyncEvent.aggregate({
           _min: { occurredAt: true },
+        }),
+        activeStableDeviceCount: await retentionStore.mobileDevice.count({
+          where: { refreshExpiresAt: { gt: now }, revokedAt: null },
         }),
         remainingUsers: await retentionStore.$queryRaw<Array<{ count: bigint }>>(
           Prisma.sql`
@@ -186,6 +193,7 @@ function numberFromCount(value: bigint | undefined) {
 }
 
 function retentionSummary({
+  activeStableDeviceCount,
   cutoff,
   now,
   oldest,
@@ -193,6 +201,7 @@ function retentionSummary({
   retainedEvents,
   rowsPruned,
 }: {
+  activeStableDeviceCount: number
   cutoff: Date
   now: Date
   oldest: { _min: { occurredAt: Date | null } }
@@ -204,6 +213,7 @@ function retentionSummary({
   const oldestRetainedEventAt = oldest._min.occurredAt ?? null
 
   return {
+    activeStableDeviceCount,
     cutoffAt: cutoff.toISOString(),
     moreEligible: usersRequiringPruning > 0,
     oldestRetainedEventAgeMs: oldestRetainedEventAt

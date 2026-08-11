@@ -33,11 +33,12 @@ useful as low-cardinality operational measurements. Mobile API request records
 now contain a bounded response class instead of a request UUID. Separate
 records cover authorization approval/cancel/failure, refresh success/retryable
 failure/reuse detection, and sync page duration/event count/has-more/full
-resync state. The existing retention worker already records journal rows,
-oldest retained age, and prune count.
+resync state. The existing six-hour retention worker now also records the
+active non-revoked stable-device count plus journal rows, oldest retained age,
+and prune count.
 
 These records intentionally contain no user, device, feed/source, article,
 query, token, request-body, header, or free-form device-name value. They do
 not add an analytics SDK, a push-install metric, remote telemetry transport,
-or production collection evidence. Active-device and offline-conflict
-aggregation remain follow-up source work.
+or production collection evidence. Offline-conflict aggregation remains
+follow-up source work.

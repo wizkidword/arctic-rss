@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   recordMobileAuthorizationDecision,
+  recordMobileJournalRetention,
   recordMobileSyncPage,
   recordMobileTokenRefresh,
 } from "./mobile-telemetry"
@@ -36,6 +37,26 @@ describe("mobile operational telemetry", () => {
       eventCount: 2,
       fullResyncRequired: false,
       hasMore: true,
+    })
+    info.mockRestore()
+  })
+
+  it("records stable-device and journal aggregates without a timestamp or identifier", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {})
+
+    recordMobileJournalRetention({
+      activeStableDeviceCount: 3,
+      oldestRetainedEventAgeMs: 95.8,
+      retainedEvents: 42,
+      rowsPruned: 2,
+    })
+
+    expect(JSON.parse(String(info.mock.calls[0][0]))).toEqual({
+      activeStableDeviceCount: 3,
+      event: "mobile_sync_journal",
+      oldestRetainedEventAgeMs: 96,
+      retainedEvents: 42,
+      rowsPruned: 2,
     })
     info.mockRestore()
   })

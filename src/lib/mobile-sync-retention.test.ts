@@ -32,6 +32,9 @@ function createStore({
       })),
       findMany: vi.fn().mockImplementation(({ take }) => candidates.slice(0, take)),
     },
+    mobileDevice: {
+      count: vi.fn().mockResolvedValue(3),
+    },
   }
   const store = {
     ...transaction,
@@ -65,6 +68,7 @@ describe("mobile sync retention", () => {
     })
     expect(transaction.$executeRaw).toHaveBeenCalledTimes(2)
     expect(result).toEqual({
+      activeStableDeviceCount: 3,
       cutoffAt: "2026-02-12T12:00:00.000Z",
       moreEligible: true,
       oldestRetainedEventAgeMs: 90_000_000,

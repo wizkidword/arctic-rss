@@ -31,6 +31,7 @@ import {
   type MobileSyncRetentionStore,
   pruneMobileSyncEvents,
 } from "../src/lib/mobile-sync-retention"
+import { recordMobileJournalRetention } from "../src/lib/mobile-telemetry"
 import { refreshFeed } from "../src/lib/feed-refresh"
 import {
   processChatArticleIntegration,
@@ -1274,6 +1275,7 @@ async function runMobileSyncRetention() {
       store: prisma as MobileSyncRetentionStore,
     })
     mobileSyncRetentionSchedule.recordSuccess(Date.now())
+    recordMobileJournalRetention(result)
     console.log(
       JSON.stringify({
         event: "mobile_sync_retention",
