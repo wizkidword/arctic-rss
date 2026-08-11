@@ -12,3 +12,8 @@ No foreign key is made required and no existing relation is removed. A later
 reviewed source cutover must dual-read, move receipts/installations, switch
 device management and caps to `MobileDevice`, and prove the disposable
 PostgreSQL rehearsal before any production deployment.
+
+`20260811120000_add_mobile_device_owned_records` is the next additive
+expansion: it backfills nullable device references on receipts and
+installations from their already-linked refresh-session rows. Existing unique
+keys and foreign keys remain in place until the later dual-write cutover.

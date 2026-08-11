@@ -574,8 +574,10 @@ model MobileDevice {
   revokedAt        DateTime?
   reuseDetectedAt  DateTime?
 
-  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessions DeviceSession[]
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions         DeviceSession[]
+  mutationReceipts DeviceMutationReceipt[]
+  installations    DeviceInstallation[]
 
   @@index([userId, revokedAt, refreshExpiresAt])
   @@index([refreshExpiresAt])
@@ -586,6 +588,7 @@ model MobileDevice {
 model DeviceMutationReceipt {
   id                 String   @id @default(cuid())
   deviceSessionId    String
+  mobileDeviceId     String?
   idempotencyKeyHash String   @db.VarChar(64)
   operation          String   @db.VarChar(80)
   requestHash        String   @db.VarChar(64)
@@ -595,8 +598,11 @@ model DeviceMutationReceipt {
   createdAt          DateTime @default(now())
 
   deviceSession DeviceSession @relation(fields: [deviceSessionId], references: [id], onDelete: Cascade)
+  mobileDevice  MobileDevice? @relation(fields: [mobileDeviceId], references: [id], onDelete: SetNull)
 
   @@unique([deviceSessionId, idempotencyKeyHash])
+  @@unique([mobileDeviceId, idempotencyKeyHash])
+  @@index([mobileDeviceId])
   @@index([createdAt])
 }
 
@@ -605,6 +611,7 @@ model DeviceMutationReceipt {
 model DeviceInstallation {
   id              String    @id @default(cuid())
   deviceSessionId String
+  mobileDeviceId  String?
   platform        String    @db.VarChar(32)
   environment     String    @db.VarChar(32)
   tokenHash       String    @unique @db.VarChar(64)
@@ -615,8 +622,10 @@ model DeviceInstallation {
   updatedAt       DateTime  @updatedAt
 
   deviceSession DeviceSession @relation(fields: [deviceSessionId], references: [id], onDelete: Cascade)
+  mobileDevice  MobileDevice? @relation(fields: [mobileDeviceId], references: [id], onDelete: SetNull)
 
   @@index([deviceSessionId, disabledAt])
+  @@index([mobileDeviceId, disabledAt])
   @@index([lastSeenAt])
 }
 
