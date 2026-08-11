@@ -16,6 +16,7 @@ fi
 # so the caller never has to evaluate shell syntax from a JSON file.
 python3 - "$RELEASE_RECORD_FILE" "$TOPOLOGY_MANIFEST_FILE" <<'PY'
 import json
+import os
 import re
 import sys
 
