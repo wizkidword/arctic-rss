@@ -4,7 +4,7 @@ import { Text, View } from "react-native"
 
 import { ArticleList } from "@/components/article-list"
 import { ActionButton, Loading, Notice, Screen, Section, mobileStyles } from "@/components/mobile-ui"
-import { useMobileQuery } from "@/hooks/use-mobile-query"
+import { useMobilePagination } from "@/hooks/use-mobile-pagination"
 import { useMobileApp } from "@/providers/mobile-app-provider"
 
 export function ReaderScreen({
@@ -16,16 +16,19 @@ export function ReaderScreen({
 }) {
   const { api } = useMobileApp()
   const load = useCallback(
-    (signal: AbortSignal) => api.reader({ collectionId, limit: 30, state }, { signal }),
+    ({ cursor, signal }: { cursor?: string; signal: AbortSignal }) =>
+      api.reader({ collectionId, cursor, limit: 30, state }, { signal }),
     [api, collectionId, state]
   )
-  const { data, error, hasOfflineCopy, isRefreshing, refresh } = useMobileQuery(
+  const page = useMobilePagination(
     `reader:${collectionId ?? "all"}:${state}`,
-    load
+    load,
+    useCallback((response) => response.data.articles, []),
+    useCallback((article) => article.id, [])
   )
 
   return (
-    <Screen isRefreshing={isRefreshing} onRefresh={refresh} title={collectionId ? "Collection" : "Articles"}>
+    <Screen isRefreshing={page.isRefreshing} onRefresh={page.refresh} title={collectionId ? "Collection" : "Articles"}>
       {!collectionId ? (
         <View style={mobileStyles.actionRow}>
           <ActionButton onPress={() => router.replace("/(authenticated)/(tabs)")} tone={state === "all" ? "primary" : "secondary"}>All</ActionButton>
@@ -33,9 +36,12 @@ export function ReaderScreen({
           <ActionButton onPress={() => router.replace("/(authenticated)/(tabs)/starred")} tone={state === "starred" ? "primary" : "secondary"}>Starred</ActionButton>
         </View>
       ) : null}
-      {error ? <Notice>{error}</Notice> : null}
+      {page.error ? <Notice>{page.error}</Notice> : null}
       <Section>
-        {data ? data.data.articles.length ? <ArticleList articles={data.data.articles} collectionId={collectionId} hasOfflineCopy={hasOfflineCopy} /> : <Text style={mobileStyles.muted}>No articles match this view.</Text> : <Loading />}
+        {page.items.length ? <ArticleList articles={page.items} collectionId={collectionId} hasOfflineCopy={page.hasOfflineCopy} /> : page.isRefreshing ? <Loading /> : <Text style={mobileStyles.muted}>No articles match this view.</Text>}
+        {page.hasNextPage ? <ActionButton disabled={page.isLoadingMore} onPress={() => void page.loadMore()} tone="secondary">{page.isLoadingMore ? "Loading more articles…" : "Load more articles"}</ActionButton> : null}
+        {page.isTruncated ? <Notice tone="info">Showing the first 300 articles. Refine this view to load a smaller result set.</Notice> : null}
+        {!page.hasNextPage && page.items.length > 0 && !page.isTruncated ? <Text style={mobileStyles.muted}>You have reached the end of this view.</Text> : null}
       </Section>
     </Screen>
   )
