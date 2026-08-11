@@ -26,6 +26,7 @@
     },
     "android": {
       "package": "com.arcticrss.reader",
+      "allowBackup": false,
       "versionCode": 1,
       "intentFilters": [
         {

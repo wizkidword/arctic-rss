@@ -13,5 +13,6 @@ The signed-in provider claims ownership after session hydration and before any
 flush or synchronization. The v1 alpha token keys lack these identifiers and
 are cleared rather than used to hydrate local account data.
 
-Authenticated Expo route grouping, Android backup exclusion verification, and
-the broader offline/account-switch test matrix remain open.
+Authenticated Expo route grouping, signed-manifest and restore verification of
+the Android backup boundary, and the broader offline/account-switch test matrix
+remain open.
