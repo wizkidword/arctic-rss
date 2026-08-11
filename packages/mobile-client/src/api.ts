@@ -357,6 +357,9 @@ export class MobileApiClient {
     assertQueuedMutation(request)
     return this.request(request.path, apiV1SuccessSchema(z.unknown()), {
       body: request.body,
+      headers: {
+        "x-arctic-rss-mutation-replay": "1",
+      },
       idempotencyKey: request.idempotencyKey,
       method: request.method,
       ...requestOptions,

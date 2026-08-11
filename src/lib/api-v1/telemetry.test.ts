@@ -4,6 +4,7 @@ import {
   parseMobileProductMilestone,
   recordApiV1Request,
   recordMobileProductMilestone,
+  recordMobileQueueConflict,
 } from "./telemetry"
 
 describe("mobile product telemetry", () => {
@@ -60,6 +61,18 @@ describe("mobile product telemetry", () => {
       rateLimitResult: "allowed",
       responseClass: "2xx",
       statusCode: 200,
+    })
+    info.mockRestore()
+  })
+
+  it("records queue conflicts with a fixed outcome and no identifier", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {})
+
+    recordMobileQueueConflict("resource_not_found")
+
+    expect(JSON.parse(String(info.mock.calls[0][0]))).toEqual({
+      event: "mobile_queue_conflict",
+      outcome: "resource_not_found",
     })
     info.mockRestore()
   })

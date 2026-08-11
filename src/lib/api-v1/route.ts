@@ -18,6 +18,7 @@ import { enforceRateLimit, getTrustedClientIp } from "@/lib/rate-limit"
 
 import {
   recordApiV1Request,
+  recordMobileQueueConflict,
   type ApiV1AuthMode,
   type ApiV1Endpoint,
   type ApiV1RateLimitResult,
@@ -264,6 +265,10 @@ export async function handleApiV1DeviceSession<T>({
       })
     }
   } catch (error) {
+    const queueConflict = mobileQueueConflictOutcome(request, error)
+    if (queueConflict) {
+      recordMobileQueueConflict(queueConflict)
+    }
     response = mobileApiErrorResponse({ endpoint, error, requestId })
   }
 
@@ -276,6 +281,22 @@ export async function handleApiV1DeviceSession<T>({
     statusCode: response.status,
   })
   return response
+}
+
+function mobileQueueConflictOutcome(request: Request, error: unknown) {
+  if (
+    request.headers.get("x-arctic-rss-mutation-replay") !== "1" ||
+    !(error instanceof MobileSyncError)
+  ) {
+    return undefined
+  }
+  if (error.code === "idempotency-conflict") {
+    return "idempotency_key_reused" as const
+  }
+  if (error.code === "collection-not-found" || error.code === "resource-not-found") {
+    return "resource_not_found" as const
+  }
+  return undefined
 }
 
 export function parseApiV1Query<T extends z.ZodType>(

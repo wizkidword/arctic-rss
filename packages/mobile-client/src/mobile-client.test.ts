@@ -74,6 +74,27 @@ describe("mobile client safeguards", () => {
     expect((fetch.mock.calls[0][1].headers as Headers).get("authorization")).toBe("Bearer device-token")
   })
 
+  it("marks only bounded offline mutation replays without adding mutation data", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("not json", { status: 502 }))
+    const client = new MobileApiClient({
+      fetch,
+      getAccessToken: async () => "device-token",
+      origin: "https://arcticrss.example",
+    })
+
+    await expect(
+      client.replayMutation({
+        body: { isRead: true },
+        idempotencyKey: "a".repeat(16),
+        method: "PATCH",
+        path: "/api/v1/articles/article_1/state",
+      })
+    ).rejects.toBeInstanceOf(MobileApiError)
+
+    const headers = fetch.mock.calls[0][1].headers as Headers
+    expect(headers.get("x-arctic-rss-mutation-replay")).toBe("1")
+  })
+
   it("replays one authenticated request after a coordinated token refresh", async () => {
     const authorizationHeaders: Array<string | null> = []
     const fetch = vi.fn(async (_url: string, init: RequestInit) => {

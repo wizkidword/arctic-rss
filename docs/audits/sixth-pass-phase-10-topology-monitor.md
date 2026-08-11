@@ -35,10 +35,11 @@ records cover authorization approval/cancel/failure, refresh success/retryable
 failure/reuse detection, and sync page duration/event count/has-more/full
 resync state. The existing six-hour retention worker now also records the
 active non-revoked stable-device count plus journal rows, oldest retained age,
-and prune count.
+and prune count. A fixed replay marker records only queue conflicts caused by
+a missing resource/collection or idempotency-key reuse; ordinary 404/409
+responses are not queue-conflict records.
 
 These records intentionally contain no user, device, feed/source, article,
 query, token, request-body, header, or free-form device-name value. They do
 not add an analytics SDK, a push-install metric, remote telemetry transport,
-or production collection evidence. Offline-conflict aggregation remains
-follow-up source work.
+or production collection evidence.

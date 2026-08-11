@@ -29,6 +29,10 @@ export type MobileProductMilestone =
   | "first_mobile_sync"
   | "first_return_session"
 
+export type MobileQueueConflictOutcome =
+  | "idempotency_key_reused"
+  | "resource_not_found"
+
 export function recordApiV1Request({
   authMode,
   durationMs,
@@ -84,6 +88,17 @@ export function recordMobileProductMilestone(milestone: MobileProductMilestone) 
       event: "mobile_product_milestone",
       milestone,
       platform: "android",
+    })
+  )
+}
+
+export function recordMobileQueueConflict(outcome: MobileQueueConflictOutcome) {
+  // The marker and outcome are fixed values. Do not add user/device IDs,
+  // mutation keys, resource IDs, request IDs, or mutation bodies here.
+  console.info(
+    JSON.stringify({
+      event: "mobile_queue_conflict",
+      outcome,
     })
   )
 }
