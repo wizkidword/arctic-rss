@@ -8,12 +8,10 @@ import { ActionButton, Loading, Notice, Screen, Section, mobileStyles } from "@/
 import { useMobileQuery } from "@/hooks/use-mobile-query"
 import { useMobileApp } from "@/providers/mobile-app-provider"
 import { submitMobileMutation } from "@/sync/submit-mobile-mutation"
-
-const channels: readonly NotificationChannel[] = ["IN_APP", "EMAIL", "MOBILE_PUSH", "DISABLED"]
-
-function nextChannel(channel: NotificationChannel) {
-  return channels[(channels.indexOf(channel) + 1) % channels.length]
-}
+import {
+  mobileNotificationChannelLabel,
+  nextMobileNotificationChannel,
+} from "@/lib/mobile-notification-channel"
 
 export default function NotificationsScreen() {
   const { api, offline } = useMobileApp()
@@ -52,12 +50,12 @@ export default function NotificationsScreen() {
         <Text style={mobileStyles.muted}>Tap a topic to cycle its delivery setting. Push delivery stays disabled until a future signed build registers a push token.</Text>
       </Section>
       {preferences.data ? preferences.data.data.preferences.map((preference) => {
-        const next = nextChannel(preference.channel)
+        const next = nextMobileNotificationChannel(preference.channel)
         return (
           <Section key={preference.topic} title={preference.topic.replaceAll("_", " ")}>
             <View style={mobileStyles.actionRow}>
-              <Text style={mobileStyles.muted}>Current: {preference.channel.replaceAll("_", " ")}</Text>
-              <ActionButton onPress={() => void update(preference.topic, next)} tone="secondary">Use {next.replaceAll("_", " ")}</ActionButton>
+              <Text style={mobileStyles.muted}>Current: {mobileNotificationChannelLabel(preference.channel)}</Text>
+              <ActionButton onPress={() => void update(preference.topic, next)} tone="secondary">Use {mobileNotificationChannelLabel(next)}</ActionButton>
             </View>
           </Section>
         )

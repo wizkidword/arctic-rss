@@ -23,3 +23,8 @@ and mobile typecheck, mobile lint, and Android export pass for this slice.
 Saved-view, briefing, collection, and any retained-podcast pagination remain
 separate follow-up work; no podcast ship/remove decision, offline-download
 expansion, signed build, or Play action is implied.
+
+The notification picker also no longer offers `MOBILE_PUSH`: there is no
+provider, permission flow, device-token registration, or delivery evidence in
+this alpha. Existing server-side push preferences remain visible only as
+unavailable and can be changed to an implemented channel.
