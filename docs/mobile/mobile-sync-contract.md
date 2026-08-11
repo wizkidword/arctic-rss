@@ -18,9 +18,10 @@ user-scoped even though the sequence is global.
 
 The database retains each user's events for 180 days. Trigger-driven pruning
 also advances a per-user cursor floor. If a supplied cursor is older than that
-floor, the API returns `409 FULL_RESYNC_REQUIRED`; clients must discard their
-cursor and rebuild their limited local cache from the existing read endpoints.
-They must not silently apply a partial delta.
+floor, the API returns `409 FULL_RESYNC_REQUIRED`. Clients must not silently
+apply a partial delta. Until a truthful bootstrap endpoint is available, the
+Android client preserves its current cursor and bounded cache instead of
+pretending the first incremental page is a full resync.
 
 Responses contain compact schema-versioned `UPSERT` and `TOMBSTONE` events
 only. Version 1 is a strict typed union for article state, collection,
@@ -34,6 +35,13 @@ queries, refresh tokens, push tokens, or account email addresses.
 when no events were returned. A client sends that cursor only after it has
 validated and applied every event in the page. Unknown event shapes or schema
 versions are rejected and must leave the cursor unchanged.
+
+The Android client currently validates each page, clears only its bounded
+derived cache when a page contains events, and writes the next cursor plus any
+local product milestone in the same SQLite transaction. Pending mutations are
+not part of event invalidation. Product milestones are local-only until a
+truthful post-commit telemetry signal exists; the sync request does not accept
+or emit an unverified milestone header.
 
 The first event sources are article state, collection membership, podcast
 episode state, saved views, feed and podcast subscriptions, Smart Digest

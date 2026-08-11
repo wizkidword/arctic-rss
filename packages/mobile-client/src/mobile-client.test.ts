@@ -42,7 +42,7 @@ describe("mobile client safeguards", () => {
     expect(headers.get("authorization")).toBe("Bearer access-token-should-not-appear-in-errors")
   })
 
-  it("sends a fixed Android milestone header only with a mobile sync request", async () => {
+  it("does not send a sync milestone before the local client has committed the page", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response("not json", { status: 502 }))
     const client = new MobileApiClient({
       fetch,
@@ -50,15 +50,11 @@ describe("mobile client safeguards", () => {
       origin: "https://arcticrss.example",
     })
 
-    await expect(client.sync(undefined, "first_mobile_sync")).rejects.toBeInstanceOf(
-      MobileApiError
-    )
+    await expect(client.sync()).rejects.toBeInstanceOf(MobileApiError)
 
     const headers = fetch.mock.calls[0][1].headers as Headers
-    expect(headers.get("x-arctic-rss-client-platform")).toBe("android")
-    expect(headers.get("x-arctic-rss-product-milestone")).toBe(
-      "first_mobile_sync"
-    )
+    expect(headers.get("x-arctic-rss-client-platform")).toBeNull()
+    expect(headers.get("x-arctic-rss-product-milestone")).toBeNull()
   })
 
   it("replays one authenticated request after a coordinated token refresh", async () => {

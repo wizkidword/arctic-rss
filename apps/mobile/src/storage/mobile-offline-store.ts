@@ -6,6 +6,11 @@ import {
   selectMobileCacheEvictions,
   type PendingMobileMutation,
 } from "@arctic-rss/mobile-client"
+import {
+  syncCursorSchema,
+  type UserSyncEvent,
+  userSyncEventSchema,
+} from "@arctic-rss/api-contract"
 
 import { MOBILE_STORE_SCHEMA_VERSION, requiresMobileStoreInitialization } from "@/storage/mobile-store-schema"
 import { readPendingMobileMutations, type StoredPendingMutationRow } from "@/storage/pending-mobile-mutations"
@@ -178,6 +183,50 @@ export class MobileOfflineStore {
     )
   }
 
+  async commitSyncPage({
+    cursor,
+    events,
+    milestone,
+  }: {
+    cursor: string | null
+    events: readonly UserSyncEvent[]
+    milestone?: MobileProductMilestone
+  }) {
+    const owner = await this.assertOwner()
+    for (const event of events) {
+      userSyncEventSchema.parse(event)
+    }
+    if (cursor !== null) {
+      syncCursorSchema.parse(cursor)
+    }
+    const database = await this.database()
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      if (!(await this.ownerRecordMatches(transaction, owner))) {
+        throw new Error("Mobile offline storage ownership changed.")
+      }
+      // Event payloads are deliberately invalidation-only. Clearing the
+      // bounded derived cache is safer than attempting partial projections.
+      if (events.length > 0) {
+        await transaction.runAsync("DELETE FROM mobile_cache")
+      }
+      if (cursor === null) {
+        await transaction.runAsync("DELETE FROM mobile_sync_state WHERE key = 'cursor'")
+      } else {
+        await transaction.runAsync(
+          "INSERT OR REPLACE INTO mobile_sync_state (key, value) VALUES ('cursor', ?)",
+          cursor
+        )
+      }
+      if (milestone) {
+        await transaction.runAsync(
+          "INSERT OR REPLACE INTO mobile_sync_state (key, value) VALUES (?, ?)",
+          productMilestoneKey(milestone),
+          "recorded"
+        )
+      }
+    })
+  }
+
   async hasProductMilestone(milestone: MobileProductMilestone) {
     await this.assertOwner()
     const database = await this.database()
@@ -275,20 +324,30 @@ export class MobileOfflineStore {
   }
 
   private async assertOwner() {
-    if (!this.owner) {
+    const owner = this.owner
+    if (!owner) {
       throw new Error("Mobile offline storage has no authenticated owner.")
     }
     const database = await this.database()
-    const existing = await database.getFirstAsync<StoreOwnerRow>(
-      "SELECT ownerUserId, mobileDeviceId FROM mobile_store_metadata WHERE id = 1"
-    )
-    if (!existing || existing.ownerUserId !== this.owner.userId || existing.mobileDeviceId !== this.owner.mobileDeviceId) {
+    if (!(await this.ownerRecordMatches(database, owner))) {
       await database.withExclusiveTransactionAsync(async (transaction) => {
         await this.purge(transaction)
       })
       this.owner = null
       throw new Error("Mobile offline storage ownership changed.")
     }
+    return owner
+  }
+
+  private async ownerRecordMatches(database: SQLite.SQLiteDatabase, owner: MobileStoreOwner) {
+    const existing = await database.getFirstAsync<StoreOwnerRow>(
+      "SELECT ownerUserId, mobileDeviceId FROM mobile_store_metadata WHERE id = 1"
+    )
+    return Boolean(
+      existing &&
+      existing.ownerUserId === owner.userId &&
+      existing.mobileDeviceId === owner.mobileDeviceId
+    )
   }
 
   private async deleteCorruptPendingMutations(database: SQLite.SQLiteDatabase) {

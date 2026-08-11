@@ -247,14 +247,8 @@ export class MobileApiClient {
     })
   }
 
-  sync(cursor?: string, productMilestone?: MobileProductMilestone) {
+  sync(cursor?: string) {
     return this.request("/api/v1/sync", syncResponseSchema, {
-      headers: productMilestone
-        ? {
-            "X-Arctic-RSS-Client-Platform": "android",
-            "X-Arctic-RSS-Product-Milestone": productMilestone,
-          }
-        : undefined,
       query: { cursor, limit: 100 },
     })
   }
