@@ -7,8 +7,13 @@ export const MOBILE_DEVELOPMENT_AUTH_REDIRECT_URI = "arcticrss://auth/callback"
 export const MOBILE_AUTH_REDIRECT_URI = __DEV__
   ? MOBILE_DEVELOPMENT_AUTH_REDIRECT_URI
   : MOBILE_PRODUCTION_AUTH_REDIRECT_URI
-export const MOBILE_SERVICE_ORIGIN =
-  process.env.EXPO_PUBLIC_ARCTIC_RSS_ORIGIN?.trim() || "https://arcticrss.com"
+const configuredMobileServiceOrigin = process.env.EXPO_PUBLIC_ARCTIC_RSS_ORIGIN?.trim()
+
+if (__DEV__ && !configuredMobileServiceOrigin) {
+  throw new Error("EXPO_PUBLIC_ARCTIC_RSS_ORIGIN is required for an Arctic RSS development build.")
+}
+
+export const MOBILE_SERVICE_ORIGIN = configuredMobileServiceOrigin || "https://arcticrss.com"
 export const MOBILE_WEB_LINKS = {
   accountDeletion: "/delete-account",
   deviceManagement: "/app/settings/devices",

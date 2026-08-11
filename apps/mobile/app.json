@@ -14,7 +14,8 @@
           "configureAndroidBackup": true
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "./plugins/with-no-cleartext.cjs"
     ],
     "experiments": {
       "typedRoutes": true
@@ -27,6 +28,11 @@
     "android": {
       "package": "com.arcticrss.reader",
       "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "versionCode": 1,
       "intentFilters": [
         {
