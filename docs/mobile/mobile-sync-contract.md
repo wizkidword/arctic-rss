@@ -19,9 +19,11 @@ user-scoped even though the sequence is global.
 The database retains each user's events for 180 days. Trigger-driven pruning
 also advances a per-user cursor floor. If a supplied cursor is older than that
 floor, the API returns `409 FULL_RESYNC_REQUIRED`. Clients must not silently
-apply a partial delta. Until a truthful bootstrap endpoint is available, the
-Android client preserves its current cursor and bounded cache instead of
-pretending the first incremental page is a full resync.
+apply a partial delta. `GET /api/v1/sync/bootstrap` returns the authenticated
+user's high-water cursor. The Android client preserves pending mutations,
+clears only derived cache, commits that cursor transactionally, and then
+resumes incremental sync from it. This is a high-water reset, not an event
+page mislabeled as a full resync.
 
 Responses contain compact schema-versioned `UPSERT` and `TOMBSTONE` events
 only. Version 1 is a strict typed union for article state, collection,

@@ -60,6 +60,7 @@ describe("first-party API v1 contract", () => {
       "/api/v1/saved-views",
       "/api/v1/search",
       "/api/v1/sync",
+      "/api/v1/sync/bootstrap",
     ])
     expect(JSON.parse(JSON.stringify(mobileApiV1OpenApiDocument)).openapi).toBe("3.1.1")
   })

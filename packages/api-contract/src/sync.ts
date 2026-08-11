@@ -132,4 +132,8 @@ export const syncResponseSchema = apiV1SuccessSchema(
     .strict()
 )
 
+export const syncBootstrapResponseSchema = apiV1SuccessSchema(
+  z.object({ highWaterCursor: syncCursorSchema.nullable() }).strict()
+)
+
 export type UserSyncEvent = z.infer<typeof userSyncEventSchema>

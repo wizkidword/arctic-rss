@@ -30,7 +30,7 @@ import {
 } from "./notifications"
 import { podcastEpisodeResponseSchema, podcastsResponseSchema } from "./podcasts"
 import { savedViewsResponseSchema } from "./saved-views"
-import { syncResponseSchema } from "./sync"
+import { syncBootstrapResponseSchema, syncResponseSchema } from "./sync"
 
 const schemas = {
   ApiV1Error: z.toJSONSchema(apiV1ErrorEnvelopeSchema, { target: "draft-2020-12" }),
@@ -109,6 +109,7 @@ const schemas = {
     target: "draft-2020-12",
   }),
   SyncResponse: z.toJSONSchema(syncResponseSchema, { target: "draft-2020-12" }),
+  SyncBootstrapResponse: z.toJSONSchema(syncBootstrapResponseSchema, { target: "draft-2020-12" }),
 }
 
 function jsonResponse(schema: keyof typeof schemas) {
@@ -381,6 +382,13 @@ export const mobileApiV1OpenApiDocument = {
           ...defaultErrors,
         },
         summary: "Read the current device session's incremental user sync events and tombstones.",
+      },
+    },
+    "/api/v1/sync/bootstrap": {
+      get: {
+        operationId: "bootstrapUserSync",
+        responses: { "200": jsonResponse("SyncBootstrapResponse"), ...defaultErrors },
+        summary: "Read a high-water cursor after clearing derived mobile cache during a full resync.",
       },
     },
   },

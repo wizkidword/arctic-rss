@@ -92,6 +92,16 @@ export async function listMobileSync({
   }
 }
 
+export async function getMobileSyncBootstrap(userId: string) {
+  const latest = await getPrisma().userSyncEvent.findFirst({
+    orderBy: { sequence: "desc" },
+    select: { sequence: true },
+    where: { userId },
+  })
+
+  return { highWaterCursor: latest?.sequence.toString() ?? null }
+}
+
 export async function updateMobileArticleState({
   articleId,
   deviceSessionId,

@@ -6,6 +6,7 @@ import { getPrisma } from "@/lib/db"
 
 import {
   addMobileCollectionItem,
+  getMobileSyncBootstrap,
   listMobileNotificationPreferences,
   listMobileSync,
   MobileSyncError,
@@ -173,6 +174,21 @@ describe("mobile sync foundations in PostgreSQL", () => {
     await expect(listMobileSync({ cursor: "1", limit: 20, userId: fixture.user.id })).rejects.toMatchObject({
       code: "full-resync-required",
     } satisfies Partial<MobileSyncError>)
+  })
+
+  databaseTest("returns a high-water cursor without rebuilding pending mobile state", async () => {
+    prisma = getPrisma()
+    const fixture = await createFixture(prisma, userIds)
+    await updateMobileArticleState({
+      articleId: fixture.article.id,
+      deviceSessionId: fixture.session.id,
+      idempotencyKey: "phase12-bootstrap-high-water",
+      input: { isRead: true },
+      userId: fixture.user.id,
+    })
+
+    const bootstrap = await getMobileSyncBootstrap(fixture.user.id)
+    expect(bootstrap.highWaterCursor).toMatch(/^\d+$/)
   })
 })
 

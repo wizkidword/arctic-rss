@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { userSyncEventSchema } from "./sync"
+import { syncBootstrapResponseSchema, userSyncEventSchema } from "./sync"
 
 const articleStateEvent = {
   action: "UPSERT",
@@ -43,6 +43,21 @@ describe("userSyncEventSchema", () => {
       userSyncEventSchema.safeParse({
         ...articleStateEvent,
         payload: { ...articleStateEvent.payload, articleBody: "must-not-enter-sync" },
+      }).success
+    ).toBe(false)
+  })
+
+  it("bounds the high-water bootstrap cursor", () => {
+    expect(
+      syncBootstrapResponseSchema.parse({
+        data: { highWaterCursor: "42" },
+        meta: { requestId: "11111111-1111-4111-8111-111111111111" },
+      })
+    ).toMatchObject({ data: { highWaterCursor: "42" } })
+    expect(
+      syncBootstrapResponseSchema.safeParse({
+        data: { highWaterCursor: "not-a-cursor" },
+        meta: { requestId: "11111111-1111-4111-8111-111111111111" },
       }).success
     ).toBe(false)
   })

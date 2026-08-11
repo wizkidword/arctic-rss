@@ -18,6 +18,7 @@ import {
   podcastsResponseSchema,
   readerPageResponseSchema,
   savedViewsResponseSchema,
+  syncBootstrapResponseSchema,
   searchPageResponseSchema,
   syncResponseSchema,
   type ArticleStateMutationRequest,
@@ -251,6 +252,10 @@ export class MobileApiClient {
     return this.request("/api/v1/sync", syncResponseSchema, {
       query: { cursor, limit: 100 },
     })
+  }
+
+  syncBootstrap() {
+    return this.request("/api/v1/sync/bootstrap", syncBootstrapResponseSchema)
   }
 
   logout() {

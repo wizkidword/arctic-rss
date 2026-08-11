@@ -57,6 +57,23 @@ describe("mobile client safeguards", () => {
     expect(headers.get("x-arctic-rss-product-milestone")).toBeNull()
   })
 
+  it("uses the private bootstrap endpoint only with the current device session", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("not json", { status: 502 }))
+    const client = new MobileApiClient({
+      fetch,
+      getAccessToken: async () => "device-token",
+      origin: "https://arcticrss.example",
+    })
+
+    await expect(client.syncBootstrap()).rejects.toBeInstanceOf(MobileApiError)
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://arcticrss.example/api/v1/sync/bootstrap",
+      expect.objectContaining({ headers: expect.any(Headers), method: "GET" })
+    )
+    expect((fetch.mock.calls[0][1].headers as Headers).get("authorization")).toBe("Bearer device-token")
+  })
+
   it("replays one authenticated request after a coordinated token refresh", async () => {
     const authorizationHeaders: Array<string | null> = []
     const fetch = vi.fn(async (_url: string, init: RequestInit) => {

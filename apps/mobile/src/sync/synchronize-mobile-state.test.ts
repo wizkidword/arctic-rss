@@ -16,6 +16,7 @@ function createOffline({
   const recorded = new Set(milestones)
 
   return {
+    bootstrapSync: vi.fn(),
     clearDownloadedData: vi.fn(),
     commitSyncPage: vi.fn(),
     getCursor: vi.fn().mockResolvedValue(cursor),
@@ -166,22 +167,30 @@ describe("synchronizeMobileState", () => {
     expect(offline.commitSyncPage).not.toHaveBeenCalled()
   })
 
-  it("preserves the cursor and cache when a truthful bootstrap is unavailable", async () => {
+  it("uses a high-water bootstrap before resuming incremental sync", async () => {
     const offline = createOffline({ cursor: "1" })
     const api = {
-      sync: vi.fn().mockRejectedValue(
-        new MobileApiError("FULL_RESYNC_REQUIRED", "A full resync is required.", false, 409)
-      ),
+      sync: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new MobileApiError("FULL_RESYNC_REQUIRED", "A full resync is required.", false, 409)
+        )
+        .mockResolvedValueOnce({ ...emptySyncResponse, meta: { ...emptySyncResponse.meta, nextCursor: "42" } }),
+      syncBootstrap: vi.fn().mockResolvedValue({ data: { highWaterCursor: "42" } }),
     }
 
-    await expect(
-      synchronizeMobileState(
-        api as unknown as MobileApiClient,
-        offline as unknown as MobileOfflineStore
-      )
-    ).rejects.toMatchObject({ code: "FULL_RESYNC_REQUIRED" })
+    await synchronizeMobileState(
+      api as unknown as MobileApiClient,
+      offline as unknown as MobileOfflineStore
+    )
 
+    expect(api.syncBootstrap).toHaveBeenCalledOnce()
+    expect(offline.bootstrapSync).toHaveBeenCalledWith("42")
+    expect(api.sync).toHaveBeenNthCalledWith(1, "1")
+    expect(api.sync).toHaveBeenNthCalledWith(2, "42")
+    expect(offline.commitSyncPage).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: "42", milestone: "first_mobile_sync" })
+    )
     expect(offline.clearDownloadedData).not.toHaveBeenCalled()
-    expect(offline.commitSyncPage).not.toHaveBeenCalled()
   })
 })

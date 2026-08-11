@@ -15,6 +15,7 @@ export type ApiV1Endpoint =
   | "saved-views"
   | "search"
   | "sync"
+  | "sync-bootstrap"
 
 export type ApiV1AuthMode = "device-session" | "web-session"
 

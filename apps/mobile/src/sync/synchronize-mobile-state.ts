@@ -1,4 +1,8 @@
-import { type MobileApiClient, type MobileProductMilestone } from "@arctic-rss/mobile-client"
+import {
+  MobileApiError,
+  type MobileApiClient,
+  type MobileProductMilestone,
+} from "@arctic-rss/mobile-client"
 
 import type { MobileOfflineStore } from "@/storage/mobile-offline-store"
 
@@ -9,8 +13,25 @@ export async function synchronizeMobileState(
 ) {
   let cursor = await offline.getCursor()
   const milestone = await nextMobileSyncMilestone(offline, returnSession)
+  let bootstrapped = false
   while (true) {
-    const response = await api.sync(cursor ?? undefined)
+    let response: Awaited<ReturnType<MobileApiClient["sync"]>>
+    try {
+      response = await api.sync(cursor ?? undefined)
+    } catch (error) {
+      if (
+        !bootstrapped &&
+        error instanceof MobileApiError &&
+        error.code === "FULL_RESYNC_REQUIRED"
+      ) {
+        const bootstrap = await api.syncBootstrap()
+        await offline.bootstrapSync(bootstrap.data.highWaterCursor)
+        cursor = bootstrap.data.highWaterCursor
+        bootstrapped = true
+        continue
+      }
+      throw error
+    }
     const followingCursor = response.meta.nextCursor
     const nextCursor = followingCursor ?? cursor
     if (!response.data.hasMore) {

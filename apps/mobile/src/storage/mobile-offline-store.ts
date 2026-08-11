@@ -227,6 +227,30 @@ export class MobileOfflineStore {
     })
   }
 
+  async bootstrapSync(highWaterCursor: string | null) {
+    const owner = await this.assertOwner()
+    if (highWaterCursor !== null) {
+      syncCursorSchema.parse(highWaterCursor)
+    }
+    const database = await this.database()
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      if (!(await this.ownerRecordMatches(transaction, owner))) {
+        throw new Error("Mobile offline storage ownership changed.")
+      }
+      // Keep pending mutations intact. API reads are authoritative for the
+      // derived cache that this truthful high-water bootstrap replaces.
+      await transaction.runAsync("DELETE FROM mobile_cache")
+      if (highWaterCursor === null) {
+        await transaction.runAsync("DELETE FROM mobile_sync_state WHERE key = 'cursor'")
+      } else {
+        await transaction.runAsync(
+          "INSERT OR REPLACE INTO mobile_sync_state (key, value) VALUES ('cursor', ?)",
+          highWaterCursor
+        )
+      }
+    })
+  }
+
   async hasProductMilestone(milestone: MobileProductMilestone) {
     await this.assertOwner()
     const database = await this.database()
