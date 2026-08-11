@@ -19,5 +19,5 @@ record it before the client had committed the event page.
 
 The invalidation is deliberately coarse—all derived cache rather than an
 incomplete projection—while the event set is still small. Native SQLite
-failure injection, retention maintenance, and multi-device convergence tests
+failure injection and multi-device convergence tests
 remain required before source completion.

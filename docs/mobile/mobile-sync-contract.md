@@ -16,14 +16,17 @@ Events have a PostgreSQL-assigned, monotonically increasing `sequence`. A
 cursor is the decimal-string form of the last applied sequence. Queries remain
 user-scoped even though the sequence is global.
 
-The database retains each user's events for 180 days. Trigger-driven pruning
-also advances a per-user cursor floor. If a supplied cursor is older than that
-floor, the API returns `409 FULL_RESYNC_REQUIRED`. Clients must not silently
-apply a partial delta. `GET /api/v1/sync/bootstrap` returns the authenticated
-user's high-water cursor. The Android client preserves pending mutations,
-clears only derived cache, commits that cursor transactionally, and then
-resumes incremental sync from it. This is a high-water reset, not an event
-page mislabeled as a full resync.
+The database retains each user's events for 180 days. Source-table triggers
+append events only; the lease-protected maintenance worker deletes one bounded
+expired batch and advances each affected user's cursor floor in that same
+transaction. Its aggregate log metrics report retained-event count, oldest
+retained age and timestamp, rows pruned, and users still requiring pruning. If a
+supplied cursor is older than that floor, the API returns `409
+FULL_RESYNC_REQUIRED`. Clients must not silently apply a partial delta. `GET
+/api/v1/sync/bootstrap` returns the authenticated user's high-water cursor.
+The Android client preserves pending mutations, clears only derived cache,
+commits that cursor transactionally, and then resumes incremental sync from
+it. This is a high-water reset, not an event page mislabeled as a full resync.
 
 Responses contain compact schema-versioned `UPSERT` and `TOMBSTONE` events
 only. Version 1 is a strict typed union for article state, collection,

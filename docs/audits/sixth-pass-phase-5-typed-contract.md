@@ -17,6 +17,6 @@ such a response unacknowledged on the client. `hasMore` and `nextCursor` now
 have explicit page semantics.
 
 This slice does not yet add the collection trigger, local event invalidation,
-bootstrap/full resync, retention maintenance, or disposable-PostgreSQL
+bootstrap/full resync, native SQLite failure injection, or disposable-PostgreSQL
 convergence proof. No database migration has been applied and no deployment
 occurred.

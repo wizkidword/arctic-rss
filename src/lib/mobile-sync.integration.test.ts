@@ -18,6 +18,7 @@ import {
   updateMobilePodcastEpisodeState,
   updateMobilePodcastProgress,
 } from "./mobile-sync"
+import { pruneMobileSyncEvents } from "./mobile-sync-retention"
 
 const databaseTest = process.env.CI ? test : test.skip
 
@@ -172,6 +173,67 @@ describe("mobile sync foundations in PostgreSQL", () => {
     })
 
     await expect(listMobileSync({ cursor: "1", limit: 20, userId: fixture.user.id })).rejects.toMatchObject({
+      code: "full-resync-required",
+    } satisfies Partial<MobileSyncError>)
+  })
+
+  databaseTest("prunes expired events in a bounded pass and advances the floor transactionally", async () => {
+    prisma = getPrisma()
+    const fixture = await createFixture(prisma, userIds)
+    const occurredAt = new Date("2025-12-01T12:00:00.000Z")
+    await prisma.userSyncEvent.createMany({
+      data: [
+        {
+          action: "UPSERT",
+          occurredAt,
+          payload: {
+            archivedAt: null,
+            articleId: fixture.article.id,
+            isRead: false,
+            isStarred: false,
+            readAt: null,
+            starredAt: null,
+          },
+          resourceId: fixture.article.id,
+          resourceType: "article-state",
+          resourceVersion: occurredAt.toISOString(),
+          userId: fixture.user.id,
+        },
+        {
+          action: "TOMBSTONE",
+          occurredAt,
+          payload: { articleId: fixture.article.id },
+          resourceId: fixture.article.id,
+          resourceType: "article-state",
+          resourceVersion: occurredAt.toISOString(),
+          userId: fixture.user.id,
+        },
+      ],
+    })
+    const expired = await prisma.userSyncEvent.findMany({
+      orderBy: { sequence: "asc" },
+      select: { sequence: true },
+      where: { occurredAt, userId: fixture.user.id },
+    })
+
+    const result = await pruneMobileSyncEvents({
+      batchSize: 2,
+      now: new Date("2026-08-11T12:00:00.000Z"),
+      store: prisma,
+    })
+
+    expect(result.rowsPruned).toBe(2)
+    const floor = await prisma.userSyncCursorFloor.findUniqueOrThrow({
+      where: { userId: fixture.user.id },
+    })
+    expect(floor.minimumSequence).toBe(expired.at(-1)!.sequence + BigInt(1))
+    await expect(
+      listMobileSync({
+        cursor: expired[0]!.sequence.toString(),
+        limit: 20,
+        userId: fixture.user.id,
+      })
+    ).rejects.toMatchObject({
       code: "full-resync-required",
     } satisfies Partial<MobileSyncError>)
   })

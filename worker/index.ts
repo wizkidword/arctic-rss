@@ -26,6 +26,11 @@ import { processAiDigest } from "../src/lib/ai-digests"
 import { reconcileExpiredAiUsageOperations } from "../src/lib/ai-usage"
 import { getPrisma } from "../src/lib/db"
 import { writeHealthSnapshot } from "../src/lib/health-snapshot"
+import {
+  getMobileSyncRetentionSettings,
+  type MobileSyncRetentionStore,
+  pruneMobileSyncEvents,
+} from "../src/lib/mobile-sync-retention"
 import { refreshFeed } from "../src/lib/feed-refresh"
 import {
   processChatArticleIntegration,
@@ -196,6 +201,7 @@ const {
 } = schedulerSettings()
 const savedMonitorSchedulerSettings = savedMonitorSettings()
 const chatRetentionSettings = getChatRetentionSettings()
+const mobileSyncRetentionSettings = getMobileSyncRetentionSettings()
 const { intervalMs: chatRetentionIntervalMs } = chatRetentionSettings
 const prisma = getPrisma()
 const chatEventOutboxIntervalMs = readClampedPositiveInteger({
@@ -218,6 +224,9 @@ const chatRetentionMaintenanceSchedule = new MaintenanceSchedule({
 })
 const securityEventMaintenanceSchedule = new MaintenanceSchedule({
   normalIntervalMs: securityEventMaintenanceIntervalMs,
+})
+const mobileSyncRetentionSchedule = new MaintenanceSchedule({
+  normalIntervalMs: mobileSyncRetentionSettings.intervalMs,
 })
 const aiOperationReconciliationSchedule = new MaintenanceSchedule({
   normalIntervalMs: schedulerIntervalMs,
@@ -756,6 +765,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       chatRetentionResult,
       maintenanceResult,
       securityEventMaintenanceResult,
+      mobileSyncRetentionResult,
       aiOperationReconciliationResult,
       savedMonitorResult,
     ] = await Promise.allSettled([
@@ -771,6 +781,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       runLeaseAwareMaintenance(lease, () => runChatRetention(lease)),
       runLeaseAwareMaintenance(lease, runAuthTokenMaintenance),
       runLeaseAwareMaintenance(lease, runSecurityEventMaintenance),
+      runLeaseAwareMaintenance(lease, runMobileSyncRetention),
       runLeaseAwareMaintenance(lease, () =>
         runAiOperationReconciliation(lease)
       ),
@@ -893,6 +904,17 @@ async function schedulerTick(lease?: MaintenanceLease) {
       )
     }
 
+    if (mobileSyncRetentionResult.status === "rejected") {
+      console.error(
+        JSON.stringify({
+          event: "mobile_sync_retention",
+          ...maintenanceScheduleMetrics(mobileSyncRetentionSchedule),
+          outcome: "failure",
+          reason: schedulerErrorMessage(mobileSyncRetentionResult.reason),
+        })
+      )
+    }
+
     if (aiOperationReconciliationResult.status === "rejected") {
       console.error(
         JSON.stringify({
@@ -924,6 +946,7 @@ async function schedulerTick(lease?: MaintenanceLease) {
       chatRetentionResult,
       maintenanceResult,
       securityEventMaintenanceResult,
+      mobileSyncRetentionResult,
       aiOperationReconciliationResult,
       savedMonitorResult,
     ].every((result) => result.status === "fulfilled")
@@ -1236,6 +1259,33 @@ async function runSecurityEventMaintenance() {
     return result
   } catch (error) {
     securityEventMaintenanceSchedule.recordFailure(Date.now())
+    throw error
+  }
+}
+
+async function runMobileSyncRetention() {
+  if (!mobileSyncRetentionSchedule.isDue(Date.now())) {
+    return
+  }
+
+  try {
+    const result = await pruneMobileSyncEvents({
+      batchSize: mobileSyncRetentionSettings.batchSize,
+      store: prisma as MobileSyncRetentionStore,
+    })
+    mobileSyncRetentionSchedule.recordSuccess(Date.now())
+    console.log(
+      JSON.stringify({
+        event: "mobile_sync_retention",
+        outcome: "success",
+        ...result,
+        ...maintenanceScheduleMetrics(mobileSyncRetentionSchedule),
+      })
+    )
+
+    return result
+  } catch (error) {
+    mobileSyncRetentionSchedule.recordFailure(Date.now())
     throw error
   }
 }
