@@ -22,7 +22,7 @@ export async function GET(request: Request) {
         recordMobileProductMilestone(milestone)
       }
       return {
-        data: { events: sync.events, fullResyncRequired: false as const },
+        data: { events: sync.events, fullResyncRequired: false as const, hasMore: sync.hasMore },
         nextCursor: sync.nextCursor,
         pageSize: query.limit,
       }

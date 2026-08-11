@@ -32,15 +32,16 @@ describe("GET /api/v1/sync product milestones", () => {
         run({ deviceSessionId: "device-1", userId: "user-1" })
     )
     mocks.parseApiV1Query.mockReturnValue({ limit: 100 })
-    mocks.listMobileSync.mockResolvedValue({ events: [], nextCursor: "2" })
+    mocks.listMobileSync.mockResolvedValue({ events: [], hasMore: false, nextCursor: "2" })
   })
 
   it("records a valid Android milestone only after successful sync work", async () => {
     mocks.parseMobileProductMilestone.mockReturnValue("first_mobile_sync")
 
-    await GET(new Request("https://arcticrss.example/api/v1/sync"))
+    const result = await GET(new Request("https://arcticrss.example/api/v1/sync"))
 
     expect(mocks.listMobileSync).toHaveBeenCalledWith({ limit: 100, userId: "user-1" })
+    expect(result).toMatchObject({ data: { hasMore: false } })
     expect(mocks.recordMobileProductMilestone).toHaveBeenCalledWith(
       "first_mobile_sync"
     )
@@ -49,8 +50,9 @@ describe("GET /api/v1/sync product milestones", () => {
   it("does not record when the header does not contain a fixed milestone", async () => {
     mocks.parseMobileProductMilestone.mockReturnValue(undefined)
 
-    await GET(new Request("https://arcticrss.example/api/v1/sync"))
+    const result = await GET(new Request("https://arcticrss.example/api/v1/sync"))
 
     expect(mocks.recordMobileProductMilestone).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ data: { hasMore: false } })
   })
 })

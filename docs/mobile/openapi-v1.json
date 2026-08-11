@@ -2464,70 +2464,1368 @@
             "type": "object",
             "properties": {
               "events": {
+                "maxItems": 200,
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "action": {
-                      "type": "string",
-                      "enum": [
-                        "TOMBSTONE",
-                        "UPSERT"
-                      ]
-                    },
-                    "occurredAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
-                    },
-                    "payload": {
+                  "anyOf": [
+                    {
                       "type": "object",
-                      "propertyNames": {
-                        "type": "string"
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "archivedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "articleId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "isRead": {
+                              "type": "boolean"
+                            },
+                            "isStarred": {
+                              "type": "boolean"
+                            },
+                            "readAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "starredAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "archivedAt",
+                            "articleId",
+                            "isRead",
+                            "isStarred",
+                            "readAt",
+                            "starredAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "article-state"
+                        }
                       },
-                      "additionalProperties": {}
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
                     },
-                    "resourceId": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 128
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "articleId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "articleId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "article-state"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
                     },
-                    "resourceType": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 64
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "collectionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "sortOrder": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "collectionId",
+                            "name",
+                            "sortOrder"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "collection"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
                     },
-                    "resourceVersion": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 64
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "collectionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "collectionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "collection"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
                     },
-                    "sequence": {
-                      "type": "string",
-                      "maxLength": 32,
-                      "pattern": "^\\d+$"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "articleId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "collectionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "itemId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "podcastEpisodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "collectionId",
+                            "itemId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "collection-item"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "articleId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "collectionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "itemId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "podcastEpisodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "collectionId",
+                            "itemId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "collection-item"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "episodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "isPlayed": {
+                              "type": "boolean"
+                            },
+                            "isStarred": {
+                              "type": "boolean"
+                            },
+                            "playedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "playbackPositionSeconds": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "starredAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "episodeId",
+                            "isPlayed",
+                            "isStarred",
+                            "playedAt",
+                            "playbackPositionSeconds",
+                            "starredAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "podcast-episode-state"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "episodeId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "episodeId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "podcast-episode-state"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "saved-view"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "saved-view"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "feedId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "subscriptionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "feedId",
+                            "subscriptionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "feed-subscription"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "feedId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "subscriptionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "feedId",
+                            "subscriptionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "feed-subscription"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "podcastId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "subscriptionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "podcastId",
+                            "subscriptionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "podcast-subscription"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "podcastId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            },
+                            "subscriptionId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "podcastId",
+                            "subscriptionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "podcast-subscription"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "briefing"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9_-]+$"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "briefing"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "UPSERT"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "channel": {
+                              "type": "string",
+                              "enum": [
+                                "IN_APP",
+                                "EMAIL",
+                                "MOBILE_PUSH",
+                                "DISABLED"
+                              ]
+                            },
+                            "topic": {
+                              "type": "string",
+                              "enum": [
+                                "SECURITY_ALERTS",
+                                "SAVED_MONITOR_MATCHES",
+                                "SMART_DIGEST_COMPLETION",
+                                "CHAT_MENTIONS"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "channel",
+                            "topic"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "notification-preference"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "resourceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z0-9_-]+$"
+                        },
+                        "resourceVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "maxLength": 32,
+                          "pattern": "^\\d+$"
+                        },
+                        "action": {
+                          "type": "string",
+                          "const": "TOMBSTONE"
+                        },
+                        "payload": {
+                          "type": "object",
+                          "properties": {
+                            "channel": {
+                              "type": "string",
+                              "enum": [
+                                "IN_APP",
+                                "EMAIL",
+                                "MOBILE_PUSH",
+                                "DISABLED"
+                              ]
+                            },
+                            "topic": {
+                              "type": "string",
+                              "enum": [
+                                "SECURITY_ALERTS",
+                                "SAVED_MONITOR_MATCHES",
+                                "SMART_DIGEST_COMPLETION",
+                                "CHAT_MENTIONS"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "channel",
+                            "topic"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "const": "notification-preference"
+                        }
+                      },
+                      "required": [
+                        "occurredAt",
+                        "resourceId",
+                        "resourceVersion",
+                        "schemaVersion",
+                        "sequence",
+                        "action",
+                        "payload",
+                        "resourceType"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "action",
-                    "occurredAt",
-                    "payload",
-                    "resourceId",
-                    "resourceType",
-                    "resourceVersion",
-                    "sequence"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               },
               "fullResyncRequired": {
                 "type": "boolean",
                 "const": false
+              },
+              "hasMore": {
+                "type": "boolean"
               }
             },
             "required": [
               "events",
-              "fullResyncRequired"
+              "fullResyncRequired",
+              "hasMore"
             ],
             "additionalProperties": false
           },

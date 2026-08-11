@@ -9,6 +9,7 @@ import type {
 
 import { articleAccessWhere } from "./articles"
 import { getPrisma } from "./db"
+import { toMobileSyncEvent } from "./mobile-sync-event"
 
 export const MOBILE_SYNC_RETENTION_DAYS = 180
 export const MOBILE_MUTATION_RECEIPT_RETENTION_DAYS = 30
@@ -85,15 +86,8 @@ export async function listMobileSync({
   const nextCursor = page.at(-1)?.sequence.toString() ?? cursor ?? null
 
   return {
-    events: page.map((event) => ({
-      action: event.action as "TOMBSTONE" | "UPSERT",
-      occurredAt: event.occurredAt.toISOString(),
-      payload: event.payload as Record<string, unknown>,
-      resourceId: event.resourceId,
-      resourceType: event.resourceType,
-      resourceVersion: event.resourceVersion,
-      sequence: event.sequence.toString(),
-    })),
+    events: page.map(toMobileSyncEvent),
+    hasMore,
     nextCursor,
   }
 }

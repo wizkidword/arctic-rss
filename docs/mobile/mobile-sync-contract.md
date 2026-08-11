@@ -22,9 +22,18 @@ floor, the API returns `409 FULL_RESYNC_REQUIRED`; clients must discard their
 cursor and rebuild their limited local cache from the existing read endpoints.
 They must not silently apply a partial delta.
 
-Responses contain compact `UPSERT` and `TOMBSTONE` events only. Their payloads
+Responses contain compact schema-versioned `UPSERT` and `TOMBSTONE` events
+only. Version 1 is a strict typed union for article state, collection,
+collection item, podcast episode state, saved view, feed subscription, podcast
+subscription, briefing, and notification preference changes. Their payloads
 carry identifiers and state flags/timestamps, never article bodies, search
 queries, refresh tokens, push tokens, or account email addresses.
+
+`hasMore` is true when the response page is full and a later event exists.
+`nextCursor` is the last sequence returned in the page, or the supplied cursor
+when no events were returned. A client sends that cursor only after it has
+validated and applied every event in the page. Unknown event shapes or schema
+versions are rejected and must leave the cursor unchanged.
 
 The first event sources are article state, collection membership, podcast
 episode state, saved views, feed and podcast subscriptions, Smart Digest
