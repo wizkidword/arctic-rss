@@ -881,7 +881,14 @@ export async function revokeMobileDeviceSession({
     select: { tokenFamilyId: true },
     where: { id: sessionId, userId },
   })
-  if (!device) {
+  const session = device
+    ? null
+    : await store.deviceSession.findFirst({
+      select: { tokenFamilyId: true },
+      where: { id: sessionId, userId },
+    })
+  const tokenFamilyId = device?.tokenFamilyId ?? session?.tokenFamilyId
+  if (!tokenFamilyId) {
     return { revoked: false }
   }
 
@@ -889,7 +896,7 @@ export async function revokeMobileDeviceSession({
     eventType: "MOBILE_DEVICE_SESSION_REVOKED",
     now,
     store,
-    tokenFamilyId: device.tokenFamilyId,
+    tokenFamilyId,
     userId,
   })
   return { revoked: true }

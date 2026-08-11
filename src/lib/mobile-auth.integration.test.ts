@@ -380,6 +380,24 @@ describe("mobile device sessions in PostgreSQL", () => {
         }),
       ).rejects.toMatchObject({ code: "refresh-invalid" } satisfies Partial<MobileAuthError>)
 
+      const secondPrincipal = await authenticateMobileAccessToken({
+        accessToken: tokens[1].accessToken,
+        accessTokenEnvironment,
+        now,
+        store: prisma,
+      })
+      await expect(
+        revokeMobileDeviceSession({ sessionId: secondPrincipal.mobileDeviceId, store: prisma, userId: user.id }),
+      ).resolves.toEqual({ revoked: true })
+      await expect(
+        refreshMobileDeviceSession({
+          accessTokenEnvironment,
+          now: new Date(now.getTime() + 1_000),
+          refreshToken: tokens[1].refreshToken,
+          store: prisma,
+        }),
+      ).rejects.toMatchObject({ code: "refresh-invalid" } satisfies Partial<MobileAuthError>)
+
       await expect(revokeAllMobileDeviceSessions({ now, store: prisma, userId: user.id })).resolves.toEqual(
         expect.objectContaining({ revoked: expect.any(Number) }),
       )
