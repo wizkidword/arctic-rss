@@ -128,8 +128,10 @@ describe("mobile client safeguards", () => {
         accessToken: "old",
         accessTokenExpiresAt: 1,
         accessTokenExpiresIn: 60,
+        mobileDeviceId: "device_1",
         refreshToken: "refresh",
         schemaVersion: MOBILE_TOKEN_BUNDLE_SCHEMA_VERSION,
+        userId: "user_1",
       }),
       write: vi.fn().mockResolvedValue(undefined),
     }
@@ -147,8 +149,8 @@ describe("mobile client safeguards", () => {
   })
 
   it("shares one refresh and publishes its bundle only after persistence succeeds", async () => {
-    let resolveRefresh: ((value: { accessToken: string; accessTokenExpiresIn: number; refreshToken: string }) => void) | undefined
-    const refreshed = new Promise<{ accessToken: string; accessTokenExpiresIn: number; refreshToken: string }>((resolve) => {
+    let resolveRefresh: ((value: { accessToken: string; accessTokenExpiresIn: number; mobileDeviceId: string; refreshToken: string; userId: string }) => void) | undefined
+    const refreshed = new Promise<{ accessToken: string; accessTokenExpiresIn: number; mobileDeviceId: string; refreshToken: string; userId: string }>((resolve) => {
       resolveRefresh = resolve
     })
     const store = {
@@ -168,7 +170,7 @@ describe("mobile client safeguards", () => {
     expect(refresh).toHaveBeenCalledTimes(1)
     expect(store.write).not.toHaveBeenCalled()
 
-    resolveRefresh?.({ accessToken: "new-access", accessTokenExpiresIn: 60, refreshToken: "new-refresh" })
+    resolveRefresh?.({ accessToken: "new-access", accessTokenExpiresIn: 60, mobileDeviceId: "device_1", refreshToken: "new-refresh", userId: "user_1" })
     await expect(Promise.all(callers)).resolves.toEqual(Array.from({ length: 20 }, () => "new-access"))
     expect(store.write).toHaveBeenCalledTimes(1)
     expect(session.isSignedIn()).toBe(true)
@@ -183,7 +185,7 @@ describe("mobile client safeguards", () => {
     }
     const session = new MobileSessionManager(
       store,
-      { refresh: vi.fn().mockResolvedValue({ accessToken: "new", accessTokenExpiresIn: 60, refreshToken: "next" }) },
+      { refresh: vi.fn().mockResolvedValue({ accessToken: "new", accessTokenExpiresIn: 60, mobileDeviceId: "device_1", refreshToken: "next", userId: "user_1" }) },
       { isRetryableFailure: (error) => error === persistenceFailure, now: () => 1_000, refreshSkewMs: 0 }
     )
 
@@ -214,8 +216,8 @@ describe("mobile client safeguards", () => {
   })
 
   it("does not restore tokens when local sign-out supersedes an in-flight refresh", async () => {
-    let resolveRefresh: ((value: { accessToken: string; accessTokenExpiresIn: number; refreshToken: string }) => void) | undefined
-    const refresh = new Promise<{ accessToken: string; accessTokenExpiresIn: number; refreshToken: string }>((resolve) => {
+    let resolveRefresh: ((value: { accessToken: string; accessTokenExpiresIn: number; mobileDeviceId: string; refreshToken: string; userId: string }) => void) | undefined
+    const refresh = new Promise<{ accessToken: string; accessTokenExpiresIn: number; mobileDeviceId: string; refreshToken: string; userId: string }>((resolve) => {
       resolveRefresh = resolve
     })
     const store = {
@@ -231,7 +233,7 @@ describe("mobile client safeguards", () => {
     await session.hydrate()
     const access = session.getAccessToken()
     await session.clear()
-    resolveRefresh?.({ accessToken: "new", accessTokenExpiresIn: 60, refreshToken: "next" })
+    resolveRefresh?.({ accessToken: "new", accessTokenExpiresIn: 60, mobileDeviceId: "device_1", refreshToken: "next", userId: "user_1" })
 
     await expect(access).rejects.toThrow()
     expect(store.write).not.toHaveBeenCalled()
@@ -245,7 +247,9 @@ function storedTokens() {
     accessToken: "old",
     accessTokenExpiresAt: 1,
     accessTokenExpiresIn: 60,
+    mobileDeviceId: "device_1",
     refreshToken: "refresh",
     schemaVersion: MOBILE_TOKEN_BUNDLE_SCHEMA_VERSION,
+    userId: "user_1",
   } as const
 }

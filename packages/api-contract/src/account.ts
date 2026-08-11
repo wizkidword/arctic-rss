@@ -17,7 +17,9 @@ export const mobileTokenResponseDataSchema = z
   .object({
     accessToken: z.string().min(1).max(2_000),
     accessTokenExpiresIn: z.number().int().positive().max(3_600),
+    mobileDeviceId: apiV1IdentifierSchema,
     refreshToken: z.string().min(1).max(512),
+    userId: apiV1IdentifierSchema,
   })
   .strict()
 

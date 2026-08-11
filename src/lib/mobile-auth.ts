@@ -75,7 +75,9 @@ export type CompletedMobileAuthorizationRequest = {
 export type MobileSessionTokens = {
   accessToken: string
   accessTokenExpiresIn: number
+  mobileDeviceId: string
   refreshToken: string
+  userId: string
 }
 
 export type MobileDeviceSession = MobileDevice & {
@@ -943,7 +945,9 @@ function issueSessionTokens({
       now
     ),
     accessTokenExpiresIn: MOBILE_ACCESS_TOKEN_TTL_SECONDS,
+    mobileDeviceId,
     refreshToken,
+    userId,
   }
 }
 

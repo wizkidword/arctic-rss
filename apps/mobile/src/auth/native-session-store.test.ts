@@ -34,20 +34,16 @@ describe("native session bundle store", () => {
     await expect(store.read()).resolves.toMatchObject({ accessToken: "old", refreshToken: "refresh" })
   })
 
-  it("migrates a complete legacy bundle only after the v2 record is written", async () => {
+  it("clears a legacy bundle that lacks an authenticated owner and device", async () => {
     const adapter = createAdapter({
       "arcticrss.mobile.access-token.v1": "legacy-access",
       "arcticrss.mobile.access-expiry.v1": "70000",
       "arcticrss.mobile.refresh-token.v1": "legacy-refresh",
     })
-    const store = createNativeSessionStore(adapter, () => 10_000)
+    const store = createNativeSessionStore(adapter)
 
-    await expect(store.read()).resolves.toMatchObject({
-      accessToken: "legacy-access",
-      refreshToken: "legacy-refresh",
-      schemaVersion: 2,
-    })
-    expect(adapter.data.get("arcticrss.mobile.token-bundle.v2")).toContain('"schemaVersion":2')
+    await expect(store.read()).resolves.toBeNull()
+    expect(adapter.data.has("arcticrss.mobile.token-bundle.v2")).toBe(false)
     expect(adapter.data.has("arcticrss.mobile.access-token.v1")).toBe(false)
   })
 
@@ -81,8 +77,10 @@ function tokens(overrides: Partial<{ accessToken: string; refreshToken: string }
     accessToken: "access",
     accessTokenExpiresAt: 70_000,
     accessTokenExpiresIn: 60,
+    mobileDeviceId: "device_1",
     refreshToken: "refresh",
     schemaVersion: 2 as const,
+    userId: "user_1",
     ...overrides,
   }
 }

@@ -15,7 +15,8 @@ the separate additive stable-device migration:
   are migrated only after the v2 write succeeds, then removed. Unknown or
   malformed bundle versions are not returned to the app.
 
-This does not yet contain `userId` or `mobileDeviceId`: those fields depend on
-the pending stable `MobileDevice` model and token contract. Device identity,
+The bundle now includes the authenticated `userId` and stable `mobileDeviceId`
+from the token response. Legacy alpha bundles without those ownership fields
+are cleared rather than allowed to hydrate local data. SQLite owner enforcement,
 family-aware cleanup, and the disposable PostgreSQL migration rehearsal remain
-separate Phase 3 work.
+separate work.

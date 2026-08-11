@@ -14,8 +14,10 @@ const TOKEN_BUNDLE_KEYS = new Set([
   "accessToken",
   "accessTokenExpiresAt",
   "accessTokenExpiresIn",
+  "mobileDeviceId",
   "refreshToken",
   "schemaVersion",
+  "userId",
 ])
 
 type SecureStoreAdapter = Pick<
@@ -24,8 +26,7 @@ type SecureStoreAdapter = Pick<
 >
 
 export function createNativeSessionStore(
-  secureStore: SecureStoreAdapter,
-  now: () => number = Date.now
+  secureStore: SecureStoreAdapter
 ): MobileTokenStore {
   const clearLegacy = () => Promise.all([
     secureStore.deleteItemAsync(LEGACY_ACCESS_TOKEN_KEY),
@@ -57,31 +58,13 @@ export function createNativeSessionStore(
       if (accessToken === null && accessTokenExpiresAt === null && refreshToken === null) {
         return null
       }
-      const expiry = Number(accessTokenExpiresAt)
-      if (!accessToken || !refreshToken || !Number.isSafeInteger(expiry) || expiry <= 0) {
-        await clearLegacy()
-        return null
-      }
-
-      const migrated: StoredMobileTokens = {
-        accessToken,
-        accessTokenExpiresAt: expiry,
-        accessTokenExpiresIn: Math.max(1, Math.floor((expiry - now()) / 1_000)),
-        refreshToken,
-        schemaVersion: MOBILE_TOKEN_BUNDLE_SCHEMA_VERSION,
-      }
-      if (!isTokenBundle(migrated)) {
-        await clearLegacy()
-        return null
-      }
-      try {
-        await secureStore.setItemAsync(TOKEN_BUNDLE_KEY, JSON.stringify(migrated))
-        await clearLegacy()
-      } catch {
-        // Retain the coherent v1 keys until a future launch can finish the
-        // migration. Never delete a working legacy bundle after a failed write.
-      }
-      return migrated
+      // Alpha v1 never carried the authenticated owner/device identity needed
+      // to authorize SQLite. Clearing it is safer than hydrating unowned cache.
+      void accessTokenExpiresAt
+      void accessToken
+      void refreshToken
+      await clearLegacy()
+      return null
     },
 
     async write(tokens) {
@@ -127,6 +110,8 @@ function isTokenBundle(value: unknown): value is StoredMobileTokens {
     bundle.schemaVersion === MOBILE_TOKEN_BUNDLE_SCHEMA_VERSION &&
     typeof bundle.accessToken === "string" && bundle.accessToken.length > 0 && bundle.accessToken.length <= 2_000 &&
     typeof bundle.refreshToken === "string" && bundle.refreshToken.length > 0 && bundle.refreshToken.length <= 512 &&
+    typeof bundle.mobileDeviceId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(bundle.mobileDeviceId) &&
+    typeof bundle.userId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(bundle.userId) &&
     typeof bundle.accessTokenExpiresAt === "number" && Number.isSafeInteger(bundle.accessTokenExpiresAt) && bundle.accessTokenExpiresAt > 0 &&
     typeof bundle.accessTokenExpiresIn === "number" && Number.isSafeInteger(bundle.accessTokenExpiresIn) && bundle.accessTokenExpiresIn > 0 && bundle.accessTokenExpiresIn <= 3_600
   )
