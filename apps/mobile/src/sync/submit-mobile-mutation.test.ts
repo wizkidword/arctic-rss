@@ -54,4 +54,19 @@ describe("submitMobileMutation", () => {
 
     expect(offline.queueMutation).not.toHaveBeenCalled()
   })
+
+  it("does not save a caller-cancelled request for replay", async () => {
+    const offline = { queueMutation: vi.fn() }
+    const cancelled = new MobileNetworkError("MOBILE_REQUEST_ABORTED")
+
+    await expect(
+      submitMobileMutation({
+        offline: offline as unknown as MobileOfflineStore,
+        perform: vi.fn().mockRejectedValue(cancelled),
+        request,
+      })
+    ).rejects.toBe(cancelled)
+
+    expect(offline.queueMutation).not.toHaveBeenCalled()
+  })
 })

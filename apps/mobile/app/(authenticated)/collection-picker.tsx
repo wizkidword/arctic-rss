@@ -15,7 +15,7 @@ export default function CollectionPickerScreen() {
   const [message, setMessage] = useState<string | null>(null)
   const { data, error, isRefreshing, refresh } = useMobileQuery(
     "collections",
-    useCallback(() => api.collections(), [api])
+    useCallback((signal: AbortSignal) => api.collections({ signal }), [api])
   )
   const add = useCallback(async (collectionId: string) => {
     if (!articleId) {

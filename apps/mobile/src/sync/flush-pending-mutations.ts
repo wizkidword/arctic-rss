@@ -19,7 +19,13 @@ export async function flushPendingMutations(api: MobileApiClient, offline: Mobil
       await offline.completePendingMutation(mutation.idempotencyKey)
       completed += 1
     } catch (error) {
-      if (error instanceof MobileNetworkError || (error instanceof MobileApiError && error.retryable)) {
+      if (error instanceof MobileNetworkError && !error.retryable) {
+        throw error
+      }
+      if (
+        (error instanceof MobileNetworkError && error.retryable) ||
+        (error instanceof MobileApiError && error.retryable)
+      ) {
         await offline.failPendingMutation({
           code: error instanceof MobileApiError ? error.code : "NETWORK_UNAVAILABLE",
           idempotencyKey: mutation.idempotencyKey,

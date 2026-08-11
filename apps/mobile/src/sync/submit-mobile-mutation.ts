@@ -19,7 +19,7 @@ export async function submitMobileMutation<T>({
     return { queued: false, result: await perform() }
   } catch (error) {
     if (
-      !(error instanceof MobileNetworkError) &&
+      !(error instanceof MobileNetworkError && error.retryable) &&
       !(error instanceof MobileApiError && error.retryable)
     ) {
       throw error

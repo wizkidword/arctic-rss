@@ -20,7 +20,7 @@ export default function NotificationsScreen() {
   const [message, setMessage] = useState<string | null>(null)
   const preferences = useMobileQuery(
     "notification-preferences",
-    useCallback(() => api.notificationPreferences(), [api])
+    useCallback((signal: AbortSignal) => api.notificationPreferences({ signal }), [api])
   )
   const update = useCallback(async (topic: NotificationTopic, channel: NotificationChannel) => {
     const idempotencyKey = Crypto.randomUUID()

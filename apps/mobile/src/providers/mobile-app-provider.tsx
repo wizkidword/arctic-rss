@@ -12,6 +12,10 @@ import { nativeSessionStore } from "@/auth/native-session-store"
 import { MOBILE_SERVICE_ORIGIN } from "@/config"
 import { MobileOfflineStore } from "@/storage/mobile-offline-store"
 import { flushPendingMutations } from "@/sync/flush-pending-mutations"
+import {
+  MobileForegroundCoordinator,
+  type MobileForegroundSyncSnapshot,
+} from "@/sync/mobile-foreground-coordinator"
 import { synchronizeMobileState } from "@/sync/synchronize-mobile-state"
 
 type MobileAppContextValue = {
@@ -19,15 +23,27 @@ type MobileAppContextValue = {
   isReady: boolean
   isSignedIn: boolean
   offline: MobileOfflineStore
+  ownerScope: string | null
   signIn: () => Promise<void>
   signOut: () => Promise<void>
+  syncNow: (options?: { returnSession?: boolean }) => Promise<void>
+  syncRevision: number
+  syncSnapshot: MobileForegroundSyncSnapshot
 }
 
 const MobileAppContext = createContext<MobileAppContextValue | null>(null)
+const INITIAL_SYNC_SNAPSHOT: MobileForegroundSyncSnapshot = {
+  conflictCount: 0,
+  lastSuccessfulSyncAt: null,
+  state: "idle",
+}
 
 export function MobileAppProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false)
   const [isSignedIn, setIsSignedIn] = useState(false)
+  const [ownerScope, setOwnerScope] = useState<string | null>(null)
+  const [syncRevision, setSyncRevision] = useState(0)
+  const [syncSnapshot, setSyncSnapshot] = useState<MobileForegroundSyncSnapshot>(INITIAL_SYNC_SNAPSHOT)
   const appState = useRef(AppState.currentState)
   const offline = useMemo(() => new MobileOfflineStore(), [])
   const unauthenticatedApi = useMemo(
@@ -60,8 +76,45 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
   const clearInvalidSession = useCallback(async () => {
     await session.clear()
     await offline.purgeForLogout()
+    setOwnerScope(null)
     setIsSignedIn(false)
   }, [offline, session])
+  const coordinator = useMemo(
+    () =>
+      new MobileForegroundCoordinator({
+        claimOwner: async () => {
+          const owner = session.getOwner()
+          if (!owner) {
+            throw new MobileApiError(
+              "MOBILE_DEVICE_SESSION_REQUIRED",
+              "Sign in to Arctic RSS before continuing.",
+              false,
+              401
+            )
+          }
+          await offline.claimOwner(owner)
+        },
+        flush: () => flushPendingMutations(api, offline),
+        onStateChange: (snapshot) => {
+          setSyncSnapshot(snapshot)
+          if (snapshot.state === "conflicts" || snapshot.state === "idle") {
+            setSyncRevision((revision) => revision + 1)
+          }
+        },
+        sync: (options) => synchronizeMobileState(api, offline, options),
+      }),
+    [api, offline, session]
+  )
+  const syncNow = useCallback(async (options: { returnSession?: boolean } = {}) => {
+    try {
+      await coordinator.request(options)
+    } catch (error) {
+      if (isTerminalMobileSessionFailure(error) || !session.isSignedIn()) {
+        await clearInvalidSession()
+      }
+      throw error
+    }
+  }, [clearInvalidSession, coordinator, session])
 
   useEffect(() => {
     let current = true
@@ -71,7 +124,6 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
         if (!current) {
           return
         }
-        setIsSignedIn(signedIn)
         if (!signedIn) {
           await offline.purgeForLogout()
         }
@@ -81,18 +133,18 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
             await clearInvalidSession()
             return
           }
-          await offline.claimOwner(owner)
           try {
-            await flushPendingMutations(api, offline)
-            await synchronizeMobileState(api, offline)
-          } catch (error) {
-            if (isTerminalMobileSessionFailure(error) || !session.isSignedIn()) {
-              await clearInvalidSession()
-            }
+            await syncNow()
+          } catch {
             // A future foreground request retries; no request body or token is logged.
           }
+          if (!session.isSignedIn()) {
+            return
+          }
+          setOwnerScope(mobileOwnerScope(owner))
         }
         if (current) {
+          setIsSignedIn(signedIn && session.isSignedIn())
           setIsReady(true)
         }
       })
@@ -106,25 +158,20 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       current = false
     }
-  }, [api, clearInvalidSession, offline, session])
+  }, [clearInvalidSession, offline, session, syncNow])
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       const becameActive = appState.current !== "active" && nextState === "active"
       appState.current = nextState
       if (becameActive && session.isSignedIn()) {
-        void flushPendingMutations(api, offline)
-          .then(() => synchronizeMobileState(api, offline, { returnSession: true }))
-          .catch(async (error) => {
-            if (isTerminalMobileSessionFailure(error) || !session.isSignedIn()) {
-              await clearInvalidSession()
-            }
-            // Network recovery retries in the foreground without logging tokens or request bodies.
-          })
+        void syncNow({ returnSession: true }).catch(() => {
+          // Network recovery retries in the foreground without logging tokens or request bodies.
+        })
       }
     })
     return () => subscription.remove()
-  }, [api, clearInvalidSession, offline, session])
+  }, [session, syncNow])
 
   const signIn = useCallback(async () => {
     const tokens = await beginBrowserMobileLogin({ api: unauthenticatedApi, origin: MOBILE_SERVICE_ORIGIN })
@@ -134,19 +181,17 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
       await clearInvalidSession()
       throw new Error("Arctic RSS could not establish local device ownership. Sign in again.")
     }
-    await offline.claimOwner(owner)
-    setIsSignedIn(true)
     try {
-      await flushPendingMutations(api, offline)
-      await synchronizeMobileState(api, offline)
-    } catch (error) {
-      if (isTerminalMobileSessionFailure(error) || !session.isSignedIn()) {
-        await clearInvalidSession()
+      await syncNow()
+    } catch {
+      if (!session.isSignedIn()) {
         throw new Error("This device session is no longer authorized. Sign in again.")
       }
       // The completed sign-in remains valid; the next foreground sync retries queued writes.
     }
-  }, [api, clearInvalidSession, offline, session, unauthenticatedApi])
+    setOwnerScope(mobileOwnerScope(owner))
+    setIsSignedIn(true)
+  }, [clearInvalidSession, session, syncNow, unauthenticatedApi])
 
   const signOut = useCallback(async () => {
     try {
@@ -159,8 +204,8 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
   }, [api, clearInvalidSession])
 
   const value = useMemo(
-    () => ({ api, isReady, isSignedIn, offline, signIn, signOut }),
-    [api, isReady, isSignedIn, offline, signIn, signOut]
+    () => ({ api, isReady, isSignedIn, offline, ownerScope, signIn, signOut, syncNow, syncRevision, syncSnapshot }),
+    [api, isReady, isSignedIn, offline, ownerScope, signIn, signOut, syncNow, syncRevision, syncSnapshot]
   )
 
   if (!isReady) {
@@ -175,6 +220,10 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
 
 function isTerminalMobileSessionFailure(error: unknown) {
   return error instanceof MobileApiError && error.status === 401
+}
+
+function mobileOwnerScope(owner: { mobileDeviceId: string; userId: string }) {
+  return `${owner.userId}:${owner.mobileDeviceId}`
 }
 
 export function useMobileApp() {

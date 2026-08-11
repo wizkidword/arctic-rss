@@ -10,11 +10,11 @@ export default function BriefingScreen() {
   const { briefingId: rawBriefingId } = useLocalSearchParams<{ briefingId: string }>()
   const briefingId = Array.isArray(rawBriefingId) ? rawBriefingId[0] : rawBriefingId
   const { api } = useMobileApp()
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal: AbortSignal) => {
     if (!briefingId) {
       throw new Error("This briefing link is incomplete.")
     }
-    return api.briefing(briefingId)
+    return api.briefing(briefingId, { signal })
   }, [api, briefingId])
   const briefing = useMobileQuery(`briefing:${briefingId ?? "missing"}`, load)
 

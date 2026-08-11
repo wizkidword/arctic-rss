@@ -9,8 +9,11 @@ import { useMobileApp } from "@/providers/mobile-app-provider"
 import { openArcticRssWebPath } from "@/web-links"
 
 export default function SettingsScreen() {
-  const { api, offline, signOut } = useMobileApp()
-  const { data, error } = useMobileQuery("me", useCallback(() => api.me(), [api]))
+  const { api, offline, signOut, syncNow, syncSnapshot } = useMobileApp()
+  const { data, error } = useMobileQuery(
+    "me",
+    useCallback((signal: AbortSignal) => api.me({ signal }), [api])
+  )
 
   return (
     <Screen title="Settings">
@@ -23,6 +26,8 @@ export default function SettingsScreen() {
       </Section>
       <Section title="Downloaded data">
         <Text style={mobileStyles.muted}>Recently opened articles and the local sync cursor stay on this device only.</Text>
+        <Text style={mobileStyles.muted}>Last sync: {syncSnapshot.lastSuccessfulSyncAt ? new Date(syncSnapshot.lastSuccessfulSyncAt).toLocaleString() : "not completed yet"}.</Text>
+        <ActionButton onPress={() => void syncNow()} tone="secondary">Sync now</ActionButton>
         <ActionButton onPress={() => void offline.clearDownloadedData()} tone="secondary">Clear downloaded data</ActionButton>
       </Section>
       <Section title="Privacy and support">

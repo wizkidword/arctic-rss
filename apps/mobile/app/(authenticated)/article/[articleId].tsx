@@ -18,11 +18,11 @@ export default function ArticleScreen() {
   const collectionId = single(params.collectionId)
   const { api, offline } = useMobileApp()
   const [message, setMessage] = useState<string | null>(null)
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal: AbortSignal) => {
     if (!articleId) {
       throw new Error("This article link is incomplete.")
     }
-    return api.article(articleId)
+    return api.article(articleId, { signal })
   }, [api, articleId])
   const { data, error, hasOfflineCopy, isRefreshing, refresh } = useMobileQuery(`article:${articleId ?? "missing"}`, load)
 

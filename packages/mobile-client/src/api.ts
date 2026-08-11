@@ -33,12 +33,21 @@ import { z } from "zod"
 
 export type FetchImplementation = typeof fetch
 
+export const DEFAULT_MOBILE_READ_DEADLINE_MS = 15_000
+export const DEFAULT_MOBILE_WRITE_DEADLINE_MS = 20_000
+export const DEFAULT_MOBILE_RESPONSE_BYTES = 512 * 1024
+
+export type MobileRequestOptions = {
+  signal?: AbortSignal
+}
+
 export class MobileApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly retryable: boolean,
-    readonly status: number
+    readonly status: number,
+    readonly retryAfterMs: number | null = null
   ) {
     super(message)
     this.name = "MobileApiError"
@@ -46,11 +55,23 @@ export class MobileApiError extends Error {
 }
 
 export class MobileNetworkError extends Error {
-  readonly retryable = true
+  readonly retryable: boolean
 
-  constructor() {
-    super("Arctic RSS could not reach the service. Try again when you are online.")
+  constructor(
+    readonly code:
+      | "MOBILE_NETWORK_UNAVAILABLE"
+      | "MOBILE_REQUEST_ABORTED"
+      | "MOBILE_REQUEST_DEADLINE_EXCEEDED" = "MOBILE_NETWORK_UNAVAILABLE"
+  ) {
+    super(
+      code === "MOBILE_REQUEST_ABORTED"
+        ? "Arctic RSS stopped an obsolete request."
+        : code === "MOBILE_REQUEST_DEADLINE_EXCEEDED"
+          ? "Arctic RSS took too long to respond. Try again when you are online."
+          : "Arctic RSS could not reach the service. Try again when you are online."
+    )
     this.name = "MobileNetworkError"
+    this.retryable = code !== "MOBILE_REQUEST_ABORTED"
   }
 }
 
@@ -58,8 +79,11 @@ export type MobileApiClientOptions = {
   allowInsecureDevelopmentOrigin?: boolean
   fetch?: FetchImplementation
   getAccessToken?: () => Promise<string>
+  maximumResponseBytes?: number
   origin: string
+  readDeadlineMs?: number
   refreshAccessToken?: () => Promise<string>
+  writeDeadlineMs?: number
 }
 
 export type IdempotentRequest = {
@@ -76,8 +100,11 @@ export type MobileProductMilestone =
 export class MobileApiClient {
   private readonly fetchImplementation: FetchImplementation
   private readonly getAccessToken: (() => Promise<string>) | undefined
+  private readonly maximumResponseBytes: number
   private readonly origin: string
+  private readonly readDeadlineMs: number
   private readonly refreshAccessToken: (() => Promise<string>) | undefined
+  private readonly writeDeadlineMs: number
 
   constructor(options: MobileApiClientOptions) {
     this.origin = normalizeMobileApiOrigin(
@@ -86,7 +113,25 @@ export class MobileApiClient {
     )
     this.fetchImplementation = options.fetch ?? fetch
     this.getAccessToken = options.getAccessToken
+    this.maximumResponseBytes = boundedPositiveInteger(
+      options.maximumResponseBytes,
+      DEFAULT_MOBILE_RESPONSE_BYTES,
+      1_024,
+      2 * 1024 * 1024
+    )
+    this.readDeadlineMs = boundedPositiveInteger(
+      options.readDeadlineMs,
+      DEFAULT_MOBILE_READ_DEADLINE_MS,
+      1_000,
+      60_000
+    )
     this.refreshAccessToken = options.refreshAccessToken
+    this.writeDeadlineMs = boundedPositiveInteger(
+      options.writeDeadlineMs,
+      DEFAULT_MOBILE_WRITE_DEADLINE_MS,
+      1_000,
+      60_000
+    )
   }
 
   exchangeAuthorizationCode(input: {
@@ -95,181 +140,226 @@ export class MobileApiClient {
     codeVerifier: string
     nonce: string
     redirectUri: string
-  }) {
+  }, requestOptions: MobileRequestOptions = {}) {
     return this.request(
       "/api/v1/device-authorizations/exchange",
       mobileTokenResponseSchema,
-      { auth: false, body: input, method: "POST" }
+      { auth: false, body: input, method: "POST", ...requestOptions }
     )
   }
 
-  refreshSession(refreshToken: string) {
+  refreshSession(refreshToken: string, requestOptions: MobileRequestOptions = {}) {
     return this.request(
       "/api/v1/device-sessions/refresh",
       mobileTokenResponseSchema,
-      { auth: false, body: { refreshToken }, method: "POST" }
+      { auth: false, body: { refreshToken }, method: "POST", ...requestOptions }
     )
   }
 
-  me() {
-    return this.request("/api/v1/me", meResponseSchema)
+  me(requestOptions: MobileRequestOptions = {}) {
+    return this.request("/api/v1/me", meResponseSchema, requestOptions)
   }
 
-  reader(query: Partial<ReaderQuery> = {}) {
+  reader(query: Partial<ReaderQuery> = {}, requestOptions: MobileRequestOptions = {}) {
     return this.request("/api/v1/reader", readerPageResponseSchema, {
       query: query as Record<string, string | number | undefined>,
+      ...requestOptions,
     })
   }
 
-  article(articleId: string) {
-    return this.request(`/api/v1/articles/${encodeURIComponent(articleId)}`, articleDetailResponseSchema)
+  article(articleId: string, requestOptions: MobileRequestOptions = {}) {
+    return this.request(
+      `/api/v1/articles/${encodeURIComponent(articleId)}`,
+      articleDetailResponseSchema,
+      requestOptions
+    )
   }
 
-  search(query: Partial<SearchQuery>) {
+  search(query: Partial<SearchQuery>, requestOptions: MobileRequestOptions = {}) {
     return this.request("/api/v1/search", searchPageResponseSchema, {
       query: query as Record<string, string | number | undefined>,
+      ...requestOptions,
     })
   }
 
-  savedViews() {
-    return this.request("/api/v1/saved-views", savedViewsResponseSchema, { query: { limit: 50 } })
+  savedViews(requestOptions: MobileRequestOptions = {}) {
+    return this.request("/api/v1/saved-views", savedViewsResponseSchema, {
+      query: { limit: 50 },
+      ...requestOptions,
+    })
   }
 
-  collections() {
-    return this.request("/api/v1/collections", collectionsResponseSchema)
+  collections(requestOptions: MobileRequestOptions = {}) {
+    return this.request("/api/v1/collections", collectionsResponseSchema, requestOptions)
   }
 
-  podcasts() {
-    return this.request("/api/v1/podcasts", podcastsResponseSchema, { query: { limit: 50 } })
+  podcasts(requestOptions: MobileRequestOptions = {}) {
+    return this.request("/api/v1/podcasts", podcastsResponseSchema, {
+      query: { limit: 50 },
+      ...requestOptions,
+    })
   }
 
-  podcastEpisode(episodeId: string) {
+  podcastEpisode(episodeId: string, requestOptions: MobileRequestOptions = {}) {
     return this.request(
       `/api/v1/podcast-episodes/${encodeURIComponent(episodeId)}`,
-      podcastEpisodeResponseSchema
+      podcastEpisodeResponseSchema,
+      requestOptions
     )
   }
 
-  briefings() {
-    return this.request("/api/v1/briefings", briefingsResponseSchema, { query: { limit: 50 } })
+  briefings(requestOptions: MobileRequestOptions = {}) {
+    return this.request("/api/v1/briefings", briefingsResponseSchema, {
+      query: { limit: 50 },
+      ...requestOptions,
+    })
   }
 
-  briefing(briefingId: string) {
+  briefing(briefingId: string, requestOptions: MobileRequestOptions = {}) {
     return this.request(
       `/api/v1/briefings/${encodeURIComponent(briefingId)}`,
-      briefingDetailResponseSchema
+      briefingDetailResponseSchema,
+      requestOptions
     )
   }
 
-  notificationPreferences() {
-    return this.request("/api/v1/notification-preferences", notificationPreferencesResponseSchema)
+  notificationPreferences(requestOptions: MobileRequestOptions = {}) {
+    return this.request(
+      "/api/v1/notification-preferences",
+      notificationPreferencesResponseSchema,
+      requestOptions
+    )
   }
 
   updateNotificationPreference(
     topic: NotificationTopic,
     channel: NotificationChannel,
-    idempotencyKey: string
+    idempotencyKey: string,
+    requestOptions: MobileRequestOptions = {}
   ) {
     return this.request(
       `/api/v1/notification-preferences/${encodeURIComponent(topic)}`,
       notificationPreferenceUpdateResponseSchema,
-      { body: { channel }, idempotencyKey, method: "PUT" }
+      { body: { channel }, idempotencyKey, method: "PUT", ...requestOptions }
     )
   }
 
   updateArticleState(
     articleId: string,
     input: ArticleStateMutationRequest,
-    idempotencyKey: string
+    idempotencyKey: string,
+    requestOptions: MobileRequestOptions = {}
   ) {
     return this.request(
       `/api/v1/articles/${encodeURIComponent(articleId)}/state`,
       articleStateMutationResponseSchema,
-      { body: input, idempotencyKey, method: "PATCH" }
+      { body: input, idempotencyKey, method: "PATCH", ...requestOptions }
     )
   }
 
-  addCollectionItem(collectionId: string, articleId: string, idempotencyKey: string) {
+  addCollectionItem(
+    collectionId: string,
+    articleId: string,
+    idempotencyKey: string,
+    requestOptions: MobileRequestOptions = {}
+  ) {
     return this.request(
       `/api/v1/collections/${encodeURIComponent(collectionId)}/items`,
       collectionItemMutationResponseSchema,
-      { body: { articleId }, idempotencyKey, method: "POST" }
+      { body: { articleId }, idempotencyKey, method: "POST", ...requestOptions }
     )
   }
 
-  removeCollectionItem(collectionId: string, articleId: string, idempotencyKey: string) {
+  removeCollectionItem(
+    collectionId: string,
+    articleId: string,
+    idempotencyKey: string,
+    requestOptions: MobileRequestOptions = {}
+  ) {
     return this.request(
       `/api/v1/collections/${encodeURIComponent(collectionId)}/items/${encodeURIComponent(articleId)}`,
       collectionItemMutationResponseSchema,
-      { idempotencyKey, method: "DELETE" }
+      { idempotencyKey, method: "DELETE", ...requestOptions }
     )
   }
 
   updatePodcastProgress(
     episodeId: string,
     input: PodcastProgressMutationRequest,
-    idempotencyKey: string
+    idempotencyKey: string,
+    requestOptions: MobileRequestOptions = {}
   ) {
     return this.request(
       `/api/v1/podcast-episodes/${encodeURIComponent(episodeId)}/progress`,
       podcastEpisodeStateMutationResponseSchema,
-      { body: input, idempotencyKey, method: "PATCH" }
+      { body: input, idempotencyKey, method: "PATCH", ...requestOptions }
     )
   }
 
   updatePodcastState(
     episodeId: string,
     input: PodcastStateMutationRequest,
-    idempotencyKey: string
+    idempotencyKey: string,
+    requestOptions: MobileRequestOptions = {}
   ) {
     return this.request(
       `/api/v1/podcast-episodes/${encodeURIComponent(episodeId)}/state`,
       podcastEpisodeStateMutationResponseSchema,
-      { body: input, idempotencyKey, method: "PATCH" }
+      { body: input, idempotencyKey, method: "PATCH", ...requestOptions }
     )
   }
 
   registerInstallation(
     input: { environment: "development" | "preview" | "production"; pushToken: string },
-    idempotencyKey: string
+    idempotencyKey: string,
+    requestOptions: MobileRequestOptions = {}
   ) {
     return this.request("/api/v1/device-installations/current", deviceInstallationResponseSchema, {
       body: input,
       idempotencyKey,
       method: "PUT",
+      ...requestOptions,
     })
   }
 
-  unregisterInstallation(pushToken: string, idempotencyKey: string) {
+  unregisterInstallation(
+    pushToken: string,
+    idempotencyKey: string,
+    requestOptions: MobileRequestOptions = {}
+  ) {
     return this.request("/api/v1/device-installations/current", deviceInstallationResponseSchema, {
       body: { pushToken },
       idempotencyKey,
       method: "DELETE",
+      ...requestOptions,
     })
   }
 
-  sync(cursor?: string) {
+  sync(cursor?: string, requestOptions: MobileRequestOptions = {}) {
     return this.request("/api/v1/sync", syncResponseSchema, {
       query: { cursor, limit: 100 },
+      ...requestOptions,
     })
   }
 
-  syncBootstrap() {
-    return this.request("/api/v1/sync/bootstrap", syncBootstrapResponseSchema)
+  syncBootstrap(requestOptions: MobileRequestOptions = {}) {
+    return this.request("/api/v1/sync/bootstrap", syncBootstrapResponseSchema, requestOptions)
   }
 
-  logout() {
+  logout(requestOptions: MobileRequestOptions = {}) {
     return this.request("/api/v1/device-sessions/current/logout", deviceSessionLogoutResponseSchema, {
       method: "POST",
+      ...requestOptions,
     })
   }
 
-  replayMutation(request: IdempotentRequest) {
+  replayMutation(request: IdempotentRequest, requestOptions: MobileRequestOptions = {}) {
     assertQueuedMutation(request)
     return this.request(request.path, apiV1SuccessSchema(z.unknown()), {
       body: request.body,
       idempotencyKey: request.idempotencyKey,
       method: request.method,
+      ...requestOptions,
     })
   }
 
@@ -283,6 +373,7 @@ export class MobileApiClient {
       idempotencyKey?: string
       method?: "DELETE" | "GET" | "PATCH" | "POST" | "PUT"
       query?: Record<string, string | number | undefined>
+      signal?: AbortSignal
     } = {}
   ): Promise<T> {
     const method = options.method ?? "GET"
@@ -297,74 +388,132 @@ export class MobileApiClient {
       headers.set("Idempotency-Key", options.idempotencyKey)
     }
     const requiresAuthentication = options.auth !== false
-    if (requiresAuthentication) {
-      if (!this.getAccessToken) {
-        throw new MobileApiError(
-          "MOBILE_DEVICE_SESSION_REQUIRED",
-          "Sign in to Arctic RSS before continuing.",
-          false,
-          401
+    const requestBoundary = createMobileRequestBoundary({
+      deadlineMs: method === "GET" ? this.readDeadlineMs : this.writeDeadlineMs,
+      signal: options.signal,
+    })
+    try {
+      if (requiresAuthentication) {
+        if (!this.getAccessToken) {
+          throw new MobileApiError(
+            "MOBILE_DEVICE_SESSION_REQUIRED",
+            "Sign in to Arctic RSS before continuing.",
+            false,
+            401
+          )
+        }
+        headers.set(
+          "Authorization",
+          `Bearer ${await awaitWithinMobileRequestBoundary(this.getAccessToken(), requestBoundary)}`
         )
       }
-      headers.set("Authorization", `Bearer ${await this.getAccessToken()}`)
-    }
 
-    const url = buildMobileApiUrl(this.origin, path, options.query)
-    let response: Response
-    try {
-      response = await this.fetchImplementation(url, {
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      const url = buildMobileApiUrl(this.origin, path, options.query)
+      let response = await this.fetchWithBoundary({
+        body: options.body,
         headers,
         method,
+        requestBoundary,
+        url,
       })
-    } catch {
-      throw new MobileNetworkError()
-    }
 
-    if (requiresAuthentication && response.status === 401 && this.refreshAccessToken) {
-      // A refresh is coordinated by MobileSessionManager. Replay exactly once
-      // with the persisted replacement token; do not recurse on another 401.
-      headers.set("Authorization", `Bearer ${await this.refreshAccessToken()}`)
-      try {
-        response = await this.fetchImplementation(url, {
-          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      if (
+        requiresAuthentication &&
+        response.status === 401 &&
+        this.refreshAccessToken &&
+        (method === "GET" || Boolean(options.idempotencyKey))
+      ) {
+        // A refresh is coordinated by MobileSessionManager. Replay exactly once
+        // with the persisted replacement token; do not recurse on another 401.
+        headers.set(
+          "Authorization",
+          `Bearer ${await awaitWithinMobileRequestBoundary(this.refreshAccessToken(), requestBoundary)}`
+        )
+        response = await this.fetchWithBoundary({
+          body: options.body,
           headers,
           method,
+          requestBoundary,
+          url,
         })
-      } catch {
-        throw new MobileNetworkError()
       }
-    }
 
-    const body = await readJson(response)
-    if (!response.ok) {
-      const parsed = apiV1ErrorEnvelopeSchema.safeParse(body)
-      if (parsed.success) {
+      const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"))
+      const body = await readBoundedJson(response, this.maximumResponseBytes)
+      if (!response.ok) {
+        const parsed = apiV1ErrorEnvelopeSchema.safeParse(body)
+        if (parsed.success) {
+          throw new MobileApiError(
+            parsed.data.error.code,
+            parsed.data.error.message,
+            parsed.data.error.retryable || response.status === 429 || response.status === 503,
+            response.status,
+            retryAfterMs
+          )
+        }
         throw new MobileApiError(
-          parsed.data.error.code,
-          parsed.data.error.message,
-          parsed.data.error.retryable,
+          "INTERNAL_ERROR",
+          "Arctic RSS could not complete this request.",
+          response.status >= 500 || response.status === 429 || response.status === 503,
+          response.status,
+          retryAfterMs
+        )
+      }
+
+      const parsed = schema.safeParse(body)
+      if (!parsed.success) {
+        throw new MobileApiError(
+          "INTERNAL_ERROR",
+          "Arctic RSS returned an invalid response.",
+          true,
           response.status
         )
       }
-      throw new MobileApiError(
-        "INTERNAL_ERROR",
-        "Arctic RSS could not complete this request.",
-        response.status >= 500,
-        response.status
-      )
+      return parsed.data
+    } catch (error) {
+      if (error instanceof MobileApiError || error instanceof MobileNetworkError) {
+        throw error
+      }
+      if (error instanceof MobileResponseTooLargeError) {
+        throw new MobileApiError(
+          "MOBILE_RESPONSE_TOO_LARGE",
+          "Arctic RSS returned an invalid response.",
+          true,
+          502
+        )
+      }
+      throw requestBoundary.networkError()
+    } finally {
+      requestBoundary.close()
     }
+  }
 
-    const parsed = schema.safeParse(body)
-    if (!parsed.success) {
-      throw new MobileApiError(
-        "INTERNAL_ERROR",
-        "Arctic RSS returned an invalid response.",
-        true,
-        response.status
-      )
+  private async fetchWithBoundary({
+    body,
+    headers,
+    method,
+    requestBoundary,
+    url,
+  }: {
+    body: unknown
+    headers: Headers
+    method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT"
+    requestBoundary: MobileRequestBoundary
+    url: string
+  }) {
+    if (requestBoundary.signal.aborted) {
+      throw requestBoundary.networkError()
     }
-    return parsed.data
+    try {
+      return await this.fetchImplementation(url, {
+        body: body === undefined ? undefined : JSON.stringify(body),
+        headers,
+        method,
+        signal: requestBoundary.signal,
+      })
+    } catch {
+      throw requestBoundary.networkError()
+    }
   }
 }
 
@@ -416,9 +565,158 @@ export function assertQueuedMutation(request: IdempotentRequest) {
   }
 }
 
-async function readJson(response: Response): Promise<unknown> {
+type MobileRequestBoundary = {
+  close: () => void
+  networkError: () => MobileNetworkError
+  signal: AbortSignal
+}
+
+class MobileResponseTooLargeError extends Error {
+  constructor() {
+    super("Mobile response exceeds the configured byte limit.")
+  }
+}
+
+function createMobileRequestBoundary({
+  deadlineMs,
+  signal,
+}: {
+  deadlineMs: number
+  signal?: AbortSignal
+}): MobileRequestBoundary {
+  const controller = new AbortController()
+  let abortedByCaller = false
+  let timedOut = false
+  const abortForCaller = () => {
+    abortedByCaller = true
+    controller.abort()
+  }
+  if (signal?.aborted) {
+    abortForCaller()
+  } else {
+    signal?.addEventListener("abort", abortForCaller, { once: true })
+  }
+  const deadline = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, deadlineMs)
+
+  return {
+    close: () => {
+      clearTimeout(deadline)
+      signal?.removeEventListener("abort", abortForCaller)
+    },
+    networkError: () =>
+      new MobileNetworkError(
+        abortedByCaller
+          ? "MOBILE_REQUEST_ABORTED"
+          : timedOut
+            ? "MOBILE_REQUEST_DEADLINE_EXCEEDED"
+            : "MOBILE_NETWORK_UNAVAILABLE"
+      ),
+    signal: controller.signal,
+  }
+}
+
+function awaitWithinMobileRequestBoundary<T>(
+  operation: Promise<T>,
+  requestBoundary: MobileRequestBoundary
+): Promise<T> {
+  if (requestBoundary.signal.aborted) {
+    return Promise.reject(requestBoundary.networkError())
+  }
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      cleanup()
+      reject(requestBoundary.networkError())
+    }
+    const cleanup = () => requestBoundary.signal.removeEventListener("abort", abort)
+    requestBoundary.signal.addEventListener("abort", abort, { once: true })
+    void operation.then(
+      (value) => {
+        cleanup()
+        resolve(value)
+      },
+      (error: unknown) => {
+        cleanup()
+        reject(error)
+      }
+    )
+  })
+}
+
+function boundedPositiveInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number
+) {
+  if (value === undefined || !Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.min(maximum, Math.max(minimum, Math.round(value)))
+}
+
+function parseRetryAfterMs(value: string | null, now = Date.now()) {
+  if (!value) {
+    return null
+  }
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.round(seconds * 1_000)
+  }
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - now) : null
+}
+
+async function readBoundedJson(response: Response, maximumBytes: number): Promise<unknown> {
+  const contentLength = Number(response.headers.get("content-length"))
+  if (Number.isFinite(contentLength) && contentLength > maximumBytes) {
+    throw new MobileResponseTooLargeError()
+  }
+  const reader = response.body?.getReader()
+  if (reader) {
+    const chunks: Uint8Array[] = []
+    let byteLength = 0
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) {
+          break
+        }
+        if (!value) {
+          continue
+        }
+        byteLength += value.byteLength
+        if (byteLength > maximumBytes) {
+          await reader.cancel()
+          throw new MobileResponseTooLargeError()
+        }
+        chunks.push(value)
+      }
+    } finally {
+      reader.releaseLock()
+    }
+    const payload = new Uint8Array(byteLength)
+    let offset = 0
+    for (const chunk of chunks) {
+      payload.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return parseJson(new TextDecoder().decode(payload))
+  }
+
+  const text = await response.text()
+  if (new TextEncoder().encode(text).byteLength > maximumBytes) {
+    throw new MobileResponseTooLargeError()
+  }
+  return parseJson(text)
+}
+
+function parseJson(value: string): unknown {
   try {
-    return await response.json()
+    return JSON.parse(value)
   } catch {
     return undefined
   }

@@ -60,7 +60,9 @@ describe("flushPendingMutations", () => {
 
   it("keeps a retryable failure with bounded evidence and stops this pass", async () => {
     const offline = createOffline([mutation("a".repeat(16))])
-    const api = { replayMutation: vi.fn().mockRejectedValue(new MobileNetworkError()) }
+    const api = {
+      replayMutation: vi.fn().mockRejectedValue(new MobileNetworkError("MOBILE_REQUEST_DEADLINE_EXCEEDED")),
+    }
 
     await expect(
       flushPendingMutations(api as unknown as MobileApiClient, offline as unknown as MobileOfflineStore)
@@ -118,5 +120,17 @@ describe("flushPendingMutations", () => {
       idempotencyKey: "a".repeat(16),
       state: "PERMANENT_FAILURE",
     })
+  })
+
+  it("leaves an obsolete caller cancellation untouched", async () => {
+    const offline = createOffline([mutation("a".repeat(16))])
+    const cancellation = new MobileNetworkError("MOBILE_REQUEST_ABORTED")
+    const api = { replayMutation: vi.fn().mockRejectedValue(cancellation) }
+
+    await expect(
+      flushPendingMutations(api as unknown as MobileApiClient, offline as unknown as MobileOfflineStore)
+    ).rejects.toBe(cancellation)
+
+    expect(offline.failPendingMutation).not.toHaveBeenCalled()
   })
 })

@@ -16,7 +16,7 @@ export function ReaderScreen({
 }) {
   const { api } = useMobileApp()
   const load = useCallback(
-    () => api.reader({ collectionId, limit: 30, state }),
+    (signal: AbortSignal) => api.reader({ collectionId, limit: 30, state }, { signal }),
     [api, collectionId, state]
   )
   const { data, error, hasOfflineCopy, isRefreshing, refresh } = useMobileQuery(

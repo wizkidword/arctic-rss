@@ -10,7 +10,10 @@ export default function SearchScreen() {
   const { api } = useMobileApp()
   const [draft, setDraft] = useState("")
   const [query, setQuery] = useState("")
-  const load = useCallback(() => api.search({ limit: 30, q: query }), [api, query])
+  const load = useCallback(
+    (signal: AbortSignal) => api.search({ limit: 30, q: query }, { signal }),
+    [api, query]
+  )
   const { data, error, isRefreshing, refresh } = useMobileQuery(`search:${query}`, load)
 
   return (

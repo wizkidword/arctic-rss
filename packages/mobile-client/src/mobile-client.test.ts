@@ -100,6 +100,108 @@ describe("mobile client safeguards", () => {
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
+  it("bounds a hanging read with a deadline and forwards caller cancellation", async () => {
+    const fetch = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          ;(init.signal as AbortSignal).addEventListener("abort", () => reject(new Error("aborted")))
+        })
+    )
+    const client = new MobileApiClient({
+      fetch: fetch as typeof globalThis.fetch,
+      getAccessToken: async () => "device-token",
+      origin: "https://arcticrss.example",
+      readDeadlineMs: 1_000,
+    })
+
+    await expect(client.me()).rejects.toMatchObject({
+      code: "MOBILE_REQUEST_DEADLINE_EXCEEDED",
+      retryable: true,
+    })
+
+    const controller = new AbortController()
+    const cancelled = client.me({ signal: controller.signal })
+    controller.abort()
+    await expect(cancelled).rejects.toMatchObject({
+      code: "MOBILE_REQUEST_ABORTED",
+      retryable: false,
+    })
+  })
+
+  it("also bounds a stalled access-token read before starting a request", async () => {
+    const fetch = vi.fn()
+    const client = new MobileApiClient({
+      fetch: fetch as typeof globalThis.fetch,
+      getAccessToken: () => new Promise<string>(() => {}),
+      origin: "https://arcticrss.example",
+      readDeadlineMs: 1_000,
+    })
+
+    await expect(client.me()).rejects.toMatchObject({
+      code: "MOBILE_REQUEST_DEADLINE_EXCEEDED",
+      retryable: true,
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("exposes Retry-After and refuses an oversized response before parsing it", async () => {
+    const retryClient = new MobileApiClient({
+      fetch: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "RATE_LIMITED",
+              message: "Slow down",
+              requestId: "11111111-1111-4111-8111-111111111111",
+              retryable: true,
+            },
+          }),
+          { headers: { "retry-after": "12" }, status: 429 }
+        )
+      ),
+      getAccessToken: async () => "device-token",
+      origin: "https://arcticrss.example",
+    })
+    await expect(retryClient.me()).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      retryAfterMs: 12_000,
+      retryable: true,
+      status: 429,
+    })
+
+    const oversizedClient = new MobileApiClient({
+      fetch: vi.fn().mockResolvedValue(
+        new Response("{}", { headers: { "content-length": "1025" }, status: 200 })
+      ),
+      getAccessToken: async () => "device-token",
+      maximumResponseBytes: 1_024,
+      origin: "https://arcticrss.example",
+    })
+    await expect(oversizedClient.me()).rejects.toMatchObject({
+      code: "MOBILE_RESPONSE_TOO_LARGE",
+    })
+  })
+
+  it("does not replay a non-idempotent write after access refresh", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: "MOBILE_DEVICE_SESSION_REQUIRED", message: "Sign in", retryable: false } }),
+        { status: 401 }
+      )
+    )
+    const refreshAccessToken = vi.fn().mockResolvedValue("replacement")
+    const client = new MobileApiClient({
+      fetch: fetch as typeof globalThis.fetch,
+      getAccessToken: async () => "device-token",
+      origin: "https://arcticrss.example",
+      refreshAccessToken,
+    })
+
+    await expect(client.logout()).rejects.toBeInstanceOf(MobileApiError)
+    expect(refreshAccessToken).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
   it("makes deterministic URL-safe PKCE material with a SHA-256 challenge", async () => {
     const pkce = await createPkceAuthorization({
       randomBytes: (size) => Uint8Array.from({ length: size }, (_, index) => index),

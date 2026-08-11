@@ -2,7 +2,7 @@ import { useCallback, useState } from "react"
 import { router } from "expo-router"
 import { Text } from "react-native"
 
-import { MobileApiError, type PendingMobileMutation } from "@arctic-rss/mobile-client"
+import { type PendingMobileMutation } from "@arctic-rss/mobile-client"
 
 import { ActionButton, Loading, Notice, Screen, Section, mobileStyles } from "@/components/mobile-ui"
 import { useMobileQuery } from "@/hooks/use-mobile-query"
@@ -12,10 +12,9 @@ import {
   mobileMutationReason,
   mobileMutationResourcePath,
 } from "@/sync/mobile-mutation-presentation"
-import { flushPendingMutations } from "@/sync/flush-pending-mutations"
 
 export default function OfflineChangesScreen() {
-  const { api, offline, signOut } = useMobileApp()
+  const { offline, syncNow, syncSnapshot } = useMobileApp()
   const [message, setMessage] = useState<string | null>(null)
   const changes = useMobileQuery(
     "offline-conflicts",
@@ -25,21 +24,13 @@ export default function OfflineChangesScreen() {
   const retry = useCallback(async (mutation: PendingMobileMutation) => {
     try {
       await offline.retryTerminalPendingMutation(mutation.idempotencyKey)
-      const result = await flushPendingMutations(api, offline)
-      setMessage(
-        result.completed > 0
-          ? "Offline changes were retried."
-          : "The change is saved for a later retry when the service is available."
-      )
+      await syncNow()
+      setMessage("Offline changes were retried.")
       changes.refresh()
-    } catch (error) {
-      if (error instanceof MobileApiError && error.status === 401) {
-        await signOut()
-        return
-      }
+    } catch {
       setMessage("This offline change could not be updated. Try again from this device.")
     }
-  }, [api, changes, offline, signOut])
+  }, [changes, offline, syncNow])
 
   const discard = useCallback(async (mutation: PendingMobileMutation) => {
     try {
@@ -55,6 +46,7 @@ export default function OfflineChangesScreen() {
     <Screen isRefreshing={changes.isRefreshing} onRefresh={changes.refresh} title="Offline changes need attention">
       <Section>
         <Text style={mobileStyles.muted}>These changes were not silently removed. Review, retry, or discard each one on this device.</Text>
+        <Text style={mobileStyles.muted}>Sync status: {mobileSyncStatus(syncSnapshot.state)}.</Text>
       </Section>
       {message ? <Notice tone="info">{message}</Notice> : null}
       {changes.error ? <Notice>{changes.error}</Notice> : null}
@@ -70,4 +62,12 @@ export default function OfflineChangesScreen() {
       ))}
     </Screen>
   )
+}
+
+function mobileSyncStatus(state: "auth-required" | "conflicts" | "idle" | "offline" | "syncing") {
+  if (state === "auth-required") return "sign in required"
+  if (state === "conflicts") return "conflicts need attention"
+  if (state === "offline") return "offline; saved changes will retry"
+  if (state === "syncing") return "syncing"
+  return "up to date"
 }

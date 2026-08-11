@@ -14,7 +14,7 @@ function SavedViewArticles({ view }: { view: SavedView }) {
   const query = useMobileQuery(
     `saved-view:${view.id}`,
     useCallback(
-      () =>
+      (signal: AbortSignal) =>
         api.search({
           collectionId: view.collectionId ?? undefined,
           folderId: view.folderId ?? undefined,
@@ -24,7 +24,7 @@ function SavedViewArticles({ view }: { view: SavedView }) {
           sourceId: view.sourceId ?? undefined,
           state: view.state,
           to: view.publishedBefore?.slice(0, 10),
-        }),
+        }, { signal }),
       [api, view]
     )
   )
@@ -41,7 +41,10 @@ export default function SavedViewScreen() {
   const { savedViewId: rawSavedViewId } = useLocalSearchParams<{ savedViewId: string }>()
   const savedViewId = Array.isArray(rawSavedViewId) ? rawSavedViewId[0] : rawSavedViewId
   const { api } = useMobileApp()
-  const savedViews = useMobileQuery("saved-views", useCallback(() => api.savedViews(), [api]))
+  const savedViews = useMobileQuery(
+    "saved-views",
+    useCallback((signal: AbortSignal) => api.savedViews({ signal }), [api])
+  )
   const view = savedViews.data?.data.savedViews.find((item) => item.id === savedViewId)
 
   return (

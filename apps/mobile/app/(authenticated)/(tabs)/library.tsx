@@ -8,10 +8,22 @@ import { useMobileApp } from "@/providers/mobile-app-provider"
 
 export default function LibraryScreen() {
   const { api } = useMobileApp()
-  const collections = useMobileQuery("collections", useCallback(() => api.collections(), [api]))
-  const savedViews = useMobileQuery("saved-views", useCallback(() => api.savedViews(), [api]))
-  const podcasts = useMobileQuery("podcasts", useCallback(() => api.podcasts(), [api]))
-  const briefings = useMobileQuery("briefings", useCallback(() => api.briefings(), [api]))
+  const collections = useMobileQuery(
+    "collections",
+    useCallback((signal: AbortSignal) => api.collections({ signal }), [api])
+  )
+  const savedViews = useMobileQuery(
+    "saved-views",
+    useCallback((signal: AbortSignal) => api.savedViews({ signal }), [api])
+  )
+  const podcasts = useMobileQuery(
+    "podcasts",
+    useCallback((signal: AbortSignal) => api.podcasts({ signal }), [api])
+  )
+  const briefings = useMobileQuery(
+    "briefings",
+    useCallback((signal: AbortSignal) => api.briefings({ signal }), [api])
+  )
 
   return (
     <Screen title="Library">

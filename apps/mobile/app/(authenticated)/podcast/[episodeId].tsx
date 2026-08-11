@@ -14,11 +14,11 @@ export default function PodcastEpisodeScreen() {
   const { api, offline } = useMobileApp()
   const [position, setPosition] = useState("")
   const [message, setMessage] = useState<string | null>(null)
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal: AbortSignal) => {
     if (!episodeId) {
       throw new Error("This episode link is incomplete.")
     }
-    return api.podcastEpisode(episodeId)
+    return api.podcastEpisode(episodeId, { signal })
   }, [api, episodeId])
   const episode = useMobileQuery(`podcast:${episodeId ?? "missing"}`, load)
 
