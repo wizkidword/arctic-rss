@@ -812,7 +812,7 @@ export async function listMobileDeviceSessions({
   userId: string
   now?: Date
 }): Promise<MobileDeviceSession[]> {
-  return store.deviceSession.findMany({
+  return store.mobileDevice.findMany({
     orderBy: { lastUsedAt: "desc" },
     select: {
       appVersion: true,
@@ -824,7 +824,6 @@ export async function listMobileDeviceSessions({
     },
     where: {
       refreshExpiresAt: { gt: now },
-      replacedById: null,
       revokedAt: null,
       userId,
     },
@@ -842,11 +841,11 @@ export async function revokeMobileDeviceSession({
   store?: MobileAuthStore
   userId: string
 }) {
-  const session = await store.deviceSession.findFirst({
+  const device = await store.mobileDevice.findFirst({
     select: { tokenFamilyId: true },
     where: { id: sessionId, userId },
   })
-  if (!session) {
+  if (!device) {
     return { revoked: false }
   }
 
@@ -854,7 +853,7 @@ export async function revokeMobileDeviceSession({
     eventType: "MOBILE_DEVICE_SESSION_REVOKED",
     now,
     store,
-    tokenFamilyId: session.tokenFamilyId,
+    tokenFamilyId: device.tokenFamilyId,
     userId,
   })
   return { revoked: true }
@@ -874,12 +873,16 @@ export async function revokeAllMobileDeviceSessions({
       data: { revokedAt: now },
       where: { revokedAt: null, userId },
     })
-    if (revoked.count) {
+    const devices = await transaction.mobileDevice.updateMany({
+      data: { revokedAt: now },
+      where: { revokedAt: null, userId },
+    })
+    if (devices.count) {
       await transaction.securityEvent.create({
         data: { eventType: "MOBILE_DEVICE_SESSIONS_REVOKED_ALL", userId },
       })
     }
-    return { revoked: revoked.count }
+    return { revoked: devices.count, revokedRefreshSessions: revoked.count }
   })
 }
 
