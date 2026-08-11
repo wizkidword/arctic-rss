@@ -342,6 +342,7 @@ model User {
   planQuota                         UserPlanQuota?
   securityEvents                    SecurityEvent[]
   mobileAuthorizationRequests       MobileAuthorizationRequest[]
+  mobileDevices                     MobileDevice[]
   deviceAuthorizationCodes          DeviceAuthorizationCode[]
   deviceSessions                    DeviceSession[]
   notificationPreferences           UserNotificationPreference[]
@@ -525,9 +526,11 @@ model MobileAuthorizationRequest {
 
 // Each refresh rotation is a new row in one token family. A conditional update
 // links the predecessor to its replacement so reuse can revoke the full family.
+// `mobileDeviceId` is additive while existing refresh history is backfilled.
 model DeviceSession {
   id               String    @id @default(cuid())
   userId           String
+  mobileDeviceId   String?
   tokenFamilyId    String
   refreshTokenHash String    @unique
   deviceName       String
@@ -543,6 +546,7 @@ model DeviceSession {
   reuseDetectedAt  DateTime?
 
   user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mobileDevice     MobileDevice?           @relation(fields: [mobileDeviceId], references: [id], onDelete: SetNull)
   replacedBy       DeviceSession?          @relation("DeviceSessionReplacement", fields: [replacedById], references: [id], onDelete: SetNull)
   replaces         DeviceSession?          @relation("DeviceSessionReplacement")
   installations    DeviceInstallation[]
@@ -550,6 +554,30 @@ model DeviceSession {
 
   @@index([userId, revokedAt, replacedById])
   @@index([tokenFamilyId])
+  @@index([mobileDeviceId])
+  @@index([refreshExpiresAt])
+}
+
+// Stable identity for a physical mobile installation. Refresh-token rows are
+// append-only history within this token family; they are not device identity.
+model MobileDevice {
+  id               String    @id @default(cuid())
+  userId           String
+  tokenFamilyId    String    @unique
+  deviceName       String    @db.VarChar(120)
+  platform         String    @db.VarChar(32)
+  appVersion       String    @db.VarChar(80)
+  authVersion      Int
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime
+  refreshExpiresAt DateTime
+  revokedAt        DateTime?
+  reuseDetectedAt  DateTime?
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions DeviceSession[]
+
+  @@index([userId, revokedAt, refreshExpiresAt])
   @@index([refreshExpiresAt])
 }
 
