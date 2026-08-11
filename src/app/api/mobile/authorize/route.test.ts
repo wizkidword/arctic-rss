@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => {
     enforceRateLimit: vi.fn(),
     getAppOrigin: vi.fn(),
     getTrustedClientIp: vi.fn(),
+    isNativeMobileAuthorizationEnabled: vi.fn(),
     issueDeviceAuthorizationCode: vi.fn(),
     parseBrowserDeviceAuthorizationRequest: vi.fn(),
     requireFreshUser: vi.fn(),
@@ -23,6 +24,9 @@ vi.mock("@/lib/authorization", () => ({
   requireFreshUser: mocks.requireFreshUser,
 }))
 vi.mock("@/lib/app-origin", () => ({ getAppOrigin: mocks.getAppOrigin }))
+vi.mock("@/lib/mobile-auth-configuration", () => ({
+  isNativeMobileAuthorizationEnabled: mocks.isNativeMobileAuthorizationEnabled,
+}))
 vi.mock("@/lib/mobile-auth", () => ({
   issueDeviceAuthorizationCode: mocks.issueDeviceAuthorizationCode,
   MobileAuthError: mocks.MobileAuthError,
@@ -39,6 +43,7 @@ describe("GET /api/mobile/authorize", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getAppOrigin.mockReturnValue(new URL("https://arcticrss.example"))
+    mocks.isNativeMobileAuthorizationEnabled.mockReturnValue(true)
     mocks.parseBrowserDeviceAuthorizationRequest.mockReturnValue(authorizationRequest)
     mocks.auth.mockResolvedValue({
       user: { authVersion: 2, id: "user-1", plan: "FREE", role: "USER" },
@@ -72,6 +77,17 @@ describe("GET /api/mobile/authorize", () => {
       ip: "198.51.100.24",
       userId: "user-1",
     })
+  })
+
+  it("fails closed before parsing or authenticating when native authorization is disabled", async () => {
+    mocks.isNativeMobileAuthorizationEnabled.mockReturnValue(false)
+
+    const response = await GET(authorizeRequest())
+
+    expect(response.status).toBe(404)
+    expect(mocks.parseBrowserDeviceAuthorizationRequest).not.toHaveBeenCalled()
+    expect(mocks.auth).not.toHaveBeenCalled()
+    expect(mocks.issueDeviceAuthorizationCode).not.toHaveBeenCalled()
   })
 
   it("returns to the exact local authorization URL after browser login", async () => {

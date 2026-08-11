@@ -28,7 +28,10 @@
                   "RATE_LIMITED",
                   "RATE_LIMIT_UNAVAILABLE",
                   "RESOURCE_NOT_FOUND",
-                  "REQUEST_VALIDATION_FAILED"
+                  "REQUEST_TIMEOUT",
+                  "REQUEST_TOO_LARGE",
+                  "REQUEST_VALIDATION_FAILED",
+                  "UNSUPPORTED_MEDIA_TYPE"
                 ]
               },
               "issues": {

@@ -55,7 +55,9 @@ export type RateLimitAction =
   | "mobile_api_read"
   | "mobile_api_write"
   | "mobile_token_exchange"
+  | "mobile_token_exchange_prebody"
   | "mobile_token_refresh"
+  | "mobile_token_refresh_prebody"
   | "opml_import"
   | "podcast_transcript"
   | "password_reset_complete"
@@ -248,12 +250,16 @@ const rateLimitRules: Record<RateLimitAction, RateLimitRule[]> = {
     { limit: 60, scope: "ip", subject: inputSubject("ip"), windowMs: 60 * 60_000 },
   ],
   mobile_token_exchange: [
-    { limit: 60, scope: "ip", subject: inputSubject("ip"), windowMs: 15 * 60_000 },
     { limit: 10, scope: "token", subject: inputSubject("token"), windowMs: 15 * 60_000 },
   ],
+  mobile_token_exchange_prebody: [
+    { limit: 60, scope: "ip", subject: inputSubject("ip"), windowMs: 15 * 60_000 },
+  ],
   mobile_token_refresh: [
-    { limit: 120, scope: "ip", subject: inputSubject("ip"), windowMs: 15 * 60_000 },
     { limit: 10, scope: "token", subject: inputSubject("token"), windowMs: 15 * 60_000 },
+  ],
+  mobile_token_refresh_prebody: [
+    { limit: 120, scope: "ip", subject: inputSubject("ip"), windowMs: 15 * 60_000 },
   ],
   opml_import: [
     { limit: 6, scope: "user", subject: inputSubject("userId"), windowMs: 60 * 60_000 },

@@ -1,6 +1,7 @@
 import { auth } from "@/auth"
 import { AuthorizationError, requireFreshUser } from "@/lib/authorization"
 import { getAppOrigin } from "@/lib/app-origin"
+import { isNativeMobileAuthorizationEnabled } from "@/lib/mobile-auth-configuration"
 import {
   issueDeviceAuthorizationCode,
   MobileAuthError,
@@ -17,6 +18,10 @@ const noStoreHeaders = {
 }
 
 export async function GET(request: Request) {
+  if (!isNativeMobileAuthorizationEnabled()) {
+    return new Response(null, { headers: noStoreHeaders, status: 404 })
+  }
+
   let authorizationRequest
   try {
     authorizationRequest = parseBrowserDeviceAuthorizationRequest(

@@ -314,6 +314,23 @@ describe("rate limiter", () => {
     })
   })
 
+  it("limits parallel mobile exchange bodies by trusted IP before secret parsing", async () => {
+    const store = createCounterStore()
+
+    const attempts = await Promise.all(
+      Array.from({ length: 61 }, () =>
+        enforceRateLimit(
+          { action: "mobile_token_exchange_prebody", ip: "198.51.100.77" },
+          { store }
+        )
+      )
+    )
+
+    expect(attempts.filter((attempt) => attempt.allowed)).toHaveLength(60)
+    expect(attempts[60]).toMatchObject({ allowed: false, scope: "ip" })
+    expect(store.eval).toHaveBeenCalledTimes(61)
+  })
+
   it("fails closed when Redis cannot be reached", async () => {
     const store: RateLimitStore = {
       eval: vi.fn(async () => {
