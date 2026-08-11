@@ -22,3 +22,7 @@ New source writes now populate both the stable-device reference and the legacy
 session relation. Idempotency lookup prefers the stable device, preserving a
 key across refresh rotation; a nullable legacy fallback remains only for rows
 not yet backfilled.
+
+New access tokens also carry the stable device ID and server validation checks
+that the linked device remains active. Tokens created before this source change
+are short-lived and intentionally fail closed once the new code is active.

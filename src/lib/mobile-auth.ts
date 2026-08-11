@@ -83,6 +83,7 @@ export type MobileDeviceSession = MobileDevice & {
 
 export type MobileAccessPrincipal = {
   authVersion: number
+  mobileDeviceId: string
   deviceSessionId: string
   userId: string
 }
@@ -609,6 +610,7 @@ export async function exchangeDeviceAuthorizationCode({
   return issueSessionTokens({
     accessTokenEnvironment,
     authVersion: deviceSession.authVersion,
+    mobileDeviceId: requireStableDeviceId(deviceSession.mobileDeviceId),
     deviceSessionId: deviceSession.id,
     refreshToken,
     userId: deviceSession.userId,
@@ -755,6 +757,7 @@ export async function refreshMobileDeviceSession({
   return issueSessionTokens({
     accessTokenEnvironment,
     authVersion: replacement.authVersion,
+    mobileDeviceId: requireStableDeviceId(replacement.mobileDeviceId),
     deviceSessionId: replacement.id,
     refreshToken: nextRefreshToken,
     userId: replacement.userId,
@@ -775,7 +778,10 @@ export async function authenticateMobileAccessToken({
 }): Promise<MobileAccessPrincipal> {
   const payload = parseMobileAccessToken(accessToken, accessTokenEnvironment, now)
   const session = await store.deviceSession.findUnique({
-    include: { user: { select: { authVersion: true, disabledAt: true, id: true } } },
+    include: {
+      mobileDevice: true,
+      user: { select: { authVersion: true, disabledAt: true, id: true } },
+    },
     where: { id: payload.sid },
   })
 
@@ -785,6 +791,10 @@ export async function authenticateMobileAccessToken({
     session.authVersion !== payload.av ||
     session.user.disabledAt ||
     session.user.authVersion !== payload.av ||
+    session.mobileDeviceId !== payload.did ||
+    !session.mobileDevice ||
+    session.mobileDevice.revokedAt ||
+    session.mobileDevice.authVersion !== payload.av ||
     session.revokedAt ||
     session.replacedById ||
     session.refreshExpiresAt <= now
@@ -800,7 +810,12 @@ export async function authenticateMobileAccessToken({
     throw new MobileAuthError("refresh-invalid", "The access token is invalid or expired.")
   }
 
-  return { authVersion: payload.av, deviceSessionId: session.id, userId: session.userId }
+  return {
+    authVersion: payload.av,
+    deviceSessionId: session.id,
+    mobileDeviceId: session.mobileDeviceId,
+    userId: session.userId,
+  }
 }
 
 export async function listMobileDeviceSessions({
@@ -889,6 +904,7 @@ export async function revokeAllMobileDeviceSessions({
 function issueSessionTokens({
   accessTokenEnvironment,
   authVersion,
+  mobileDeviceId,
   deviceSessionId,
   refreshToken,
   userId,
@@ -896,6 +912,7 @@ function issueSessionTokens({
 }: {
   accessTokenEnvironment: Readonly<Record<string, string | undefined>>
   authVersion: number
+  mobileDeviceId: string
   deviceSessionId: string
   refreshToken: string
   userId: string
@@ -903,7 +920,7 @@ function issueSessionTokens({
 }): MobileSessionTokens {
   return {
     accessToken: createMobileAccessToken(
-      { av: authVersion, sid: deviceSessionId, sub: userId },
+      { av: authVersion, did: mobileDeviceId, sid: deviceSessionId, sub: userId },
       accessTokenEnvironment,
       now
     ),
@@ -913,8 +930,9 @@ function issueSessionTokens({
 }
 
 export function createMobileAccessToken(
-  principal: Pick<MobileAccessPrincipal, "authVersion" | "deviceSessionId" | "userId"> | {
+  principal: Pick<MobileAccessPrincipal, "authVersion" | "deviceSessionId" | "mobileDeviceId" | "userId"> | {
     av: number
+    did: string
     sid: string
     sub: string
   },
@@ -922,7 +940,7 @@ export function createMobileAccessToken(
   now = new Date()
 ) {
   const payload = "authVersion" in principal
-    ? { av: principal.authVersion, sid: principal.deviceSessionId, sub: principal.userId }
+    ? { av: principal.authVersion, did: principal.mobileDeviceId, sid: principal.deviceSessionId, sub: principal.userId }
     : principal
   const encodedPayload = Buffer.from(
     JSON.stringify({
@@ -967,6 +985,7 @@ function parseMobileAccessToken(
       parsed.v === 1 &&
       typeof parsed.sub === "string" &&
       typeof parsed.sid === "string" &&
+      typeof parsed.did === "string" &&
       Number.isInteger(parsed.av) &&
       typeof parsed.exp === "number" &&
       Number.isInteger(parsed.exp) &&
@@ -974,7 +993,7 @@ function parseMobileAccessToken(
     if (!isValid) {
       throw new Error("invalid access token payload")
     }
-    return { av: parsed.av as number, sid: parsed.sid as string, sub: parsed.sub as string }
+    return { av: parsed.av as number, did: parsed.did as string, sid: parsed.sid as string, sub: parsed.sub as string }
   } catch {
     throw new MobileAuthError("refresh-invalid", "The access token is invalid or expired.")
   }
@@ -1028,6 +1047,13 @@ function assertActiveUser(
   if (!user || user.disabledAt || user.authVersion !== authVersion) {
     throw new MobileAuthError(code, "The account is no longer authorized.")
   }
+}
+
+function requireStableDeviceId(mobileDeviceId: string | null) {
+  if (!mobileDeviceId) {
+    throw new MobileAuthError("authorization-invalid", "The mobile device is no longer authorized.")
+  }
+  return mobileDeviceId
 }
 
 function hashCredential(value: string) {
