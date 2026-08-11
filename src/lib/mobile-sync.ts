@@ -10,6 +10,7 @@ import type {
 import { articleAccessWhere } from "./articles"
 import { getPrisma } from "./db"
 import { toMobileSyncEvent } from "./mobile-sync-event"
+import { recordMobileSyncPage } from "./mobile-telemetry"
 
 export const MOBILE_SYNC_RETENTION_DAYS = 180
 export const MOBILE_MUTATION_RECEIPT_RETENTION_DAYS = 30
@@ -56,6 +57,7 @@ export async function listMobileSync({
   limit: number
   userId: string
 }) {
+  const startedAt = performance.now()
   const prisma = getPrisma()
   const requestedCursor = cursor ? BigInt(cursor) : null
   const floor = await prisma.userSyncCursorFloor.findUnique({
@@ -67,6 +69,12 @@ export async function listMobileSync({
     requestedCursor !== null &&
     requestedCursor < (floor?.minimumSequence ?? BigInt(0)) - BigInt(1)
   ) {
+    recordMobileSyncPage({
+      durationMs: performance.now() - startedAt,
+      eventCount: 0,
+      fullResyncRequired: true,
+      hasMore: false,
+    })
     throw new MobileSyncError(
       "full-resync-required",
       "This device's sync cursor is outside the retained history. Perform a full resync."
@@ -85,11 +93,18 @@ export async function listMobileSync({
   const page = hasMore ? events.slice(0, limit) : events
   const nextCursor = page.at(-1)?.sequence.toString() ?? cursor ?? null
 
-  return {
+  const result = {
     events: page.map(toMobileSyncEvent),
     hasMore,
     nextCursor,
   }
+  recordMobileSyncPage({
+    durationMs: performance.now() - startedAt,
+    eventCount: result.events.length,
+    fullResyncRequired: false,
+    hasMore,
+  })
+  return result
 }
 
 export async function getMobileSyncBootstrap(userId: string) {

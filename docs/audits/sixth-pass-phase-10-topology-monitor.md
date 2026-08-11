@@ -25,3 +25,19 @@ Compose project on Linux. The current Windows workstation runs the source,
 release-controller, typecheck, and lint tests but skips the Bash/Python
 resolver fixture because those host tools are absent. No monitor helper was
 installed, no systemd unit was run, and no production topology was changed.
+
+## Initial mobile operational metrics
+
+The same Phase 10 source slice also makes existing structured mobile logs more
+useful as low-cardinality operational measurements. Mobile API request records
+now contain a bounded response class instead of a request UUID. Separate
+records cover authorization approval/cancel/failure, refresh success/retryable
+failure/reuse detection, and sync page duration/event count/has-more/full
+resync state. The existing retention worker already records journal rows,
+oldest retained age, and prune count.
+
+These records intentionally contain no user, device, feed/source, article,
+query, token, request-body, header, or free-form device-name value. They do
+not add an analytics SDK, a push-install metric, remote telemetry transport,
+or production collection evidence. Active-device and offline-conflict
+aggregation remain follow-up source work.

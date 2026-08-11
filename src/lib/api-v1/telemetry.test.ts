@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   parseMobileProductMilestone,
+  recordApiV1Request,
   recordMobileProductMilestone,
 } from "./telemetry"
 
@@ -34,6 +35,31 @@ describe("mobile product telemetry", () => {
       event: "mobile_product_milestone",
       milestone: "first_return_session",
       platform: "android",
+    })
+    info.mockRestore()
+  })
+
+  it("records a bounded API response class without a request identifier", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {})
+
+    recordApiV1Request({
+      authMode: "device-session",
+      durationMs: 14,
+      endpoint: "sync",
+      pageSize: 50,
+      rateLimitResult: "allowed",
+      statusCode: 200,
+    })
+
+    expect(JSON.parse(String(info.mock.calls[0][0]))).toEqual({
+      authMode: "device-session",
+      durationMs: 14,
+      endpoint: "sync",
+      event: "mobile_api_v1_request",
+      pageSize: 50,
+      rateLimitResult: "allowed",
+      responseClass: "2xx",
+      statusCode: 200,
     })
     info.mockRestore()
   })

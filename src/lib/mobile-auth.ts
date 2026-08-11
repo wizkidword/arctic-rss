@@ -98,6 +98,7 @@ export type MobileAuthErrorCode =
   | "configuration"
   | "device-limit"
   | "refresh-invalid"
+  | "refresh-reuse-detected"
 
 export class MobileAuthError extends Error {
   constructor(
@@ -666,7 +667,7 @@ export async function refreshMobileDeviceSession({
       tokenFamilyId: previous.tokenFamilyId,
       userId: previous.userId,
     })
-    throw new MobileAuthError("refresh-invalid", "The refresh token is invalid or expired.")
+    throw new MobileAuthError("refresh-reuse-detected", "The refresh token is invalid or expired.")
   }
 
   const nextRefreshToken = randomToken()
@@ -744,7 +745,7 @@ export async function refreshMobileDeviceSession({
         tokenFamilyId: previous.tokenFamilyId,
         userId: previous.userId,
       })
-      throw new MobileAuthError("refresh-invalid", "The refresh token is invalid or expired.")
+      throw new MobileAuthError("refresh-reuse-detected", "The refresh token is invalid or expired.")
     }
     if (error instanceof RefreshAccountInvalidatedError) {
       await revokeMobileDeviceFamily({

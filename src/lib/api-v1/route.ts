@@ -187,7 +187,6 @@ export async function handleApiV1Read<T>({
     endpoint,
     pageSize,
     rateLimitResult,
-    requestId,
     statusCode: response.status,
   })
 
@@ -274,7 +273,6 @@ export async function handleApiV1DeviceSession<T>({
     endpoint,
     pageSize,
     rateLimitResult,
-    requestId,
     statusCode: response.status,
   })
   return response

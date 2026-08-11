@@ -9,6 +9,7 @@ import {
   MobileAuthError,
   parseBrowserDeviceAuthorizationRequest,
 } from "@/lib/mobile-auth"
+import { recordMobileAuthorizationDecision } from "@/lib/mobile-telemetry"
 import { enforceRateLimit, getTrustedClientIp } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -92,11 +93,13 @@ export async function POST(request: Request) {
     typeof approvalToken !== "string" ||
     (decision !== "approve" && decision !== "cancel")
   ) {
+    recordMobileAuthorizationDecision("failure")
     return authorizationErrorResponse(400)
   }
 
   const session = await auth()
   if (!session?.user?.id || session.user.authVersion === undefined) {
+    recordMobileAuthorizationDecision("failure")
     return authorizationErrorResponse(400)
   }
 
@@ -108,6 +111,7 @@ export async function POST(request: Request) {
       userId: user.id,
     })
     if (!rateLimit.allowed) {
+      recordMobileAuthorizationDecision("failure")
       return authorizationErrorResponse(
         rateLimit.reason === "unavailable" ? 503 : 429,
         rateLimit.retryAfterSeconds
@@ -116,6 +120,7 @@ export async function POST(request: Request) {
     const result = decision === "approve"
       ? await approveMobileAuthorizationRequest({ approvalToken, requestId, userId: user.id })
       : await cancelMobileAuthorizationRequest({ approvalToken, requestId, userId: user.id })
+    recordMobileAuthorizationDecision(decision === "approve" ? "approved" : "cancelled")
     const redirectUri = new URL(result.redirectUri)
     redirectUri.searchParams.set("state", result.state)
     if (result.code) {
@@ -125,6 +130,7 @@ export async function POST(request: Request) {
     }
     return mobileRedirect(redirectUri)
   } catch (error) {
+    recordMobileAuthorizationDecision("failure")
     if (error instanceof AuthorizationError || error instanceof MobileAuthError) {
       return authorizationErrorResponse(400)
     }

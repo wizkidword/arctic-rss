@@ -10,6 +10,7 @@ import {
   parseMobileRefreshRequest,
   refreshMobileDeviceSession,
 } from "@/lib/mobile-auth"
+import { recordMobileTokenRefresh } from "@/lib/mobile-telemetry"
 import { enforceRateLimit, getTrustedClientIp } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
       ip,
     })
     if (!preBodyRateLimit.allowed) {
+      recordMobileTokenRefresh("retryable_failure")
       return tokenRateLimitResponse(preBodyRateLimit, requestId)
     }
 
@@ -34,19 +36,25 @@ export async function POST(request: Request) {
       token: body.refreshToken,
     })
     if (!rateLimit.allowed) {
+      recordMobileTokenRefresh("retryable_failure")
       return tokenRateLimitResponse(rateLimit, requestId)
     }
 
+    const tokens = await refreshMobileDeviceSession({ refreshToken: body.refreshToken })
+    recordMobileTokenRefresh("success")
     return apiV1SuccessResponse({
-      data: await refreshMobileDeviceSession({ refreshToken: body.refreshToken }),
+      data: tokens,
       requestId,
     })
   } catch (error) {
     if (error instanceof BoundedJsonBodyError) {
+      recordMobileTokenRefresh("invalid")
       return tokenBodyErrorResponse(error, requestId)
     }
     if (error instanceof SyntaxError || error instanceof MobileAuthError) {
       const isConfiguration = error instanceof MobileAuthError && error.code === "configuration"
+      const isReuse = error instanceof MobileAuthError && error.code === "refresh-reuse-detected"
+      recordMobileTokenRefresh(isReuse ? "reuse_detected" : isConfiguration ? "retryable_failure" : "invalid")
       return apiV1ErrorResponse({
         code: isConfiguration ? "MOBILE_AUTHENTICATION_UNAVAILABLE" : "MOBILE_REFRESH_INVALID",
         message: isConfiguration
@@ -58,6 +66,7 @@ export async function POST(request: Request) {
       })
     }
 
+    recordMobileTokenRefresh("retryable_failure")
     console.error(JSON.stringify({ event: "mobile_refresh_failed", requestId }))
     return apiV1ErrorResponse({
       code: "INTERNAL_ERROR",

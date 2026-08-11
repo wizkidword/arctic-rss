@@ -35,7 +35,6 @@ export function recordApiV1Request({
   endpoint,
   pageSize,
   rateLimitResult,
-  requestId,
   statusCode,
 }: {
   authMode: ApiV1AuthMode
@@ -43,12 +42,12 @@ export function recordApiV1Request({
   endpoint: ApiV1Endpoint
   pageSize: number | null
   rateLimitResult: ApiV1RateLimitResult
-  requestId: string
   statusCode: number
 }) {
   // This intentionally carries only low-cardinality operational dimensions.
   // Do not add account identifiers, search terms, article data, tokens, or
-  // application headers here.
+  // application headers here. Request IDs are correlation values rather than
+  // an aggregate metric dimension, so they remain in the response only.
   console.info(
     JSON.stringify({
       authMode,
@@ -57,7 +56,7 @@ export function recordApiV1Request({
       event: "mobile_api_v1_request",
       pageSize,
       rateLimitResult,
-      requestId,
+      responseClass: `${Math.floor(statusCode / 100)}xx`,
       statusCode,
     })
   )
