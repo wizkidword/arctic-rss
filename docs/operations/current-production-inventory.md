@@ -105,6 +105,28 @@ gateway.
   remain operator-managed. The 2026-07-13 manual synchronization and disposable
   restore drill are historical evidence, not a claim about the current cadence.
 
+## 2026-08-10 backup-capacity reconciliation
+
+This non-destructive review found 70% root utilization with 10.86 GiB available.
+Backups occupied 10.17 GiB: 6.08 GiB in standard timestamped backups and 4.10
+GiB in named recovery archives. All 22 named archives had valid, unexpired
+review manifests; none was changed or deleted.
+
+The 30-day standard-backup window held 134 snapshots across 30 days. Only two
+had a checksum-verified off-host acknowledgement. The two-per-day cap therefore
+correctly retained all 88 excess snapshots because each lacked the acknowledgement
+required for automated deletion; together they account for 3.78 GiB of backup
+files. The backup and monitor timers were active with successful latest results.
+
+This is a recovery-evidence gap, not permission to remove backups. Before any
+pruning, the owner must choose and approve one of two reviewed paths: verify an
+off-host copy of each candidate snapshot and then prune only acknowledged
+excess, or adopt a separately reviewed supersession policy that permits an
+older same-day snapshot to be removed only after a newer checksum-verified
+off-host snapshot is retained. The existing controller capacity gate, 30-day
+retention policy, two-per-day cap, and named-archive protection remain in force
+until then.
+
 ## Delivery and verification controls
 
 - Production source is deployed from an archive of a reviewed commit rather

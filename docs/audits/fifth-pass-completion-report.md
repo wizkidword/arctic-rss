@@ -118,10 +118,9 @@ remaining owner checklist.
    smoke record, Play Console policy forms/listing, and provide a separate
    exact-artifact/internal-track approval. Do not use a website deployment
    approval for that action.
-3. Triage the current dependency audit separately from this source closeout;
-   `npm audit --omit=dev --audit-level=high` currently reports 19 advisories
-   (10 high, 9 moderate), chiefly through Expo/Metro build tooling plus
-   transitive Hono/UUID paths. Automatic fixes were not applied because the
-   offered remedies include breaking Expo/React Native changes. Record a
-   reviewed dependency decision before the signed Android build or a future
-   release.
+3. Apply the reviewed [dependency audit decision](./fifth-pass-dependency-audit-decision.md)
+   before the signed Android build or any future dependency remediation. The
+   2026-08-10 audit reports 19 advisories (10 high, 9 moderate) and no critical
+   findings; automatic fixes remain intentionally disallowed because the
+   offered Expo/React Native resolution is breaking. Rerun the exact checks for
+   the source revision immediately before signing.

@@ -32,24 +32,27 @@ Google Play's current target-SDK requirement is documented at
    developer information; do not put any identity material in this repository.
 2. Confirm ownership of `com.arcticrss.reader`, create/select the signing key,
    and retain its SHA-256 certificate fingerprint outside the repository.
-3. Configure the reviewed EAS project and build environment with the approved
+3. Rerun the [reviewed dependency-audit checks](../audits/fifth-pass-dependency-audit-decision.md)
+   against the exact source revision. Do not run a blanket `npm audit fix`; a
+   dependency change requires its own Expo-compatible review.
+4. Configure the reviewed EAS project and build environment with the approved
    HTTPS API origin. Build a `preview` AAB; record build ID, exact source SHA,
    version/versionCode, artifact checksum, target SDK, and signing fingerprint.
-4. Serve `https://arcticrss.com/.well-known/assetlinks.json` for that exact
+5. Serve `https://arcticrss.com/.well-known/assetlinks.json` for that exact
    package/fingerprint. Verify Android App Links, browser PKCE return,
    reader/search/article state, collection add/remove, offline retry, podcast
    progress, notification preference, logout purge, and every link route on a
    signed test device.
-5. Create the internal testing track and add only the approved tester group.
+6. Create the internal testing track and add only the approved tester group.
    Upload the reviewed AAB only after the separate owner approval described
    below. Check Play Console's current policy notices, crash/ANR dashboard,
    and release notes before rollout.
-6. Complete the store listing: app name, short/full descriptions, application
+7. Complete the store listing: app name, short/full descriptions, application
    category, contact/support details, privacy-policy URL, screenshots, app
    icon/feature graphics as required, content rating questionnaire, and any
    app-access instructions for the reviewer. Verify all public URLs from a
    signed-out browser.
-7. Complete the Data safety and Data deletion declarations from a current
+8. Complete the Data safety and Data deletion declarations from a current
    code-and-SDK inventory. The form covers data transmitted by the app and its
    SDKs, not merely data stored locally. The current source sends account and
    reader-state requests to the Arctic RSS first-party service, stores tokens
@@ -57,7 +60,7 @@ Google Play's current target-SDK requirement is documented at
    it has no configured advertising, analytics, or push-provider SDK. A legal
    and owner review must validate the final answers, purposes, retention, and
    all bundled SDK disclosures.
-8. Ensure the store listing and in-app settings link to the live privacy policy
+9. Ensure the store listing and in-app settings link to the live privacy policy
    at `https://arcticrss.com/privacy`, and that account deletion is available
    from the app/web handoff at `https://arcticrss.com/delete-account`. Recheck
    the hosted flows after the candidate website revision is live.
