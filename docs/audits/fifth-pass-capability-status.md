@@ -2,22 +2,27 @@
 
 **Last source review:** 2026-08-10
 **Baseline:** `686cd18b7e7f6196865af34c93496c3bddf16a69`  
-**Last independently verified production revision:** `c04e509` on 2026-08-10
-through the approved OVH release controller. It includes the Phase 14
-completion work and the reader-state refresh correction. This record does not
-claim that every product flow was exercised with a real production account.
+**Last independently verified production revision:** `7e5f7fe` on 2026-08-10
+through the approved OVH release controller. It retains the Phase 14
+completion work and reader-state refresh correction first released in
+`c04e509`, while preserving monitor and off-host backup-evidence behavior.
+This record does not claim that every product flow was exercised with a real
+production account.
 
 ## Release addendum
 
-The approved release controller passed its exact-commit CI and local gates,
-fresh backup gate, migration ownership preflight, migration status,
+The Phase 15 `c04e509` release controller passed its exact-commit CI and local
+gates, fresh backup gate, migration ownership preflight, migration status,
 selected-service health, loopback health/liveness, public health/login, and
-monitor checks. Independent verification confirmed `c04e509`, its migration
-status, the required `all-in-one-with-chat` services, and the private release
-record. An initial `c04e509` attempt stopped at the read-only capacity gate;
-the separately approved repair removed only stale, unreferenced older release
-image tags while preserving the then-live and rollback image sets. No backups,
-volumes, release sources, or journals were removed in that repair.
+monitor checks. An initial `c04e509` attempt stopped at the read-only capacity
+gate; the separately approved repair removed only stale, unreferenced older
+release-image tags while preserving the then-live and rollback image sets. No
+backups, volumes, release sources, or journals were removed in that repair.
+
+The later `7e5f7fe` operational release independently passed its own
+exact-commit CI, local gates, fresh backup, migration-status, selected-service,
+loopback, public health/login, monitor, and image-retention checks. It did not
+add a mobile product feature, signed Android artifact, or Play distribution.
 
 The per-finding production and operator columns below are the preserved
 pre-release implementation snapshot. Their `Not deployed` and `No` entries are
@@ -35,11 +40,11 @@ where list cardinality is not product-limited, request IDs, rate-limit
 fail-closed behavior, and low-cardinality telemetry.
 List DTOs exclude article bodies; the selected article detail is sanitized.
 
-The Phase 10 contract is now deployed as part of the last verified production
-revision. Subsequent phases added a local Android client, PKCE device sessions,
-sync mutations, protected device-installation references, and an unsigned
-Android JavaScript export. No signed Android artifact, Play track, push-provider
-delivery, or new Phase 14 source change is deployed.
+The Phase 10 contract and subsequent Phase 14 source are deployed as part of
+the last verified production revision. Subsequent phases added a local Android
+client, PKCE device sessions, sync mutations, protected device-installation
+references, and an unsigned Android JavaScript export. No signed Android
+artifact, Play track, or push-provider delivery is deployed.
 
 | Finding ID | Source implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Unit/integration coverage                                                                                                                                                                                                                                                                                                                                                        | Browser evidence                      | Redis/PostgreSQL/Compose evidence                                                                                                                                                                                                                                    | Migration required                                                                               | Production release status | Operator verification | Mobile dependency                            | Remaining owner gate                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------- | --------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -73,16 +78,16 @@ column, and separate production/operator fields.
 
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
-| Browser PKCE device authorization, rotating device sessions, revocation, and web device management | Implemented with additive migration evidence and exercised by local contract/real-database suites; consumed by the local Android client | Included in last verified website release `c04e509`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for any later website release; signed Android distribution remains owner-gated |
+| Browser PKCE device authorization, rotating device sessions, revocation, and web device management | Implemented with additive migration evidence and exercised by local contract/real-database suites; consumed by the local Android client | Included in last verified website release `7e5f7fe` (first released in `c04e509`); no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for any later website release; signed Android distribution remains owner-gated |
 
 ## Phase 12 mobile sync and notification addendum (2026-08-10)
 
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
-| Transactional user sync events/tombstones, cursor-floor full-resync handling, session-bound idempotent mobile writes, HTTPS web deep-link fallback, centralized notification preferences, and protected Android installation references | Implemented with additive migration evidence, private contract coverage, and a local Android client; App Link signing verification and push-provider delivery remain deferred | Included in last verified website release `c04e509`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for later website releases. A signing identity, App Link verification, and the separate Play owner approval are required for Android distribution |
+| Transactional user sync events/tombstones, cursor-floor full-resync handling, session-bound idempotent mobile writes, HTTPS web deep-link fallback, centralized notification preferences, and protected Android installation references | Implemented with additive migration evidence, private contract coverage, and a local Android client; App Link signing verification and push-provider delivery remain deferred | Included in last verified website release `7e5f7fe` (first released in `c04e509`); no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for later website releases. A signing identity, App Link verification, and the separate Play owner approval are required for Android distribution |
 
 ## Phase 14 reader coherence and safe activation evidence addendum (2026-08-10)
 
 | Capability | Source status | Production status | Next gate |
 | --- | --- | --- | --- |
-| Retained collection provenance and removal, bounded mobile offline indicators, consent-gated first-success milestone events, and fixed Android first-sync/return telemetry | Complete with unit, contract, full-suite, typecheck, lint, web-build, and Android export evidence | Included in independently verified website release `c04e509`; no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for a later website release. Play distribution remains separately owner-gated |
+| Retained collection provenance and removal, bounded mobile offline indicators, consent-gated first-success milestone events, and fixed Android first-sync/return telemetry | Complete with unit, contract, full-suite, typecheck, lint, web-build, and Android export evidence | Included in independently verified website release `7e5f7fe` (first released in `c04e509`); no signed Android distribution | A fresh exact-commit `DEPLOY <short-sha>` approval is required for a later website release. Play distribution remains separately owner-gated |

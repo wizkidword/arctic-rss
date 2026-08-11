@@ -1,7 +1,7 @@
 # Current production inventory
 
 **Captured:** 2026-07-29
-**Updated:** 2026-08-10, after the verified `c04e509` fifth-pass release.
+**Updated:** 2026-08-10, after the verified `7e5f7fe` operational release.
 **Scope:** non-secret current-state addendum plus the historical `74ffd3f`
 reconciliation snapshot below.
 
@@ -11,25 +11,27 @@ those details in the private operator inventory.
 
 ## 2026-08-10 current-release addendum
 
-`c04e509` is the current verified website release, deployed through the
-approved controller with the `all-in-one-with-chat` topology. The controller
-recorded fresh private backup evidence, verified migration status, retained the
-previous release for rollback, and passed selected-service, loopback, public
-health/login, and monitor gates.
+`7e5f7fe` is the current verified website release, deployed through the
+approved controller with the `all-in-one-with-chat` topology. It is the
+post-closeout operational follow-up to the Phase 15 `c04e509` release. The
+controller recorded fresh private backup evidence, verified migration status,
+retained the previous release for rollback, and passed selected-service,
+loopback, public health/login, monitor, and image-retention gates.
 
 The first `c04e509` controller attempt stopped before remote mutation at its
 capacity preflight. The separately approved repair removed only stale,
 unreferenced old release-image tags and explicitly preserved the live and
 rollback image sets; it did not remove backups, volumes, release sources, or
-journals. Independent verification then confirmed the deployed revision,
+journals. The later `7e5f7fe` verification confirmed the deployed revision,
 healthy PostgreSQL, durable Redis, ephemeral Redis, web, worker,
 worker-health, chat gateway, and edge proxy; loopback health/liveness; public
-health and login HTTP 200; and an active-successful monitor. Roughly 7.4 GiB
-of root capacity was available after the successful release. The older snapshot
-below remains historical evidence only where it names `74ffd3f`, 32 migrations,
-or an inactive chat gateway.
+health and login HTTP 200; and an active-successful monitor. The roughly 7.4
+GiB capacity measurement belongs to the earlier `c04e509` release evidence,
+not a current capacity claim. The older snapshot below remains historical
+evidence only where it names `74ffd3f`, 32 migrations, or an inactive chat
+gateway.
 
-> The current release is `c04e509`. The all-in-one worker and active chat
+> The current release is `7e5f7fe`. The all-in-one worker and active chat
 > gateway are part of the verified topology. The split-worker profile remains
 > deferred until sustained workload evidence justifies a separately approved
 > cutover.
@@ -71,9 +73,8 @@ or an inactive chat gateway.
   `pg_restore -l` before each swap and retains the prior release directory for
   rollback.
 - The private release record ties the live archive deployment to public commit
-  `c04e509`, its successful CI run, migration verification, source-built image
-  tags, and public health/login checks. The record itself
-  remains outside Git.
+  `7e5f7fe`, its successful CI run, migration verification, source-built image
+  tags, and public health/login checks. The record itself remains outside Git.
 - Runtime and migration database accounts are separate, login-capable,
   non-superuser roles with no role-management or database-creation powers.
 - Database-level integrity guards prevent cross-user folder links, malformed
@@ -94,13 +95,15 @@ or an inactive chat gateway.
   checks backup freshness, service health, data-store persistence, disk space,
   readiness, and certificate expiry.
 - The backup and monitor timers were active and their latest service results
-  were successful during this capture. A current completed backup was present.
-  Alert routing and the private off-host backup copy remain outside this
-  repository.
+  were successful during the `7e5f7fe` verification. A current completed backup
+  and checksum-verified off-host acknowledgement were present. Alert routing
+  and the private off-host backup copy remain outside this repository.
 - A private Windows scheduled task copies the newest VPS backup to off-host
   storage, validates both database-file checksums, and retains 30 days of
-  local copies. The latest manual synchronization and a disposable restore
-  drill both completed successfully on 2026-07-13.
+  local copies. The current operator-selected daily cap is two standard
+  timestamped backups after off-host acknowledgement; named recovery archives
+  remain operator-managed. The 2026-07-13 manual synchronization and disposable
+  restore drill are historical evidence, not a claim about the current cadence.
 
 ## Delivery and verification controls
 
