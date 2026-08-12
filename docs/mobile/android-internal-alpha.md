@@ -6,7 +6,7 @@
 - Package name: `com.arcticrss.reader` (provisional; confirm ownership before the first Play upload)
 - Version: `0.1.0`, Android `versionCode` 1; EAS version control is explicitly remote for future builds
 - Build profiles: `development` (internal APK/dev client) and `preview` (internal AAB)
-- Signed preview candidate: EAS build `a5f5d507-8dff-4bde-bc94-9706dbfdd3d5`, built from `18767e5a7a5bdc35f8843a07874470a7ce09c242`; no Play upload, track, tester group, or release exists
+- Signed preview candidate: EAS build `8a8f6fd9-770a-462f-9089-2ba57b3d7121`, built from `bf6564902bf3e406615ba4e2339a02a6535a0f61`; no Play upload, track, tester group, or release exists
 - Public Play release: not configured and not authorized
 
 The native alpha uses the private first-party v1 API and the browser PKCE device
