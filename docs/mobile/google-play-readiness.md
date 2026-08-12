@@ -46,7 +46,8 @@ Google Play's current target-SDK requirement is documented at
 5. Serve `https://arcticrss.com/.well-known/assetlinks.json` for that exact
    package/fingerprint. Verify Android App Links, browser PKCE return,
    reader/search/article state, collection add/remove, offline retry, podcast
-   progress, notification preference, logout purge, and every link route on a
+   episode notes and completion/star state, notification preference, logout
+   purge, and every link route on a
    signed test device.
 6. Create the internal testing track and add only the approved tester group.
    Upload the reviewed AAB only after the separate owner approval described

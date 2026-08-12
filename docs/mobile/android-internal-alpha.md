@@ -24,7 +24,7 @@ mobile data accessible through this app.
 ## Included in this alpha
 
 - Browser sign-in; All, Unread, and Starred reader views; article actions and collection save/remove
-- Search, saved views, collections, Smart Digest briefing detail, and podcast episode progress/state
+- Search, saved views, collections, Smart Digest briefing detail, and podcast episode notes/completion/star state
 - Notification preference changes, device-management web link, privacy, support entry, and account deletion link
 - HTTPS App Link routes for articles, podcast episodes, collections, saved views, and briefings
 
@@ -54,7 +54,7 @@ track or tester access.
 3. Serve `https://arcticrss.com/.well-known/assetlinks.json` containing that exact package name and signing fingerprint, then verify Android App Links on a signed device. Do not publish this file before the signing identity exists.
 4. Set the approved HTTPS `EXPO_PUBLIC_ARCTIC_RSS_ORIGIN` for the build environment. No HTTP origin is allowed outside an explicit development build.
 5. Create a reviewed EAS project/credential configuration and run the `preview` profile from `apps/mobile` to produce an internal AAB. Record the build ID, version code, signing certificate fingerprint, and tester group.
-6. Exercise the signed-device smoke test: browser login, reader/search/article state, collection add/remove, offline queue then foreground retry, podcast progress, notification setting, logout purge, and every App Link.
+6. Exercise the signed-device smoke test: browser login, reader/search/article state, collection add/remove, offline queue then foreground retry, podcast episode notes/completion/star state, notification setting, logout purge, and every App Link. Native playback and listening-progress controls are deferred.
 
 This workstation does not currently have Android SDK tooling configured, and no
 EAS build, signing identity, Play Console project, tester group, or submission

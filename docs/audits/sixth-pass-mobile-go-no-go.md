@@ -13,7 +13,7 @@ and Play production. This is a source-evidence decision, not a release request.
 | Offline/sync/queue | Local source and real sync tests cover ownership, non-lossy cursor/bootstrap, retention, and queue conflicts | Source verified only | Native SQLite/account-switch/restore failure injection and signed-device proof |
 | Android configuration | Expo Doctor, native config, typecheck, lint, audit, SBOM, and unsigned export pass | Source verified only | Exact signed AAB manifest, checksum, target SDK, and signing fingerprint |
 | Push | No provider, permission, registration, or selectable mobile push channel | Truthful boundary | Re-review Data Safety and policy before any future provider integration |
-| Podcast | State/progress controls exist; native playback remains an owner product decision | NOT READY TO CLAIM | Choose native playback or remove playback controls before internal testing |
+| Podcast | Episode browsing, notes, and completion/star state remain available; native playback and listening-progress controls are deliberately deferred | Deferred; not in internal-test scope | Do not claim in-app playback. Revisit only when native audio work is separately approved and tested. |
 | Privacy and Data Safety | Source-backed evidence inventory and smoke plan exist | Owner/legal review required | Publish owner/counsel-approved factual policy text and complete exact-artifact Data Safety review |
 | Play prerequisites | Owner checklist is documented | Owner action required | Developer account, package ownership, EAS project/credentials, signing identity, tester group, listing, track approval |
 
