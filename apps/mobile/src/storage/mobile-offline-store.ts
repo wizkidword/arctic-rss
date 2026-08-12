@@ -23,8 +23,8 @@ import {
 import {
   MOBILE_STORE_SCHEMA_VERSION,
   mobileStoreUpgrade,
-} from "@/storage/mobile-store-schema"
-import { readPendingMobileMutations, type StoredPendingMutationRow } from "@/storage/pending-mobile-mutations"
+} from "./mobile-store-schema"
+import { readPendingMobileMutations, type StoredPendingMutationRow } from "./pending-mobile-mutations"
 
 type CacheIndexRow = {
   accessedAt: number
@@ -37,6 +37,7 @@ type CachePayloadRow = { payload: string }
 type StoreOwnerRow = { mobileDeviceId: string; ownerUserId: string }
 
 export type MobileStoreOwner = { mobileDeviceId: string; userId: string }
+export type MobileSqliteAdapter = Pick<typeof SQLite, "openDatabaseAsync">
 
 const MOBILE_STORE_DATABASE_NAME = "arctic-rss-mobile.db"
 const MOBILE_MUTATION_SEND_LEASE_MS = 60_000
@@ -44,6 +45,8 @@ const MOBILE_MUTATION_SEND_LEASE_MS = 60_000
 export class MobileOfflineStore {
   private databasePromise: Promise<SQLite.SQLiteDatabase> | null = null
   private owner: MobileStoreOwner | null = null
+
+  constructor(private readonly sqlite: MobileSqliteAdapter = SQLite) {}
 
   async claimOwner(owner: MobileStoreOwner) {
     const database = await this.database()
@@ -203,7 +206,8 @@ export class MobileOfflineStore {
         "SELECT idempotencyKey, payload FROM mobile_pending_mutation ORDER BY createdAt ASC"
       )
       const { mutations } = readPendingMobileMutations(rows)
-      for (const mutation of mutations) {
+      const recoveredMutations = [...mutations]
+      for (const [index, mutation] of recoveredMutations.entries()) {
         if (
           mutation.state === "SENDING" &&
           mutation.lastAttemptAt !== null &&
@@ -215,9 +219,10 @@ export class MobileOfflineStore {
             updatedAt: now,
           })
           await this.writePendingMutation(transaction, recovered)
+          recoveredMutations[index] = recovered
         }
       }
-      const replayable = mutations.find((mutation) => isReplayableMobileMutation(mutation, now))
+      const replayable = recoveredMutations.find((mutation) => isReplayableMobileMutation(mutation, now))
       if (!replayable) {
         return
       }
@@ -407,7 +412,7 @@ export class MobileOfflineStore {
   }
 
   private async openAndInitializeDatabase() {
-    const database = await SQLite.openDatabaseAsync(MOBILE_STORE_DATABASE_NAME)
+    const database = await this.sqlite.openDatabaseAsync(MOBILE_STORE_DATABASE_NAME)
     await database.execAsync("PRAGMA journal_mode = WAL;")
     const result = await database.getFirstAsync<{ user_version: number }>("PRAGMA user_version")
     const currentVersion = result?.user_version ?? 0
