@@ -10,6 +10,7 @@ import type { PrismaClient } from "@/generated/prisma/client"
 import { z } from "zod"
 
 import { getPrisma } from "@/lib/db"
+import { verifyPassword } from "@/lib/password"
 
 export const MOBILE_ANDROID_CLIENT_ID = "android:com.arcticrss.reader"
 export const MOBILE_PRODUCTION_REDIRECT_URI = "https://arcticrss.com/mobile/auth/callback"
@@ -31,6 +32,13 @@ const NONCE_PATTERN = /^[A-Za-z0-9._~-]{16,256}$/
 const STATE_PATTERN = /^[A-Za-z0-9._~-]{16,512}$/
 const TOKEN_HASH_CONTEXT = "arctic-rss:mobile-auth:v1:token"
 const ACCESS_TOKEN_CONTEXT = "arctic-rss:mobile-auth:v1:access"
+const BROWSER_SESSION_BINDING_CONTEXT = "arctic-rss:mobile-auth:v1:browser-session"
+const BROWSER_SESSION_COOKIE_NAMES = [
+  "__Secure-authjs.session-token",
+  "authjs.session-token",
+  "__Secure-next-auth.session-token",
+  "next-auth.session-token",
+]
 
 type MobileAuthStore = Pick<
   PrismaClient,
@@ -244,12 +252,14 @@ export function createPkceS256Challenge(codeVerifier: string) {
 // code. Only a later, user-initiated POST can consume the opaque approval token.
 export async function createMobileAuthorizationRequest({
   authVersion,
+  browserSessionHash,
   request,
   store = getPrisma(),
   userId,
   now = new Date(),
 }: {
   authVersion: number
+  browserSessionHash: string
   request: BrowserDeviceAuthorizationRequest
   store?: MobileAuthStore
   userId: string
@@ -269,6 +279,7 @@ export async function createMobileAuthorizationRequest({
         appVersion: request.appVersion,
         approvalTokenHash: hashCredential(approvalToken),
         authVersion,
+        browserSessionHash,
         clientId: request.clientId,
         codeChallenge: request.codeChallenge,
         codeChallengeMethod: request.codeChallengeMethod,
@@ -297,12 +308,14 @@ export async function createMobileAuthorizationRequest({
 
 export async function approveMobileAuthorizationRequest({
   approvalToken,
+  browserSessionHash,
   requestId,
   store = getPrisma(),
   userId,
   now = new Date(),
 }: {
   approvalToken: string
+  browserSessionHash: string
   requestId: string
   store?: MobileAuthStore
   userId: string
@@ -310,6 +323,7 @@ export async function approveMobileAuthorizationRequest({
 }): Promise<CompletedMobileAuthorizationRequest> {
   const pending = await getPendingMobileAuthorizationRequest({
     approvalToken,
+    browserSessionHash,
     requestId,
     store,
     userId,
@@ -370,12 +384,14 @@ export async function approveMobileAuthorizationRequest({
 
 export async function cancelMobileAuthorizationRequest({
   approvalToken,
+  browserSessionHash,
   requestId,
   store = getPrisma(),
   userId,
   now = new Date(),
 }: {
   approvalToken: string
+  browserSessionHash: string
   requestId: string
   store?: MobileAuthStore
   userId: string
@@ -383,6 +399,7 @@ export async function cancelMobileAuthorizationRequest({
 }): Promise<CompletedMobileAuthorizationRequest> {
   const pending = await getPendingMobileAuthorizationRequest({
     approvalToken,
+    browserSessionHash,
     requestId,
     store,
     userId,
@@ -418,12 +435,14 @@ export async function cancelMobileAuthorizationRequest({
 
 async function getPendingMobileAuthorizationRequest({
   approvalToken,
+  browserSessionHash,
   requestId,
   store,
   userId,
   now,
 }: {
   approvalToken: string
+  browserSessionHash: string
   requestId: string
   store: MobileAuthStore
   userId: string
@@ -436,11 +455,70 @@ async function getPendingMobileAuthorizationRequest({
     pending.approvedAt ||
     pending.cancelledAt ||
     pending.expiresAt <= now ||
+    !safeEqual(pending.browserSessionHash, browserSessionHash) ||
     !safeEqual(pending.approvalTokenHash, hashCredential(approvalToken))
   ) {
     throw new MobileAuthError("authorization-invalid", "The authorization request is invalid or expired.")
   }
   return pending
+}
+
+export function getMobileAuthorizationBrowserSessionHash(headers: Headers) {
+  const cookieHeader = headers.get("cookie")
+  if (!cookieHeader) {
+    return null
+  }
+
+  const cookies = new Map(
+    cookieHeader.split(";").map((part) => {
+      const separator = part.indexOf("=")
+      return separator === -1
+        ? [part.trim(), ""]
+        : [part.slice(0, separator).trim(), part.slice(separator + 1).trim()]
+    })
+  )
+  for (const name of BROWSER_SESSION_COOKIE_NAMES) {
+    const value = cookies.get(name)
+    if (value) {
+      return createHash("sha256")
+        .update(`${BROWSER_SESSION_BINDING_CONTEXT}:${value}`)
+        .digest("hex")
+    }
+  }
+  return null
+}
+
+// A mobile authorization approval is a high-impact credential issuance. A
+// current browser session alone is not enough: credentials users must re-enter
+// their password in the approval form immediately before a code can be issued.
+// OAuth-only accounts remain fail-closed until a provider reauthentication
+// continuation is implemented; a global last-login timestamp is never used.
+export async function requireMobileAuthorizationReauthentication({
+  currentPassword,
+  expectedAuthVersion,
+  store = getPrisma(),
+  userId,
+  verify = verifyPassword,
+}: {
+  currentPassword: string
+  expectedAuthVersion: number
+  store?: Pick<PrismaClient, "user">
+  userId: string
+  verify?: typeof verifyPassword
+}) {
+  const user = await store.user.findUnique({
+    select: { authVersion: true, disabledAt: true, passwordHash: true },
+    where: { id: userId },
+  })
+  if (
+    !user ||
+    user.disabledAt ||
+    user.authVersion !== expectedAuthVersion ||
+    !user.passwordHash ||
+    !(await verify(currentPassword, user.passwordHash))
+  ) {
+    throw new MobileAuthError("authorization-invalid", "The mobile authorization request is invalid.")
+  }
 }
 
 export async function issueDeviceAuthorizationCode({
@@ -456,6 +534,12 @@ export async function issueDeviceAuthorizationCode({
   userId: string
   now?: Date
 }): Promise<IssuedDeviceAuthorizationCode> {
+  // This remains for database fixture coverage only. Production routes use the
+  // browser-bound, reauthenticated approval flow above. Refuse any accidental
+  // runtime import outside Vitest's test environment.
+  if (process.env.NODE_ENV !== "test") {
+    throw new MobileAuthError("authorization-invalid", "The mobile authorization request is invalid.")
+  }
   const user = await store.user.findUnique({
     select: { authVersion: true, disabledAt: true, id: true },
     where: { id: userId },

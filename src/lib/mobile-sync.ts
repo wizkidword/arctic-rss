@@ -602,12 +602,6 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
         throw new MobileSyncError("resource-not-found", "This mobile device is no longer authorized.")
       }
       const receiptScope = { mobileDeviceId }
-      await tx.deviceMutationReceipt.deleteMany({
-        where: {
-          createdAt: { lt: new Date(Date.now() - MOBILE_MUTATION_RECEIPT_RETENTION_DAYS * 86_400_000) },
-          ...receiptScope,
-        },
-      })
       const existing = await tx.deviceMutationReceipt.findFirst({
         where: { ...receiptScope, idempotencyKeyHash },
       })

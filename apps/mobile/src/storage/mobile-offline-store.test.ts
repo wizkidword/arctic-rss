@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import type { QueuedMobileMutation } from "@arctic-rss/mobile-client"
+import type { UserSyncEvent } from "@arctic-rss/api-contract"
 
 import {
   MobileOfflineStore,
@@ -57,7 +58,88 @@ describe("mobile offline SQLite ownership and recovery", () => {
     await expect(store.cached("reader:one")).resolves.toEqual({ title: "Private article" })
     await expect(store.pendingMutations()).resolves.toHaveLength(1)
   })
+
+  it("invalidates only cache entries affected by an article sync event", async () => {
+    const { store } = createStore()
+    await store.claimOwner(firstOwner)
+    await store.cache("article:article-one", { title: "Changed article" })
+    await store.cache("mobile-page:reader:all:starred", { items: ["article-one"] })
+    await store.cache("collections", { data: ["collection-one"] })
+    await store.cache("notification-preferences", { data: "unchanged" })
+
+    await store.commitSyncPage({ cursor: "1", events: [articleStateEvent()] })
+
+    await expect(store.cached("article:article-one")).resolves.toBeNull()
+    await expect(store.cached("mobile-page:reader:all:starred")).resolves.toBeNull()
+    await expect(store.cached("collections")).resolves.toEqual({ data: ["collection-one"] })
+    await expect(store.cached("notification-preferences")).resolves.toEqual({ data: "unchanged" })
+    await expect(store.getCursor()).resolves.toBe("1")
+  })
+
+  it("invalidates only notification settings for a notification preference event", async () => {
+    const { store } = createStore()
+    await store.claimOwner(firstOwner)
+    await store.cache("notification-preferences", { data: "changed" })
+    await store.cache("mobile-page:reader:all:unread", { items: ["article-one"] })
+
+    await store.commitSyncPage({ cursor: "2", events: [notificationPreferenceEvent()] })
+
+    await expect(store.cached("notification-preferences")).resolves.toBeNull()
+    await expect(store.cached("mobile-page:reader:all:unread")).resolves.toEqual({ items: ["article-one"] })
+  })
+
+  it("keeps selected collections owner-scoped and clears them with downloaded data", async () => {
+    const { store } = createStore()
+    await store.claimOwner(firstOwner)
+    await store.cache("article:article-one", { title: "Available offline" })
+    await store.setCollectionOfflineSelected("collection-one", true)
+
+    await expect(store.offlineStatus()).resolves.toMatchObject({
+      cachedEntries: 1,
+      selectedCollectionIds: ["collection-one"],
+    })
+
+    await store.clearDownloadedData()
+
+    await expect(store.offlineStatus()).resolves.toMatchObject({
+      cachedEntries: 0,
+      selectedCollectionIds: [],
+    })
+  })
 })
+
+function articleStateEvent(): UserSyncEvent {
+  return {
+    action: "UPSERT",
+    occurredAt: "2026-08-12T12:00:00.000Z",
+    payload: {
+      archivedAt: null,
+      articleId: "article-one",
+      isRead: true,
+      isStarred: true,
+      readAt: "2026-08-12T12:00:00.000Z",
+      starredAt: "2026-08-12T12:00:00.000Z",
+    },
+    resourceId: "article-one",
+    resourceType: "article-state",
+    resourceVersion: "1",
+    schemaVersion: 1,
+    sequence: "1",
+  }
+}
+
+function notificationPreferenceEvent(): UserSyncEvent {
+  return {
+    action: "UPSERT",
+    occurredAt: "2026-08-12T12:00:00.000Z",
+    payload: { channel: "EMAIL", topic: "SECURITY_ALERTS" },
+    resourceId: "notification-one",
+    resourceType: "notification-preference",
+    resourceVersion: "1",
+    schemaVersion: 1,
+    sequence: "2",
+  }
+}
 
 function queuedMutation(idempotencyKey: string): QueuedMobileMutation {
   return {
@@ -150,6 +232,12 @@ class MemorySqliteDatabase {
         updatedAt: row.updatedAt,
       }) as T)
     }
+    if (normalized.includes("FROM MOBILE_SYNC_STATE") && normalized.includes("OFFLINE-COLLECTION")) {
+      return [...this.state.sync.keys()]
+        .filter((key) => key.startsWith("offline-collection:"))
+        .sort()
+        .map((key) => ({ key }) as T)
+    }
     return []
   }
 
@@ -163,6 +251,13 @@ class MemorySqliteDatabase {
         mobileDeviceId: this.state.owner.mobileDeviceId,
         ownerUserId: this.state.owner.ownerUserId,
       } as T : null
+    }
+    if (normalized.includes("COUNT(*) AS CACHEDENTRIES") && normalized.includes("FROM MOBILE_CACHE")) {
+      const entries = [...this.state.cache.values()]
+      return {
+        cachedBytes: entries.reduce((total, entry) => total + entry.byteCount, 0),
+        cachedEntries: entries.length,
+      } as T
     }
     if (normalized.includes("FROM MOBILE_CACHE")) {
       const row = this.state.cache.get(String(parameters[0]))
@@ -231,7 +326,11 @@ class MemorySqliteDatabase {
       return
     }
     if (normalized.includes("INTO MOBILE_SYNC_STATE")) {
-      this.state.sync.set(String(parameters[0]), String(parameters[1]))
+      if (normalized.includes("VALUES ('CURSOR', ?)")) {
+        this.state.sync.set("cursor", String(parameters[0]))
+      } else {
+        this.state.sync.set(String(parameters[0]), String(parameters[1]))
+      }
       return
     }
     if (normalized.startsWith("DELETE FROM MOBILE_SYNC_STATE WHERE")) {

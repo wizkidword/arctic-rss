@@ -1214,15 +1214,23 @@ async function runAuthTokenMaintenance() {
     const deleted =
       result.passwordResetTokensDeleted +
       result.emailVerificationTokensDeleted +
-      result.accountDeletionConfirmationTokensDeleted
+      result.accountDeletionConfirmationTokensDeleted +
+      result.authorizationCodesDeleted +
+      result.authorizationRequestsDeleted +
+      result.expiredSessionsDeleted +
+      result.expiredMutationReceiptsDeleted
 
     authTokenMaintenanceSchedule.recordSuccess(Date.now())
     console.log(
       JSON.stringify({
         accountDeletionConfirmationTokensDeleted:
           result.accountDeletionConfirmationTokensDeleted,
+        authorizationCodesDeleted: result.authorizationCodesDeleted,
+        authorizationRequestsDeleted: result.authorizationRequestsDeleted,
         emailVerificationTokensDeleted: result.emailVerificationTokensDeleted,
         event: "auth_token_maintenance",
+        expiredMutationReceiptsDeleted: result.expiredMutationReceiptsDeleted,
+        expiredSessionsDeleted: result.expiredSessionsDeleted,
         outcome: "success",
         passwordResetTokensDeleted: result.passwordResetTokensDeleted,
         totalDeleted: deleted,

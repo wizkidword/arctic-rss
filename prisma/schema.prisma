@@ -509,6 +509,7 @@ model MobileAuthorizationRequest {
   nonceHash           String    @db.VarChar(64)
   state               String    @db.VarChar(512)
   approvalTokenHash   String    @unique @db.VarChar(64)
+  browserSessionHash  String    @db.VarChar(64)
   deviceName          String    @db.VarChar(120)
   platform            String    @db.VarChar(32)
   appVersion          String    @db.VarChar(80)

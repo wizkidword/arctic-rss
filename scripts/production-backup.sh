@@ -85,19 +85,22 @@ grep -q '^CREATE ROLE ' "$staging/database.globals.sql"
 printf 'created_at=%s\n' "$timestamp" > "$staging/metadata"
 dump_bytes="$(stat --format=%s "$staging/database.dump")"
 dump_sha256="$(awk 'NR == 1 { print $1 }' "$staging/database.dump.sha256")"
+globals_sha256="$(awk 'NR == 1 { print $1 }' "$staging/database.globals.sql.sha256")"
 
 python3 - "$staging/backup-evidence.json" "$BACKUP_ENVIRONMENT" "$database_name" \
-  "$timestamp" "$completed_at" "$dump_bytes" "$dump_sha256" "$BACKUP_EVIDENCE_TOOL_VERSION" <<'PY'
+  "$timestamp" "$completed_at" "$dump_bytes" "$dump_sha256" "$globals_sha256" "$BACKUP_EVIDENCE_TOOL_VERSION" <<'PY'
 import json
 import sys
 
-path, environment, database, backup_id, completed_at, bytes_written, sha256, tool_version = sys.argv[1:]
+path, environment, database, backup_id, completed_at, bytes_written, sha256, globals_sha256, tool_version = sys.argv[1:]
 if not environment or not database or not backup_id or not completed_at:
     raise SystemExit("Backup evidence identity is incomplete.")
 if not bytes_written.isdigit() or int(bytes_written) <= 0:
     raise SystemExit("Backup evidence artifact is empty.")
 if len(sha256) != 64 or any(character not in "0123456789abcdef" for character in sha256.lower()):
     raise SystemExit("Backup evidence checksum is invalid.")
+if len(globals_sha256) != 64 or any(character not in "0123456789abcdef" for character in globals_sha256.lower()):
+    raise SystemExit("Backup evidence globals checksum is invalid.")
 
 with open(path, "w", encoding="utf-8") as handle:
     json.dump({
@@ -108,7 +111,9 @@ with open(path, "w", encoding="utf-8") as handle:
         "completedAt": completed_at,
         "bytes": int(bytes_written),
         "sha256": sha256.lower(),
+        "globalsSha256": globals_sha256.lower(),
         "artifactPath": "database.dump",
+        "offHostAcknowledgement": None,
         "offHostTarget": None,
         "offHostVerifiedAt": None,
         "restoreTestedAt": None,
@@ -138,45 +143,11 @@ done < <(
     -name '20??????T??????Z' -mtime "+$RETENTION_DAYS" -print0
 )
 
-# A daily cap is deliberately opt-in and never removes a backup that has not
-# received the existing checksum-verified off-host acknowledgement.  It only
-# applies to standard timestamp directories; named recovery archives are
-# operator-managed and must never be silently expired by this release path.
+# A daily cap is deliberately opt-in and remains report-only. A separate
+# read-only report requires per-artifact acknowledgement and identifies exact
+# candidates; no backup helper performs deletion automatically.
 if (( MAX_BACKUPS_PER_DAY > 0 )); then
-  declare -A retained_for_day=()
-  mapfile -t completed_backups < <(
-    find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' \
-      -printf '%f\n' | sort -r
-  )
-
-  for backup_id in "${completed_backups[@]}"; do
-    backup_day="${backup_id:0:8}"
-    retained_count="${retained_for_day[$backup_day]:-0}"
-    if (( retained_count < MAX_BACKUPS_PER_DAY )); then
-      retained_for_day["$backup_day"]=$((retained_count + 1))
-      continue
-    fi
-
-    backup_evidence="$BACKUP_DIR/$backup_id/backup-evidence.json"
-    if python3 - "$backup_evidence" <<'PY'
-import json
-import sys
-
-try:
-    with open(sys.argv[1], encoding="utf-8") as handle:
-        evidence = json.load(handle)
-except (OSError, ValueError, TypeError):
-    raise SystemExit(1)
-
-raise SystemExit(0 if isinstance(evidence.get("offHostVerifiedAt"), str) and evidence["offHostVerifiedAt"] else 1)
-PY
-    then
-      rm -rf -- "$BACKUP_DIR/$backup_id"
-      echo "Pruned off-host-verified excess backup: $backup_id"
-    else
-      echo "Retaining excess backup without off-host acknowledgement: $backup_id" >&2
-    fi
-  done
+  echo "Daily backup cap is report-only; no backups were pruned automatically (MAX_BACKUPS_PER_DAY=$MAX_BACKUPS_PER_DAY)." >&2
 fi
 
 echo "Arctic RSS backup verified: $timestamp"

@@ -11,11 +11,13 @@ const mocks = vi.hoisted(() => {
     cancelMobileAuthorizationRequest: vi.fn(),
     createMobileAuthorizationRequest: vi.fn(),
     enforceRateLimit: vi.fn(),
+    getMobileAuthorizationBrowserSessionHash: vi.fn(),
     getAppOrigin: vi.fn(),
     getTrustedClientIp: vi.fn(),
     isNativeMobileAuthorizationEnabled: vi.fn(),
     MobileAuthError,
     parseBrowserDeviceAuthorizationRequest: vi.fn(),
+    requireMobileAuthorizationReauthentication: vi.fn(),
     requireFreshUser: vi.fn(),
   }
 })
@@ -33,8 +35,10 @@ vi.mock("@/lib/mobile-auth", () => ({
   approveMobileAuthorizationRequest: mocks.approveMobileAuthorizationRequest,
   cancelMobileAuthorizationRequest: mocks.cancelMobileAuthorizationRequest,
   createMobileAuthorizationRequest: mocks.createMobileAuthorizationRequest,
+  getMobileAuthorizationBrowserSessionHash: mocks.getMobileAuthorizationBrowserSessionHash,
   MobileAuthError: mocks.MobileAuthError,
   parseBrowserDeviceAuthorizationRequest: mocks.parseBrowserDeviceAuthorizationRequest,
+  requireMobileAuthorizationReauthentication: mocks.requireMobileAuthorizationReauthentication,
 }))
 vi.mock("@/lib/rate-limit", () => ({
   enforceRateLimit: mocks.enforceRateLimit,
@@ -55,6 +59,7 @@ describe("/api/mobile/authorize", () => {
     mocks.requireFreshUser.mockResolvedValue({ authVersion: 2, id: "user-1" })
     mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
     mocks.getTrustedClientIp.mockReturnValue("198.51.100.24")
+    mocks.getMobileAuthorizationBrowserSessionHash.mockReturnValue("browser-session-hash")
     mocks.createMobileAuthorizationRequest.mockResolvedValue({
       approvalToken: "approval-token",
       id: "request-1",
@@ -74,6 +79,7 @@ describe("/api/mobile/authorize", () => {
     await expect(response.text()).resolves.toContain("Authorize Arctic RSS for Android")
     expect(mocks.createMobileAuthorizationRequest).toHaveBeenCalledWith({
       authVersion: 2,
+      browserSessionHash: "browser-session-hash",
       request: authorizationRequest,
       userId: "user-1",
     })
@@ -138,12 +144,22 @@ describe("/api/mobile/authorize", () => {
     )
     expect(mocks.approveMobileAuthorizationRequest).toHaveBeenCalledWith({
       approvalToken: "approval-token",
+      browserSessionHash: "browser-session-hash",
       requestId: "request-1",
       userId: "user-1",
     })
     expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
       action: "mobile_device_authorization_approval",
       ip: "198.51.100.24",
+      userId: "user-1",
+    })
+    expect(mocks.enforceRateLimit).toHaveBeenCalledWith({
+      action: "mobile_device_authorization_approval_prebody",
+      ip: "198.51.100.24",
+    })
+    expect(mocks.requireMobileAuthorizationReauthentication).toHaveBeenCalledWith({
+      currentPassword: "correct horse battery staple",
+      expectedAuthVersion: 2,
       userId: "user-1",
     })
     expect(mocks.cancelMobileAuthorizationRequest).not.toHaveBeenCalled()
@@ -163,6 +179,7 @@ describe("/api/mobile/authorize", () => {
     )
     expect(mocks.cancelMobileAuthorizationRequest).toHaveBeenCalledWith({
       approvalToken: "approval-token",
+      browserSessionHash: "browser-session-hash",
       requestId: "request-1",
       userId: "user-1",
     })
@@ -177,6 +194,40 @@ describe("/api/mobile/authorize", () => {
     expect(response.status).toBe(404)
     expect(mocks.auth).not.toHaveBeenCalled()
     expect(mocks.approveMobileAuthorizationRequest).not.toHaveBeenCalled()
+  })
+
+  it("rejects cross-origin, multipart, and duplicate approval forms before authentication", async () => {
+    const crossOrigin = await POST(approvalRequest("approve", { origin: "https://attacker.example" }))
+    expect(crossOrigin.status).toBe(400)
+    expect(mocks.auth).not.toHaveBeenCalled()
+
+    const missingOrigin = await POST(new Request("https://arcticrss.example/api/mobile/authorize", {
+      body: "approval_token=one&current_password=p&decision=approve&request_id=request-1",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: "POST",
+    }))
+    expect(missingOrigin.status).toBe(400)
+    expect(mocks.auth).not.toHaveBeenCalled()
+
+    const multipart = new Request("https://arcticrss.example/api/mobile/authorize", {
+      body: new FormData(),
+      headers: { Origin: "https://arcticrss.example" },
+      method: "POST",
+    })
+    const multipartResponse = await POST(multipart)
+    expect(multipartResponse.status).toBe(400)
+
+    const duplicate = new Request("https://arcticrss.example/api/mobile/authorize", {
+      body: "approval_token=one&approval_token=two&current_password=p&decision=approve&request_id=request-1",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: "https://arcticrss.example",
+      },
+      method: "POST",
+    })
+    const duplicateResponse = await POST(duplicate)
+    expect(duplicateResponse.status).toBe(400)
+    expect(mocks.auth).not.toHaveBeenCalled()
   })
 })
 
@@ -196,10 +247,23 @@ function authorizeRequest(query = "") {
   return new Request(`https://arcticrss.example/api/mobile/authorize${query}`)
 }
 
-function approvalRequest(decision: "approve" | "cancel") {
-  const form = new FormData()
-  form.set("approval_token", "approval-token")
-  form.set("decision", decision)
-  form.set("request_id", "request-1")
-  return new Request("https://arcticrss.example/api/mobile/authorize", { method: "POST", body: form })
+function approvalRequest(
+  decision: "approve" | "cancel",
+  { origin = "https://arcticrss.example" }: { origin?: string } = {}
+) {
+  const form = new URLSearchParams({
+    approval_token: "approval-token",
+    current_password: decision === "approve" ? "correct horse battery staple" : "",
+    decision,
+    request_id: "request-1",
+  })
+  return new Request("https://arcticrss.example/api/mobile/authorize", {
+    body: form.toString(),
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Cookie: "authjs.session-token=browser-session-token",
+      Origin: origin,
+    },
+    method: "POST",
+  })
 }

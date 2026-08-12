@@ -51,23 +51,40 @@ if [[ ! -f "$evidence_path" ]]; then
   exit 1
 fi
 
-python3 - "$evidence_path" "$backup_id" "$BACKUP_OFF_HOST_TARGET" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" <<'PY'
+(
+  cd "$backup_path"
+  sha256sum -c database.dump.sha256 >/dev/null
+  sha256sum -c database.globals.sql.sha256 >/dev/null
+)
+database_sha256="$(awk 'NR == 1 { print $1 }' "$backup_path/database.dump.sha256")"
+globals_sha256="$(awk 'NR == 1 { print $1 }' "$backup_path/database.globals.sql.sha256")"
+
+python3 - "$evidence_path" "$backup_id" "$BACKUP_OFF_HOST_TARGET" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$database_sha256" "$globals_sha256" <<'PY'
 import json
 import os
 import stat
 import sys
 import tempfile
 
-path, backup_id, target, verified_at = sys.argv[1:]
+path, backup_id, target, verified_at, database_sha256, globals_sha256 = sys.argv[1:]
 with open(path, encoding="utf-8") as handle:
     evidence = json.load(handle)
 if evidence.get("schemaVersion") != 1 or evidence.get("backupId") != backup_id:
     raise SystemExit("Backup evidence does not match the requested backup.")
 if not target.strip():
     raise SystemExit("Off-host target is empty.")
+if evidence.get("sha256") != database_sha256.lower() or evidence.get("globalsSha256") != globals_sha256.lower():
+    raise SystemExit("Backup evidence checksums no longer match the verified artifacts.")
 
 evidence["offHostTarget"] = target
 evidence["offHostVerifiedAt"] = verified_at
+evidence["offHostAcknowledgement"] = {
+    "databaseSha256": database_sha256.lower(),
+    "globalsSha256": globals_sha256.lower(),
+    "status": "verified",
+    "targetClass": target,
+    "verifiedAt": verified_at,
+}
 original_stat = os.stat(path)
 mode = stat.S_IMODE(original_stat.st_mode)
 descriptor, temporary_path = tempfile.mkstemp(prefix=".backup-evidence-", dir=os.path.dirname(path))

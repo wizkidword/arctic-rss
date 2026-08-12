@@ -45,6 +45,7 @@ describe("mobile device sessions in PostgreSQL", () => {
       const request = deviceAuthorizationRequest("p".repeat(43))
       const pending = await createMobileAuthorizationRequest({
         authVersion: user.authVersion,
+        browserSessionHash: "browser-session-hash",
         now,
         request,
         store: prisma,
@@ -55,8 +56,20 @@ describe("mobile device sessions in PostgreSQL", () => {
         prisma.deviceAuthorizationCode.count({ where: { userId: user.id } }),
       ).resolves.toBe(0)
 
+      await expect(
+        approveMobileAuthorizationRequest({
+          approvalToken: pending.approvalToken,
+          browserSessionHash: "different-browser-session-hash",
+          now,
+          requestId: pending.id,
+          store: prisma,
+          userId: user.id,
+        }),
+      ).rejects.toMatchObject({ code: "authorization-invalid" } satisfies Partial<MobileAuthError>)
+
       const approved = await approveMobileAuthorizationRequest({
         approvalToken: pending.approvalToken,
+        browserSessionHash: "browser-session-hash",
         now,
         requestId: pending.id,
         store: prisma,
@@ -68,6 +81,7 @@ describe("mobile device sessions in PostgreSQL", () => {
       await expect(
         approveMobileAuthorizationRequest({
           approvalToken: pending.approvalToken,
+          browserSessionHash: "browser-session-hash",
           now,
           requestId: pending.id,
           store: prisma,
@@ -77,6 +91,7 @@ describe("mobile device sessions in PostgreSQL", () => {
 
       const cancelledPending = await createMobileAuthorizationRequest({
         authVersion: user.authVersion,
+        browserSessionHash: "browser-session-hash",
         now,
         request,
         store: prisma,
@@ -85,6 +100,7 @@ describe("mobile device sessions in PostgreSQL", () => {
       await expect(
         cancelMobileAuthorizationRequest({
           approvalToken: cancelledPending.approvalToken,
+          browserSessionHash: "browser-session-hash",
           now,
           requestId: cancelledPending.id,
           store: prisma,
@@ -94,6 +110,7 @@ describe("mobile device sessions in PostgreSQL", () => {
       await expect(
         approveMobileAuthorizationRequest({
           approvalToken: cancelledPending.approvalToken,
+          browserSessionHash: "browser-session-hash",
           now,
           requestId: cancelledPending.id,
           store: prisma,
