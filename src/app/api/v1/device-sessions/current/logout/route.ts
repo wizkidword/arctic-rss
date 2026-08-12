@@ -9,10 +9,10 @@ export async function POST(request: Request) {
   return handleApiV1DeviceSession({
     endpoint: "device-sessions",
     request,
-    run: async ({ deviceSessionId, userId }) => {
+    run: async ({ mobileDeviceId, userId }) => {
       await Promise.all([
-        disableMobileDeviceInstallations({ deviceSessionId }),
-        revokeMobileDeviceSession({ sessionId: deviceSessionId, userId }),
+        disableMobileDeviceInstallations({ mobileDeviceId }),
+        revokeMobileDeviceSession({ sessionId: mobileDeviceId, userId }),
       ])
       return { data: { loggedOut: true as const } }
     },

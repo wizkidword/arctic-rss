@@ -18,7 +18,7 @@ export async function PATCH(
   return handleApiV1DeviceSession({
     endpoint: "article-state",
     request,
-    run: async ({ deviceSessionId, userId }) => {
+    run: async ({ deviceSessionId, mobileDeviceId, userId }) => {
       const { articleId: rawArticleId } = await params
       const articleId = parseApiV1Identifier(rawArticleId, "articleId")
       const input = await parseApiV1Json(request, articleStateMutationRequestSchema)
@@ -27,6 +27,7 @@ export async function PATCH(
         data: await updateMobileArticleState({
           articleId,
           deviceSessionId,
+          mobileDeviceId,
           idempotencyKey,
           input,
           userId,

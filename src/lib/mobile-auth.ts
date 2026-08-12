@@ -35,6 +35,7 @@ const ACCESS_TOKEN_CONTEXT = "arctic-rss:mobile-auth:v1:access"
 type MobileAuthStore = Pick<
   PrismaClient,
   | "deviceAuthorizationCode"
+  | "deviceInstallation"
   | "deviceSession"
   | "mobileDevice"
   | "mobileAuthorizationRequest"
@@ -920,6 +921,10 @@ export async function revokeAllMobileDeviceSessions({
       data: { revokedAt: now },
       where: { revokedAt: null, userId },
     })
+    await transaction.deviceInstallation.updateMany({
+      data: { disabledAt: now },
+      where: { disabledAt: null, mobileDevice: { is: { userId } } },
+    })
     if (devices.count) {
       await transaction.securityEvent.create({
         data: { eventType: "MOBILE_DEVICE_SESSIONS_REVOKED_ALL", userId },
@@ -1062,6 +1067,13 @@ async function revokeMobileDeviceFamily({
     await transaction.mobileDevice.updateMany({
       data: { ...(markReuse ? { reuseDetectedAt: now } : {}), revokedAt: now },
       where: { revokedAt: null, tokenFamilyId, userId },
+    })
+    await transaction.deviceInstallation.updateMany({
+      data: { disabledAt: now },
+      where: {
+        disabledAt: null,
+        mobileDevice: { is: { tokenFamilyId, userId } },
+      },
     })
     await transaction.securityEvent.create({
       data: { eventType, userId },

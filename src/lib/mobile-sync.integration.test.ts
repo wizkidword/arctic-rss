@@ -46,6 +46,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
       updateMobileArticleState({
         articleId: fixture.article.id,
         deviceSessionId: fixture.session.id,
+        mobileDeviceId: fixture.session.mobileDeviceId!,
         idempotencyKey: key,
         input,
         userId: fixture.user.id,
@@ -53,6 +54,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
       updateMobileArticleState({
         articleId: fixture.article.id,
         deviceSessionId: fixture.session.id,
+        mobileDeviceId: fixture.session.mobileDeviceId!,
         idempotencyKey: key,
         input,
         userId: fixture.user.id,
@@ -74,6 +76,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
       updateMobileArticleState({
         articleId: fixture.article.id,
         deviceSessionId: fixture.session.id,
+        mobileDeviceId: fixture.session.mobileDeviceId!,
         idempotencyKey: key,
         input: { isRead: false },
         userId: fixture.user.id,
@@ -90,6 +93,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
       articleId: fixture.article.id,
       collectionId: fixture.collection.id,
       deviceSessionId: fixture.session.id,
+      mobileDeviceId: fixture.session.mobileDeviceId!,
       idempotencyKey: "phase12-idempotency-key-collection-add",
       userId: fixture.user.id,
     })
@@ -97,6 +101,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
       articleId: fixture.article.id,
       collectionId: fixture.collection.id,
       deviceSessionId: secondSession.id,
+      mobileDeviceId: secondSession.mobileDeviceId!,
       idempotencyKey: "phase12-idempotency-key-collection-remove",
       userId: fixture.user.id,
     })
@@ -116,6 +121,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
 
     await updateMobilePodcastProgress({
       deviceSessionId: fixture.session.id,
+      mobileDeviceId: fixture.session.mobileDeviceId!,
       episodeId: fixture.episode.id,
       idempotencyKey: "phase12-idempotency-key-podcast-progress",
       input: { playbackPositionSeconds: 321 },
@@ -123,6 +129,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
     })
     await updateMobilePodcastEpisodeState({
       deviceSessionId: fixture.session.id,
+      mobileDeviceId: fixture.session.mobileDeviceId!,
       episodeId: fixture.episode.id,
       idempotencyKey: "phase12-idempotency-key-podcast-state",
       input: { isPlayed: true, isStarred: true },
@@ -133,6 +140,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
     await updateMobileNotificationPreference({
       channel: "MOBILE_PUSH",
       deviceSessionId: fixture.session.id,
+      mobileDeviceId: fixture.session.mobileDeviceId!,
       idempotencyKey: "phase12-idempotency-key-preference",
       topic: "SMART_DIGEST_COMPLETION",
       userId: fixture.user.id,
@@ -140,6 +148,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
     const pushToken = `ExponentPushToken[${randomUUID().replaceAll("-", "")}0000000000000000]`
     const installation = await registerMobileDeviceInstallation({
       deviceSessionId: fixture.session.id,
+      mobileDeviceId: fixture.session.mobileDeviceId!,
       environment: "preview",
       idempotencyKey: "phase12-idempotency-key-installation",
       pushToken,
@@ -147,6 +156,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
     })
     const disabled = await unregisterMobileDeviceInstallation({
       deviceSessionId: fixture.session.id,
+      mobileDeviceId: fixture.session.mobileDeviceId!,
       idempotencyKey: "phase12-idempotency-key-unregister",
       pushToken,
     })
@@ -244,6 +254,7 @@ describe("mobile sync foundations in PostgreSQL", () => {
     await updateMobileArticleState({
       articleId: fixture.article.id,
       deviceSessionId: fixture.session.id,
+      mobileDeviceId: fixture.session.mobileDeviceId!,
       idempotencyKey: "phase12-bootstrap-high-water",
       input: { isRead: true },
       userId: fixture.user.id,
@@ -295,18 +306,31 @@ function createDeviceSession(
   suffix: string
 ) {
   const now = new Date()
-  return prisma.deviceSession.create({
+  const tokenFamilyId = `sync-family-${randomUUID()}`
+  return prisma.mobileDevice.create({
     data: {
-      accessIssuedAt: now,
       appVersion: "0.1.0-test",
       authVersion: 0,
       deviceName: `Test Android ${suffix}`,
       lastUsedAt: now,
       platform: "android",
       refreshExpiresAt: new Date(now.getTime() + 86_400_000),
-      refreshTokenHash: `sync-refresh-${randomUUID()}`,
-      tokenFamilyId: `sync-family-${randomUUID()}`,
+      tokenFamilyId,
       userId,
     },
-  })
+  }).then((device) => prisma.deviceSession.create({
+    data: {
+      accessIssuedAt: now,
+      appVersion: "0.1.0-test",
+      authVersion: 0,
+      deviceName: `Test Android ${suffix}`,
+      lastUsedAt: now,
+      mobileDeviceId: device.id,
+      platform: "android",
+      refreshExpiresAt: new Date(now.getTime() + 86_400_000),
+      refreshTokenHash: `sync-refresh-${randomUUID()}`,
+      tokenFamilyId,
+      userId,
+    },
+  }))
 }

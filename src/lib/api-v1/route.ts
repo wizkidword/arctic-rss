@@ -201,7 +201,7 @@ export async function handleApiV1DeviceSession<T>({
 }: {
   endpoint: ApiV1Endpoint
   request: Request
-  run: (context: { deviceSessionId: string; userId: string }) => Promise<ApiV1Payload<T>>
+  run: (context: { deviceSessionId: string; mobileDeviceId: string; userId: string }) => Promise<ApiV1Payload<T>>
 }): Promise<Response> {
   const requestId = randomUUID()
   const startedAt = performance.now()
@@ -255,6 +255,7 @@ export async function handleApiV1DeviceSession<T>({
       rateLimitResult = "allowed"
       const payload = await run({
         deviceSessionId: principal.deviceSessionId,
+        mobileDeviceId: principal.mobileDeviceId,
         userId: principal.userId,
       })
       pageSize = payload.pageSize ?? null

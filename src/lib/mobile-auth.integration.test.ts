@@ -1,8 +1,12 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 import { afterAll, describe, expect, test } from "vitest"
 
 import { getPrisma } from "@/lib/db"
+import {
+  registerMobileDeviceInstallation,
+  updateMobileArticleState,
+} from "@/lib/mobile-sync"
 
 import {
   approveMobileAuthorizationRequest,
@@ -487,6 +491,120 @@ describe("mobile device sessions in PostgreSQL", () => {
       ).rejects.toMatchObject({ code: "refresh-invalid" } satisfies Partial<MobileAuthError>)
     },
   )
+
+  databaseTest(
+    "keeps receipts and installations stable across refresh-history cleanup and device revocation",
+    async () => {
+      prisma = getPrisma()
+      const user = await createUser(prisma, userIds)
+      const verifier = "s".repeat(43)
+      const request = deviceAuthorizationRequest(verifier)
+      const issued = await issueDeviceAuthorizationCode({
+        authVersion: user.authVersion,
+        now,
+        request,
+        store: prisma,
+        userId: user.id,
+      })
+      let tokens = await exchangeDeviceAuthorizationCode({
+        accessTokenEnvironment,
+        now,
+        request: {
+          clientId: request.clientId,
+          code: issued.code,
+          codeVerifier: verifier,
+          nonce: request.nonce,
+          redirectUri: request.redirectUri,
+        },
+        store: prisma,
+      })
+      const initialPrincipal = await authenticateMobileAccessToken({
+        accessToken: tokens.accessToken,
+        accessTokenEnvironment,
+        now,
+        store: prisma,
+      })
+      const article = await createReaderArticle(prisma, user.id)
+      const idempotencyKey = "seventh-pass-stable-receipt-key-0001"
+      const mutation = await updateMobileArticleState({
+        articleId: article.id,
+        deviceSessionId: initialPrincipal.deviceSessionId,
+        idempotencyKey,
+        input: { isRead: true },
+        mobileDeviceId: initialPrincipal.mobileDeviceId,
+        userId: user.id,
+      })
+      expect(mutation.replayed).toBe(false)
+      const installation = await registerMobileDeviceInstallation({
+        deviceSessionId: initialPrincipal.deviceSessionId,
+        environment: "preview",
+        idempotencyKey: "seventh-pass-stable-installation-key-0001",
+        mobileDeviceId: initialPrincipal.mobileDeviceId,
+        pushToken: `ExponentPushToken[${randomUUID().replaceAll("-", "")}0000000000000000]`,
+        userId: user.id,
+      })
+
+      for (let rotation = 1; rotation <= 20; rotation += 1) {
+        tokens = await refreshMobileDeviceSession({
+          accessTokenEnvironment,
+          now: new Date(now.getTime() + rotation * 1_000),
+          refreshToken: tokens.refreshToken,
+          store: prisma,
+        })
+      }
+      const finalPrincipal = await authenticateMobileAccessToken({
+        accessToken: tokens.accessToken,
+        accessTokenEnvironment,
+        now: new Date(now.getTime() + 21_000),
+        store: prisma,
+      })
+      expect(finalPrincipal.mobileDeviceId).toBe(initialPrincipal.mobileDeviceId)
+
+      await prisma.deviceSession.deleteMany({
+        where: {
+          id: { not: finalPrincipal.deviceSessionId },
+          mobileDeviceId: initialPrincipal.mobileDeviceId,
+        },
+      })
+      const receipt = await prisma.deviceMutationReceipt.findUniqueOrThrow({
+        where: {
+          mobileDeviceId_idempotencyKeyHash: {
+            idempotencyKeyHash: hashReceiptKey(idempotencyKey),
+            mobileDeviceId: initialPrincipal.mobileDeviceId,
+          },
+        },
+      })
+      const storedInstallation = await prisma.deviceInstallation.findUniqueOrThrow({
+        where: { id: installation.installationId },
+      })
+      expect(receipt.deviceSessionId).toBeNull()
+      expect(storedInstallation.deviceSessionId).toBeNull()
+      expect(storedInstallation.mobileDeviceId).toBe(initialPrincipal.mobileDeviceId)
+
+      await expect(
+        updateMobileArticleState({
+          articleId: article.id,
+          deviceSessionId: finalPrincipal.deviceSessionId,
+          idempotencyKey,
+          input: { isRead: true },
+          mobileDeviceId: finalPrincipal.mobileDeviceId,
+          userId: user.id,
+        }),
+      ).resolves.toMatchObject({ replayed: true })
+
+      await revokeMobileDeviceSession({
+        sessionId: finalPrincipal.mobileDeviceId,
+        store: prisma,
+        userId: user.id,
+      })
+      await expect(
+        prisma.deviceInstallation.findUniqueOrThrow({ where: { id: installation.installationId } }),
+      ).resolves.toMatchObject({ disabledAt: expect.any(Date) })
+      await expect(
+        prisma.deviceSession.findMany({ where: { mobileDeviceId: finalPrincipal.mobileDeviceId } }),
+      ).resolves.toEqual([expect.objectContaining({ revokedAt: expect.any(Date) })])
+    },
+  )
 })
 
 async function createUser(prisma: ReturnType<typeof getPrisma>, userIds: string[]) {
@@ -496,6 +614,28 @@ async function createUser(prisma: ReturnType<typeof getPrisma>, userIds: string[
   })
   userIds.push(user.id)
   return user
+}
+
+async function createReaderArticle(prisma: ReturnType<typeof getPrisma>, userId: string) {
+  const marker = randomUUID().replaceAll("-", "")
+  const feed = await prisma.feed.create({
+    data: { feedUrl: `https://mobile-device-${marker}.example.test/rss.xml`, title: "Mobile device test" },
+  })
+  await prisma.feedSubscription.create({ data: { feedId: feed.id, userId } })
+  return prisma.article.create({
+    data: {
+      externalId: `mobile-device-${marker}`,
+      feedId: feed.id,
+      title: "Mobile device test article",
+      url: `https://mobile-device-${marker}.example.test/articles/1`,
+    },
+  })
+}
+
+function hashReceiptKey(idempotencyKey: string) {
+  return createHash("sha256")
+    .update(`arctic-rss-mobile:idempotency-key:${idempotencyKey}`)
+    .digest("hex")
 }
 
 function deviceAuthorizationRequest(codeVerifier: string) {

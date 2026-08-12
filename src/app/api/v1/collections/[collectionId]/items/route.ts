@@ -18,7 +18,7 @@ export async function POST(
   return handleApiV1DeviceSession({
     endpoint: "collection-items",
     request,
-    run: async ({ deviceSessionId, userId }) => {
+    run: async ({ deviceSessionId, mobileDeviceId, userId }) => {
       const { collectionId: rawCollectionId } = await params
       const collectionId = parseApiV1Identifier(rawCollectionId, "collectionId")
       const { articleId } = await parseApiV1Json(request, collectionItemRequestSchema)
@@ -28,6 +28,7 @@ export async function POST(
           articleId,
           collectionId,
           deviceSessionId,
+          mobileDeviceId,
           idempotencyKey,
           userId,
         }),
