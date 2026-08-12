@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.arcticrss.reader",
+      "sha256_cert_fingerprints": [
+        "7A:B8:90:C8:A1:27:9A:36:EC:40:13:51:13:30:85:FD:92:7A:6C:DB:9B:27:82:09:3C:CC:79:46:D0:00:D6:80"
+      ]
+    }
+  }
+]
