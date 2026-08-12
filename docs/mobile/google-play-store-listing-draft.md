@@ -40,7 +40,7 @@ Account and support tasks continue on Arctic RSS on the web.
 
 | Asset | Current state | Remaining work |
 | --- | --- | --- |
-| Store icon | `public/brand/arctic-rss-icon.png` is a 512 x 512 PNG, 178,014 bytes. | Confirm the rendered icon meets Play's current graphic-content rules before upload. |
+| Store icon | `public/brand/arctic-rss-play-icon.png` is a 512 x 512, 32-bit RGBA PNG, 230,720 bytes. It preserves the original icon's RGB pixels. | Confirm the rendered icon meets Play's current graphic-content rules before upload. |
 | Feature graphic | Not present. | Create a current, reviewed graphic after the signed build can be exercised. |
 | Phone screenshots | Not present. | Capture from the exact signed candidate using non-sensitive, disposable test data: reader, article, collection, briefing, and episode-state screens. Do not show account identity, tokens, feed URLs, or private article content. |
 | Tablet / Chromebook screenshots | Not present. | Decide whether the app will be distributed to large-screen devices, then follow the current Play Console asset requirements. |
