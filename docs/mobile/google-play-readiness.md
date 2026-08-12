@@ -1,9 +1,8 @@
 # Google Play readiness
 
-**Status:** Android source and unsigned JavaScript export are ready for an
-internal-build handoff. No signing identity, EAS build, AAB, Play Console
-project, tester group, store listing, Data safety declaration, or submission
-has been created.
+**Status:** Android source and a pre-identity signed internal AAB candidate are
+ready for owner handoff. No Play Console project, tester group, store listing,
+Data safety declaration, upload, or submission has been created.
 
 This is an owner checklist, not authorization to upload or submit anything.
 Recheck the linked official requirements in Play Console immediately before an
@@ -18,17 +17,29 @@ not completed declarations or test results.
 
 | Item | Current evidence | Owner action before internal upload |
 | --- | --- | --- |
-| Android application ID | `com.arcticrss.reader` in `apps/mobile/app.json`; provisional until ownership is confirmed | Confirm the package is unclaimed or owned by the approved developer account before the first signed build. |
-| Versioning | App version `0.1.0`; `versionCode` `1` | Choose the first release version and preserve a monotonically increasing version code for every later artifact. |
+| Android application ID | `com.arcticrss.reader` in `apps/mobile/app.json`; provisional until ownership is confirmed | Confirm the package is unclaimed or owned by the approved developer account before the first Play upload. |
+| Versioning | App version `0.1.0`; `versionCode` `1`; EAS remote version source is explicit in `apps/mobile/eas.json` | Confirm the first Play version and preserve a monotonically increasing managed version code for every later artifact. |
 | Target SDK | Expo SDK `57.0.12` defaults to compile and target SDK 36. This meets Google Play's stated Android 16/API 36 requirement for new apps and updates from 2026-08-31. | Inspect the generated signed AAB/manifest and record the observed target SDK; do not rely only on this source record. |
-| Build profile | `preview` produces an internal-distribution Android app bundle | Create/review EAS project and credentials, then run the profile in the approved build account. |
-| App Links | HTTPS filters are declared for Arctic RSS reader paths | Publish and verify `assetlinks.json` only after a signing certificate fingerprint exists; test every declared route on a signed device. |
+| Build profile | `preview` produces an internal-distribution Android app bundle; a candidate completed from `18767e5` | Rebuild after the explicit remote-version configuration is merged, then use the resulting candidate for the smoke test. |
+| App Links | HTTPS filters are declared and a matching `public/.well-known/assetlinks.json` is staged in source | A separately approved website release must make the JSON public; test every declared route on a signed device. |
 | Private API/auth | Browser PKCE, rotating device sessions, secure token storage, bounded SQLite cache, and idempotent offline mutation replay are implemented | Run the signed-device smoke test and record only non-secret results. |
 
 Google Play's current target-SDK requirement is documented at
 <https://developer.android.com/google/play/requirements/target-sdk>. Expo's SDK
 57 platform table documents target SDK 36 at
 <https://docs.expo.dev/versions/latest/>.
+
+## Pre-identity candidate evidence
+
+| Item | Verified value |
+| --- | --- |
+| EAS build | `a5f5d507-8dff-4bde-bc94-9706dbfdd3d5` — `preview`, Android, internal distribution, finished 2026-08-11 local time |
+| Source revision | `18767e5a7a5bdc35f8843a07874470a7ce09c242` |
+| Application and version | `com.arcticrss.reader`; `0.1.0` / build version `1` |
+| Archive SHA-256 | `022925B1F8FFE8DA726AB950284820777FEF4A1B9DE98F107FD1B4141FB86E17` |
+| Manifest inspection | Package and `targetSdkVersion` are `com.arcticrss.reader` and `36` in the finished AAB. |
+| Archive signature | The AAB's JAR signature block validated. The exact certificate pin is retained in the staged App Links association and the external release record. |
+| What this does not prove | Play package ownership, Play identity verification, track/tester access, live App Links, browser sign-in return, or signed-device behavior. |
 
 ## Required owner checklist
 

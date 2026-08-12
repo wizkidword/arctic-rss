@@ -3,9 +3,10 @@
 ## Source record
 
 - App workspace: `apps/mobile`
-- Package name: `com.arcticrss.reader` (provisional; confirm ownership before signing)
-- Version: `0.1.0` source configuration, Android `versionCode` 1
+- Package name: `com.arcticrss.reader` (provisional; confirm ownership before the first Play upload)
+- Version: `0.1.0`, Android `versionCode` 1; EAS version control is explicitly remote for future builds
 - Build profiles: `development` (internal APK/dev client) and `preview` (internal AAB)
+- Signed preview candidate: EAS build `a5f5d507-8dff-4bde-bc94-9706dbfdd3d5`, built from `18767e5a7a5bdc35f8843a07874470a7ce09c242`; no Play upload, track, tester group, or release exists
 - Public Play release: not configured and not authorized
 
 The native alpha uses the private first-party v1 API and the browser PKCE device
@@ -47,18 +48,18 @@ The source configuration and Android JavaScript bundle pass these checks. The
 bundle export is not a signed Android artifact and does not establish a Play
 track or tester access.
 
-## Required before a signed internal build
+## Remaining before internal Play distribution
 
-1. Confirm that `com.arcticrss.reader` is the intended unclaimed/owned Android package name, or change it before the first build.
-2. Create or select the Android signing identity in the approved build account; record its SHA-256 certificate fingerprint outside the repository.
-3. Serve `https://arcticrss.com/.well-known/assetlinks.json` containing that exact package name and signing fingerprint, then verify Android App Links on a signed device. Do not publish this file before the signing identity exists.
-4. Set the approved HTTPS `EXPO_PUBLIC_ARCTIC_RSS_ORIGIN` for the build environment. No HTTP origin is allowed outside an explicit development build.
-5. Create a reviewed EAS project/credential configuration and run the `preview` profile from `apps/mobile` to produce an internal AAB. Record the build ID, version code, signing certificate fingerprint, and tester group.
+1. Confirm that `com.arcticrss.reader` is the intended unclaimed/owned Android package name, or change it before the first Play upload.
+2. Confirm the long-term owner and retention of the signing identity used for the candidate; retain the release certificate record outside the repository.
+3. Deploy the staged `public/.well-known/assetlinks.json` only through a separately approved website release, then verify every declared App Link on a signed device. The live endpoint currently remains absent.
+4. Keep the approved HTTPS `EXPO_PUBLIC_ARCTIC_RSS_ORIGIN` for the build environment. No HTTP origin is allowed outside an explicit development build.
+5. Create a replacement candidate after the explicit remote-version configuration is merged, then use that exact candidate for the signed-device smoke test. Create another candidate with a higher managed version code if its mobile source or signing choice changes.
 6. Exercise the signed-device smoke test: browser login, reader/search/article state, collection add/remove, offline queue then foreground retry, podcast episode notes/completion/star state, notification setting, logout purge, and every App Link. Native playback and listening-progress controls are deferred.
 
-This workstation does not currently have Android SDK tooling configured, and no
-EAS build, signing identity, Play Console project, tester group, or submission
-has been created by this phase.
+This workstation does not currently have Android SDK tooling configured. The
+remote EAS candidate is signed and its archive provenance was checked, but no
+Play Console project, tester group, upload, or submission has been created.
 
 See [Google Play readiness](./google-play-readiness.md) for the separate
 submission checklist, current target-SDK evidence, and the owner-only actions.
