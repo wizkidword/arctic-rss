@@ -43,6 +43,7 @@
     "mobile:doctor": "npm --workspace @arctic-rss/mobile run doctor",
     "mobile:export:android": "npm --workspace @arctic-rss/mobile run export:android",
     "mobile:lint": "npm --workspace @arctic-rss/mobile run lint",
+    "mobile:verify-auth-containment": "node scripts/security/verify-mobile-auth-containment.mjs",
     "mobile:start": "npm --workspace @arctic-rss/mobile run start",
     "mobile:typecheck": "npm --workspace @arctic-rss/mobile run typecheck",
     "mobile:audit-dependencies": "node scripts/security/audit-mobile-dependencies.mjs",

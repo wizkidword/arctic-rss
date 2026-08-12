@@ -5,6 +5,7 @@ import {
   apiV1SuccessResponse,
 } from "@/lib/api-v1/route"
 import { BoundedJsonBodyError, readBoundedJsonBody } from "@/lib/api-v1/bounded-json"
+import { isNativeMobileAuthorizationEnabled } from "@/lib/mobile-auth-configuration"
 import {
   MobileAuthError,
   parseMobileRefreshRequest,
@@ -18,6 +19,19 @@ export const revalidate = 0
 
 export async function POST(request: Request) {
   const requestId = randomUUID()
+
+  // Refresh tokens extend a native session, so the containment switch must
+  // reject this route before it reads any untrusted body or touches a limit or
+  // database. Keep its public shape indistinguishable from a missing route.
+  if (!isNativeMobileAuthorizationEnabled()) {
+    return apiV1ErrorResponse({
+      code: "RESOURCE_NOT_FOUND",
+      message: "Not found.",
+      requestId,
+      retryable: false,
+      status: 404,
+    })
+  }
 
   try {
     const ip = getTrustedClientIp(request.headers)

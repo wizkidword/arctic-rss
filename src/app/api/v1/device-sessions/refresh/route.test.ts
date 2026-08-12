@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
     BoundedJsonBodyError,
     enforceRateLimit: vi.fn(),
     getTrustedClientIp: vi.fn(),
+    isNativeMobileAuthorizationEnabled: vi.fn(),
     MobileAuthError,
     parseMobileRefreshRequest: vi.fn(),
     readBoundedJsonBody: vi.fn(),
@@ -38,6 +39,9 @@ vi.mock("@/lib/api-v1/bounded-json", () => ({
   BoundedJsonBodyError: mocks.BoundedJsonBodyError,
   readBoundedJsonBody: mocks.readBoundedJsonBody,
 }))
+vi.mock("@/lib/mobile-auth-configuration", () => ({
+  isNativeMobileAuthorizationEnabled: mocks.isNativeMobileAuthorizationEnabled,
+}))
 vi.mock("@/lib/rate-limit", () => ({
   enforceRateLimit: mocks.enforceRateLimit,
   getTrustedClientIp: mocks.getTrustedClientIp,
@@ -52,6 +56,7 @@ describe("POST /api/v1/device-sessions/refresh", () => {
     mocks.readBoundedJsonBody.mockResolvedValue(refreshRequest)
     mocks.enforceRateLimit.mockResolvedValue({ allowed: true })
     mocks.getTrustedClientIp.mockReturnValue("198.51.100.24")
+    mocks.isNativeMobileAuthorizationEnabled.mockReturnValue(true)
     mocks.refreshMobileDeviceSession.mockResolvedValue({
       accessToken: "next-access-token",
       accessTokenExpiresIn: 900,
@@ -89,6 +94,20 @@ describe("POST /api/v1/device-sessions/refresh", () => {
       error: { code: "MOBILE_REFRESH_INVALID", retryable: false },
     })
     expect(consoleError).not.toHaveBeenCalled()
+  })
+
+  it("fails closed before reading, rate limiting, or rotating when native authorization is disabled", async () => {
+    mocks.isNativeMobileAuthorizationEnabled.mockReturnValue(false)
+
+    const response = await POST(refreshHttpRequest())
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "RESOURCE_NOT_FOUND", retryable: false },
+    })
+    expect(mocks.readBoundedJsonBody).not.toHaveBeenCalled()
+    expect(mocks.enforceRateLimit).not.toHaveBeenCalled()
+    expect(mocks.refreshMobileDeviceSession).not.toHaveBeenCalled()
   })
 
   it("returns one invalid-refresh shape for replay and expiration", async () => {
