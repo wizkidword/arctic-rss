@@ -8,6 +8,10 @@ import {
 } from "@arctic-rss/mobile-client"
 
 import { beginBrowserMobileLogin } from "@/auth/browser-login"
+import {
+  clearLocalMobileData,
+  type LocalSessionCleanupState,
+} from "@/auth/local-session-cleanup"
 import { nativeSessionStore } from "@/auth/native-session-store"
 import { MOBILE_SERVICE_ORIGIN } from "@/config"
 import { MobileOfflineStore } from "@/storage/mobile-offline-store"
@@ -22,6 +26,7 @@ type MobileAppContextValue = {
   api: MobileApiClient
   isReady: boolean
   isSignedIn: boolean
+  localSessionState: LocalSessionState
   offline: MobileOfflineStore
   ownerScope: string | null
   signIn: () => Promise<void>
@@ -29,7 +34,10 @@ type MobileAppContextValue = {
   syncNow: (options?: { returnSession?: boolean }) => Promise<void>
   syncRevision: number
   syncSnapshot: MobileForegroundSyncSnapshot
+  retryLocalCleanup: () => Promise<void>
 }
+
+export type LocalSessionState = "preparing" | "signed-in" | "signing-out" | LocalSessionCleanupState
 
 const MobileAppContext = createContext<MobileAppContextValue | null>(null)
 const INITIAL_SYNC_SNAPSHOT: MobileForegroundSyncSnapshot = {
@@ -39,8 +47,7 @@ const INITIAL_SYNC_SNAPSHOT: MobileForegroundSyncSnapshot = {
 }
 
 export function MobileAppProvider({ children }: { children: React.ReactNode }) {
-  const [isReady, setIsReady] = useState(false)
-  const [isSignedIn, setIsSignedIn] = useState(false)
+  const [localSessionState, setLocalSessionState] = useState<LocalSessionState>("preparing")
   const [ownerScope, setOwnerScope] = useState<string | null>(null)
   const [syncRevision, setSyncRevision] = useState(0)
   const [syncSnapshot, setSyncSnapshot] = useState<MobileForegroundSyncSnapshot>(INITIAL_SYNC_SNAPSHOT)
@@ -73,11 +80,18 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
       }),
     [session]
   )
-  const clearInvalidSession = useCallback(async () => {
-    await session.clear()
-    await offline.purgeForLogout()
+  const clearLocalSession = useCallback(async () => {
+    // The protected route group must disappear before either persistent cleanup
+    // promise settles. A failed cleanup is never treated as a normal sign-out.
+    setLocalSessionState("signing-out")
     setOwnerScope(null)
-    setIsSignedIn(false)
+    setSyncSnapshot(INITIAL_SYNC_SNAPSHOT)
+    const outcome = await clearLocalMobileData({
+      clearSession: () => session.clear(),
+      purgeOfflineData: () => offline.purgeForLogout(),
+    })
+    setLocalSessionState(outcome)
+    return outcome === "signed-out-clean"
   }, [offline, session])
   const coordinator = useMemo(
     () =>
@@ -110,55 +124,55 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
       await coordinator.request(options)
     } catch (error) {
       if (isTerminalMobileSessionFailure(error) || !session.isSignedIn()) {
-        await clearInvalidSession()
+        await clearLocalSession()
       }
       throw error
     }
-  }, [clearInvalidSession, coordinator, session])
+  }, [clearLocalSession, coordinator, session])
 
   useEffect(() => {
     let current = true
-    void session
-      .hydrate()
-      .then(async (signedIn) => {
+    void (async () => {
+      try {
+        const signedIn = await session.hydrate()
         if (!current) {
           return
         }
         if (!signedIn) {
-          await offline.purgeForLogout()
+          await clearLocalSession()
+          return
         }
-        if (signedIn) {
-          const owner = session.getOwner()
-          if (!owner) {
-            await clearInvalidSession()
-            return
-          }
-          try {
-            await syncNow()
-          } catch {
-            // A future foreground request retries; no request body or token is logged.
-          }
-          if (!session.isSignedIn()) {
-            return
-          }
-          setOwnerScope(mobileOwnerScope(owner))
+        const owner = session.getOwner()
+        if (!owner) {
+          await clearLocalSession()
+          return
         }
+        try {
+          await offline.claimOwner(owner)
+        } catch {
+          await clearLocalSession()
+          return
+        }
+        if (!current || !session.isSignedIn()) {
+          return
+        }
+        setOwnerScope(mobileOwnerScope(owner))
+        setLocalSessionState("signed-in")
+        try {
+          await syncNow()
+        } catch {
+          // A future foreground request retries; no request body or token is logged.
+        }
+      } catch {
         if (current) {
-          setIsSignedIn(signedIn && session.isSignedIn())
-          setIsReady(true)
+          await clearLocalSession()
         }
-      })
-      .catch(() => {
-        if (current) {
-          void offline.purgeForLogout()
-          setIsSignedIn(false)
-          setIsReady(true)
-        }
-      })
+      }
+    })()
     return () => {
       current = false
     }
-  }, [clearInvalidSession, offline, session, syncNow])
+  }, [clearLocalSession, offline, session, syncNow])
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -174,24 +188,33 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
   }, [session, syncNow])
 
   const signIn = useCallback(async () => {
+    if (localSessionState !== "signed-out-clean") {
+      throw new Error("Finish clearing local data before signing in to another account.")
+    }
     const tokens = await beginBrowserMobileLogin({ api: unauthenticatedApi, origin: MOBILE_SERVICE_ORIGIN })
-    await session.setTokens(tokens)
-    const owner = session.getOwner()
-    if (!owner) {
-      await clearInvalidSession()
-      throw new Error("Arctic RSS could not establish local device ownership. Sign in again.")
+    try {
+      await session.setTokens(tokens)
+      const owner = session.getOwner()
+      if (!owner) {
+        throw new Error("Arctic RSS could not establish local device ownership. Sign in again.")
+      }
+      await offline.claimOwner(owner)
+      setOwnerScope(mobileOwnerScope(owner))
+      setLocalSessionState("signed-in")
+    } catch {
+      await clearLocalSession()
+      throw new Error("Arctic RSS could not safely establish local account ownership. Sign in again after cleanup.")
     }
     try {
       await syncNow()
     } catch {
       if (!session.isSignedIn()) {
-        throw new Error("This device session is no longer authorized. Sign in again.")
+        throw new Error("This device session is no longer authorized. Sign in again after cleanup.")
       }
-      // The completed sign-in remains valid; the next foreground sync retries queued writes.
+      // A completed, owner-scoped sign-in remains valid; foreground sync
+      // retries recover network-only failures without crossing account scope.
     }
-    setOwnerScope(mobileOwnerScope(owner))
-    setIsSignedIn(true)
-  }, [clearInvalidSession, session, syncNow, unauthenticatedApi])
+  }, [clearLocalSession, localSessionState, offline, session, syncNow, unauthenticatedApi])
 
   const signOut = useCallback(async () => {
     try {
@@ -199,13 +222,33 @@ export function MobileAppProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Local logout must still remove this device's sensitive and cached state.
     } finally {
-      await clearInvalidSession()
+      await clearLocalSession()
     }
-  }, [api, clearInvalidSession])
+  }, [api, clearLocalSession])
+
+  const retryLocalCleanup = useCallback(async () => {
+    await clearLocalSession()
+  }, [clearLocalSession])
+
+  const isReady = localSessionState !== "preparing"
+  const isSignedIn = localSessionState === "signed-in"
 
   const value = useMemo(
-    () => ({ api, isReady, isSignedIn, offline, ownerScope, signIn, signOut, syncNow, syncRevision, syncSnapshot }),
-    [api, isReady, isSignedIn, offline, ownerScope, signIn, signOut, syncNow, syncRevision, syncSnapshot]
+    () => ({
+      api,
+      isReady,
+      isSignedIn,
+      localSessionState,
+      offline,
+      ownerScope,
+      retryLocalCleanup,
+      signIn,
+      signOut,
+      syncNow,
+      syncRevision,
+      syncSnapshot,
+    }),
+    [api, isReady, isSignedIn, localSessionState, offline, ownerScope, retryLocalCleanup, signIn, signOut, syncNow, syncRevision, syncSnapshot]
   )
 
   if (!isReady) {

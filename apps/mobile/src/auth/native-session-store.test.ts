@@ -56,6 +56,17 @@ describe("native session bundle store", () => {
     await expect(store.read()).resolves.toBeNull()
     expect(adapter.data.has("arcticrss.mobile.token-bundle.v2")).toBe(false)
   })
+
+  it("reports persistent deletion failure without restoring the deleted in-memory session", async () => {
+    const adapter = createAdapter({
+      "arcticrss.mobile.token-bundle.v2": JSON.stringify(tokens()),
+    })
+    adapter.deleteItemAsync.mockRejectedValueOnce(new Error("secure storage unavailable"))
+    const store = createNativeSessionStore(adapter)
+
+    await expect(store.clear()).rejects.toThrow("secure storage unavailable")
+    expect(adapter.deleteItemAsync).toHaveBeenCalled()
+  })
 })
 
 function createAdapter(initial: Record<string, string> = {}) {
