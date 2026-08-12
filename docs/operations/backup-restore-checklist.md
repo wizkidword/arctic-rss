@@ -23,8 +23,7 @@ BACKUP_DIR=/private/path/to/arctic-rss-backups
 COMPOSE_PROJECT=app
 RETENTION_DAYS=30
 # Optional: 0 preserves all timestamp backups inside the age window. A positive
-# cap keeps the newest N per UTC day only after each older backup has received
-# checksum-verified off-host acknowledgement.
+# cap enables a read-only eligibility report only. It never enables deletion.
 MAX_BACKUPS_PER_DAY=0
 ARCTIC_RSS_BACKUP_ENVIRONMENT=production
 # Opaque label only; never put a storage URL, account, or credential here.
@@ -131,10 +130,11 @@ the backup directory world-readable.
 Keep `RETENTION_DAYS=30` unless an owner explicitly changes the recovery
 policy. `MAX_BACKUPS_PER_DAY=0` is the safe compatibility default. After the
 checksum-verified off-host copy has a reliable cadence, an owner may set a
-small positive daily cap (for example, `2`) to prevent repeated release or
-manual backups from accumulating indefinitely. The cap never removes a
-timestamp backup that lacks the existing `offHostVerifiedAt` acknowledgement,
-and it does not affect named recovery directories.
+small positive daily cap (for example, `2`) to generate a read-only review
+report for repeated release or manual backups. The backup helper itself never
+removes a timestamp directory. Inspect each candidate and replacement evidence
+from the separate report, then obtain separate owner approval for any deletion.
+Named recovery directories are never report candidates.
 
 Named recovery archives are never automatically deleted. Once an archive has
 an agreed review deadline, register it with its direct directory name and a

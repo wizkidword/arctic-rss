@@ -11,6 +11,7 @@ describe("mobile store schema", () => {
     expect(requiresMobileStoreInitialization(0)).toBe(true)
     expect(mobileStoreUpgrade(0)).toBe("initialize")
     expect(mobileStoreUpgrade(1)).toBe("upgrade-v1")
+    expect(mobileStoreUpgrade(2)).toBe("upgrade-v2")
     expect(requiresMobileStoreInitialization(MOBILE_STORE_SCHEMA_VERSION)).toBe(false)
   })
 

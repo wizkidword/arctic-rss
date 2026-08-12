@@ -60,6 +60,10 @@ const runtimeEnvironment: Record<string, string> = {
   ...productionServerEnvironment,
   ...authenticatedFixtureEnvironment,
 }
+const developmentServerEnvironment: Record<string, string> = {
+  APP_ORIGIN: `http://localhost:${e2ePort}`,
+  AUTH_URL: `http://localhost:${e2ePort}`,
+}
 const productionServerCommand =
   process.env.ARCTIC_RSS_E2E_PRODUCTION_SERVER_COMMAND ??
   "npm run test:e2e:production:server"
@@ -89,7 +93,9 @@ export default defineConfig({
     command: usesProductionServer
       ? productionServerCommand
       : `npm run dev -- --hostname 127.0.0.1 --port ${e2ePort}`,
-    env: usesProductionServer ? runtimeEnvironment : {},
+    // The host-validation proxy derives its development default from port
+    // 3000. Keep an isolated E2E port canonical when one is configured.
+    env: usesProductionServer ? runtimeEnvironment : developmentServerEnvironment,
     reuseExistingServer: !process.env.CI && !usesAuthenticatedFixtures,
     timeout: 120_000,
     url: `http://localhost:${e2ePort}`,

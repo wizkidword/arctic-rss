@@ -1,13 +1,16 @@
 import { auth } from "@/auth"
 import { AuthorizationError, requireFreshUser } from "@/lib/authorization"
 import { getAppOrigin } from "@/lib/app-origin"
+import { BoundedUrlEncodedFormError, readBoundedUrlEncodedForm } from "@/lib/bounded-urlencoded-form"
 import { isNativeMobileAuthorizationEnabled } from "@/lib/mobile-auth-configuration"
 import {
   approveMobileAuthorizationRequest,
   cancelMobileAuthorizationRequest,
   createMobileAuthorizationRequest,
+  getMobileAuthorizationBrowserSessionHash,
   MobileAuthError,
   parseBrowserDeviceAuthorizationRequest,
+  requireMobileAuthorizationReauthentication,
 } from "@/lib/mobile-auth"
 import { recordMobileAuthorizationDecision } from "@/lib/mobile-telemetry"
 import { enforceRateLimit, getTrustedClientIp } from "@/lib/rate-limit"
@@ -43,6 +46,10 @@ export async function GET(request: Request) {
 
   try {
     const user = await requireFreshUser(session)
+    const browserSessionHash = getMobileAuthorizationBrowserSessionHash(request.headers)
+    if (!browserSessionHash) {
+      return authorizationErrorResponse(400)
+    }
     const rateLimit = await enforceRateLimit({
       action: "mobile_device_authorization",
       ip: getTrustedClientIp(request.headers),
@@ -59,6 +66,7 @@ export async function GET(request: Request) {
     // issues an authorization code or redirects credentials to a mobile app.
     const pending = await createMobileAuthorizationRequest({
       authVersion: user.authVersion,
+      browserSessionHash,
       request: authorizationRequest,
       userId: user.id,
     })
@@ -84,30 +92,51 @@ export async function POST(request: Request) {
     return new Response(null, { headers: noStoreHeaders, status: 404 })
   }
 
-  const form = await request.formData()
-  const requestId = form.get("request_id")
-  const approvalToken = form.get("approval_token")
-  const decision = form.get("decision")
-  if (
-    typeof requestId !== "string" ||
-    typeof approvalToken !== "string" ||
-    (decision !== "approve" && decision !== "cancel")
-  ) {
-    recordMobileAuthorizationDecision("failure")
-    return authorizationErrorResponse(400)
-  }
-
-  const session = await auth()
-  if (!session?.user?.id || session.user.authVersion === undefined) {
-    recordMobileAuthorizationDecision("failure")
-    return authorizationErrorResponse(400)
-  }
-
   try {
+    const ip = getTrustedClientIp(request.headers)
+    const preBodyRateLimit = await enforceRateLimit({
+      action: "mobile_device_authorization_approval_prebody",
+      ip,
+    })
+    if (!preBodyRateLimit.allowed) {
+      recordMobileAuthorizationDecision("failure")
+      return authorizationErrorResponse(
+        preBodyRateLimit.reason === "unavailable" ? 503 : 429,
+        preBodyRateLimit.retryAfterSeconds
+      )
+    }
+    if (!hasSameOrigin(request)) {
+      recordMobileAuthorizationDecision("failure")
+      return authorizationErrorResponse(400)
+    }
+    const form = await readBoundedUrlEncodedForm(request, {
+      allowedFields: ["approval_token", "current_password", "decision", "request_id"],
+    })
+    const { approval_token: approvalToken, current_password: currentPassword, decision, request_id: requestId } = form
+    if (
+      !requestId ||
+      !approvalToken ||
+      (decision !== "approve" && decision !== "cancel") ||
+      (decision === "approve" && !currentPassword)
+    ) {
+      recordMobileAuthorizationDecision("failure")
+      return authorizationErrorResponse(400)
+    }
+
+    const session = await auth()
+    if (!session?.user?.id || session.user.authVersion === undefined) {
+      recordMobileAuthorizationDecision("failure")
+      return authorizationErrorResponse(400)
+    }
     const user = await requireFreshUser(session)
+    const browserSessionHash = getMobileAuthorizationBrowserSessionHash(request.headers)
+    if (!browserSessionHash) {
+      recordMobileAuthorizationDecision("failure")
+      return authorizationErrorResponse(400)
+    }
     const rateLimit = await enforceRateLimit({
       action: "mobile_device_authorization_approval",
-      ip: getTrustedClientIp(request.headers),
+      ip,
       userId: user.id,
     })
     if (!rateLimit.allowed) {
@@ -117,9 +146,16 @@ export async function POST(request: Request) {
         rateLimit.retryAfterSeconds
       )
     }
+    if (decision === "approve") {
+      await requireMobileAuthorizationReauthentication({
+        currentPassword,
+        expectedAuthVersion: user.authVersion,
+        userId: user.id,
+      })
+    }
     const result = decision === "approve"
-      ? await approveMobileAuthorizationRequest({ approvalToken, requestId, userId: user.id })
-      : await cancelMobileAuthorizationRequest({ approvalToken, requestId, userId: user.id })
+      ? await approveMobileAuthorizationRequest({ approvalToken, browserSessionHash, requestId, userId: user.id })
+      : await cancelMobileAuthorizationRequest({ approvalToken, browserSessionHash, requestId, userId: user.id })
     recordMobileAuthorizationDecision(decision === "approve" ? "approved" : "cancelled")
     const redirectUri = new URL(result.redirectUri)
     redirectUri.searchParams.set("state", result.state)
@@ -131,7 +167,11 @@ export async function POST(request: Request) {
     return mobileRedirect(redirectUri)
   } catch (error) {
     recordMobileAuthorizationDecision("failure")
-    if (error instanceof AuthorizationError || error instanceof MobileAuthError) {
+    if (
+      error instanceof AuthorizationError ||
+      error instanceof BoundedUrlEncodedFormError ||
+      error instanceof MobileAuthError
+    ) {
       return authorizationErrorResponse(400)
     }
     console.error(JSON.stringify({ event: "mobile_authorization_approval_failed" }))
@@ -152,12 +192,24 @@ function approvalPageResponse({
   const escapedToken = escapeHtml(approvalToken)
   const escapedRequestId = escapeHtml(requestId)
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Authorize Arctic RSS for Android</title></head><body><main><h1>Authorize Arctic RSS for Android</h1><p>Signed in as <strong>${escapedAccount}</strong>.</p><p>Allow Arctic RSS for Android to connect to this account?</p><form method="post" action="/api/mobile/authorize"><input type="hidden" name="request_id" value="${escapedRequestId}"><input type="hidden" name="approval_token" value="${escapedToken}"><button type="submit" name="decision" value="approve">Approve</button><button type="submit" name="decision" value="cancel">Cancel</button></form></main></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Authorize Arctic RSS for Android</title></head><body><main><h1>Authorize Arctic RSS for Android</h1><p>Signed in as <strong>${escapedAccount}</strong>.</p><p>Allow Arctic RSS for Android to connect to this account?</p><form method="post" action="/api/mobile/authorize"><input type="hidden" name="request_id" value="${escapedRequestId}"><input type="hidden" name="approval_token" value="${escapedToken}"><label>Current password <input autocomplete="current-password" name="current_password" required type="password"></label><button type="submit" name="decision" value="approve">Approve</button><button formnovalidate type="submit" name="decision" value="cancel">Cancel</button></form></main></body></html>`,
     {
       headers: { ...noStoreHeaders, "Content-Type": "text/html; charset=utf-8" },
       status: 200,
     }
   )
+}
+
+function hasSameOrigin(request: Request) {
+  const origin = request.headers.get("origin")
+  if (!origin) {
+    return false
+  }
+  try {
+    return new URL(origin).origin === getAppOrigin().origin
+  } catch {
+    return false
+  }
 }
 
 function redirectToLogin(request: Request) {

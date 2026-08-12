@@ -21,7 +21,7 @@ export async function PUT(
   return handleApiV1DeviceSession({
     endpoint: "notification-preferences",
     request,
-    run: async ({ deviceSessionId, userId }) => {
+    run: async ({ deviceSessionId, mobileDeviceId, userId }) => {
       const { topic: rawTopic } = await params
       const topic = notificationTopicSchema.safeParse(rawTopic)
       if (!topic.success) {
@@ -39,6 +39,7 @@ export async function PUT(
         data: await updateMobileNotificationPreference({
           channel,
           deviceSessionId,
+          mobileDeviceId,
           idempotencyKey,
           topic: topic.data,
           userId,

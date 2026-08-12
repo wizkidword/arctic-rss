@@ -8,6 +8,8 @@ describe("production backup evidence workflow", () => {
 
     expect(script).toContain('"schemaVersion": 1')
     expect(script).toContain('"artifactPath": "database.dump"')
+    expect(script).toContain('"globalsSha256": globals_sha256.lower()')
+    expect(script).toContain('"offHostAcknowledgement": None')
     expect(script).toContain('"offHostTarget": None')
     expect(script).toContain('"restoreTestedAt": None')
     expect(script).toContain("latest-backup-evidence.json")
@@ -24,6 +26,8 @@ describe("production backup evidence workflow", () => {
     expect(latest).toContain("backup-evidence.json")
     expect(latest).toContain('backup_id != expected_backup_id')
     expect(recorder).toContain("BACKUP_OFF_HOST_TARGET")
+    expect(recorder).toContain("Backup evidence checksums no longer match the verified artifacts.")
+    expect(recorder).toContain('"globalsSha256": globals_sha256.lower()')
     expect(recorder).toContain("BACKUP_EVIDENCE_ID")
     expect(recorder).toContain("os.fchown(descriptor, original_stat.st_uid, original_stat.st_gid)")
     expect(recorder).toContain("os.fchmod(descriptor, mode)")
@@ -33,14 +37,12 @@ describe("production backup evidence workflow", () => {
     expect(sync).toContain("Copy-RemoteEvidence")
   })
 
-  it("keeps the existing 30-day default while allowing an off-host-gated daily cap", async () => {
+  it("keeps the existing 30-day default while making daily-cap review read-only", async () => {
     const script = await readFile("scripts/production-backup.sh", "utf8")
 
     expect(script).toContain('MAX_BACKUPS_PER_DAY="${MAX_BACKUPS_PER_DAY:-0}"')
     expect(script).toContain('MAX_BACKUPS_PER_DAY must be zero or a positive whole number.')
-    expect(script).toContain('evidence.get("offHostVerifiedAt")')
-    expect(script).toContain('Pruned off-host-verified excess backup')
-    expect(script).toContain('named recovery archives are')
+    expect(script).toContain("Daily backup cap is report-only; no backups were pruned automatically")
   })
 
   it("uses an explicit, root-only manifest for named recovery archive review deadlines", async () => {

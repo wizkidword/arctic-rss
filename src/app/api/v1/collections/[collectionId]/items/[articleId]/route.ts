@@ -15,7 +15,7 @@ export async function DELETE(
   return handleApiV1DeviceSession({
     endpoint: "collection-items",
     request,
-    run: async ({ deviceSessionId, userId }) => {
+    run: async ({ deviceSessionId, mobileDeviceId, userId }) => {
       const { articleId: rawArticleId, collectionId: rawCollectionId } = await params
       const articleId = parseApiV1Identifier(rawArticleId, "articleId")
       const collectionId = parseApiV1Identifier(rawCollectionId, "collectionId")
@@ -25,6 +25,7 @@ export async function DELETE(
           articleId,
           collectionId,
           deviceSessionId,
+          mobileDeviceId,
           idempotencyKey,
           userId,
         }),

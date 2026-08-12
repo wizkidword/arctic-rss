@@ -4,6 +4,12 @@
 ready for owner handoff. No Play Console project, tester group, store listing,
 Data safety declaration, upload, or submission has been created.
 
+The canonical [release-candidate manifest](./release-candidate.json) records
+the exact completed preview AAB. Its status is **SUPERSEDED** because later
+mobile-auth and server changes require a replacement reviewed build. The
+manifest, generated status, and staged App Links statement are checked together
+by `npm run mobile:verify-release-candidate`.
+
 This is an owner checklist, not authorization to upload or submit anything.
 Recheck the linked official requirements in Play Console immediately before an
 upload because requirements can change.

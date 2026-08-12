@@ -18,18 +18,22 @@ transaction, so a replay cannot cause a duplicate welcome email.
 
 ## Scheduled cleanup
 
-Interactive requests do not scan or delete expired tokens. The `worker`
-service removes expired password-reset and email-verification tokens in bounded
-batches.
+Interactive requests do not scan or delete expired tokens. The lease-held
+`worker` service removes expired password-reset, email-verification, mobile
+authorization-code, and pending mobile-approval rows in bounded batches. The
+same pass removes only expired or revoked historical device-session rows and
+mobile mutation receipts older than 30 days; stable-device ownership remains
+intact and foreign keys null only optional session audit references.
 
 ```dotenv
 AUTH_TOKEN_MAINTENANCE_BATCH_SIZE=100
 AUTH_TOKEN_MAINTENANCE_INTERVAL_MS=900000
 ```
 
-The defaults are 100 tokens per type every 15 minutes. Increase only after
-checking database load and worker logs. The cleanup query selects a bounded
-oldest-first batch and deletes only the selected rows that are still expired.
+The defaults are 100 rows per artifact type every 15 minutes. Increase only
+after checking database load and worker logs. Each cleanup query selects a
+bounded oldest-first batch and deletes only selected rows that still satisfy
+its expired/revoked predicate. It emits aggregate counts only.
 
 There must be exactly one Compose `worker` replica. Its in-process scheduler
 is the maintenance-job owner. Do not use `docker compose up --scale worker=2`

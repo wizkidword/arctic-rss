@@ -119,18 +119,21 @@ export async function getMobileSyncBootstrap(userId: string) {
 
 export async function updateMobileArticleState({
   articleId,
+  mobileDeviceId,
   deviceSessionId,
   idempotencyKey,
   input,
   userId,
 }: {
   articleId: string
+  mobileDeviceId: string
   deviceSessionId: string
   idempotencyKey: string
   input: ArticleStateMutationRequest
   userId: string
 }) {
   return runIdempotentMobileMutation({
+    mobileDeviceId,
     deviceSessionId,
     idempotencyKey,
     input: { articleId, ...input },
@@ -185,17 +188,20 @@ export async function updateMobileArticleState({
 export async function addMobileCollectionItem({
   articleId,
   collectionId,
+  mobileDeviceId,
   deviceSessionId,
   idempotencyKey,
   userId,
 }: {
   articleId: string
   collectionId: string
+  mobileDeviceId: string
   deviceSessionId: string
   idempotencyKey: string
   userId: string
 }) {
   return runIdempotentMobileMutation({
+    mobileDeviceId,
     deviceSessionId,
     idempotencyKey,
     input: { articleId, collectionId },
@@ -232,17 +238,20 @@ export async function addMobileCollectionItem({
 export async function removeMobileCollectionItem({
   articleId,
   collectionId,
+  mobileDeviceId,
   deviceSessionId,
   idempotencyKey,
   userId,
 }: {
   articleId: string
   collectionId: string
+  mobileDeviceId: string
   deviceSessionId: string
   idempotencyKey: string
   userId: string
 }) {
   return runIdempotentMobileMutation({
+    mobileDeviceId,
     deviceSessionId,
     idempotencyKey,
     input: { articleId, collectionId },
@@ -265,12 +274,14 @@ export async function removeMobileCollectionItem({
 }
 
 export async function updateMobilePodcastProgress({
+  mobileDeviceId,
   deviceSessionId,
   episodeId,
   idempotencyKey,
   input,
   userId,
 }: {
+  mobileDeviceId: string
   deviceSessionId: string
   episodeId: string
   idempotencyKey: string
@@ -278,6 +289,7 @@ export async function updateMobilePodcastProgress({
   userId: string
 }) {
   return updateMobilePodcastState({
+    mobileDeviceId,
     deviceSessionId,
     episodeId,
     idempotencyKey,
@@ -288,12 +300,14 @@ export async function updateMobilePodcastProgress({
 }
 
 export async function updateMobilePodcastEpisodeState({
+  mobileDeviceId,
   deviceSessionId,
   episodeId,
   idempotencyKey,
   input,
   userId,
 }: {
+  mobileDeviceId: string
   deviceSessionId: string
   episodeId: string
   idempotencyKey: string
@@ -301,6 +315,7 @@ export async function updateMobilePodcastEpisodeState({
   userId: string
 }) {
   return updateMobilePodcastState({
+    mobileDeviceId,
     deviceSessionId,
     episodeId,
     idempotencyKey,
@@ -325,18 +340,21 @@ export async function listMobileNotificationPreferences(userId: string) {
 
 export async function updateMobileNotificationPreference({
   channel,
+  mobileDeviceId,
   deviceSessionId,
   idempotencyKey,
   topic,
   userId,
 }: {
   channel: MobileNotificationChannel
+  mobileDeviceId: string
   deviceSessionId: string
   idempotencyKey: string
   topic: MobileNotificationTopic
   userId: string
 }) {
   return runIdempotentMobileMutation({
+    mobileDeviceId,
     deviceSessionId,
     idempotencyKey,
     input: { channel, topic },
@@ -372,12 +390,14 @@ export async function updateNotificationPreferenceForUser({
 }
 
 export async function registerMobileDeviceInstallation({
+  mobileDeviceId,
   deviceSessionId,
   environment,
   idempotencyKey,
   pushToken,
   userId,
 }: {
+  mobileDeviceId: string
   deviceSessionId: string
   environment: "development" | "preview" | "production"
   idempotencyKey: string
@@ -385,21 +405,18 @@ export async function registerMobileDeviceInstallation({
   userId: string
 }) {
   return runIdempotentMobileMutation({
+    mobileDeviceId,
     deviceSessionId,
     idempotencyKey,
     input: { environment, pushToken },
     operation: "DEVICE_INSTALLATION_REGISTER",
     run: async (tx) => {
-      const session = await tx.deviceSession.findUnique({
-        select: { mobileDeviceId: true },
-        where: { id: deviceSessionId },
-      })
       const tokenHash = hashMobileValue("installation-token", pushToken)
       const existing = await tx.deviceInstallation.findUnique({
-        include: { deviceSession: { select: { userId: true } } },
+        include: { mobileDevice: { select: { userId: true } } },
         where: { tokenHash },
       })
-      if (existing && existing.deviceSession.userId !== userId) {
+      if (existing && existing.mobileDevice.userId !== userId) {
         throw new MobileSyncError(
           "installation-conflict",
           "This push installation cannot be registered to this account."
@@ -408,7 +425,7 @@ export async function registerMobileDeviceInstallation({
       const installation = await tx.deviceInstallation.upsert({
         create: {
           deviceSessionId,
-          mobileDeviceId: session?.mobileDeviceId ?? null,
+          mobileDeviceId,
           environment,
           lastSeenAt: new Date(),
           platform: "android",
@@ -416,7 +433,7 @@ export async function registerMobileDeviceInstallation({
         },
         update: {
           deviceSessionId,
-          mobileDeviceId: session?.mobileDeviceId ?? null,
+          mobileDeviceId,
           disabledAt: null,
           environment,
           lastSeenAt: new Date(),
@@ -434,23 +451,26 @@ export async function registerMobileDeviceInstallation({
   })
 }
 
-export async function disableMobileDeviceInstallations({ deviceSessionId }: { deviceSessionId: string }) {
+export async function disableMobileDeviceInstallations({ mobileDeviceId }: { mobileDeviceId: string }) {
   await getPrisma().deviceInstallation.updateMany({
     data: { disabledAt: new Date(), unregisteredAt: new Date() },
-    where: { deviceSessionId, disabledAt: null },
+    where: { mobileDeviceId, disabledAt: null },
   })
 }
 
 export async function unregisterMobileDeviceInstallation({
+  mobileDeviceId,
   deviceSessionId,
   idempotencyKey,
   pushToken,
 }: {
+  mobileDeviceId: string
   deviceSessionId: string
   idempotencyKey: string
   pushToken: string
 }) {
   return runIdempotentMobileMutation({
+    mobileDeviceId,
     deviceSessionId,
     idempotencyKey,
     input: { pushToken },
@@ -459,7 +479,7 @@ export async function unregisterMobileDeviceInstallation({
       const tokenHash = hashMobileValue("installation-token", pushToken)
       const installation = await tx.deviceInstallation.findFirst({
         select: { id: true, lastSeenAt: true },
-        where: { deviceSessionId, tokenHash },
+        where: { mobileDeviceId, tokenHash },
       })
       if (!installation) {
         throw resourceNotFound()
@@ -478,6 +498,7 @@ export async function unregisterMobileDeviceInstallation({
 }
 
 async function updateMobilePodcastState({
+  mobileDeviceId,
   deviceSessionId,
   episodeId,
   idempotencyKey,
@@ -485,6 +506,7 @@ async function updateMobilePodcastState({
   operation,
   userId,
 }: {
+  mobileDeviceId: string
   deviceSessionId: string
   episodeId: string
   idempotencyKey: string
@@ -493,6 +515,7 @@ async function updateMobilePodcastState({
   userId: string
 }) {
   return runIdempotentMobileMutation({
+    mobileDeviceId,
     deviceSessionId,
     idempotencyKey,
     input: { ...input, episodeId },
@@ -549,6 +572,7 @@ async function updateMobilePodcastState({
 }
 
 async function runIdempotentMobileMutation<T extends MutationResult>({
+  mobileDeviceId,
   deviceSessionId,
   idempotencyKey,
   input,
@@ -556,6 +580,7 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
   resultReference,
   run,
 }: {
+  mobileDeviceId: string
   deviceSessionId: string
   idempotencyKey: string
   input: Record<string, unknown>
@@ -569,19 +594,14 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
 
   try {
     return await prisma.$transaction(async (tx) => {
-      const session = await tx.deviceSession.findUnique({
+      const session = await tx.deviceSession.findFirst({
         select: { mobileDeviceId: true },
-        where: { id: deviceSessionId },
+        where: { id: deviceSessionId, mobileDeviceId },
       })
-      const receiptScope = session?.mobileDeviceId
-        ? { mobileDeviceId: session.mobileDeviceId }
-        : { deviceSessionId }
-      await tx.deviceMutationReceipt.deleteMany({
-        where: {
-          createdAt: { lt: new Date(Date.now() - MOBILE_MUTATION_RECEIPT_RETENTION_DAYS * 86_400_000) },
-          ...receiptScope,
-        },
-      })
+      if (!session?.mobileDeviceId) {
+        throw new MobileSyncError("resource-not-found", "This mobile device is no longer authorized.")
+      }
+      const receiptScope = { mobileDeviceId }
       const existing = await tx.deviceMutationReceipt.findFirst({
         where: { ...receiptScope, idempotencyKeyHash },
       })
@@ -593,7 +613,7 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
       await tx.deviceMutationReceipt.create({
         data: {
           deviceSessionId,
-          mobileDeviceId: session?.mobileDeviceId ?? null,
+          mobileDeviceId,
           idempotencyKeyHash,
           operation,
           requestHash,
@@ -607,13 +627,9 @@ async function runIdempotentMobileMutation<T extends MutationResult>({
     if (!isUniqueReceiptError(error)) {
       throw error
     }
-    const session = await prisma.deviceSession.findUnique({
-      select: { mobileDeviceId: true },
-      where: { id: deviceSessionId },
-    })
     const existing = await prisma.deviceMutationReceipt.findFirst({
       where: {
-        ...(session?.mobileDeviceId ? { mobileDeviceId: session.mobileDeviceId } : { deviceSessionId }),
+        mobileDeviceId,
         idempotencyKeyHash,
       },
     })

@@ -7,11 +7,26 @@ import { useMobileApp } from "@/providers/mobile-app-provider"
 import { safeMobileReturnPath } from "@/auth/safe-mobile-return-path"
 
 export default function WelcomeScreen() {
-  const { isSignedIn, signIn } = useMobileApp()
+  const { isSignedIn, localSessionState, retryLocalCleanup, signIn } = useMobileApp()
   const { returnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>()
   const [error, setError] = useState<string | null>(null)
   if (isSignedIn) {
     return <Redirect href={(safeMobileReturnPath(returnTo) ?? "/(authenticated)/(tabs)") as Href} />
+  }
+
+  if (localSessionState === "signing-out" || localSessionState === "signed-out-cleanup-required") {
+    return (
+      <Screen title="Clear local account data">
+        <Section title="Protected data is blocked">
+          <Text style={mobileStyles.muted}>
+            Arctic RSS could not confirm that this device cleared the previous account&apos;s local data. Sign-in stays blocked until cleanup succeeds.
+          </Text>
+          <ActionButton accessibilityLabel="Retry local data cleanup" onPress={() => void retryLocalCleanup()}>
+            Retry cleanup
+          </ActionButton>
+        </Section>
+      </Screen>
+    )
   }
 
   return (

@@ -11,7 +11,6 @@ import {
   retryPendingMobileMutation,
   startPendingMobileMutation,
   type MobileProductMilestone,
-  selectMobileCacheEvictions,
   type PendingMobileMutation,
 } from "@arctic-rss/mobile-client"
 import {
@@ -24,13 +23,15 @@ import {
   MOBILE_STORE_SCHEMA_VERSION,
   mobileStoreUpgrade,
 } from "./mobile-store-schema"
+import {
+  mobileCacheInvalidationsForSyncEvents,
+  shouldInvalidateMobileCacheKey,
+} from "./mobile-cache-invalidation"
 import { readPendingMobileMutations, type StoredPendingMutationRow } from "./pending-mobile-mutations"
 
-type CacheIndexRow = {
-  accessedAt: number
+type CacheUsageRow = {
   byteCount: number
-  cacheKey: string
-  updatedAt: number
+  entryCount: number
 }
 
 type CachePayloadRow = { payload: string }
@@ -41,6 +42,14 @@ export type MobileSqliteAdapter = Pick<typeof SQLite, "openDatabaseAsync">
 
 const MOBILE_STORE_DATABASE_NAME = "arctic-rss-mobile.db"
 const MOBILE_MUTATION_SEND_LEASE_MS = 60_000
+const MOBILE_OFFLINE_COLLECTION_LIMIT = 10
+const OFFLINE_COLLECTION_KEY_PREFIX = "offline-collection:"
+
+export type MobileOfflineStatus = {
+  cachedBytes: number
+  cachedEntries: number
+  selectedCollectionIds: string[]
+}
 
 export class MobileOfflineStore {
   private databasePromise: Promise<SQLite.SQLiteDatabase> | null = null
@@ -95,14 +104,28 @@ export class MobileOfflineStore {
         now,
         now
       )
-      const entries = await transaction.getAllAsync<CacheIndexRow>(
-        "SELECT cacheKey, byteCount, updatedAt, accessedAt FROM mobile_cache"
+      await transaction.runAsync(
+        "DELETE FROM mobile_cache WHERE updatedAt < ?",
+        now - MOBILE_OFFLINE_LIMITS.maximumEntryAgeMs
       )
-      for (const eviction of selectMobileCacheEvictions(
-        entries.map((entry) => ({ ...entry, key: entry.cacheKey })),
-        now
-      )) {
-        await transaction.runAsync("DELETE FROM mobile_cache WHERE cacheKey = ?", eviction)
+      const usage = await transaction.getFirstAsync<CacheUsageRow>(
+        "SELECT COUNT(*) AS entryCount, COALESCE(SUM(byteCount), 0) AS byteCount FROM mobile_cache"
+      )
+      let entryCount = Number(usage?.entryCount ?? 0)
+      let totalBytes = Number(usage?.byteCount ?? 0)
+      while (
+        entryCount > MOBILE_OFFLINE_LIMITS.maximumCachedEntries ||
+        totalBytes > MOBILE_OFFLINE_LIMITS.maximumCacheBytes
+      ) {
+        const oldest = await transaction.getFirstAsync<{ byteCount: number; cacheKey: string }>(
+          "SELECT cacheKey, byteCount FROM mobile_cache ORDER BY accessedAt ASC, cacheKey ASC LIMIT 1"
+        )
+        if (!oldest) {
+          break
+        }
+        await transaction.runAsync("DELETE FROM mobile_cache WHERE cacheKey = ?", oldest.cacheKey)
+        entryCount -= 1
+        totalBytes -= Number(oldest.byteCount)
       }
     })
   }
@@ -313,10 +336,16 @@ export class MobileOfflineStore {
       if (!(await this.ownerRecordMatches(transaction, owner))) {
         throw new Error("Mobile offline storage ownership changed.")
       }
-      // Event payloads are deliberately invalidation-only. Clearing the
-      // bounded derived cache is safer than attempting partial projections.
-      if (events.length > 0) {
-        await transaction.runAsync("DELETE FROM mobile_cache")
+      const invalidations = mobileCacheInvalidationsForSyncEvents(events)
+      if (invalidations.length > 0) {
+        const entries = await transaction.getAllAsync<{ cacheKey: string }>(
+          "SELECT cacheKey FROM mobile_cache"
+        )
+        for (const entry of entries) {
+          if (shouldInvalidateMobileCacheKey(entry.cacheKey, invalidations)) {
+            await transaction.runAsync("DELETE FROM mobile_cache WHERE cacheKey = ?", entry.cacheKey)
+          }
+        }
       }
       if (cursor === null) {
         await transaction.runAsync("DELETE FROM mobile_sync_state WHERE key = 'cursor'")
@@ -381,12 +410,60 @@ export class MobileOfflineStore {
     )
   }
 
+  async selectedOfflineCollectionIds() {
+    await this.assertOwner()
+    const database = await this.database()
+    const rows = await database.getAllAsync<{ key: string }>(
+      "SELECT key FROM mobile_sync_state WHERE key LIKE 'offline-collection:%' ORDER BY key ASC"
+    )
+    return rows.map((row) => row.key.slice(OFFLINE_COLLECTION_KEY_PREFIX.length))
+  }
+
+  async setCollectionOfflineSelected(collectionId: string, selected: boolean) {
+    await this.assertOwner()
+    if (!/^[A-Za-z0-9_-]+$/.test(collectionId)) {
+      throw new Error("Offline collections require a valid collection identifier.")
+    }
+    const database = await this.database()
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      const key = `${OFFLINE_COLLECTION_KEY_PREFIX}${collectionId}`
+      if (!selected) {
+        await transaction.runAsync("DELETE FROM mobile_sync_state WHERE key = ?", key)
+        return
+      }
+      const selections = await transaction.getAllAsync<{ key: string }>(
+        "SELECT key FROM mobile_sync_state WHERE key LIKE 'offline-collection:%' ORDER BY key ASC"
+      )
+      if (!selections.some((entry) => entry.key === key) && selections.length >= MOBILE_OFFLINE_COLLECTION_LIMIT) {
+        throw new Error(`Select at most ${MOBILE_OFFLINE_COLLECTION_LIMIT} collections for offline reading.`)
+      }
+      await transaction.runAsync(
+        "INSERT OR REPLACE INTO mobile_sync_state (key, value) VALUES (?, ?)",
+        key,
+        "selected"
+      )
+    })
+  }
+
+  async offlineStatus(): Promise<MobileOfflineStatus> {
+    await this.assertOwner()
+    const database = await this.database()
+    const cache = await database.getFirstAsync<{ cachedBytes: number; cachedEntries: number }>(
+      "SELECT COUNT(*) AS cachedEntries, COALESCE(SUM(byteCount), 0) AS cachedBytes FROM mobile_cache"
+    )
+    return {
+      cachedBytes: Number(cache?.cachedBytes ?? 0),
+      cachedEntries: Number(cache?.cachedEntries ?? 0),
+      selectedCollectionIds: await this.selectedOfflineCollectionIds(),
+    }
+  }
+
   async clearDownloadedData() {
     await this.assertOwner()
     const database = await this.database()
     await database.withExclusiveTransactionAsync(async (transaction) => {
       await transaction.execAsync(
-        "DELETE FROM mobile_cache; DELETE FROM mobile_sync_state WHERE key = 'cursor';"
+        "DELETE FROM mobile_cache; DELETE FROM mobile_sync_state WHERE key = 'cursor' OR key LIKE 'offline-collection:%';"
       )
     })
   }
@@ -424,7 +501,19 @@ export class MobileOfflineStore {
     await database.withExclusiveTransactionAsync(async (transaction) => {
       if (upgrade === "upgrade-v1") {
         await this.upgradePendingMutationsFromVersion1(transaction)
-        await transaction.execAsync(`PRAGMA user_version = ${MOBILE_STORE_SCHEMA_VERSION};`)
+        await transaction.execAsync(`
+          CREATE INDEX IF NOT EXISTS mobile_cache_accessed_at_idx ON mobile_cache (accessedAt, cacheKey);
+          CREATE INDEX IF NOT EXISTS mobile_cache_updated_at_idx ON mobile_cache (updatedAt);
+          PRAGMA user_version = ${MOBILE_STORE_SCHEMA_VERSION};
+        `)
+        return
+      }
+      if (upgrade === "upgrade-v2") {
+        await transaction.execAsync(`
+          CREATE INDEX IF NOT EXISTS mobile_cache_accessed_at_idx ON mobile_cache (accessedAt, cacheKey);
+          CREATE INDEX IF NOT EXISTS mobile_cache_updated_at_idx ON mobile_cache (updatedAt);
+          PRAGMA user_version = ${MOBILE_STORE_SCHEMA_VERSION};
+        `)
         return
       }
       await transaction.execAsync(`
@@ -439,6 +528,8 @@ export class MobileOfflineStore {
         updatedAt INTEGER NOT NULL,
         accessedAt INTEGER NOT NULL
       );
+      CREATE INDEX mobile_cache_accessed_at_idx ON mobile_cache (accessedAt, cacheKey);
+      CREATE INDEX mobile_cache_updated_at_idx ON mobile_cache (updatedAt);
       CREATE TABLE mobile_pending_mutation (
         idempotencyKey TEXT PRIMARY KEY NOT NULL,
         payload TEXT NOT NULL,

@@ -6,7 +6,7 @@
 - Package name: `com.arcticrss.reader` (provisional; confirm ownership before the first Play upload)
 - Version: `0.1.0`, Android `versionCode` 1; EAS version control is explicitly remote for future builds
 - Build profiles: `development` (internal APK/dev client) and `preview` (internal AAB)
-- Signed preview candidate: EAS build `8a8f6fd9-770a-462f-9089-2ba57b3d7121`, built from `bf6564902bf3e406615ba4e2339a02a6535a0f61`; no Play upload, track, tester group, or release exists
+- Signed preview candidate: EAS build `8a8f6fd9-770a-462f-9089-2ba57b3d7121`, built from `bf6564902bf3e406615ba4e2339a02a6535a0f61`; it is superseded by later source changes and cannot be used for seventh-pass testing
 - Public Play release: not configured and not authorized
 
 The native alpha uses the private first-party v1 API and the browser PKCE device
@@ -58,7 +58,8 @@ track or tester access.
 6. Exercise the signed-device smoke test: browser login, reader/search/article state, collection add/remove, offline queue then foreground retry, podcast episode notes/completion/star state, notification setting, logout purge, and every App Link. Native playback and listening-progress controls are deferred.
 
 This workstation does not currently have Android SDK tooling configured. The
-remote EAS candidate is signed and its archive provenance was checked, but no
+remote EAS candidate is signed and its archive provenance was checked, but it
+is superseded. No
 Play Console project, tester group, upload, or submission has been created.
 
 See [Google Play readiness](./google-play-readiness.md) for the separate

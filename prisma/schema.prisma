@@ -509,6 +509,7 @@ model MobileAuthorizationRequest {
   nonceHash           String    @db.VarChar(64)
   state               String    @db.VarChar(512)
   approvalTokenHash   String    @unique @db.VarChar(64)
+  browserSessionHash  String    @db.VarChar(64)
   deviceName          String    @db.VarChar(120)
   platform            String    @db.VarChar(32)
   appVersion          String    @db.VarChar(80)
@@ -587,8 +588,10 @@ model MobileDevice {
 // bodies are SHA-256 digests so retries cannot expose queued offline content.
 model DeviceMutationReceipt {
   id                 String   @id @default(cuid())
-  deviceSessionId    String
-  mobileDeviceId     String?
+  // Rotating refresh-session context is audit-only. The stable device is the
+  // authoritative owner and survives retention of old session rows.
+  deviceSessionId    String?
+  mobileDeviceId     String
   idempotencyKeyHash String   @db.VarChar(64)
   operation          String   @db.VarChar(80)
   requestHash        String   @db.VarChar(64)
@@ -597,10 +600,9 @@ model DeviceMutationReceipt {
   result             Json
   createdAt          DateTime @default(now())
 
-  deviceSession DeviceSession @relation(fields: [deviceSessionId], references: [id], onDelete: Cascade)
-  mobileDevice  MobileDevice? @relation(fields: [mobileDeviceId], references: [id], onDelete: SetNull)
+  deviceSession DeviceSession? @relation(fields: [deviceSessionId], references: [id], onDelete: SetNull)
+  mobileDevice  MobileDevice   @relation(fields: [mobileDeviceId], references: [id], onDelete: Cascade)
 
-  @@unique([deviceSessionId, idempotencyKeyHash])
   @@unique([mobileDeviceId, idempotencyKeyHash])
   @@index([mobileDeviceId])
   @@index([createdAt])
@@ -610,8 +612,10 @@ model DeviceMutationReceipt {
 // itself remains out of scope until a reviewed provider integration exists.
 model DeviceInstallation {
   id              String    @id @default(cuid())
-  deviceSessionId String
-  mobileDeviceId  String?
+  // The source session is retained only for audit correlation; revocation and
+  // deletion always follow the stable device.
+  deviceSessionId String?
+  mobileDeviceId  String
   platform        String    @db.VarChar(32)
   environment     String    @db.VarChar(32)
   tokenHash       String    @unique @db.VarChar(64)
@@ -621,10 +625,9 @@ model DeviceInstallation {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  deviceSession DeviceSession @relation(fields: [deviceSessionId], references: [id], onDelete: Cascade)
-  mobileDevice  MobileDevice? @relation(fields: [mobileDeviceId], references: [id], onDelete: SetNull)
+  deviceSession DeviceSession? @relation(fields: [deviceSessionId], references: [id], onDelete: SetNull)
+  mobileDevice  MobileDevice   @relation(fields: [mobileDeviceId], references: [id], onDelete: Cascade)
 
-  @@index([deviceSessionId, disabledAt])
   @@index([mobileDeviceId, disabledAt])
   @@index([lastSeenAt])
 }
