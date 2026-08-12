@@ -33,10 +33,10 @@ Google Play's current target-SDK requirement is documented at
 
 | Item | Verified value |
 | --- | --- |
-| EAS build | `a5f5d507-8dff-4bde-bc94-9706dbfdd3d5` — `preview`, Android, internal distribution, finished 2026-08-11 local time |
-| Source revision | `18767e5a7a5bdc35f8843a07874470a7ce09c242` |
+| EAS build | `8a8f6fd9-770a-462f-9089-2ba57b3d7121` — `preview`, Android, internal distribution, finished 2026-08-11 local time |
+| Source revision | `bf6564902bf3e406615ba4e2339a02a6535a0f61` |
 | Application and version | `com.arcticrss.reader`; `0.1.0` / build version `1` |
-| Archive SHA-256 | `022925B1F8FFE8DA726AB950284820777FEF4A1B9DE98F107FD1B4141FB86E17` |
+| Archive SHA-256 | `DFBDEC75004B25B5077D5DCE1F71222257961DD1E9F6C6A98B183CA02450DE8D` |
 | Manifest inspection | Package and `targetSdkVersion` are `com.arcticrss.reader` and `36` in the finished AAB. |
 | Archive signature | The AAB's JAR signature block validated. The exact certificate pin is retained in the staged App Links association and the external release record. |
 | What this does not prove | Play package ownership, Play identity verification, track/tester access, live App Links, browser sign-in return, or signed-device behavior. |
