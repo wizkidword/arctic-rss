@@ -64,8 +64,19 @@ async function main() {
       throw new Error("Guest reader had no selectable article. Do not capture misleading launch assets.")
     }
 
-    await articleLinks.first().click()
-    await page.waitForLoadState("networkidle")
+    const articleHref = await articleLinks.first().getAttribute("href")
+
+    if (!articleHref) {
+      throw new Error("Guest reader article has no destination. Do not capture misleading launch assets.")
+    }
+
+    await page.goto(new URL(articleHref, origin).toString(), { waitUntil: "networkidle" })
+
+    const cardLayout = page.getByRole("button", { name: "Card" })
+    if (await cardLayout.isVisible()) {
+      await cardLayout.click()
+    }
+
     await page.screenshot({
       path: assetPath("marketing/product-hunt/gallery/04-read-your-way.png"),
     })
